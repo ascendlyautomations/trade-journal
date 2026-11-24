@@ -40,7 +40,7 @@ struct PayoutHistoryRowView: View {
         ProfileDisplay.formatMoney(item.amount)
     }
 
-    /// `Name · Mode` — authoritative mode, no inferred prop-firm labels.
+    /// `Name · Mode`, authoritative mode, no inferred prop-firm labels.
     private var accountContextLine: String {
         guard let account else {
             let title = item.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

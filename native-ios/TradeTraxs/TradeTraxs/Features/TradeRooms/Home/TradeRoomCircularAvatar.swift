@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Circular Trade Room image — shared lists, discovery rows, and navigation chrome.
+/// Circular Trade Room image, shared lists, discovery rows, and navigation chrome.
 struct TradeRoomCircularAvatar: View {
     let imageReference: MediaReference?
     let imagePipeline: any ImagePipeline

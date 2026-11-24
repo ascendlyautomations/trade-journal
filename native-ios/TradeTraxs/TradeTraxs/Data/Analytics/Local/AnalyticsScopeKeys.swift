@@ -1,6 +1,6 @@
 import Foundation
 
-/// Normalized scope keys for SQLite (avoids NULL in UNIQUE/PK — Postgres uses NULLS NOT DISTINCT).
+/// Normalized scope keys for SQLite (avoids NULL in UNIQUE/PK, Postgres uses NULLS NOT DISTINCT).
 nonisolated enum AnalyticsScopeKeys {
     /// Query fetched all accounts (`p_account_id` null).
     static let allAccountsQuery = "*"

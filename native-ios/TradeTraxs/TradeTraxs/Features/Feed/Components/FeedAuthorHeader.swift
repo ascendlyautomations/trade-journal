@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact Instagram-style author row — avatar from cache / fixtures only (no per-row fetch).
+/// Compact Instagram-style author row, avatar from cache / fixtures only (no per-row fetch).
 struct FeedAuthorHeader: View {
     let profile: Profile?
     let fallbackID: ProfileID
@@ -69,7 +69,7 @@ struct FeedAuthorHeader: View {
 
     private var resolvedProfile: Profile {
         if let profile { return profile }
-        // Web feed cards fall back to "User" — never render a raw UUID.
+        // Web feed cards fall back to "User", never render a raw UUID.
         return Profile(
             id: fallbackID,
             userID: UserID(fallbackID.rawValue),

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Session-scoped join checks — distinct from room bans and transient network failures.
+/// Session-scoped join checks, distinct from room bans and transient network failures.
 enum BroadcastViewerJoinAccessGate {
     static func isJoinDenied(
         snapshot: LiveKitBroadcastInteractiveStateResponse.Snapshot,

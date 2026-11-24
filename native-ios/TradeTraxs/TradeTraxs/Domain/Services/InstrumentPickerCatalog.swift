@@ -1,6 +1,6 @@
 import Foundation
 
-/// Built-in instrument lists for the shared Add/Edit Trade picker — display only.
+/// Built-in instrument lists for the shared Add/Edit Trade picker, display only.
 ///
 /// P&L math remains in ``FuturesInstrumentRegistry`` for symbols with known specs.
 /// Web has no separate catalog; native provides quick picks while still storing `trades.ticker`.

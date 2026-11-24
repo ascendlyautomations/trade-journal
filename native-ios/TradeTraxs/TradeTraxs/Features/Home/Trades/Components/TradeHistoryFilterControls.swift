@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// Dropdown row chrome for the Trades filter sheet — elevated box in light mode; legacy fill in dark.
+/// Dropdown row chrome for the Trades filter sheet, elevated box in light mode; legacy fill in dark.
 struct TradeHistoryFilterControlChrome: ViewModifier {
     enum Surface {
-        /// Date / Session / Sort menus — dark keeps prior `fillSecondary` box.
+        /// Date / Session / Sort menus, dark keeps prior `fillSecondary` box.
         case dropdown
-        /// Trades With Pictures — dark stays flush (no container).
+        /// Trades With Pictures, dark stays flush (no container).
         case toggleRow
     }
 
@@ -19,31 +19,28 @@ struct TradeHistoryFilterControlChrome: ViewModifier {
             .padding(.horizontal, surface == .toggleRow && colorScheme == .dark ? 0 : ExperienceSpacing.sm)
             .frame(maxWidth: .infinity, minHeight: ExperienceSpacing.minTouchTarget, alignment: .leading)
             .background {
-                if colorScheme == .light {
-                    lightElevatedBackground
+                if colorScheme == .light, surface == .dropdown {
+                    Color.clear
                 } else if surface == .dropdown {
                     colors.fillSecondary
                         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
                 }
             }
+            .modifier(TradeHistoryFilterLightChrome(surface: surface))
     }
+}
 
-    private var lightElevatedBackground: some View {
-        RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-            .fill(colors.surfacePrimary)
-            .overlay {
-                RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                    .strokeBorder(
-                        colors.border.opacity(ExperienceTradingRulesSurface.lightBorderOpacity),
-                        lineWidth: ExperienceBorder.hairline
-                    )
-            }
-            .shadow(
-                color: colors.surfaceOverlay.opacity(ExperienceTradingRulesSurface.lightShadowOpacity),
-                radius: 6,
-                x: 0,
-                y: 2
-            )
+/// Applies shared sheet-row chrome in light mode only.
+private struct TradeHistoryFilterLightChrome: ViewModifier {
+    var surface: TradeHistoryFilterControlChrome.Surface
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if colorScheme == .light, surface == .dropdown {
+            content.experienceFilterMenuRow()
+        } else {
+            content
+        }
     }
 }
 
@@ -53,7 +50,7 @@ extension View {
     }
 }
 
-/// Menu-based filter dropdown — selected value left, chevron right.
+/// Menu-based filter dropdown, selected value left, chevron right.
 struct TradeHistoryFilterDropdownMenu<MenuItems: View>: View {
     let selectionTitle: String
     var accessibilityLabel: String

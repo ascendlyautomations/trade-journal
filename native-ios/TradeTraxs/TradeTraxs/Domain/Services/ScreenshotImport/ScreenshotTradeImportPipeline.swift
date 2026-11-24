@@ -90,7 +90,7 @@ nonisolated enum ScreenshotTradeImportPipeline {
         return process(blocksByImage: blocks)
     }
 
-    /// Phase 3 — normalize AI extraction through the same Phase 2 aggregation path.
+    /// Phase 3, normalize AI extraction through the same Phase 2 aggregation path.
     static func processAIExtraction(
         _ extraction: ScreenshotAIExtractionV1,
         imagesProcessed: Int

@@ -3,7 +3,7 @@ import Foundation
 /// Constructed graph of application services.
 ///
 /// Built only by ``CompositionRoot``. Consumers receive dependencies through
-/// initializers (or a narrow SwiftUI `Environment` surface) — never by looking
+/// initializers (or a narrow SwiftUI `Environment` surface), never by looking
 /// services up from a global locator.
 struct DependencyContainer {
     /// Placeholder slot for future platform services.
@@ -12,7 +12,7 @@ struct DependencyContainer {
     /// Production navigation subgraph.
     let navigation: NavigationEnvironment
 
-    /// Production networking subgraph — nil only during logged-out login shell bootstrap.
+    /// Production networking subgraph, nil only during logged-out login shell bootstrap.
     let networking: NetworkingEnvironment?
 
     /// Production data subgraph (repositories, cache, realtime seams).

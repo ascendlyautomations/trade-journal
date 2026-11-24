@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact Instagram-style Profile section picker — monochrome SF Symbols, no horizontal scroll.
+/// Compact Instagram-style Profile section picker, monochrome SF Symbols, no horizontal scroll.
 struct ProfileSectionPicker: View {
     @Binding var selection: ProfileSection
 

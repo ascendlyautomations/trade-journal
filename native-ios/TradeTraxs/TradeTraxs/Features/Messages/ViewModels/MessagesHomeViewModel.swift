@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import OSLog
 
-/// Messages inbox screen owner — presentation + navigation over ``MessagingDomain``.
+/// Messages inbox screen owner, presentation + navigation over ``MessagingDomain``.
 ///
 /// Initial network / realtime ownership lives in ``MessagingDomain`` (shared with Trade Rooms).
 @Observable
@@ -97,10 +97,10 @@ final class MessagesHomeViewModel {
         filteredDirectMessages.filter { !$0.isPinned }
     }
 
-    /// Member rooms matching search — use ``joinedTradeRoomItems`` / ``ownedTradeRoomItem`` for layout.
+    /// Member rooms matching search, use ``joinedTradeRoomItems`` / ``ownedTradeRoomItem`` for layout.
     var tradeRoomItems: [TradeRoomInboxItem] { filteredTradeRoomItems }
 
-    /// Viewer-owned room (`TradeRoom.ownerProfileID`) — at most one row, excluded from ``joinedTradeRoomItems``.
+    /// Viewer-owned room (`TradeRoom.ownerProfileID`), at most one row, excluded from ``joinedTradeRoomItems``.
     var ownedTradeRoomItem: TradeRoomInboxItem? {
         guard let viewerID else { return nil }
         return filteredTradeRoomItems.first { $0.room.ownerProfileID == viewerID }
@@ -271,7 +271,7 @@ final class MessagesHomeViewModel {
         }
     }
 
-    /// Web swipe/menu delete — confirm first (`DELETE_CHAT_CONFIRM_COPY`).
+    /// Web swipe/menu delete, confirm first (`DELETE_CHAT_CONFIRM_COPY`).
     func requestDeleteConversation(id: ConversationID) {
         guard !isDeletingConversation else { return }
         ExperienceHaptics.play(.warning)
@@ -288,7 +288,7 @@ final class MessagesHomeViewModel {
         showsDeleteConfirmation = false
     }
 
-    /// Web `handleDeleteConversation` — remove participant row, then drop from inbox.
+    /// Web `handleDeleteConversation`, remove participant row, then drop from inbox.
     func confirmDeleteConversation() async {
         guard let id = pendingDeleteConversationID else { return }
         await confirmDeleteConversation(id: id)
@@ -346,7 +346,17 @@ final class MessagesHomeViewModel {
         inboxStore.toggleMute(roomID: roomID)
     }
 
+    func isViewerOwner(of room: TradeRoom) -> Bool {
+        TradeRoomManagementPermission.isViewerOwner(room: room, viewerID: viewerID)
+    }
+
+    func isViewerOwner(roomID: RoomID) -> Bool {
+        guard let room = inboxStore.rooms.first(where: { $0.id == roomID }) else { return false }
+        return isViewerOwner(of: room)
+    }
+
     func requestLeaveRoom(id: RoomID) {
+        guard !isViewerOwner(roomID: id) else { return }
         ExperienceHaptics.play(.warning)
         pendingLeaveRoomID = id
         showsLeaveRoomConfirmation = true
@@ -365,6 +375,7 @@ final class MessagesHomeViewModel {
     }
 
     func leaveRoom(id: RoomID) async {
+        guard !isViewerOwner(roomID: id) else { return }
         ExperienceHaptics.play(.warning)
         guard let viewerID else {
             inboxStore.removeRoom(id: id)
@@ -480,6 +491,6 @@ final class MessagesHomeViewModel {
 /// Canonical screen name for the Messages inbox (Profile/Feed architecture parity).
 typealias MessagesScreenViewModel = MessagesHomeViewModel
 
-/// Conversation thread screen owner — pagination / composer remain thread-scoped.
+/// Conversation thread screen owner, pagination / composer remain thread-scoped.
 typealias ConversationScreenViewModel = ConversationViewModel
 

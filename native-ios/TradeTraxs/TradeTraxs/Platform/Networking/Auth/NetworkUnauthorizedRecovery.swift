@@ -1,6 +1,6 @@
 import Foundation
 
-/// Coalesced 401 recovery — wired from ``CompositionRoot`` into ``URLSessionNetworkClient``.
+/// Coalesced 401 recovery, wired from ``CompositionRoot`` into ``URLSessionNetworkClient``.
 actor NetworkUnauthorizedRecovery {
     static let shared = NetworkUnauthorizedRecovery()
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Persisted structured-share pointer — mirrors web `messages.type` + id columns.
+/// Persisted structured-share pointer, mirrors web `messages.type` + id columns.
 nonisolated enum SharedContentReference: Hashable, Codable, Sendable {
     case feedPost(PostID)
     case profilePost(PostID)
@@ -291,7 +291,7 @@ nonisolated enum SharedContentMessageSupport {
         ]
     }
 
-    /// Optional sender note attached to a structured share — not structured JSON / placeholders.
+    /// Optional sender note attached to a structured share, not structured JSON / placeholders.
     static func userWrittenMessage(for message: Message) -> String? {
         guard isInternallySharedContent(message) else { return nil }
         return normalizedUserWrittenBody(message.body)

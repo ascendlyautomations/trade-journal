@@ -76,7 +76,7 @@ struct LiveVoiceTabShellLayoutModifier: ViewModifier {
             }
     }
 
-    /// Chrome + tab-bar clearance (bar height only — not home indicator — so it sits flush on the tab strip).
+    /// Chrome + tab-bar clearance (bar height only, not home indicator, so it sits flush on the tab strip).
     @ViewBuilder
     private var sessionChromeInset: some View {
         if showsTabShellChrome {

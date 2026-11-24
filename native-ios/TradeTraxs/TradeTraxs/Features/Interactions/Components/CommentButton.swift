@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Reusable comment affordance — opens detail / focuses composer via `action`.
+/// Reusable comment affordance, opens detail / focuses composer via `action`.
 struct CommentButton: View {
     let target: InteractionTarget
     @Bindable var store: EngagementStore

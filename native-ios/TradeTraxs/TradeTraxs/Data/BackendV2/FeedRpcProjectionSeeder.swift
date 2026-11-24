@@ -1,6 +1,6 @@
 import Foundation
 
-/// Seeds ``DetailPresentationCache`` from `rpc_v1_feed_bootstrap` item payloads — no per-card REST.
+/// Seeds ``DetailPresentationCache`` from `rpc_v1_feed_bootstrap` item payloads, no per-card REST.
 enum FeedRpcProjectionSeeder {
     struct SeedResult: Sendable {
         var trades: Int = 0

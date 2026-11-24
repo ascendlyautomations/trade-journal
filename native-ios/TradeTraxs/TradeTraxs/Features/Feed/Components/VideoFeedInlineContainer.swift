@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 
-/// Inline Feed clip layout — compact capped media region; full video visible via aspectFit.
+/// Inline Feed clip layout, compact capped media region; full video visible via aspectFit.
 struct VideoFeedInlineContainer<Overlay: View>: View {
     let reel: Reel
     var feedItemID: String? = nil

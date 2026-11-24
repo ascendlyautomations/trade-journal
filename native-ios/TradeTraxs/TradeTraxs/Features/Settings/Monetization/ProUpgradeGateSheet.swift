@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Limit- and feature-triggered upgrade sheet — reuses Settings subscription purchase flow.
+/// Limit- and feature-triggered upgrade sheet, reuses Settings subscription purchase flow.
 struct ProUpgradeGateSheet: View {
     let reason: ProGateReason
     @Bindable var coordinator: ProUpgradeCoordinator
@@ -38,7 +38,7 @@ struct ProUpgradeGateSheet: View {
                     limitContextBlock
                     statusFeedback
                     highlightBenefits
-                    allBenefitsDisclosure
+                    improvementDisclosure
                     MonetizationPlanPresentation.SelectedSubscriptionPriceCard(
                         product: viewModel.selectedProduct
                     )
@@ -78,6 +78,7 @@ struct ProUpgradeGateSheet: View {
                 {
                     ToolbarItem(placement: .topBarTrailing) {
                         MonetizationPlanPresentation.ProUpgradePreviewProToolbarButton(
+                            previewFeature: previewFeature,
                             accessibilityIdentifier: "proUpgrade.previewPro"
                         ) {
                             ExperienceHaptics.play(.selection)
@@ -127,7 +128,7 @@ struct ProUpgradeGateSheet: View {
             }
             .padding(ExperienceSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(colors.fillSecondary.opacity(0.22), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+            .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
         }
     }
 
@@ -153,24 +154,16 @@ struct ProUpgradeGateSheet: View {
         MonetizationPlanPresentation.ProMarketingFeatureList(compact: true, showsDividers: false)
     }
 
-    private var allBenefitsDisclosure: some View {
+    private var improvementDisclosure: some View {
         MonetizationPlanPresentation.DisclosureToggle(
-            title: "View All Benefits",
+            title: MonetizationPlanCopy.paywallImprovementSectionTitle,
             isExpanded: showsAllBenefits,
-            accessibilityID: "proUpgrade.allBenefits"
+            accessibilityID: "proUpgrade.improvementSection"
         ) {
             showsAllBenefits.toggle()
         } content: {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text(MonetizationPlanCopy.proEverythingInFreeHeading)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                    ForEach(MonetizationPlanCopy.proPlanFeatures, id: \.self) { line in
-                        MonetizationPlanPresentation.BenefitRow(text: line)
-                    }
-                }
-            }
-            .padding(.top, ExperienceSpacing.xxs)
+            MonetizationPlanPresentation.ProMarketingOutcomeList(compact: true)
+                .padding(.top, ExperienceSpacing.xxs)
         }
     }
 
@@ -296,7 +289,7 @@ struct ProUpgradeGateSheet: View {
                     .foregroundStyle(isSelected ? colors.accent : colors.tertiaryText)
             }
             .padding(ExperienceSpacing.sm)
-            .background(colors.fillSecondary.opacity(isSelected ? 0.45 : 0.22), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+            .modifier(ProUpgradePlanRowSurface(isSelected: isSelected))
         }
         .buttonStyle(.experiencePlain)
     }
@@ -304,4 +297,33 @@ struct ProUpgradeGateSheet: View {
 
 enum ProUpgradeMarketing {
     static var benefitLines: [String] { MonetizationPlanCopy.proPlanFeatures }
+}
+
+private struct ProUpgradePlanRowSurface: ViewModifier {
+    var isSelected: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if colorScheme == .light {
+            if isSelected {
+                content
+                    .background(colors.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                            .strokeBorder(
+                                colors.accent.opacity(0.55),
+                                lineWidth: ExperienceBorder.hairline
+                            )
+                    }
+            } else {
+                content.modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.sm))
+            }
+        } else {
+            content.background(
+                colors.fillSecondary.opacity(isSelected ? 0.45 : 0.22),
+                in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+            )
+        }
+    }
 }

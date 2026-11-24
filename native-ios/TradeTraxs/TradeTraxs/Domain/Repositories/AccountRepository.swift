@@ -1,6 +1,6 @@
 import Foundation
 
-/// Self-service account actions — the server determines the target user from the session token.
+/// Self-service account actions, the server determines the target user from the session token.
 nonisolated protocol AccountRepository: Sendable {
     func deleteAuthenticatedAccount() async throws
     /// CSV from `GET /api/export-data`. Same file the web Settings export downloads.

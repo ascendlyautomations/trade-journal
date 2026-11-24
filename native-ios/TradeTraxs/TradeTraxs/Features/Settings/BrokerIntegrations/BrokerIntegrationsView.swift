@@ -112,7 +112,7 @@ struct BrokerIntegrationsView: View {
                     brokerCollapsibleSection(provider)
                 }
                 BrokerIntegrationComingSoonFooter()
-                    .listRowBackground(colors.groupedBackground)
+                    .experienceDashboardListRow()
                     .listRowSeparator(.hidden)
             }
         }
@@ -233,7 +233,7 @@ struct BrokerIntegrationsView: View {
                 tradovateSection
                 Text("Connect your Tradovate login to discover accounts and import trades.")
                     .experienceStyle(.caption, color: colors.secondaryText)
-                    .listRowBackground(colors.groupedBackground)
+                    .experienceDashboardListRow()
             case .rithmic:
                 rithmicSection
                 rithmicExpandedFooter
@@ -270,11 +270,11 @@ struct BrokerIntegrationsView: View {
             if viewModel.isRithmicConnectUIAvailable {
                 Text("Test environment only. Your Rithmic password is used only when you connect or import and is not saved by TradeTraxs.")
                     .experienceStyle(.caption, color: colors.secondaryText)
-                    .listRowBackground(colors.groupedBackground)
+                    .experienceDashboardListRow()
             } else {
                 Text("Rithmic connection is not available on this server yet.")
                     .experienceStyle(.caption, color: colors.secondaryText)
-                    .listRowBackground(colors.groupedBackground)
+                    .experienceDashboardListRow()
             }
         }
     }

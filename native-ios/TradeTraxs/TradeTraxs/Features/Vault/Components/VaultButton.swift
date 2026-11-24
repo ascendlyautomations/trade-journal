@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Vault affordance — outlined/filled hexagon aligned with Like/Comment/Share.
+/// Vault affordance, outlined/filled hexagon aligned with Like/Comment/Share.
 struct VaultButton: View {
     let ref: VaultContentRef
     @Bindable var store: VaultStore

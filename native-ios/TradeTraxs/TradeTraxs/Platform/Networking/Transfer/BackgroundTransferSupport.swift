@@ -2,7 +2,7 @@ import Foundation
 
 /// Background URLSession wiring for large media / CSV transfers.
 ///
-/// Infrastructure only — no product uploads are started here.
+/// Infrastructure only, no product uploads are started here.
 final class BackgroundTransferSupport: NSObject, @unchecked Sendable {
     let configuration: NetworkConfiguration
     let sessionIdentifier: String

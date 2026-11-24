@@ -1,6 +1,6 @@
 import Foundation
 
-/// Semantic identity for a prop-firm rule or detail line — dedupe by meaning, not string equality.
+/// Semantic identity for a prop-firm rule or detail line, dedupe by meaning, not string equality.
 nonisolated enum PropFirmDetailRuleTopic: Hashable, Sendable {
     case accountSize
     case profitTarget
@@ -23,7 +23,7 @@ nonisolated enum PropFirmDetailRuleTopic: Hashable, Sendable {
     case drawdownMethodology
 }
 
-/// Canonical detail presentation — registers authoritative sections first, then supplies deduped content.
+/// Canonical detail presentation, registers authoritative sections first, then supplies deduped content.
 nonisolated struct PropFirmDetailContentPlan: Sendable {
     let snapshot: PropFirmStatusSnapshot
     let showsDrawdownSection: Bool

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Selected linked-trade card shown before publish/send — thumbnail + summary + actions.
+/// Selected linked-trade card shown before publish/send, thumbnail + summary + actions.
 struct LinkedTradePreviewCard: View {
     let trade: Trade
     let imagePipeline: any ImagePipeline

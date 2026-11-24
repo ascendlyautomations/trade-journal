@@ -131,3 +131,29 @@ extension View {
         proUpgradeSheet(coordinator: .shared)
     }
 }
+
+/// One-shot auto presentation of ``ProUpgradeGateSheet`` for gated home/settings routes.
+@MainActor
+enum ProUpgradeAutoPresent {
+    static func presentFeatureGateIfNeeded(
+        isRestricted: Bool,
+        didPresent: inout Bool,
+        feature: ProFeatureKind,
+        previewFeature: TraxsProPreviewFeature? = nil,
+        suppressPreview: Bool = false
+    ) {
+        guard isRestricted else { return }
+        guard !didPresent else { return }
+        guard ProMonetizationPolicy.canPresentProPaywall(
+            demoModeActive: ExploreModeSupport.isActive,
+            enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
+            paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
+        ) else { return }
+        didPresent = true
+        ProUpgradeCoordinator.shared.present(
+            reason: .feature(feature),
+            previewFeature: previewFeature,
+            suppressPreview: suppressPreview
+        )
+    }
+}

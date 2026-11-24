@@ -37,8 +37,13 @@ struct TradesContainerView: View {
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             viewModel.handleJournalMutation()
         }
-        .sheet(item: $viewModel.sharePayload) { payload in
-            TradeShareSheet(items: [payload.text])
+        .sheet(item: $viewModel.journalSharePresentation) { presentation in
+            SharedContentShareSheet(
+                target: presentation.target,
+                data: appEnvironment.data,
+                tradeOwnerShareAccess: presentation.ownerAccess,
+                onClose: { viewModel.journalSharePresentation = nil }
+            )
         }
     }
 

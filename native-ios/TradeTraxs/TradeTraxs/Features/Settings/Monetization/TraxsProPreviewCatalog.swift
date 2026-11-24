@@ -52,7 +52,7 @@ enum TraxsProPreviewCatalog {
         return previewFeature(for: feature)
     }
 
-    /// Paywall preview routing — explicit context wins; otherwise map from the gate reason.
+    /// Paywall preview routing, explicit context wins; otherwise map from the gate reason.
     static func resolvedPreviewFeature(
         reason: ProGateReason,
         preferred: TraxsProPreviewFeature?,

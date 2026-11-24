@@ -10,7 +10,7 @@ enum FeedClipsPageMetricsStore {
 }
 #endif
 
-/// Host root for a single Clips page — layout is exactly the UIKit page bounds, not the device screen.
+/// Host root for a single Clips page, layout is exactly the UIKit page bounds, not the device screen.
 struct FeedClipsPageHostRoot<Content: View>: View {
     let index: Int
     @ViewBuilder let content: () -> Content

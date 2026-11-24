@@ -20,7 +20,7 @@ nonisolated enum AccountTrackedBalanceSupport {
         return startingBalance + lifetimeRealizedPnL - withdrawals
     }
 
-    /// Dashboard hero account value — one definition for Eval, Live, and Funded prop.
+    /// Dashboard hero account value, one definition for Eval, Live, and Funded prop.
     ///
     /// - Eval / Live / Sim: `startingBalance + lifetimeRealizedPnL` (manual ledger subtracts withdrawals on Live).
     /// - Funded prop (payout cycles): ``PropFirmStatusSnapshot/currentBalance`` when trade replay is available.

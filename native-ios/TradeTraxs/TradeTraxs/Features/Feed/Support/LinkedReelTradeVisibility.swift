@@ -2,7 +2,7 @@ import Foundation
 
 /// Resolve whether a clip may show its Linked Trade block (display-only; does not mutate Supabase).
 enum LinkedReelTradeVisibility {
-    /// Trade returned from reel detail fetch / authoritative owner cache — never stale list seeds alone.
+    /// Trade returned from reel detail fetch / authoritative owner cache, never stale list seeds alone.
     static func resolvedTrade(
         reel: Reel,
         embeddedTrade: Trade?,

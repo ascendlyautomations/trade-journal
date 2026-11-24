@@ -136,7 +136,7 @@ nonisolated struct PsychologyReportEmotionRow: Identifiable, Hashable, Sendable 
     var metrics: PsychologyGroupMetrics
 }
 
-/// Deterministic psychology report — reproducible from trades + check-ins.
+/// Deterministic psychology report, reproducible from trades + check-ins.
 nonisolated struct PsychologyReport: Hashable, Sendable, Identifiable {
     var periodRef: PsychologyReportPeriodRef
     var title: String

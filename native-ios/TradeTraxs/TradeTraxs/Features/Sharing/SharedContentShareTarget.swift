@@ -1,6 +1,6 @@
 import Foundation
 
-/// Feed / detail share entry — one picker + send flow for all structured content types.
+/// Feed / detail share entry, one picker + send flow for all structured content types.
 struct SharedContentShareTarget: Identifiable, Equatable, Sendable {
     var reference: SharedContentReference
     var contentLink: DetailContentLink

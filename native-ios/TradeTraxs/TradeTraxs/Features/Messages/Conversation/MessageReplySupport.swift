@@ -35,7 +35,7 @@ enum MessageReplySupport {
         return resolved
     }
 
-    /// Display name for quoted reply UI — prefers hydrated profile, then lightweight inbox metadata.
+    /// Display name for quoted reply UI, prefers hydrated profile, then lightweight inbox metadata.
     static func quotedAuthorName(
         senderProfileID: ProfileID,
         profile: Profile?,

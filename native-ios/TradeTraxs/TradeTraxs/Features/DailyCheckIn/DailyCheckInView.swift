@@ -122,7 +122,7 @@ struct DailyCheckInView: View {
             .accessibilityIdentifier("dailyCheckIn.sleepQuality")
         }
         .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .overlay(
             RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
                 .stroke(colors.border, lineWidth: 1)
@@ -141,7 +141,7 @@ struct DailyCheckInView: View {
             .accessibilityIdentifier("dailyCheckIn.morning")
         }
         .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .overlay(
             RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
                 .stroke(colors.border, lineWidth: 1)
@@ -174,7 +174,7 @@ struct DailyCheckInView: View {
             .accessibilityIdentifier("dailyCheckIn.focus")
         }
         .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .overlay(
             RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
                 .stroke(colors.border, lineWidth: 1)
@@ -200,7 +200,7 @@ struct DailyCheckInView: View {
                 )
         }
         .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .overlay(
             RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
                 .stroke(colors.border, lineWidth: 1)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Explore Mode capability surface — unauthenticated guest reads + local demo journal.
+/// Explore Mode capability surface, unauthenticated guest reads + local demo journal.
 @MainActor
 enum ExploreModeSupport {
     static var isActive: Bool {
@@ -10,7 +10,7 @@ enum ExploreModeSupport {
     /// Demo Feed uses bundled fixtures for Global and Following. Guest RPC scope lock stays off.
     static var usesLiveCommunityFeed: Bool { false }
 
-    /// Cache key identity for guest Feed — not a Supabase user id.
+    /// Cache key identity for guest Feed, not a Supabase user id.
     static let guestFeedViewerID = ProfileID("explore.guest.feed")
 
     /// Bundled Explore has no session, so it skips viewer services.

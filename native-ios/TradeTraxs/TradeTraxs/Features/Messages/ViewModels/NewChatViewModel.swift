@@ -328,7 +328,7 @@ final class NewChatViewModel {
         selectedGroupMembers.removeAll { $0.id == profile.id }
     }
 
-    /// Opens an existing 1:1 conversation or creates one — never duplicates.
+    /// Opens an existing 1:1 conversation or creates one, never duplicates.
     func select(_ profile: Profile) async -> Conversation? {
         guard let viewerID else { return nil }
         guard openingProfileID == nil else { return nil }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Input validation for auth forms — no networking.
+/// Input validation for auth forms, no networking.
 nonisolated struct AuthenticationValidator: Sendable {
     func validateEmail(_ email: String) -> AuthenticationError? {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)

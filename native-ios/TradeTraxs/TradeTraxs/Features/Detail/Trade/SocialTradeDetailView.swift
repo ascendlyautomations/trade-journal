@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Social trade post detail — likes, comments, community discussion.
+/// Social trade post detail, likes, comments, community discussion.
 ///
 /// Opened from Feed / Profile / Explore / Activity. No Trade AI or journal tools.
 struct SocialTradeDetailView: View {

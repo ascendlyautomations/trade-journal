@@ -1,6 +1,6 @@
 import Foundation
 
-/// Viewer-scoped generation + per-profile shadow dedupe (Phase 7D — no UI effect).
+/// Viewer-scoped generation + per-profile shadow dedupe (Phase 7D, no UI effect).
 actor ProfileAnalyticsV2ShadowSession {
     static let shared = ProfileAnalyticsV2ShadowSession()
 

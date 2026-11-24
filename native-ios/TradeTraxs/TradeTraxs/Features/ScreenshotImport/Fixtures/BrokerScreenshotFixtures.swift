@@ -3,7 +3,7 @@ import Foundation
 
 /// Broker screenshot OCR fixtures derived from real Vision output (no image assets required).
 nonisolated enum BrokerScreenshotFixtures {
-    /// Fixture A — order/execution history with FILLED + CANCELLED rows.
+    /// Fixture A, order/execution history with FILLED + CANCELLED rows.
     static let executionOrderHistory: [[OCRTextBlock]] = [
         brokerTableBlocks(
             rows: [
@@ -19,7 +19,7 @@ nonisolated enum BrokerScreenshotFixtures {
         ),
     ]
 
-    /// Fixture B — completed trade history with Trade Day / Open-Close prices / PnL.
+    /// Fixture B, completed trade history with Trade Day / Open-Close prices / PnL.
     static let completedTradeHistory: [[OCRTextBlock]] = [
         brokerTableBlocks(
             rows: [
@@ -32,7 +32,7 @@ nonisolated enum BrokerScreenshotFixtures {
         ),
     ]
 
-    /// Fixture C — completed trade table with SIDE / OPEN SIDE / CLOSE SIDE.
+    /// Fixture C, completed trade table with SIDE / OPEN SIDE / CLOSE SIDE.
     static let completedTradeTable: [[OCRTextBlock]] = [
         brokerTableBlocks(
             rows: [

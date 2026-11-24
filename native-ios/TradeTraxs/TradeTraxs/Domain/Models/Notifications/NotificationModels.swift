@@ -36,7 +36,7 @@ nonisolated enum ActivityNotificationKind: String, Hashable, Codable, Sendable {
     case affiliateReferral = "affiliate_referral"
     case affiliateCommissionEarned = "affiliate_commission_earned"
     case tradingReport = "trading_report"
-    /// Messaging-only / legacy — excluded from Activity inbox queries.
+    /// Messaging-only / legacy, excluded from Activity inbox queries.
     case message
     case system
 
@@ -63,7 +63,7 @@ nonisolated enum ActivityNotificationKind: String, Hashable, Codable, Sendable {
         }
     }
 
-    /// TradeTraxs-sourced Activity (not another user's profile) — show app logo in the avatar slot.
+    /// TradeTraxs-sourced Activity (not another user's profile), show app logo in the avatar slot.
     var usesTradeTraxsBrandAvatar: Bool {
         switch self {
         case .tradingReport, .affiliateReferral, .affiliateCommissionEarned, .system:
@@ -103,9 +103,9 @@ nonisolated struct ActivityNotification: Hashable, Codable, Sendable, Identifiab
     var messagePreview: String?
     var reportID: ReportID?
     var affiliateHref: String?
-    /// Comment reply — never group with ordinary comments.
+    /// Comment reply, never group with ordinary comments.
     var isReply: Bool
-    /// @mention — never group; always deep-link individually.
+    /// @mention, never group; always deep-link individually.
     var isMention: Bool
     var createdAt: Date
     var isRead: Bool

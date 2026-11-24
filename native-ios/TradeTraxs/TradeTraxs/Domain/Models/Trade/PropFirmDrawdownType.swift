@@ -1,6 +1,6 @@
 import Foundation
 
-/// Authoritative max drawdown methodology from `accounts.drawdown_type` — never inferred client-side.
+/// Authoritative max drawdown methodology from `accounts.drawdown_type`, never inferred client-side.
 nonisolated enum PropFirmDrawdownType: String, Codable, Sendable, Hashable, CaseIterable {
     case staticThreshold = "static"
     case intradayTrailing = "intraday_trailing"

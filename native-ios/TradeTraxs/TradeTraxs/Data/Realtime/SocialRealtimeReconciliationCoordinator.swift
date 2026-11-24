@@ -5,7 +5,7 @@ nonisolated enum SocialRealtimeRepairReason: String, Sendable {
     case networkRegain
 }
 
-/// Bounded missed-event repair after Realtime disconnect — orchestrates existing owners only.
+/// Bounded missed-event repair after Realtime disconnect, orchestrates existing owners only.
 actor SocialRealtimeReconciliationCoordinator {
     static let shared = SocialRealtimeReconciliationCoordinator()
 
@@ -67,7 +67,7 @@ actor SocialRealtimeReconciliationCoordinator {
         }
     }
 
-    /// Single coalesced social repair cycle — invoked by ``SupabaseReconnectRepairCoordinator`` only.
+    /// Single coalesced social repair cycle, invoked by ``SupabaseReconnectRepairCoordinator`` only.
     func performCoalescedRepair(reasons: Set<SocialRealtimeRepairReason>) async {
         guard SocialRealtimeRepairGate.isEnabled else { return }
         guard let viewer = viewerID else { return }

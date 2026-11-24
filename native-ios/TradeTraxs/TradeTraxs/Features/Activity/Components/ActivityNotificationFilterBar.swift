@@ -70,7 +70,7 @@ struct ActivityNotificationFilterBar: View {
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
             .frame(maxWidth: .infinity)
-            .background(colors.fillSecondary, in: Capsule())
+            .experienceFilterCapsule()
         }
         .buttonStyle(.experiencePlain)
         .accessibilityLabel(accessibilityIdentifier)

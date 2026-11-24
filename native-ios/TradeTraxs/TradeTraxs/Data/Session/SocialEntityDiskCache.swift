@@ -1,10 +1,10 @@
 import Foundation
 
-/// Viewer-scoped shared social entity records — one canonical disk copy per entity.
+/// Viewer-scoped shared social entity records, one canonical disk copy per entity.
 ///
 /// Patched from Feed / Profile / Detail mutations so surfaces stay coherent offline.
 ///
-/// Phase 9B: entity records do not embed engagement fields — ``SocialPresentationWriteThroughCoordinator``
+/// Phase 9B: entity records do not embed engagement fields, ``SocialPresentationWriteThroughCoordinator``
 /// patches Feed/Profile presentation only (never partial entity overwrites for likes/comments).
 nonisolated enum SocialEntityDiskCache {
     static let folderName = "SocialEntityDiskCache"
@@ -27,9 +27,9 @@ nonisolated enum SocialEntityDiskCache {
         var entityID: String
         var savedAt: Date
         var lastAccessedAt: Date
-        /// Phase 8F — social preview only (never authoritative detail).
+        /// Phase 8F, social preview only (never authoritative detail).
         var tradeSummary: TradeSummary?
-        /// Legacy v1 full trade blob — rejected on read unless migrated to summary.
+        /// Legacy v1 full trade blob, rejected on read unless migrated to summary.
         var trade: Trade?
         var post: Post?
         var reel: Reel?
@@ -58,7 +58,7 @@ nonisolated enum SocialEntityDiskCache {
         )
     }
 
-    /// Back-compat — persists canonical ``TradeSummary`` (list/mutation rows are not authoritative detail).
+    /// Back-compat, persists canonical ``TradeSummary`` (list/mutation rows are not authoritative detail).
     static func saveTrade(_ trade: Trade, viewerID: ProfileID) {
         saveTradeSummary(TradeSummaryMapper.summary(fromPartialListTrade: trade), viewerID: viewerID)
     }
@@ -78,7 +78,7 @@ nonisolated enum SocialEntityDiskCache {
         return nil
     }
 
-    /// Non-authoritative card preview — never use for edit/detail completeness.
+    /// Non-authoritative card preview, never use for edit/detail completeness.
     static func loadTrade(id: TradeID, viewerID: ProfileID) -> Trade? {
         guard let summary = loadTradeSummary(id: id, viewerID: viewerID) else { return nil }
         return TradeSummaryMapper.previewTrade(from: summary)
@@ -88,7 +88,7 @@ nonisolated enum SocialEntityDiskCache {
         remove(kind: .trade, entityID: id.rawValue, viewerID: viewerID)
     }
 
-    /// Merge path — skips migration side effects; used only from ``SocialEntityPersistedCacheCoordinator``.
+    /// Merge path, skips migration side effects; used only from ``SocialEntityPersistedCacheCoordinator``.
     static func loadRecordForMerge(
         kind: EntityKind,
         entityID: String,

@@ -16,7 +16,7 @@ struct ThemeIdentifier: Hashable, Codable, Sendable, RawRepresentable, Expressib
     static let light = ThemeIdentifier(rawValue: "light")
     static let dark = ThemeIdentifier(rawValue: "dark")
 
-    /// Legacy persisted appearance — migrated to ``system`` on load.
+    /// Legacy persisted appearance, migrated to ``system`` on load.
     static let legacyTradeTraxsPersistedValue = "tradetraxs"
 
     var isBuiltIn: Bool {

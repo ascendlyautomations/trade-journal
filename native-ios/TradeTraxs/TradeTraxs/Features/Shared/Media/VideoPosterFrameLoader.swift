@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import UIKit
 
-/// Async poster frames for remote clips — memory cache, coalesced generation, no main-thread extraction.
+/// Async poster frames for remote clips, memory cache, coalesced generation, no main-thread extraction.
 enum VideoPosterFrameLoader {
     private actor Cache {
         static let shared = Cache()

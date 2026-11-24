@@ -1,6 +1,6 @@
 import Foundation
 
-/// Non-authoritative detail shell — list/card snapshot only. Never used for edit or completeness checks.
+/// Non-authoritative detail shell, list/card snapshot only. Never used for edit or completeness checks.
 nonisolated struct DetailPresentationSeed: Sendable, Equatable {
     var summary: TradeSummary
 

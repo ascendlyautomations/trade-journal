@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Dashboard / Settings withdrawal history — observes ``WithdrawalsHistoryStore`` directly.
+/// Dashboard / Settings withdrawal history, observes ``WithdrawalsHistoryStore`` directly.
 struct PayoutsScreenView: View {
     @Bindable private var withdrawalsHistory = WithdrawalsHistoryStore.shared
     @Bindable private var withdrawalAchievementLinks = WithdrawalAchievementLinkStore.shared
@@ -207,10 +207,7 @@ struct PayoutsScreenView: View {
                     }
                 }
             }
-            .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(
-                cornerRadius: ExperienceRadius.md,
-                style: .continuous
-            ))
+            .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
             .padding(.horizontal, ExperienceSpacing.md)
         }
     }

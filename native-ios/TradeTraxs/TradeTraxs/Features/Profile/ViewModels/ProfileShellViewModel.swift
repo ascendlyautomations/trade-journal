@@ -4,7 +4,7 @@ import Observation
 /// Owns Profile section selection and render-oriented section ViewModels.
 ///
 /// Stage 1 (``ProfileBootstrap``) fills header state. Section ViewModels load their
-/// payloads lazily on first ``activate`` — one repository request per resource.
+/// payloads lazily on first ``activate``, one repository request per resource.
 @Observable
 @MainActor
 final class ProfileShellViewModel {

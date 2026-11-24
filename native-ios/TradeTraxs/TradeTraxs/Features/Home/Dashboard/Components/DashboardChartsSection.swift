@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Full-width analytics charts — Phase 2 visuals + Phase 3 interactions.
+/// Full-width analytics charts, Phase 2 visuals + Phase 3 interactions.
 ///
 /// Flow: Win/Loss … Symbol Performance (Free) → Hold / Hours / R:R / setup / drawdown (TraxsPro subscribers only).
 /// Free users see standard charts here; premium charts are summarized in ``DashboardTraxProUpsellSection``.
@@ -14,7 +14,7 @@ struct DashboardChartsSection: View {
     var onBrowseLong: (() -> Void)?
     var onBrowseShort: (() -> Void)?
     var onBrowseHoldBucket: ((String) -> Void)?
-    /// TraxsPro chart blocks — Hold, Hours, R:R, Setup, Drawdown when enforcement is on.
+    /// TraxsPro chart blocks, Hold, Hours, R:R, Setup, Drawdown when enforcement is on.
     var premiumChartsPresentation: ProPremiumFeaturePresentation = .unrestricted
     /// When false, only TraxsPro chart blocks render (TraxsPro Dashboard preview).
     var showsStandardCharts: Bool = true

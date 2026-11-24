@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Persists analytics section expansion across navigation (UserDefaults only — no server writes).
+/// Persists analytics section expansion across navigation (UserDefaults only, no server writes).
 @MainActor
 @Observable
 final class TradingRulesAnalyticsExpansionStore {

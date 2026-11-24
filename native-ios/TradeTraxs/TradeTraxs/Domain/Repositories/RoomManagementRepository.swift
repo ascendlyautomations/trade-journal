@@ -1,6 +1,6 @@
 import Foundation
 
-/// Owner-only Trade Room management — extends base ``RoomRepository`` without breaking test stubs.
+/// Owner-only Trade Room management, extends base ``RoomRepository`` without breaking test stubs.
 nonisolated protocol RoomManagementRepository: RoomRepository, Sendable {
     func updateRoom(roomID: RoomID, request: RoomUpdateRequest) async throws -> TradeRoom
     func createChannel(roomID: RoomID, request: RoomChannelCreateRequest) async throws -> RoomChannel
@@ -29,11 +29,11 @@ nonisolated protocol RoomManagementRepository: RoomRepository, Sendable {
         profileID: ProfileID,
         tagID: RoomMemberTagID
     ) async throws
-    /// Owner — `rpc_v1_list_trade_room_join_requests`.
+    /// Owner, `rpc_v1_list_trade_room_join_requests`.
     func pendingJoinRequests(roomID: RoomID) async throws -> [RoomJoinRequestRecord]
-    /// Owner — `rpc_v1_resolve_trade_room_join_request`.
+    /// Owner, `rpc_v1_resolve_trade_room_join_request`.
     func resolveJoinRequest(requestID: String, action: TradeRoomJoinRequestResolution) async throws
-    /// Owner-only — deletes `rooms` row; RLS `rooms_delete_owner` enforces `auth.uid()`.
+    /// Owner-only, deletes `rooms` row; RLS `rooms_delete_owner` enforces `auth.uid()`.
     func deleteRoom(roomID: RoomID) async throws
 }
 

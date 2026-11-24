@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// DEBUG-only Trade Room message send tracing — no tokens or message bodies.
+/// DEBUG-only Trade Room message send tracing, no tokens or message bodies.
 enum RoomMessageSendProbe {
     struct Context: Sendable {
         var roomID: String

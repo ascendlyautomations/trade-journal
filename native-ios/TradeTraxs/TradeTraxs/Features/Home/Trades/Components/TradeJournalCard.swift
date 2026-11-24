@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Owner-journal trade card for the Trades history page.
 ///
-/// Distinct from ``ProfileTradeCard`` — no likes/comments/share chrome.
+/// Distinct from ``ProfileTradeCard``, no likes/comments/share chrome.
 /// Fixed vertical template: header → context (+ optional compact thumbnail) → execution → metrics.
 enum TradeJournalCardContentLayout {
     case legacy
@@ -108,7 +108,7 @@ struct TradeJournalCard: View {
         }
     }
 
-    /// Row 1 — ticker + side (left), P&L (right).
+    /// Row 1, ticker + side (left), P&L (right).
     private var headerRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
             VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
@@ -135,7 +135,7 @@ struct TradeJournalCard: View {
         }
     }
 
-    /// Row 2 — account or copy-trade context, then timing / duration (layout-specific).
+    /// Row 2, account or copy-trade context, then timing / duration (layout-specific).
     private var contextSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             if isCopyGroup {
@@ -181,7 +181,7 @@ struct TradeJournalCard: View {
         }
     }
 
-    /// Compact list thumbnail — same treatment as Profile browse cards (~96pt wide).
+    /// Compact list thumbnail, same treatment as Profile browse cards (~96pt wide).
     private var tradeThumbnail: some View {
         ProfileCompactMediaThumbnail(
             reference: summary.thumbnail,
@@ -191,7 +191,7 @@ struct TradeJournalCard: View {
         .accessibilityHidden(true)
     }
 
-    /// Entry / exit / size — compact three-column execution row.
+    /// Entry / exit / size, compact three-column execution row.
     private var executionRow: some View {
         HStack(alignment: .top, spacing: ExperienceSpacing.md) {
             journalFieldColumn(
@@ -209,7 +209,7 @@ struct TradeJournalCard: View {
         }
     }
 
-    /// Bottom row — session / R:R / max R:R or legacy duration row (left); visibility (right).
+    /// Bottom row, session / R:R / max R:R or legacy duration row (left); visibility (right).
     private var metricsRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
             if contentLayout == .tradesList {
@@ -248,7 +248,7 @@ struct TradeJournalCard: View {
             return canonical
         }
         let raw = item.sessionLabel?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return raw.isEmpty ? "—" : raw
+        return raw.isEmpty ? "–" : raw
     }
 
     private func journalFieldColumn(title: String, value: String) -> some View {
@@ -309,7 +309,7 @@ struct TradeJournalCard: View {
     }
 }
 
-/// Globe/lock + title — shared by journal trade cards and trade detail header.
+/// Globe/lock + title, shared by journal trade cards and trade detail header.
 struct TradeJournalVisibilityLabel: View {
     let visibility: ContentVisibility
 
@@ -343,7 +343,7 @@ struct TradeJournalVisibilityLabel: View {
     }
 }
 
-/// Lightweight context-menu preview — no network, no engagement chrome.
+/// Lightweight context-menu preview, no network, no engagement chrome.
 private struct TradeJournalCardPreview: View {
     let item: TradeOwnerJournalSummary
     let accountName: String?

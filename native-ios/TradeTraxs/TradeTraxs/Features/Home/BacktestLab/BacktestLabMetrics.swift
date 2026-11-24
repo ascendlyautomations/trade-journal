@@ -1,6 +1,6 @@
 import Foundation
 
-/// Client-side Backtest Lab aggregates — mirrors web `/backtest` metrics.
+/// Client-side Backtest Lab aggregates, mirrors web `/backtest` metrics.
 nonisolated enum BacktestLabMetrics {
     static let allStrategiesToken = "all"
 
@@ -11,7 +11,7 @@ nonisolated enum BacktestLabMetrics {
         var winRatePercent: Double
         var totalPnL: Decimal
         var averageRR: Double?
-        /// Gross profit / gross loss — nil when undefined (e.g. no losing trades).
+        /// Gross profit / gross loss, nil when undefined (e.g. no losing trades).
         var profitFactor: Decimal?
         var averageWin: Decimal?
         /// Positive loss magnitude per losing trade.
@@ -63,12 +63,12 @@ nonisolated enum BacktestLabMetrics {
     }
 
     static func formatAverageWin(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return TradeDisplay.pnlText(Money(amount: value))
     }
 
     static func formatAverageLoss(_ value: Decimal?) -> String {
-        guard let value, value > 0 else { return "—" }
+        guard let value, value > 0 else { return "–" }
         return TradeDisplay.pnlText(Money(amount: -value))
     }
 

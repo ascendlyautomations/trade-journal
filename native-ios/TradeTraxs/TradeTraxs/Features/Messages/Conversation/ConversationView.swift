@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Production conversation thread — replaces the Messages `thread` placeholder.
+/// Production conversation thread, replaces the Messages `thread` placeholder.
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
     @State private var contentRevealed = false
@@ -228,7 +228,7 @@ struct ConversationView: View {
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         guard viewModel.phase == .loaded else { return }
-        viewModel.draft = "Locked in — R:R looks clean."
+        viewModel.draft = "Locked in, R:R looks clean."
         await viewModel.sendText()
     }
     #endif

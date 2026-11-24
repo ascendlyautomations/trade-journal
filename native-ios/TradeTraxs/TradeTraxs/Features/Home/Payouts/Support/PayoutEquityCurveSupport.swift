@@ -1,12 +1,12 @@
 import Foundation
 
-/// Cumulative withdrawal curve — one point per chronological payout plus a $0 origin.
+/// Cumulative withdrawal curve, one point per chronological payout plus a $0 origin.
 nonisolated struct PayoutEquityCurvePoint: Sendable, Equatable, Identifiable {
     var id: Int { index }
     var index: Int
     var cumulative: Decimal
     var date: Date?
-    /// Increment for this step — `nil` on the origin ($0) point.
+    /// Increment for this step, `nil` on the origin ($0) point.
     var eventAmount: Decimal?
     var source: PayoutHistoryItem.Source?
 

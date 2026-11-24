@@ -3,7 +3,7 @@ import SwiftUI
 enum AuthLegalPresentation {
     /// Onboarding hero + Get Started (unchanged copy and layout).
     case onboarding
-    /// Create Account — compact agreement directly above the primary button.
+    /// Create Account, compact agreement directly above the primary button.
     case createAccountAgreement
     /// Standalone Terms / Privacy / Guidelines links (page footer).
     case footerLinks

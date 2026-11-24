@@ -1,6 +1,6 @@
 import Foundation
 
-/// Profile Trades tab — presentation-only copy-action grouping (mirrors owner Trades list).
+/// Profile Trades tab, presentation-only copy-action grouping (mirrors owner Trades list).
 nonisolated enum ProfileTradesDisplayGrouping {
     static func visibleSummaries(
         journalItems: [TradeOwnerJournalSummary],

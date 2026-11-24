@@ -14,7 +14,7 @@ nonisolated struct AnalyticsDashboardBootstrapV3: Codable, Sendable, Equatable {
         var presets: [String: AnalyticsDashboardAggregatePresetV1]?
         /// Per-account metrics-only presets for instant account filter KPIs.
         var account_preset_metrics: [AccountPresetMetrics]?
-        /// Legacy bloated shape — read only when `presets` is nil (pre payload-fix servers).
+        /// Legacy bloated shape, read only when `presets` is nil (pre payload-fix servers).
         var scopes: [LegacyScope]?
 
         var revisionInt: Int64 {

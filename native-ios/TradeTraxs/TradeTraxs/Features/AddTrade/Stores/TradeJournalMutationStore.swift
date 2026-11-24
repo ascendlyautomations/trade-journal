@@ -23,7 +23,7 @@ final class TradeJournalMutationStore {
         return nil
     }
 
-    /// Create or update — screens that upsert by ID.
+    /// Create or update, screens that upsert by ID.
     var latestUpsertedTrade: Trade? {
         switch latest {
         case .created(let trade), .updated(let trade):
@@ -38,7 +38,7 @@ final class TradeJournalMutationStore {
 
     private init() {}
 
-    /// Bind the shared presentation cache once at app bootstrap — central upsert path for all journal mutations.
+    /// Bind the shared presentation cache once at app bootstrap, central upsert path for all journal mutations.
     func configure(detailCache: DetailPresentationCache, vaultStore: VaultStore? = nil) {
         self.detailCache = detailCache
         self.vaultStore = vaultStore
@@ -130,7 +130,7 @@ final class TradeJournalMutationStore {
         )
     }
 
-    /// CSV / bulk import — bounded invalidation; authoritative reload via mounted observers.
+    /// CSV / bulk import, bounded invalidation; authoritative reload via mounted observers.
     func noteBulkImport(
         owner: ProfileID,
         source: AnalyticsBulkImportSource = .unknown,

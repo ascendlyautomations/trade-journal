@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Reels/TikTok-style comments sheet — reuses ``CommentsViewModel`` and comment row UI.
+/// Reels/TikTok-style comments sheet, reuses ``CommentsViewModel`` and comment row UI.
 struct ReelCommentsSheetView: View {
     let target: InteractionTarget
     let contentOwnerUserID: String

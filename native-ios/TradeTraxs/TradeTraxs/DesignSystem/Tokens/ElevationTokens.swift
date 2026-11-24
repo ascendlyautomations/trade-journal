@@ -1,7 +1,7 @@
 import CoreGraphics
 import SwiftUI
 
-/// Soft elevation language — prefer materials over heavy multi-shadow stacks.
+/// Soft elevation language, prefer materials over heavy multi-shadow stacks.
 enum ElevationToken: Int, CaseIterable, Sendable {
     case flat = 0
     case low = 1

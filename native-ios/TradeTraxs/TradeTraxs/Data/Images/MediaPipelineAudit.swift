@@ -3,7 +3,7 @@ import ImageIO
 import UIKit
 
 #if DEBUG
-/// End-to-end image pipeline trace — correlate Feed vs Detail loads for the same storage reference.
+/// End-to-end image pipeline trace, correlate Feed vs Detail loads for the same storage reference.
 nonisolated enum MediaPipelineAudit {
     struct FetchReport: Sendable {
         var surface: String

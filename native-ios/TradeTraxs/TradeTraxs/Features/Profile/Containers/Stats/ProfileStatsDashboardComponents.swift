@@ -34,10 +34,7 @@ struct ProfileStatsDashboardCard<Content: View>: View {
         content()
             .padding(ExperienceSpacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                colors.fillSecondary.opacity(0.55),
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-            )
+            .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
     }
 }
 
@@ -245,10 +242,7 @@ struct ProfileStatsExtremeCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ExperienceSpacing.sm)
-        .background(
-            colors.fillSecondary.opacity(0.55),
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-        )
+        .modifier(ProfileStatsMetricTileChrome())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(value)")
     }
@@ -270,12 +264,12 @@ struct ProfileStatsLongShortCard: View {
     }
 
     private var longPercentText: String {
-        guard total > 0 else { return "—" }
+        guard total > 0 else { return "–" }
         return NumberDisplay.percent(Double(longCount) / Double(total) * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 
     private var shortPercentText: String {
-        guard total > 0 else { return "—" }
+        guard total > 0 else { return "–" }
         return NumberDisplay.percent(Double(shortCount) / Double(total) * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 
@@ -367,12 +361,25 @@ struct ProfileStatsStreakCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ExperienceSpacing.sm)
-        .background(
-            colors.fillSecondary.opacity(0.55),
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-        )
+        .modifier(ProfileStatsMetricTileChrome())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(count) trades")
+    }
+}
+
+private struct ProfileStatsMetricTileChrome: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if colorScheme == .light {
+            content.experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
+        } else {
+            content.background(
+                colors.fillSecondary.opacity(0.55),
+                in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+            )
+        }
     }
 }
 

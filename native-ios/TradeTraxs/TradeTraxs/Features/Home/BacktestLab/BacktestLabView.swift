@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Native Backtest Lab — isolated `mode == backtest` journal analytics (web `/backtest` parity).
+/// Native Backtest Lab, isolated `mode == backtest` journal analytics (web `/backtest` parity).
 struct BacktestLabView: View {
     @State private var viewModel: BacktestLabViewModel
     @State private var entitlementGateRevision = 0
@@ -60,6 +60,10 @@ struct BacktestLabView: View {
             guard !restrictsBacktestLab else { return }
             Task { await viewModel.refresh() }
         }
+        .onOwnerAccountMutation {
+            guard !restrictsBacktestLab else { return }
+            viewModel.handleAccountMutation()
+        }
         .confirmationDialog(
             "Delete this backtest?",
             isPresented: Binding(
@@ -76,8 +80,13 @@ struct BacktestLabView: View {
                 viewModel.pendingDelete = nil
             }
         }
-        .sheet(item: $viewModel.sharePayload) { payload in
-            BacktestLabShareSheet(items: [payload.text])
+        .sheet(item: $viewModel.journalSharePresentation) { presentation in
+            SharedContentShareSheet(
+                target: presentation.target,
+                data: data,
+                tradeOwnerShareAccess: presentation.ownerAccess,
+                onClose: { viewModel.journalSharePresentation = nil }
+            )
         }
         .sheet(isPresented: Binding(
             get: { viewModel.showsCustomTimeSheet },
@@ -393,7 +402,7 @@ struct BacktestLabView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
             if let rr = row.averageRR {
-                Text("Avg R:R: \(TradeDisplay.compactRRText(Decimal(rr)) ?? "—")")
+                Text("Avg R:R: \(TradeDisplay.compactRRText(Decimal(rr)) ?? "–")")
                     .experienceStyle(.caption, color: colors.tertiaryText)
             }
         }

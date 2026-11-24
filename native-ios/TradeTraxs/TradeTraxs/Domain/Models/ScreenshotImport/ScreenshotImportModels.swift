@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// Vision OCR text block with layout — used before trade semantics.
+/// Vision OCR text block with layout, used before trade semantics.
 nonisolated struct OCRTextBlock: Hashable, Codable, Sendable, Identifiable {
     var id: String
     var text: String
@@ -62,7 +62,7 @@ nonisolated struct ScreenshotStructuredTable: Hashable, Codable, Sendable {
     }
 }
 
-/// Safe DEBUG diagnostics — no account IDs, emails, balances, or raw OCR dumps.
+/// Safe DEBUG diagnostics, no account IDs, emails, balances, or raw OCR dumps.
 nonisolated struct ScreenshotImportDiagnostics: Hashable, Codable, Sendable {
     var ocrObservationCount: Int
     var detectedHeaders: [String]
@@ -80,7 +80,7 @@ nonisolated struct ScreenshotImportRejectedRow: Hashable, Codable, Sendable {
     var reason: String
 }
 
-/// Parsed trade or execution candidate — Phase 2 fill aggregation consumes `.executionFill`.
+/// Parsed trade or execution candidate, Phase 2 fill aggregation consumes `.executionFill`.
 nonisolated struct ScreenshotParsedCandidate: Hashable, Codable, Sendable, Identifiable {
     enum Kind: String, Hashable, Codable, Sendable {
         case completedTrade
@@ -111,7 +111,7 @@ nonisolated struct ScreenshotImportParseResult: Hashable, Codable, Sendable {
     var imagesProcessed: Int
 }
 
-/// Phase 2 pipeline output — trades plus parallel screenshot review metadata.
+/// Phase 2 pipeline output, trades plus parallel screenshot review metadata.
 nonisolated struct ScreenshotImportProcessResult: Hashable, Codable, Sendable {
     var summary: CSVParseSummary
     var metadataByTradeID: [String: ScreenshotImportTradeMetadata]

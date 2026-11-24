@@ -1,6 +1,6 @@
 import Foundation
 
-/// Personal thread V2 bootstrap — `rpc_v1_conversation_thread_bootstrap`.
+/// Personal thread V2 bootstrap, `rpc_v1_conversation_thread_bootstrap`.
 nonisolated struct ConversationThreadRpcBootstrapRepository {
     private let client: BackendV2RPCClient
 

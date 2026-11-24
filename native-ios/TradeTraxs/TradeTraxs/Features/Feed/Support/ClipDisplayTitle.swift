@@ -1,6 +1,6 @@
 import Foundation
 
-/// Profile / clip card title — stored reel caption; generic label when empty.
+/// Profile / clip card title, stored reel caption; generic label when empty.
 enum ClipDisplayTitle {
     static func text(for reel: Reel, linkedTrade _: Trade?) -> String {
         ReelCaptionDisplay.displayText(for: reel)

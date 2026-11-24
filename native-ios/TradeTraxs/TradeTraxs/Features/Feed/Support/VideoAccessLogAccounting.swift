@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 #if DEBUG
-/// Correct AVPlayerItem access-log byte accounting — events are per-request, not one session counter.
+/// Correct AVPlayerItem access-log byte accounting, events are per-request, not one session counter.
 enum VideoAccessLogAccounting {
     struct DeltaResult: Sendable {
         var newBytes: Int64

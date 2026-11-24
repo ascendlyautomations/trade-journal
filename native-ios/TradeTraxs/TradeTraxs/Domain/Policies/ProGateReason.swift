@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared Pro gate semantics — keep aligned with ``lib/proGateReason.ts``.
+/// Shared Pro gate semantics, keep aligned with ``lib/proGateReason.ts``.
 enum ProLimitKind: String, Sendable {
     case accountCount = "account_count"
     case dailyTrades = "daily_trades"
@@ -70,7 +70,7 @@ enum ProGateReason: Sendable {
         }
     }
 
-    /// Extra paywall context for feature gates — avoids repeating benefit marketing copy.
+    /// Extra paywall context for feature gates, avoids repeating benefit marketing copy.
     var paywallFeatureContext: String? {
         guard case .feature(let feature) = self else { return nil }
         switch feature {
@@ -85,11 +85,11 @@ enum ProGateReason: Sendable {
         "Upgrade to \(MonetizationPlanCopy.proPlanName) for unlimited active accounts, unlimited Clips, and professional tools."
     }
 
-    /// Legacy subtitle — prefer ``detailMessage`` in new UI.
+    /// Legacy subtitle, prefer ``detailMessage`` in new UI.
     var subtitle: String { detailMessage }
 }
 
-enum ProGateReasonParser {
+nonisolated enum ProGateReasonParser {
     static let proLimitReachedCode = "PRO_LIMIT_REACHED"
 
     static func limit(fromLegacyCode code: String) -> ProLimitKind? {
@@ -101,7 +101,7 @@ enum ProGateReasonParser {
         case "FREE_PLAN_DAILY_POST_LIMIT": return .dailyPosts
         case "FREE_PLAN_DAILY_CLIP_LIMIT", "FREE_PLAN_REELS_LIMIT": return .dailyClips
         case "FREE_PLAN_DAILY_DM_LIMIT": return .dailyDirectMessages
-        case "TRAXPRO_COPY_TRADING_REQUIRED": return nil
+        case "TRAXPRO_COPY_TRADING_REQUIRED": return nil // mapped via feature(fromMessage:)
         default:
             if upper.contains("CSV"), upper.contains("IMPORT") || upper.contains("COOLDOWN") {
                 return .csvImportCooldown
@@ -125,7 +125,7 @@ enum ProGateReasonParser {
         }
     }
 
-    /// Legitimate Free-plan limits and Pro features only — never RLS, auth, or validation noise.
+    /// Legitimate Free-plan limits and Pro features only, never RLS, auth, or validation noise.
     static func reason(from error: Error) -> ProGateReason? {
         if let structured = structuredReason(from: error) {
             return structured
@@ -220,8 +220,20 @@ enum ProGateReasonParser {
 
     private static func feature(fromMessage message: String) -> ProFeatureKind? {
         let lowered = message.lowercased()
-        if lowered.contains("traxpro_copy_trading") {
+        if lowered.contains("traxpro_copy_trading_required") || lowered.contains("traxpro_copy_trading") {
             return .copyTrading
+        }
+        if lowered.contains("traxpro_premium_analytics_required") {
+            return .premiumAnalytics
+        }
+        if lowered.contains("traxpro_prop_firm_required") {
+            return .propFirm
+        }
+        if lowered.contains("traxpro_trading_reports_required") {
+            return .tradingReports
+        }
+        if lowered.contains("traxpro_backtest_lab_required") {
+            return .backtestLab
         }
         if lowered.contains("copy trading") || lowered.contains("copy_trading") {
             return .copyTrading

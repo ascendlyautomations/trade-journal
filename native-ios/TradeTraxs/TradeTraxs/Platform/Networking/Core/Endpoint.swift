@@ -9,7 +9,7 @@ nonisolated enum APIHost: String, Sendable {
     case external
 }
 
-/// Declarative endpoint description — not an implemented feature call.
+/// Declarative endpoint description, not an implemented feature call.
 nonisolated struct Endpoint: Sendable, Hashable {
     var host: APIHost
     var path: String

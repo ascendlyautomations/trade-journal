@@ -11,10 +11,10 @@ nonisolated struct HTTPRequest: Sendable {
     /// Stable key for metrics / future in-flight coalescing.
     var idempotencyKey: String?
     var allowsRetry: Bool = true
-    /// Scheduling lane — background requests yield while visible work is in flight.
+    /// Scheduling lane, background requests yield while visible work is in flight.
     var schedulingPriority: NetworkSchedulingPriority = .visible
     /// When true, 4xx/5xx are returned as ``HTTPResponse`` instead of thrown ``NetworkError``.
-    /// Default false — only Trade AI BFF analysis opts in.
+    /// Default false, only Trade AI BFF analysis opts in.
     var acceptsNonSuccessStatusCodes: Bool = false
 
     var urlRequest: URLRequest {

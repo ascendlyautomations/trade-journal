@@ -1,6 +1,6 @@
 import Foundation
 
-/// Trade Room alias — shared semantics live in ``MessageReactionSemantics``.
+/// Trade Room alias, shared semantics live in ``MessageReactionSemantics``.
 nonisolated enum RoomMessageReactionSemantics {
     static var supportedEmojis: [String] { MessageReactionSemantics.supportedEmojis }
     static var doubleTapLikeEmoji: String { MessageReactionSemantics.doubleTapLikeEmoji }

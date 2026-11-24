@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped profile entity cache — one batched SELECT for missing IDs.
+/// Session-scoped profile entity cache, one batched SELECT for missing IDs.
 ///
 /// Features must not call `profiles.profile(id:)` in a loop. Use ``profiles(ids:)``.
 @Observable

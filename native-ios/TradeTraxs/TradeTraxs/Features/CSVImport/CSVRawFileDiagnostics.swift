@@ -3,7 +3,7 @@ import Foundation
 import UniformTypeIdentifiers
 
 #if DEBUG
-/// Raw-byte inspection for CSV imports — counts and tiny hex windows only (never full file dumps).
+/// Raw-byte inspection for CSV imports, counts and tiny hex windows only (never full file dumps).
 nonisolated enum CSVRawFileDiagnostics {
     struct PickMetadata: Sendable {
         var fileName: String

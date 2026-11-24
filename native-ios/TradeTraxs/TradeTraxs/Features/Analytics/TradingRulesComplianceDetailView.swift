@@ -97,11 +97,11 @@ struct TradingRulesComplianceDetailView: View {
                 }
 
                 if session.isProvisionalCompliance {
-                    Text("Preliminary — full trade history is still loading. Numbers may change.")
+                    Text("Preliminary, full trade history is still loading. Numbers may change.")
                         .experienceStyle(.caption2, color: colors.tertiaryText)
                         .padding(ExperienceSpacing.sm)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+                        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
                         .accessibilityIdentifier("tradingRulesAnalytics.provisional")
                 }
 
@@ -174,7 +174,7 @@ struct TradingRulesComplianceDetailView: View {
                 icon: .filter,
                 title: "No trades match this filter",
                 message: """
-                You have trading rules configured, but none of your trades match the current filter. Widen the date range or account selection — compliance is not 0%.
+                You have trading rules configured, but none of your trades match the current filter. Widen the date range or account selection, compliance is not 0%.
                 """
             )
         }

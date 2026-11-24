@@ -2,9 +2,12 @@ import Foundation
 
 /// Locale-aware numeric presentation for user-facing TradeTraxs UI.
 ///
-/// Display-only — never mutates domain values. Prefer these helpers over
+/// Display-only, never mutates domain values. Prefer these helpers over
 /// ad-hoc `String(format:)` / string interpolation for counts, currency, and percentages.
 nonisolated enum NumberDisplay {
+    /// Shown when a metric is unknown (en dash U+2013, not em dash).
+    static let missingValueSymbol = "\u{2013}"
+
     // MARK: - Integers
 
     static func integer(_ value: Int) -> String {
@@ -81,9 +84,9 @@ nonisolated enum NumberDisplay {
         )
     }
 
-    /// Whole-dollar P&L — `+$1,250`, `-$450` (Trade cards / leaderboard).
+    /// Whole-dollar P&L, `+$1,250`, `-$450` (Trade cards / leaderboard).
     static func pnlWholeDollars(_ money: Money?) -> String {
-        guard let amount = money?.amount else { return "—" }
+        guard let amount = money?.amount else { return missingValueSymbol }
         return signedCurrencyPrefix(
             value: amount,
             minimumFractionDigits: 0,
@@ -92,9 +95,9 @@ nonisolated enum NumberDisplay {
         )
     }
 
-    /// Profile / dashboard currency — `$1,250.00`, `-$1,250.50`.
+    /// Profile / dashboard currency, `$1,250.00`, `-$1,250.50`.
     static func money(_ amount: Decimal?) -> String {
-        guard let amount else { return "—" }
+        guard let amount else { return missingValueSymbol }
         return signedCurrencyPrefix(
             value: amount,
             minimumFractionDigits: 0,
@@ -117,7 +120,7 @@ nonisolated enum NumberDisplay {
         signedMoney(Decimal(value))
     }
 
-    /// Report-style P&L — preserves two decimal places.
+    /// Report-style P&L, preserves two decimal places.
     static func reportPnL(_ value: Double) -> String {
         currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
@@ -126,7 +129,7 @@ nonisolated enum NumberDisplay {
         currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
-    /// Chart axis / tooltip — whole dollars, optional explicit `+` on meaningful gains.
+    /// Chart axis / tooltip, whole dollars, optional explicit `+` on meaningful gains.
     static func chartSignedCurrency(_ value: Double) -> String {
         if value > 0.01 {
             return currency(value, minimumFractionDigits: 0, maximumFractionDigits: 0, explicitPlus: true)
@@ -142,14 +145,14 @@ nonisolated enum NumberDisplay {
         currency(value, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 
-    /// Journal-style reward multiple — `1:2.9`.
+    /// Journal-style reward multiple, `1:2.9`.
     static func journalRewardMultiple(_ value: Decimal) -> String {
         "1:\(decimal(value, minimumFractionDigits: 1, maximumFractionDigits: 1))"
     }
 
     // MARK: - Percentages
 
-    /// Percent on a 0–100 scale — `1,250%`, `1,250.5%`, `-1,250.5%`.
+    /// Percent on a 0–100 scale, `1,250%`, `1,250.5%`, `-1,250.5%`.
     static func percent(
         _ value: Double,
         minimumFractionDigits: Int = 0,
@@ -180,7 +183,7 @@ nonisolated enum NumberDisplay {
 
     /// Win rate stored as 0–1 fraction.
     static func winRate(_ rate: Decimal?) -> String {
-        guard let rate else { return "—" }
+        guard let rate else { return missingValueSymbol }
         let percentValue = NSDecimalNumber(decimal: rate * 100).doubleValue
         if percentValue.rounded() == percentValue {
             return percent(percentValue, minimumFractionDigits: 0, maximumFractionDigits: 0)
@@ -188,15 +191,15 @@ nonisolated enum NumberDisplay {
         return percent(percentValue, minimumFractionDigits: 1, maximumFractionDigits: 1)
     }
 
-    /// Profit factor / generic factor — `1,234.56`.
+    /// Profit factor / generic factor, `1,234.56`.
     static func factor(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return missingValueSymbol }
         return ratio(value, fractionDigits: 2)
     }
 
     // MARK: - Compact social counts (K / M)
 
-    /// Compact follower/member counts — `1.2K`, `15K`, `1.4M`. Values under 1,000 use grouping.
+    /// Compact follower/member counts, `1.2K`, `15K`, `1.4M`. Values under 1,000 use grouping.
     static func compactCount(_ value: Int) -> String {
         let absolute = abs(value)
         if absolute >= 1_000_000 {
@@ -210,7 +213,7 @@ nonisolated enum NumberDisplay {
         return integer(value)
     }
 
-    /// Like/engagement compact counts — preserves existing K/M thresholds.
+    /// Like/engagement compact counts, preserves existing K/M thresholds.
     static func compactEngagementCount(_ value: Int) -> String {
         if value >= 1_000_000 {
             return decimal(Double(value) / 1_000_000, minimumFractionDigits: 1, maximumFractionDigits: 1) + "M"
@@ -221,7 +224,7 @@ nonisolated enum NumberDisplay {
         return integer(value)
     }
 
-    /// Chart axis compact currency — preserves `$1.2K` behavior for large magnitudes.
+    /// Chart axis compact currency, preserves `$1.2K` behavior for large magnitudes.
     static func compactCurrencyAxis(_ value: Decimal) -> String {
         let number = NSDecimalNumber(decimal: value).doubleValue
         let sign = number < 0 ? "-" : "+"
@@ -240,7 +243,7 @@ nonisolated enum NumberDisplay {
         return "\(sign)$\(integer(Int(absValue.rounded())))"
     }
 
-    /// Equity curve Y-axis — compact K for large values, grouped full value otherwise.
+    /// Equity curve Y-axis, compact K for large values, grouped full value otherwise.
     static func compactEquityAxis(_ value: Double) -> String {
         let absValue = abs(value)
         let formatted: String
@@ -262,22 +265,22 @@ nonisolated enum NumberDisplay {
         "\(compactCount(count)) members"
     }
 
-    /// Rating on a 1–5 scale — `4.2/5`.
+    /// Rating on a 1–5 scale, `4.2/5`.
     static func ratingOutOfFive(_ value: Double, fractionDigits: Int = 1) -> String {
         "\(decimal(value, minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits))/5"
     }
 
-    /// Duration in hours — `7.5h`.
+    /// Duration in hours, `7.5h`.
     static func hours(_ value: Double, fractionDigits: Int = 1) -> String {
         "\(decimal(value, minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits))h"
     }
 
-    /// Multiplier — `2.5×`.
+    /// Multiplier, `2.5×`.
     static func multiple(_ value: Double, fractionDigits: Int = 1) -> String {
         "\(decimal(value, minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits))×"
     }
 
-    /// R multiple label — `1.5R`.
+    /// R multiple label, `1.5R`.
     static func rMultiple(_ value: Double, fractionDigits: Int = 1) -> String {
         "\(decimal(abs(value), minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits))R"
     }

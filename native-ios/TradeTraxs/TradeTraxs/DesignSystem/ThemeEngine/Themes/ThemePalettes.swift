@@ -5,7 +5,7 @@ enum ThemePalettes {
     /// Adaptive System palette (current Experience standard).
     static let adaptiveStandard = SemanticColorPalette.standard
 
-    /// Fixed Light — always light tokens.
+    /// Fixed Light, always light tokens.
     static let lightFixed = SemanticColorPalette(
         accent: Color(hex: 0x0A6E8A),
         accentMuted: Color(hex: 0x0A6E8A, alpha: 0.14),
@@ -15,7 +15,7 @@ enum ThemePalettes {
         backgroundGrouped: Color(hex: 0xEEF2F6),
         backgroundElevated: Color(hex: 0xFFFFFF),
         surfacePrimary: Color(hex: 0xFFFFFF),
-        surfaceSecondary: Color(hex: 0xF0F3F7),
+        surfaceSecondary: Color(hex: 0xF2F5F9),
         surfaceGrouped: Color(hex: 0xE8EEF4),
         surfaceOverlay: Color(hex: 0x0B1218, alpha: 0.45),
         textPrimary: Color(hex: 0x101820),
@@ -41,7 +41,7 @@ enum ThemePalettes {
         accessibilityLoss: Color(hex: 0x9F1D1D)
     )
 
-    /// Fixed Dark — always dark tokens.
+    /// Fixed Dark, always dark tokens.
     static let darkFixed = SemanticColorPalette(
         accent: Color(hex: 0x4EC4E0),
         accentMuted: Color(hex: 0x4EC4E0, alpha: 0.22),

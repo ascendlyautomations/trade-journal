@@ -1,6 +1,6 @@
 import Foundation
 
-/// Logged-out launch shell — satisfies ``ContentReportRepository`` without Supabase transport.
+/// Logged-out launch shell, satisfies ``ContentReportRepository`` without Supabase transport.
 ///
 /// Production reporting remains ``DefaultContentReportRepository`` after deferred bootstrap.
 nonisolated struct LoginShellContentReportRepository: ContentReportRepository {

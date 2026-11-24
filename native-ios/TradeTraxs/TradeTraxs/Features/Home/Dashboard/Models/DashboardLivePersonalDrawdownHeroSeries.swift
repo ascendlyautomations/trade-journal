@@ -1,6 +1,6 @@
 import Foundation
 
-/// Dashboard hero equity + personal drawdown floor — mirrors web `useDashboardLiveAccountBundle`.
+/// Dashboard hero equity + personal drawdown floor, mirrors web `useDashboardLiveAccountBundle`.
 ///
 /// Balance levels come only from ``LivePersonalDrawdownEngine``; never apply
 /// ``DashboardEquityHeroPresentation/chartPoints`` (V3 cumulative P&amp;L offset).

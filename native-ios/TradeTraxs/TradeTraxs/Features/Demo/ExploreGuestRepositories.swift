@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Guest public community (anon RPC / RLS only)
 
-/// Feed timeline loads exclusively via ``FeedBootstrapLoader`` guest RPC — no REST / block sync.
+/// Feed timeline loads exclusively via ``FeedBootstrapLoader`` guest RPC, no REST / block sync.
 nonisolated struct GuestPublicFeedRepository: FeedRepository, @unchecked Sendable {
     private let publicReads: DefaultFeedRepository?
 
@@ -131,7 +131,7 @@ nonisolated struct GuestPublicExploreRepository: ExploreRepository, @unchecked S
     }
 }
 
-/// Public room metadata reads only — membership / messaging writes blocked for guests.
+/// Public room metadata reads only, membership / messaging writes blocked for guests.
 nonisolated struct GuestPublicRoomsRepository: RoomRepository, @unchecked Sendable {
     private let live: DefaultRoomRepository
 
@@ -501,7 +501,7 @@ nonisolated struct GuestPublicTradeAccessRepository: TradeRepository, @unchecked
     }
 }
 
-/// Local demo DMs only — never hits ``rpc_v2_messaging_bootstrap``.
+/// Local demo DMs only, never hits ``rpc_v2_messaging_bootstrap``.
 nonisolated struct DemoExploreMessageRepository: MessageRepository, @unchecked Sendable {
     private let viewerID: ProfileID
 

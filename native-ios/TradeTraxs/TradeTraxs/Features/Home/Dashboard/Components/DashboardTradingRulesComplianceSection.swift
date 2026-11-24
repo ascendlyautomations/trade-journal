@@ -63,7 +63,7 @@ struct DashboardTradingRulesComplianceSection: View {
                     Text("Compliance")
                         .experienceStyle(.caption2, color: colors.tertiaryText)
                     Text(
-                        result.score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "—"
+                        result.score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "–"
                     )
                     .font(.title2.weight(.bold).monospacedDigit())
                     .foregroundStyle(colors.primaryText)
@@ -89,7 +89,7 @@ struct DashboardTradingRulesComplianceSection: View {
             }
 
             if session.isProvisionalCompliance {
-                Text("Preliminary — full trade history is still loading. Numbers may change.")
+                Text("Preliminary, full trade history is still loading. Numbers may change.")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
                     .accessibilityIdentifier("dashboard.tradingRulesCompliance.provisional")
             }

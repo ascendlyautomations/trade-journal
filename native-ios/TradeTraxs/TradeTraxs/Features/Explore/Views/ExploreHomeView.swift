@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Discovery surface pushed from Feed — not a Global Feed clone.
+/// Discovery surface pushed from Feed, not a Global Feed clone.
 struct ExploreHomeView: View {
     @State private var viewModel: ExploreViewModel
     private let imagePipeline: any ImagePipeline

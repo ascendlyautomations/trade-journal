@@ -116,7 +116,7 @@ enum TradePsychologyFormComponents {
     }
 }
 
-/// Patch values for Quick Reflection saves — `nil` means do not update that column.
+/// Patch values for Quick Reflection saves, `nil` means do not update that column.
 struct PostTradePsychologySavePatch: Sendable {
     var confidence: Int? = nil
     var emotion: String? = nil

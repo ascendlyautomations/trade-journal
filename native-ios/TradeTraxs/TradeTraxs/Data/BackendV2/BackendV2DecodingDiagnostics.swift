@@ -1,6 +1,6 @@
 import Foundation
 
-/// Safe `DecodingError` diagnostics — never logs response bodies or user data.
+/// Safe `DecodingError` diagnostics, never logs response bodies or user data.
 nonisolated enum BackendV2DecodingDiagnostics {
     struct Snapshot: Sendable, Equatable {
         var category: String

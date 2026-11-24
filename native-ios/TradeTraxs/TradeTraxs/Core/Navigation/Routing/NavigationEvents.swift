@@ -2,7 +2,7 @@ import Foundation
 
 /// Navigation lifecycle events for logging / future analytics.
 ///
-/// Not a service locator — observers subscribe via coordinator hooks later.
+/// Not a service locator, observers subscribe via coordinator hooks later.
 enum NavigationEvent: Sendable, Equatable {
     case sessionPhaseChanged(SessionPhase)
     case tabSelected(TabIdentifier)

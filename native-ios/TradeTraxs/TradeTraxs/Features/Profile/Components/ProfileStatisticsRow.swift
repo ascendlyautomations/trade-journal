@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Dedicated public statistics row beneath the Profile identity block.
 ///
-/// Pass any ordered ``ProfileHeaderMetric`` list — the layout expands without
+/// Pass any ordered ``ProfileHeaderMetric`` list, the layout expands without
 /// redesigning the header.
 struct ProfileStatisticsRow: View {
     let metrics: [ProfileHeaderMetric]

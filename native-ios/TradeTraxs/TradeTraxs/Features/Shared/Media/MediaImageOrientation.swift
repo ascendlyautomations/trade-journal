@@ -1,6 +1,6 @@
 import UIKit
 
-/// EXIF / UIImage orientation — normalize once before crop math, encode, and display sizing.
+/// EXIF / UIImage orientation, normalize once before crop math, encode, and display sizing.
 nonisolated enum MediaImageOrientation {
     /// Bakes orientation into pixels. Returns `.up` at scale 1.
     nonisolated static func normalized(_ image: UIImage) -> UIImage {
@@ -33,7 +33,7 @@ nonisolated enum MediaImageOrientation {
         return max(size.width, 1) / max(size.height, 1)
     }
 
-    /// Visual pixel dimensions without re-baking orientation — for already-normalized display bitmaps.
+    /// Visual pixel dimensions without re-baking orientation, for already-normalized display bitmaps.
     nonisolated static func visualPixelSize(of image: UIImage) -> CGSize {
         if image.imageOrientation == .up, image.scale == 1, let cgImage = image.cgImage {
             return CGSize(width: cgImage.width, height: cgImage.height)

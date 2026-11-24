@@ -1,10 +1,10 @@
 import Foundation
 import Observation
 
-/// User-scoped custom instrument symbols — survives logout/login and app restart.
+/// User-scoped custom instrument symbols, survives logout/login and app restart.
 ///
 /// Web has no instrument table; explicit picker customs complement `trades.ticker` history.
-/// Intentionally **not** cleared in ``SessionScopedCaches`` — keyed per profile ID.
+/// Intentionally **not** cleared in ``SessionScopedCaches``, keyed per profile ID.
 @Observable
 @MainActor
 final class UserCustomInstrumentStore {

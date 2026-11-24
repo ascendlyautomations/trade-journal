@@ -7,7 +7,7 @@ nonisolated enum LivePersonalDrawdownEngine {
 
     // MARK: - Account config (web parse / gear read)
 
-    /// Opening equity from `accounts.account_size` — never inferred from trade P&L history.
+    /// Opening equity from `accounts.account_size`, never inferred from trade P&L history.
     static func resolvedStartingBalance(for account: TradingAccount) -> Decimal? {
         TradingAccountStartingBalancePolicy.resolvedStartingBalance(for: account)
     }
@@ -83,7 +83,7 @@ nonisolated enum LivePersonalDrawdownEngine {
     }
 
     /// Dashboard bootstrap wire fields for live/broker/personal manual-ledger accounts.
-    /// PostgREST patch body — always emits JSON null when clearing drawdown columns.
+    /// PostgREST patch body, always emits JSON null when clearing drawdown columns.
     static func makeAccountDrawdownPatchBody(
         config: LivePersonalDrawdownConfig?
     ) -> LivePersonalDrawdownAccountPatchBody {

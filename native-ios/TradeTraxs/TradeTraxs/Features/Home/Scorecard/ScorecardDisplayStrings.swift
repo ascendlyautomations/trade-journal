@@ -11,7 +11,7 @@ nonisolated enum ScorecardDisplayStrings {
         case .psychology: return "Insights only (Phase 1)"
         default:
             if let score = category.score { return String(score) }
-            return "—"
+            return "–"
         }
     }
 

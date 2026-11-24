@@ -1,6 +1,6 @@
 import Foundation
 
-/// One row in Check-In History — Eastern trading date + optional check-in + day trade stats.
+/// One row in Check-In History, Eastern trading date + optional check-in + day trade stats.
 nonisolated struct CheckInHistoryDaySummary: Identifiable, Hashable, Sendable {
     var id: String { dateKey }
     var dateKey: String

@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// DEBUG timing for dedicated Clips pager autoplay — one log line per milestone per clip.
+/// DEBUG timing for dedicated Clips pager autoplay, one log line per milestone per clip.
 nonisolated enum ClipsPagerPlaybackProbe {
     nonisolated(unsafe) private static var pageActiveAt: [String: CFAbsoluteTime] = [:]
     nonisolated(unsafe) private static var loggedEvents: Set<String> = []

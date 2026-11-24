@@ -27,11 +27,11 @@ enum InteractiveImageZoomProbe {
 
 // MARK: - SwiftUI entry (Feed + detail image renderer with interactive zoom)
 
-/// Shared interactive image for Feed and detail — identical aspect-fit presentation.
+/// Shared interactive image for Feed and detail, identical aspect-fit presentation.
 ///
 /// Feed and Post/Trade detail use the same container sizing and `scaleAspectFit` UIKit
 /// renderer. Only ``deliveryQuality`` differs (640px feed egress vs full-resolution detail).
-/// Stored crop metadata is never reapplied — the baked/uploaded bitmap is shown as-is.
+/// Stored crop metadata is never reapplied, the baked/uploaded bitmap is shown as-is.
 struct InteractiveImageView: View {
     let mediaID: String
     let reference: MediaReference?
@@ -41,7 +41,7 @@ struct InteractiveImageView: View {
     var accessibilityIdentifier: String = "interactive.media"
     /// Feed uses `.feedDisplay` (640px). Detail defaults to `.feedDetail` (1280px); pinch upgrades to `.fullResolution`.
     var deliveryQuality: ImageDeliveryQuality = .feedDisplay
-    /// DEBUG pipeline audit label — `feed` or `detail`.
+    /// DEBUG pipeline audit label, `feed` or `detail`.
     var auditSurface: String = ""
     var onSingleTap: (() -> Void)?
     var onDoubleTapLike: (() -> Void)?
@@ -503,9 +503,9 @@ private struct InteractiveImageRepresentable: UIViewRepresentable {
     }
 }
 
-// MARK: - UIKit root (pixels + pinch/tap — recognizer stays here; overlay follows live)
+// MARK: - UIKit root (pixels + pinch/tap, recognizer stays here; overlay follows live)
 
-/// Root interactive surface — `UIImageView` displays pixels; root owns recognizers.
+/// Root interactive surface, `UIImageView` displays pixels; root owns recognizers.
 final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
     let mediaID: String
     let storageReference: String
@@ -903,7 +903,7 @@ final class InteractiveImageUIView: UIView, UIGestureRecognizerDelegate {
         view.transform = transform
     }
 
-    /// Keeps the scaled overlay covering the original image viewport — no empty gaps inside.
+    /// Keeps the scaled overlay covering the original image viewport, no empty gaps inside.
     private func clampedTranslation(
         _ proposed: CGPoint,
         scale: CGFloat,

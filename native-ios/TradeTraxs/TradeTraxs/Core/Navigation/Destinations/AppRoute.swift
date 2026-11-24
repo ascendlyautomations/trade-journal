@@ -28,7 +28,7 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case report(ReportID)
     /// Owner-only psychology analytics detail.
     case psychologyAnalytics
-    /// Personal trading rules — compliance, violations, trends, and impact.
+    /// Personal trading rules, compliance, violations, trends, and impact.
     case tradingRulesAnalytics
     /// Drill-down for a single rule’s compliance history.
     case tradingRulesRuleDetail(String)
@@ -60,7 +60,7 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case room(RoomID)
     case rooms
     case affiliate
-    /// Hierarchical Settings — owned by the Home tab stack that opened Settings.
+    /// Hierarchical Settings, owned by the Home tab stack that opened Settings.
     case settings(SettingsRoute)
 }
 
@@ -85,7 +85,7 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case roomInfo(RoomID)
     case manageRoom(RoomID)
     case roomSettings(RoomID)
-    /// Hierarchical Settings — owned by the Feed tab stack that opened Settings.
+    /// Hierarchical Settings, owned by the Feed tab stack that opened Settings.
     case settings(SettingsRoute)
     case tradingRulesAnalytics
     case tradingRulesRuleDetail(String)
@@ -110,7 +110,7 @@ enum MessagesRoute: Hashable, Codable, Sendable {
     case roomInfo(RoomID)
     case manageRoom(RoomID)
     case roomSettings(RoomID)
-    /// Hierarchical Settings — owned by the Messages tab stack that opened Settings.
+    /// Hierarchical Settings, owned by the Messages tab stack that opened Settings.
     case settings(SettingsRoute)
     case tradingRulesAnalytics
     case tradingRulesRuleDetail(String)
@@ -126,7 +126,7 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case following(ProfileID)
     case followRequests
     case tradeRoomJoinRequest(String)
-    /// Hierarchical Settings destination — push multiple cases for nested stacks.
+    /// Hierarchical Settings destination, push multiple cases for nested stacks.
     case settings(SettingsRoute)
     case referrals
     case affiliate
@@ -262,7 +262,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     }
 }
 
-/// Legacy web settings tab names — retained for call-site clarity.
+/// Legacy web settings tab names, retained for call-site clarity.
 typealias SettingsSection = SettingsRoute
 
 /// Auth stack routes (pre-main-shell).

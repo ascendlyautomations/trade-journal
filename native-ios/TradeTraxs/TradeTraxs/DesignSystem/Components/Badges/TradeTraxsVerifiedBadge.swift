@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// TradeTraxs verification mark — blue hexagon with white “T” (not a generic platform check).
+/// TradeTraxs verification mark, blue hexagon with white “T” (not a generic platform check).
 struct TradeTraxsVerifiedBadge: View {
     enum Size: Sendable {
         /// Beside usernames in dense lists (DM rows, leaderboard, members).

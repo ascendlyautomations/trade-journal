@@ -1,10 +1,10 @@
 import Foundation
 
-/// Owner-only daily lifestyle / mental-state check-in — separate from per-trade psychology.
+/// Owner-only daily lifestyle / mental-state check-in, separate from per-trade psychology.
 nonisolated struct TraderDailyCheckIn: Hashable, Codable, Sendable, Identifiable {
     var id: TraderDailyCheckInID
     var ownerProfileID: ProfileID
-    /// Eastern trade date (`YYYY-MM-DD`) — matches `trades.trade_date` semantics.
+    /// Eastern trade date (`YYYY-MM-DD`), matches `trades.trade_date` semantics.
     var checkInDate: String
     var sleepHours: Decimal?
     var sleepQuality: Int?
@@ -77,7 +77,7 @@ nonisolated struct TraderDailyCheckInDraft: Hashable, Sendable {
     }
 }
 
-/// Stress rating scale for daily check-ins — 1 is calmest, 5 is most stressed.
+/// Stress rating scale for daily check-ins, 1 is calmest, 5 is most stressed.
 nonisolated enum TraderDailyCheckInStressScale {
     static let labels: [Int: String] = [
         1: "Calm",
@@ -92,7 +92,7 @@ nonisolated enum TraderDailyCheckInStressScale {
     }
 
     static func displayText(for level: Int?) -> String {
-        guard let level else { return "—" }
+        guard let level else { return "–" }
         return "\(label(for: level)) (\(level)/5)"
     }
 
@@ -153,7 +153,7 @@ extension TraderDailyCheckIn {
 }
 
 nonisolated enum PsychologyCheckInHistoryGate {
-    /// Web `psychologyPreviewParts` — day counts only when preview would be non-empty in Check-In History → Psychology.
+    /// Web `psychologyPreviewParts`, day counts only when preview would be non-empty in Check-In History → Psychology.
     static func psychologyPreviewParts(for checkIn: TraderDailyCheckIn) -> [String] {
         var parts: [String] = []
         if let hours = checkIn.sleepHours {
@@ -192,7 +192,7 @@ nonisolated enum PsychologyCheckInHistoryGate {
     }
 }
 
-/// Web `mergeCheckInsByDatePreferNewer` — range fetch + psychology RPC window.
+/// Web `mergeCheckInsByDatePreferNewer`, range fetch + psychology RPC window.
 nonisolated enum TraderDailyCheckInMerge {
     static func preferNewer(
         primary: [TraderDailyCheckIn],

@@ -228,7 +228,7 @@ final class RoomInfoViewModel {
     }
 
     func leaveRoom() async {
-        guard let viewerID else { return }
+        guard !isOwner, let viewerID else { return }
         ExperienceHaptics.play(.warning)
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
             inboxStore.removeRoom(id: roomID)

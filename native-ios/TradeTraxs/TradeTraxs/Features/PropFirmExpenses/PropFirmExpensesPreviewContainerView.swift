@@ -17,8 +17,9 @@ struct PropFirmExpensesPreviewContainerView: View {
         NavigationStack {
             PropFirmExpensesView(data: data, embeddedInTraxsProPreview: true)
                 .safeAreaInset(edge: .top, spacing: 0) {
-                    TraxsProPreviewSampleDataBanner(
+                    TraxsProSampleDataHeader(
                         unlockFeature: .propFirm,
+                        subtitle: MonetizationPlanCopy.expenseTrackerPreviewSampleDataSubtitle,
                         onExit: exitPreview,
                         onUnlock: {
                             ExperienceHaptics.play(.selection)

@@ -1,18 +1,19 @@
 import Foundation
 import Observation
 
-/// Cross-actor preview flag — readable from repositories without hopping to the main actor.
+/// Cross-actor preview flag, readable from repositories without hopping to the main actor.
 nonisolated enum TraxsProPreviewRuntimeFlag {
     nonisolated(unsafe) static var isReportsPreviewActive = false
     nonisolated(unsafe) static var isDashboardPreviewActive = false
     nonisolated(unsafe) static var isExpenseTrackerPreviewActive = false
+    nonisolated(unsafe) static var isTradingRulesPreviewActive = false
 
     static var usesCanonicalJournalSampleData: Bool {
-        isReportsPreviewActive || isDashboardPreviewActive
+        isReportsPreviewActive || isDashboardPreviewActive || isTradingRulesPreviewActive
     }
 }
 
-/// Signed-in TraxsPro interactive preview — independent of Explore / ``AppLaunchController``.
+/// Signed-in TraxsPro interactive preview, independent of Explore / ``AppLaunchController``.
 @Observable
 @MainActor
 final class TraxsProPreviewSession {
@@ -25,6 +26,7 @@ final class TraxsProPreviewSession {
     private(set) var activeFeature: TraxsProPreviewFeature?
     private var seededTradeIDs: [TradeID] = []
     private var previewSeededSessionCheckIns = false
+    private var tradingRulesPreviewViewerID: ProfileID?
 
     private init() {}
 
@@ -36,7 +38,7 @@ final class TraxsProPreviewSession {
     }
 
   /// Seeds demo trades into the detail cache for report / dashboard drill-down. Does not touch ``SessionOwnerTradesStore``.
-    func beginReportsPreview(detailCache: DetailPresentationCache) {
+    func beginReportsPreview(detailCache: DetailPresentationCache, viewer: ProfileID? = nil) {
         guard !isAnyPreviewActive else { return }
         isReportsPreviewActive = true
         activeFeature = .reports
@@ -44,7 +46,12 @@ final class TraxsProPreviewSession {
         refreshRollingJournalForPreview()
         let trades = DemoCanonicalDataset.trades()
         seededTradeIDs = trades.map(\.id)
-        DemoCanonicalDataset.seedDetailCache(detailCache)
+        if let viewer {
+            DemoCanonicalDataset.seedDetailCache(detailCache, viewer: viewer)
+            seedPreviewCheckIns(for: viewer, trades: trades)
+        } else {
+            DemoCanonicalDataset.seedDetailCache(detailCache)
+        }
     }
 
     func beginDashboardPreview(detailCache: DetailPresentationCache, viewer: ProfileID) {
@@ -59,7 +66,7 @@ final class TraxsProPreviewSession {
         seedPreviewCheckIns(for: viewer, trades: trades)
     }
 
-    /// Expense tracker preview uses in-memory sample rows only — no journal or Supabase seeds.
+    /// Expense tracker preview uses in-memory sample rows only, no journal or Supabase seeds.
     func beginExpenseTrackerPreview() {
         guard !isAnyPreviewActive else { return }
         isExpenseTrackerPreviewActive = true
@@ -67,19 +74,36 @@ final class TraxsProPreviewSession {
         TraxsProPreviewRuntimeFlag.isExpenseTrackerPreviewActive = true
     }
 
-    /// Trading Rules settings preview — sample preferences only (no persistence).
-    func beginTradingRulesPreview() {
+    /// Trading Rules Analytics preview, canonical trades, accounts, and sample rule preferences.
+    func beginTradingRulesPreview(detailCache: DetailPresentationCache, viewer: ProfileID) {
         guard !isAnyPreviewActive else { return }
         isTradingRulesPreviewActive = true
         activeFeature = .tradingRules
+        TraxsProPreviewRuntimeFlag.isTradingRulesPreviewActive = true
+        tradingRulesPreviewViewerID = viewer
+        refreshRollingJournalForPreview()
+        let trades = DemoCanonicalDataset.trades()
+        seededTradeIDs = trades.map(\.id)
+        let accounts = DemoCanonicalDataset.accounts(owner: viewer)
+        DemoCanonicalDataset.seedDetailCache(detailCache, viewer: viewer)
+        seedPreviewCheckIns(for: viewer, trades: trades)
+        SessionAccountsStore.shared.seed(accounts, for: viewer, detailCache: detailCache)
+        SessionOwnerTradesStore.shared.seed(
+            trades,
+            for: viewer,
+            detailCache: detailCache,
+            historyComplete: true,
+            totalTradeCount: trades.count
+        )
+        TradingRulesCompliancePreferencesCache.store(
+            DemoCanonicalDataset.previewPreferenceContext(for: viewer),
+            for: viewer
+        )
     }
 
-    func endTradingRulesPreview() {
+    func endTradingRulesPreview(detailCache: DetailPresentationCache) {
         guard isTradingRulesPreviewActive else { return }
-        isTradingRulesPreviewActive = false
-        if activeFeature == .tradingRules {
-            activeFeature = nil
-        }
+        tearDownTradingRulesPreview(detailCache: detailCache)
     }
 
     /// Ends preview and removes only demo trade seeds from the detail cache.
@@ -115,7 +139,9 @@ final class TraxsProPreviewSession {
         TraxsProPreviewRuntimeFlag.isReportsPreviewActive = false
         TraxsProPreviewRuntimeFlag.isDashboardPreviewActive = false
         TraxsProPreviewRuntimeFlag.isExpenseTrackerPreviewActive = false
+        TraxsProPreviewRuntimeFlag.isTradingRulesPreviewActive = false
         activeFeature = nil
+        tradingRulesPreviewViewerID = nil
         for id in seededTradeIDs {
             detailCache.removeTrade(id: id)
         }
@@ -148,6 +174,24 @@ final class TraxsProPreviewSession {
         SessionDailyCheckInsStore.shared.invalidate()
         CheckInHistorySessionStore.shared.invalidate()
         previewSeededSessionCheckIns = false
+    }
+
+    private func tearDownTradingRulesPreview(detailCache: DetailPresentationCache) {
+        isTradingRulesPreviewActive = false
+        TraxsProPreviewRuntimeFlag.isTradingRulesPreviewActive = false
+        if activeFeature == .tradingRules {
+            activeFeature = nil
+        }
+        if let viewer = tradingRulesPreviewViewerID {
+            SessionOwnerTradesStore.shared.invalidate(profileID: viewer)
+            TradingRulesCompliancePreferencesCache.invalidate(profileID: viewer)
+            TradingRulesComplianceSessionStore.shared.reset()
+        }
+        tradingRulesPreviewViewerID = nil
+        for id in seededTradeIDs {
+            detailCache.removeTrade(id: id)
+        }
+        seededTradeIDs = []
     }
 }
 

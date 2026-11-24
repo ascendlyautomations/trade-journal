@@ -2,7 +2,7 @@ import Foundation
 
 /// BFF client for the existing `/api/push/register` + `/api/push/unregister` pipeline.
 ///
-/// No duplicate token storage on the server — reuses `device_push_tokens`.
+/// No duplicate token storage on the server, reuses `device_push_tokens`.
 protocol DevicePushTokenClienting: Sendable {
     /// Login-shell clients must stay false so a no-op upload cannot count as registered.
     var registersTokensWithServer: Bool { get }

@@ -7,12 +7,12 @@ enum UnauthorizedRefreshResult: Sendable {
     case sessionTerminated
 }
 
-/// Owns authentication state. Features observe ``state`` — they never touch Keychain.
+/// Owns authentication state. Features observe ``state``, they never touch Keychain.
 @Observable
 final class AuthenticationManager {
     private(set) var state: AuthenticationState = .unknown
     private(set) var lastEvent: AuthenticationEvent?
-    /// Monotonic attempt id — stale async refresh/restore completions must not publish state.
+    /// Monotonic attempt id, stale async refresh/restore completions must not publish state.
     private(set) var restorationGeneration: UInt64 = 0
     /// Set after synchronous Keychain restore in ``prepareColdLaunch()``.
     private(set) var coldLaunchKeychainRestoreCompleted = false
@@ -115,13 +115,13 @@ final class AuthenticationManager {
             traceRestoreSessionFound(expired: expired, present: true)
             if expiration.needsRefresh(session) {
                 if expiration.isAccessTokenUsable(session) {
-                    // Near expiry — enter shell with the current token; refresh runs asynchronously.
+                    // Near expiry, enter shell with the current token; refresh runs asynchronously.
                     applyAuthenticated(session, event: .restorationSucceeded(userID: session.userID))
                     Task { await SessionNetworkGate.shared.markReady() }
                     refreshCoordinator.schedule(for: session)
                     return state
                 }
-                // Access token unusable — block until refresh restores a usable session.
+                // Access token unusable, block until refresh restores a usable session.
                 state = .refreshing(session)
                 Task { await SessionNetworkGate.shared.beginRefresh() }
                 return state
@@ -146,7 +146,7 @@ final class AuthenticationManager {
         }
     }
 
-    /// Async follow-up after cold launch — refresh only when required.
+    /// Async follow-up after cold launch, refresh only when required.
     func restoreSession() async {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-uitesting-reset-auth") {
@@ -238,7 +238,7 @@ final class AuthenticationManager {
         refreshCoordinator.cancel()
     }
 
-    /// Invoked when an authenticated API returns 401 — refresh once, then terminal logout if needed.
+    /// Invoked when an authenticated API returns 401, refresh once, then terminal logout if needed.
     func attemptRefreshAfterUnauthorized() async -> UnauthorizedRefreshResult {
         if case .sessionValidationFailed = state {
             return .transientFailure
@@ -766,7 +766,7 @@ final class AuthenticationManager {
 #endif
             } catch {
                 AppLog.authentication.error(
-                    "Post-auth profile bootstrap failed — session remains authenticated: \(String(describing: error), privacy: .public)"
+                    "Post-auth profile bootstrap failed, session remains authenticated: \(String(describing: error), privacy: .public)"
                 )
 #if DEBUG
                 if session.provider == .apple {

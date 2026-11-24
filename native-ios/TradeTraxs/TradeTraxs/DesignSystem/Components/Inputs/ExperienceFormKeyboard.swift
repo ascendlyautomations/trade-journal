@@ -64,7 +64,7 @@ extension View {
         modifier(ExperienceFormFocusSyncBoolModifier(isFocused: isFocused))
     }
 
-    /// Standard scroll keyboard dismissal for forms — does not force scrolling when content fits.
+    /// Standard scroll keyboard dismissal for forms, does not force scrolling when content fits.
     func experienceFormScrollKeyboard() -> some View {
         scrollDismissesKeyboard(.interactively)
             .scrollBounceBehavior(.basedOnSize, axes: .vertical)

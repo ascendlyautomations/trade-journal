@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single owner wall-post deletion path — Post Detail and Profile cards.
+/// Single owner wall-post deletion path, Post Detail and Profile cards.
 @MainActor
 enum OwnerPostDeletionService {
     static func deleteOwnedPost(

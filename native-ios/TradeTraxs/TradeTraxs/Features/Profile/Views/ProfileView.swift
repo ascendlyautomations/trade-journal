@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Unified Profile root — same UI for the authenticated user and every other profile.
+/// Unified Profile root, same UI for the authenticated user and every other profile.
 ///
 /// Ownership only swaps the action row (Edit/Share/Settings vs Follow/Following).
 /// Data lifecycle is owned exclusively by ``ProfileScreenViewModel``.
@@ -16,7 +16,7 @@ struct ProfileView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.tabIsActive) private var tabIsActive
-    /// Profile tab root — current user.
+    /// Profile tab root, current user.
     init(
         store: CurrentUserProfileStore,
         navigationCoordinator: NavigationCoordinator,

@@ -10,7 +10,7 @@ enum WithdrawalDetailSelection {
     }
 }
 
-/// Read-only withdrawal / payout history detail — optional post-as-achievement (no ledger mutation).
+/// Read-only withdrawal / payout history detail, optional post-as-achievement (no ledger mutation).
 struct WithdrawalDetailView: View {
     let historyItemID: String
     let data: DataEnvironment
@@ -291,7 +291,7 @@ struct WithdrawalDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ExperienceSpacing.sm)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
     }
 
     private func saveFirm(for item: PayoutHistoryItem) async {
@@ -418,10 +418,7 @@ struct WithdrawalDetailView: View {
                         .foregroundStyle(colors.tertiaryText)
                 }
                 .padding(ExperienceSpacing.md)
-                .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-                    cornerRadius: ExperienceRadius.md,
-                    style: .continuous
-                ))
+                .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
             }
             .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("withdrawals.detail.postedAchievement")

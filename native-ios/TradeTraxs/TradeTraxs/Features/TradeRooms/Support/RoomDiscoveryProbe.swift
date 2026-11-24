@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// DEBUG-only Trade Room discovery tracing — no private room content.
+/// DEBUG-only Trade Room discovery tracing, no private room content.
 enum RoomDiscoveryProbe {
     nonisolated enum DisplayedSource: String, Sendable {
         case cache

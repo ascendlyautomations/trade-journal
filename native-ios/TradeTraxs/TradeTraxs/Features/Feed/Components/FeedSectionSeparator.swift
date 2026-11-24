@@ -4,7 +4,7 @@ import SwiftUI
 struct FeedSectionSeparator: View {
     @Environment(\.themeColors) private var colors
 
-    /// Visible section gap — thicker than a hairline, compact enough to avoid empty-card feel.
+    /// Visible section gap, thicker than a hairline, compact enough to avoid empty-card feel.
     static let height: CGFloat = 5
 
     var body: some View {

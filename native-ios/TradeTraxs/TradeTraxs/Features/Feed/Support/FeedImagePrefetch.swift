@@ -1,6 +1,6 @@
 import Foundation
 
-/// Viewport-aware Feed image prefetch — small lookahead, cancellable, feed-display quality only.
+/// Viewport-aware Feed image prefetch, small lookahead, cancellable, feed-display quality only.
 @MainActor
 enum FeedImagePrefetch {
     static let lookaheadCount = 2

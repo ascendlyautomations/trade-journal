@@ -66,7 +66,7 @@ nonisolated struct KeychainService: KeychainServicing {
     }
 }
 
-/// Test / preview store — never used for production secrets on device.
+/// Test / preview store, never used for production secrets on device.
 nonisolated final class InMemoryKeychainService: KeychainServicing, @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [String: Data] = [:]

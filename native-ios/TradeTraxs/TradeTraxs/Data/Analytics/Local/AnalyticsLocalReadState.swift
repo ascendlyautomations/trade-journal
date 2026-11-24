@@ -1,6 +1,6 @@
 import Foundation
 
-/// Explicit local analytical read availability (shadow read layer — not UI-authoritative).
+/// Explicit local analytical read availability (shadow read layer, not UI-authoritative).
 nonisolated enum AnalyticsLocalReadState: Equatable, Sendable, CustomStringConvertible {
     /// Coverage and row revision requirements satisfied; zero rows is still available.
     case available
@@ -36,7 +36,7 @@ struct AnalyticsCalendarPresentationReadResult: Sendable, Equatable {
     var accountScope: String
     var modeScope: String
     var wireRows: [AnalyticsDailyStatRowV1]
-    /// Full range covered at `effectiveRevision` — render locally (available or stale last-known).
+    /// Full range covered at `effectiveRevision`, render locally (available or stale last-known).
     var canRenderLocally: Bool
 }
 

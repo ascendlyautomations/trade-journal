@@ -107,7 +107,7 @@ struct GlobalUploadQueueSheet: View {
     }
 }
 
-/// Upload queue sheet — attach once on ``MainTabShellView`` (not per tab stack).
+/// Upload queue sheet, attach once on ``MainTabShellView`` (not per tab stack).
 struct GlobalUploadQueueSheetModifier: ViewModifier {
     @Bindable var coordinator: GlobalUploadCoordinator
 

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// Fixed crop viewport layout — single source of truth for editor preview + export.
+/// Fixed crop viewport layout, single source of truth for editor preview + export.
 nonisolated struct ImageCropViewportLayout: Equatable {
     /// Minimum aspect-fill scale (viewport points per source pixel).
     let baseFillScale: CGFloat
@@ -28,7 +28,7 @@ nonisolated struct ImageCropViewportLayout: Equatable {
     )
 }
 
-/// Authoritative aspect-fill crop math — preview and export both use this.
+/// Authoritative aspect-fill crop math, preview and export both use this.
 nonisolated enum ImageCropViewportMath {
     static let minUserScale: CGFloat = 1
     static let maxUserScale: CGFloat = ImageCropMath.maxZoom
@@ -280,7 +280,7 @@ nonisolated enum ImageCropMath {
         min(maxZoom, max(minZoom, zoom))
     }
 
-    // Legacy aspect-FIT math — Feed metadata / legacy render paths only (not crop editor).
+    // Legacy aspect-FIT math, Feed metadata / legacy render paths only (not crop editor).
     static func computeFitScale(
         imageWidth: CGFloat,
         imageHeight: CGFloat,

@@ -60,7 +60,7 @@ enum StoryTextOverlayLayout {
       context: nil
     )
 
-    // Tight ink box — never expand to the wrap width unless the glyphs actually use it.
+    // Tight ink box, never expand to the wrap width unless the glyphs actually use it.
     let textSize = CGSize(
       width: max(ceil(textBounds.width), 1),
       height: max(ceil(textBounds.height), 1)

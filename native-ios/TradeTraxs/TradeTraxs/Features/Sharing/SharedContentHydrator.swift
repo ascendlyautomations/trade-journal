@@ -29,7 +29,7 @@ enum SharedContentHydrator {
         var unavailableSharedContentKeys: Set<String>
     }
 
-    /// Cache-only hydration for outbound internal share — no network.
+    /// Cache-only hydration for outbound internal share, no network.
     static func shareOutboundSnapshot(
         message: Message,
         detailCache: DetailPresentationCache,
@@ -101,7 +101,7 @@ enum SharedContentHydrator {
         return merged
     }
 
-    /// Synchronous cache priming — no network. Seeds ``DetailPresentationCache`` from feed rows.
+    /// Synchronous cache priming, no network. Seeds ``DetailPresentationCache`` from feed rows.
     static func primeFromCaches(
         messages: [Message],
         sharedTrades: inout [TradeID: Trade],
@@ -201,7 +201,7 @@ enum SharedContentHydrator {
         }
     }
 
-    /// Network hydration for unresolved references — parallel per content type, batched trades + profiles.
+    /// Network hydration for unresolved references, parallel per content type, batched trades + profiles.
     static func hydrateMissing(
         messages: [Message],
         snapshot: Snapshot,

@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// Phase 12D — AVPlayer network bytes separated from cache fill and diagnostic probes.
+/// Phase 12D, AVPlayer network bytes separated from cache fill and diagnostic probes.
 nonisolated enum ClipAVPlayerEgressTelemetry {
     private struct ClipEgress {
         var assetBytes: Int64?

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Native port of web `lib/propfirmMetrics.ts` — behavioral source of truth.
+/// Native port of web `lib/propfirmMetrics.ts`, behavioral source of truth.
 ///
 /// Do not invent alternate formulas. Ambiguities (static DD, best-day consistency,
 /// null daily_drawdown breach) are documented in Prop Firm phase notes.
@@ -283,7 +283,7 @@ nonisolated enum PropFirmMetrics {
         return trailingMetricsBeforePayout.drawdownFloor
     }
 
-    /// Orchestrator — mirrors `computePropfirmAccountMetrics`.
+    /// Orchestrator, mirrors `computePropfirmAccountMetrics`.
     ///
     /// Payout cycle defaults to account inception (`startedAt == nil`) when
     /// `account_payout_cycles` has not been loaded yet.
@@ -336,7 +336,7 @@ nonisolated enum PropFirmMetrics {
             ? lifetimeTrailing.currentBalance
             : cycleTrailing.currentBalance
 
-        // Web: `worstDailyLossUsed > Number(daily_drawdown)` — null coerces to 0.
+        // Web: `worstDailyLossUsed > Number(daily_drawdown)`, null coerces to 0.
         let dailyLimit = rules?.dailyDrawdown
         let dailyBreached: Bool = {
             let limit = dailyLimit ?? 0
@@ -430,7 +430,7 @@ nonisolated enum PropFirmMetrics {
     }
 }
 
-/// Futures trading day key — web `getTradingDayKey` (6 PM America/New_York rollover).
+/// Futures trading day key, web `getTradingDayKey` (6 PM America/New_York rollover).
 nonisolated enum PropFirmTradingDay {
     private static let timeZone = TimeZone(identifier: "America/New_York") ?? .gmt
 

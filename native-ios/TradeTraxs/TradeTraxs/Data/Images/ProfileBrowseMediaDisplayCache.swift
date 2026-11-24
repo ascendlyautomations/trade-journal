@@ -1,7 +1,7 @@
 import Synchronization
 import UIKit
 
-/// Decoded Profile browse thumbnails (list + grid) — instant when toggling layout.
+/// Decoded Profile browse thumbnails (list + grid), instant when toggling layout.
 ///
 /// Keyed by media reference + purpose only so list and grid share one UIImage per asset.
 nonisolated enum ProfileBrowseMediaDisplayCache {

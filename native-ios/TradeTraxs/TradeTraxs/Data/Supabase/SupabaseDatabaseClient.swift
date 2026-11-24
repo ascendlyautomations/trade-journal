@@ -27,7 +27,7 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         returning type: T.Type
     ) async throws -> T
 
-    /// PostgREST bulk insert — JSON array response (`Accept: application/json`).
+    /// PostgREST bulk insert, JSON array response (`Accept: application/json`).
     func insertReturningMany<Body: Encodable, T: Decodable>(
         _ body: Body,
         into table: String,
@@ -35,7 +35,7 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         returning type: T.Type
     ) async throws -> [T]
 
-    /// PostgREST insert with `return=minimal` — required for conversation shell before participants exist (RLS).
+    /// PostgREST insert with `return=minimal`, required for conversation shell before participants exist (RLS).
     func insert<Body: Encodable>(_ body: Body, into table: String) async throws
 
     /// PostgREST insert using pre-validated JSON bytes (object or array top-level).
@@ -48,7 +48,7 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         returning type: T.Type
     ) async throws -> T
 
-    /// PostgREST patch with JSON array response — exposes updated row count.
+    /// PostgREST patch with JSON array response, exposes updated row count.
     func updateReturningRows<Body: Encodable, T: Decodable>(
         _ body: Body,
         table: String,
@@ -56,7 +56,7 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         returning type: T.Type
     ) async throws -> [T]
 
-    /// Bulk-safe PostgREST patch — `return=minimal` (no single-row Accept header).
+    /// Bulk-safe PostgREST patch, `return=minimal` (no single-row Accept header).
     func update<Body: Encodable>(
         _ body: Body,
         table: String,
@@ -102,7 +102,7 @@ extension SupabaseDatabaseExecuting {
         try await select(type, from: table, query: query, headers: [:])
     }
 
-    /// Convenience — insert with representation and no query filters (legacy call sites).
+    /// Convenience, insert with representation and no query filters (legacy call sites).
     func insert<Body: Encodable, T: Decodable>(
         _ body: Body,
         into table: String,

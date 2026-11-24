@@ -300,7 +300,7 @@ final class CommentsViewModel {
         }
     }
 
-    /// Architecture-ready — edit UI ships when web exposes body update.
+    /// Architecture-ready, edit UI ships when web exposes body update.
     func beginEdit(_: InteractionComment) {
         // Reserved for Phase 6 follow-up (web pin-only today).
     }

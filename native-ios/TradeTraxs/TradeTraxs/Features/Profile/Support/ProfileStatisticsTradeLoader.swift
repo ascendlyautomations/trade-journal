@@ -1,6 +1,6 @@
 import Foundation
 
-/// Legacy fallback — cursor-paginates the full public trade history when `rpc_v1_profile_statistics_bootstrap` is unavailable.
+/// Legacy fallback, cursor-paginates the full public trade history when `rpc_v1_profile_statistics_bootstrap` is unavailable.
 enum ProfileStatisticsTradeLoader {
     static func loadPublicTradeInputs(
         profileID: ProfileID,

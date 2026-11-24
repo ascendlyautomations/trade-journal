@@ -9,7 +9,7 @@ nonisolated enum DashboardBootstrapApplier {
         var skippedTrades: Int
         /// `trade_window_meta.total_trade_count` when loaded via dashboard bootstrap RPC.
         var totalTradeCount: Int?
-        /// `trade_window_meta.history_complete` — when false, trade window may be partial.
+        /// `trade_window_meta.history_complete`, when false, trade window may be partial.
         var tradeHistoryComplete: Bool = true
     }
 
@@ -59,7 +59,7 @@ nonisolated enum DashboardBootstrapApplier {
         )
     }
 
-    /// Accounts from a cached dashboard bootstrap payload — no network.
+    /// Accounts from a cached dashboard bootstrap payload, no network.
     nonisolated static func mappedAccounts(
         from bootstrap: DashboardBootstrapV1,
         ownerID: ProfileID

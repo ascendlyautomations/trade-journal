@@ -3,7 +3,7 @@ import Foundation
 
 /// Synthetic OCR layouts for screenshot import unit tests (no Vision required).
 nonisolated enum ScreenshotImportFixtures {
-    /// Generic trade-history table — two completed round-trip rows.
+    /// Generic trade-history table, two completed round-trip rows.
     static let tradeHistoryTable: [[OCRTextBlock]] = [
         tableBlocks(
             rows: [
@@ -28,7 +28,7 @@ nonisolated enum ScreenshotImportFixtures {
         ),
     ]
 
-    /// Individual execution lines — should require review, not import as completed trades confidently.
+    /// Individual execution lines, should require review, not import as completed trades confidently.
     static let executionLines: [[OCRTextBlock]] = [
         lineBlocks(
             lines: [

@@ -25,20 +25,20 @@ final class AuthenticationCoordinator {
 
     /// Bound by ``CompositionRoot`` after session stores exist (MainActor).
     var invalidateSessionCaches: (@MainActor () -> Void)?
-    /// Bound by ``CompositionRoot`` — best-effort push unregister after local logout (never blocks Login UI).
+    /// Bound by ``CompositionRoot``, best-effort push unregister after local logout (never blocks Login UI).
     var prepareSessionTeardown: (@MainActor () async -> Void)?
-    /// Bound by ``CompositionRoot`` — all-device push unregister + realtime stop after server deletion.
+    /// Bound by ``CompositionRoot``, all-device push unregister + realtime stop after server deletion.
     var prepareAccountDeletion: (@MainActor () async -> Void)?
-    /// Bound by ``CompositionRoot`` — APNs registration after a user session binds.
+    /// Bound by ``CompositionRoot``, APNs registration after a user session binds.
     var onAuthenticatedSessionBound: (@MainActor () -> Void)?
 
-    /// Last authenticated user — detects account switches without an intervening logout.
+    /// Last authenticated user, detects account switches without an intervening logout.
     private var boundUserID: UserID?
     /// Prevents a stale sign-in attempt from overwriting a newer success.
     private var signInGeneration: UInt64 = 0
     /// Prevents stale restore completion from publishing authenticated shell.
     private var restoreGeneration: UInt64 = 0
-    /// Single-flight logout — duplicate taps must not re-enter teardown or push unregister.
+    /// Single-flight logout, duplicate taps must not re-enter teardown or push unregister.
     private var logoutInFlight = false
 
     init(
@@ -162,7 +162,7 @@ final class AuthenticationCoordinator {
         })
     }
 
-    /// Infrastructure Continue — uses development session when allowed (Debug).
+    /// Infrastructure Continue, uses development session when allowed (Debug).
     func continueAsDevelopmentSessionIfAllowed() async throws {
         try await performSignIn(flow: .returningUser, operation: {
             try await self.authenticationManager.issueDevelopmentSession()
@@ -185,7 +185,7 @@ final class AuthenticationCoordinator {
         )
     }
 
-    /// Server-side account deletion only — local teardown runs after the user confirms on the success screen.
+    /// Server-side account deletion only, local teardown runs after the user confirms on the success screen.
     func deleteAuthenticatedAccountOnServer(using repository: any AccountRepository) async throws {
         let correlation = AuthFlowTracer.beginCorrelation()
         AuthFlowTracer.trace(

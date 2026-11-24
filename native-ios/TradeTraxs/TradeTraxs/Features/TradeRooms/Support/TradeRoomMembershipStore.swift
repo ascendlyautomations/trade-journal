@@ -1,14 +1,14 @@
 import Foundation
 import Observation
 
-/// Viewer-scoped Trade Room membership — optimistic joins mirror ``TradeRoomFavoritesStore``.
+/// Viewer-scoped Trade Room membership, optimistic joins mirror ``TradeRoomFavoritesStore``.
 @MainActor
 @Observable
 final class TradeRoomMembershipStore {
     static let shared = TradeRoomMembershipStore()
 
     private var joinedRoomIDs: Set<RoomID> = []
-    /// Optimistic leaves — stale bootstrap must not mark the room joined again until the server agrees.
+    /// Optimistic leaves, stale bootstrap must not mark the room joined again until the server agrees.
     private var pendingLeaveRoomIDs: Set<RoomID> = []
     private(set) var revision: UInt64 = 0
 
@@ -38,7 +38,7 @@ final class TradeRoomMembershipStore {
         )
     }
 
-      /// Server bootstrap / inbox — union optimistic joins; honor optimistic leaves over stale server rows.
+      /// Server bootstrap / inbox, union optimistic joins; honor optimistic leaves over stale server rows.
     func mergeServerMembership(_ roomIDs: Set<RoomID>) {
         for pendingLeave in pendingLeaveRoomIDs where !roomIDs.contains(pendingLeave) {
             pendingLeaveRoomIDs.remove(pendingLeave)

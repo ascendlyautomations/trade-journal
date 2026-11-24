@@ -1,6 +1,6 @@
 import Foundation
 
-/// Snapshot of the Reports catalog screen — single source of truth.
+/// Snapshot of the Reports catalog screen, single source of truth.
 struct ReportsState: Equatable {
     enum Phase: Equatable {
         case idle
@@ -53,7 +53,7 @@ struct ReportDetailState: Equatable {
         case failed(String)
     }
 
-    /// Resolved Best Trade reference — never exposes raw IDs in the UI.
+    /// Resolved Best Trade reference, never exposes raw IDs in the UI.
     enum BestTradeReference: Equatable {
         case loading
         case available(Trade)

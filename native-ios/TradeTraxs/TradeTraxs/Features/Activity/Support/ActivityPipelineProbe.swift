@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// Row counts through Activity load/publish — DEBUG only.
+/// Row counts through Activity load/publish, DEBUG only.
 nonisolated enum ActivityPipelineProbe {
     private static let logger = Logger(subsystem: AppLog.subsystem, category: "ActivityPipeline")
 

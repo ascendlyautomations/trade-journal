@@ -3,7 +3,7 @@ import OSLog
 
 /// Mirrors web `createDirectMessagePush` → `POST /api/messaging/notify-dm`.
 ///
-/// Messaging push only — never creates an Activity/`notifications` row.
+/// Messaging push only, never creates an Activity/`notifications` row.
 /// Failures are logged and never thrown to the message send path.
 nonisolated struct DirectMessagePushClient: Sendable {
     private let transport: SupabaseTransport?

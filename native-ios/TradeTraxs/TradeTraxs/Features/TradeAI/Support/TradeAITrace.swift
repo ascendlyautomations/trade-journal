@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Privacy-safe Trade AI pipeline tracing — search console for `[TradeAITrace]`.
+/// Privacy-safe Trade AI pipeline tracing, search console for `[TradeAITrace]`.
 nonisolated enum TradeAITrace {
     private static let logger = Logger(
         subsystem: "com.tradetraxs.TradeTraxs",

@@ -95,7 +95,7 @@ final class ProfileHeaderViewModel {
         return "They won't be able to message or interact with you and their content will be hidden where applicable."
     }
 
-    /// Screen owns bootstrap — kept for API compatibility; no independent load.
+    /// Screen owns bootstrap, kept for API compatibility; no independent load.
     func onAppear() {
         guard !store.isOwner else { return }
         Task { await refreshBlockStatus() }

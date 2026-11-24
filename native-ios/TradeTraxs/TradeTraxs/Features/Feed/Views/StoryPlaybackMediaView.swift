@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 
-/// Story media surface — aspect-fill image or inline video from ``StoryPlaybackController``.
+/// Story media surface, aspect-fill image or inline video from ``StoryPlaybackController``.
 struct StoryPlaybackMediaView: View {
     let reference: MediaReference?
     let imagePipeline: any ImagePipeline

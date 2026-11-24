@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Plain `List` spacing for Activity — date section headers and filter chrome.
+/// Plain `List` spacing for Activity, date section headers and filter chrome.
 enum ActivityInboxLayout {
     /// Default plain-list inter-section gap (~`ExperienceSpacing.md`) tightened by half.
     static let sectionSpacing = ExperienceSpacing.xs

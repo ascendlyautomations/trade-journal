@@ -33,7 +33,7 @@ enum TradeRoomsHomeScreenStore {
         pendingDiscoveryScope.removeAll()
     }
 
-    /// Deep links / onboarding — apply once when Trade Rooms home mounts (e.g. Getting Started → All).
+    /// Deep links / onboarding, apply once when Trade Rooms home mounts (e.g. Getting Started → All).
     static func requestDiscoveryScope(
         _ scope: TradeRoomDiscoveryScope,
         host: TradeRoomNavigationHost

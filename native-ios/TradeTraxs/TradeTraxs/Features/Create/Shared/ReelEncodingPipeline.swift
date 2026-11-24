@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-/// Shared reel/clip delivery encoding — all native upload paths must use this before Storage upload.
+/// Shared reel/clip delivery encoding, all native upload paths must use this before Storage upload.
 enum ReelEncodingPipeline {
     struct ResolvedUploadVideo: Sendable {
         var fileURL: URL
@@ -124,7 +124,7 @@ enum ReelEncodingPipeline {
         return prepared
     }
 
-    /// Publish-time — reuse import-time delivery file when valid; never re-encode unnecessarily.
+    /// Publish-time, reuse import-time delivery file when valid; never re-encode unnecessarily.
     static func resolveUploadVideo(
         draft: ReelDraft,
         onProgress: ((Double) -> Void)? = nil

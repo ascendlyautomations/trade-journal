@@ -1,6 +1,6 @@
 import Foundation
 
-/// Client-side pre-action Pro gates — backend remains authoritative.
+/// Client-side pre-action Pro gates, backend remains authoritative.
 @MainActor
 enum ProAccessGate {
     static func shouldPresentPaywall(profileID: ProfileID?) -> Bool {

@@ -45,7 +45,7 @@ struct AdminBugReportDetailView: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 Text("Description")
                     .experienceStyle(.caption, color: colors.tertiaryText)
-                Text(viewModel.snapshot.row.description.isEmpty ? "—" : viewModel.snapshot.row.description)
+                Text(viewModel.snapshot.row.description.isEmpty ? "–" : viewModel.snapshot.row.description)
                     .experienceStyle(.body, color: colors.primaryText)
             }
             if let created = viewModel.snapshot.row.createdAt {
@@ -103,14 +103,14 @@ struct AdminBugReportDetailView: View {
             SettingsInfoRow(
                 title: BugReportDisplay.environmentContextLabel(pageURL: viewModel.snapshot.row.pageURL),
                 value: viewModel.snapshot.row.pageURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                    ? (viewModel.snapshot.row.pageURL ?? "—")
-                    : "—"
+                    ? (viewModel.snapshot.row.pageURL ?? "–")
+                    : "–"
             )
             SettingsInfoRow(
                 title: BugReportDisplay.environmentClientLabel(browserInfo: viewModel.snapshot.row.browserInfo),
                 value: viewModel.snapshot.row.browserInfo?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                    ? (viewModel.snapshot.row.browserInfo ?? "—")
-                    : "—"
+                    ? (viewModel.snapshot.row.browserInfo ?? "–")
+                    : "–"
             )
         }
     }

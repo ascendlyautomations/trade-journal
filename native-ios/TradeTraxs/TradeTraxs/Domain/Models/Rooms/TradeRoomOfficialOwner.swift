@@ -1,6 +1,6 @@
 import Foundation
 
-/// Presentation for official Trade Rooms — never fetched from Supabase `profiles`.
+/// Presentation for official Trade Rooms, never fetched from Supabase `profiles`.
 enum TradeRoomOfficialOwnerPresentation {
     static func systemOwnerProfile(roomID: RoomID) -> Profile {
         Profile(

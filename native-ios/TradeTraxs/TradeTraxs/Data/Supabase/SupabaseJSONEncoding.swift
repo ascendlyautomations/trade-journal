@@ -1,6 +1,6 @@
 import Foundation
 
-/// PostgREST-safe JSON encoding — never passes invalid top-level values to ``JSONSerialization``.
+/// PostgREST-safe JSON encoding, never passes invalid top-level values to ``JSONSerialization``.
 nonisolated enum SupabaseJSONEncoding {
     enum Error: Swift.Error, Sendable, Equatable {
         case invalidTopLevelType(String)

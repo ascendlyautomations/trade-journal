@@ -261,7 +261,7 @@ struct TradingAnalyticsPreferencesView: View {
                 }
                 settingsInlineDivider()
                 scopedNumericField(
-                    "Maximum Trades Per Day",
+                    TradingRulesFieldInfo.maxTradesPerDay.title,
                     info: .maxTradesPerDay,
                     placeholder: "5",
                     text: $viewModel.maxTrades,
@@ -273,7 +273,7 @@ struct TradingAnalyticsPreferencesView: View {
                 )
                 settingsInlineDivider()
                 numericField(
-                    "Maximum Contracts",
+                    TradingRulesDisplayLabels.maxContracts,
                     info: .maxContractsPerTrade,
                     placeholder: "4",
                     text: $viewModel.maxContracts,
@@ -337,10 +337,10 @@ struct TradingAnalyticsPreferencesView: View {
             resetID: "settings.tradingAnalytics.risk.reset"
         ) {
             Button("Daily loss limit") { viewModel.reset(\.dailyLossLimit) }
-            Button("Maximum risk per trade") { viewModel.reset(\.maxRiskPerTrade) }
+            Button(TradingRulesFieldInfo.maxRiskPerTrade.title) { viewModel.reset(\.maxRiskPerTrade) }
             Button("Breakeven tolerance") { viewModel.reset(\.breakevenTolerance) }
-            Button("Maximum weekly loss") { viewModel.reset(\.maxWeeklyLoss) }
-            Button("Maximum drawdown goal") { viewModel.reset(\.maxDrawdownGoal) }
+            Button(TradingRulesFieldInfo.maxWeeklyLoss.title) { viewModel.reset(\.maxWeeklyLoss) }
+            Button(TradingRulesFieldInfo.maxDrawdownGoal.title) { viewModel.reset(\.maxDrawdownGoal) }
             Divider()
             Button("Reset global risk rules") {
                 viewModel.reset(\.dailyLossLimit)
@@ -363,7 +363,7 @@ struct TradingAnalyticsPreferencesView: View {
                 )
                 settingsInlineDivider()
                 numericField(
-                    "Maximum risk per trade",
+                    TradingRulesFieldInfo.maxRiskPerTrade.title,
                     info: .maxRiskPerTrade,
                     placeholder: "250",
                     text: $viewModel.maxRisk,
@@ -381,7 +381,7 @@ struct TradingAnalyticsPreferencesView: View {
                 )
                 settingsInlineDivider()
                 scopedNumericField(
-                    "Maximum weekly loss",
+                    TradingRulesFieldInfo.maxWeeklyLoss.title,
                     info: .maxWeeklyLoss,
                     placeholder: "1500",
                     text: $viewModel.maxWeeklyLoss,
@@ -392,7 +392,7 @@ struct TradingAnalyticsPreferencesView: View {
                 )
                 settingsInlineDivider()
                 numericField(
-                    "Maximum drawdown goal",
+                    TradingRulesFieldInfo.maxDrawdownGoal.title,
                     info: .maxDrawdownGoal,
                     placeholder: "2000",
                     text: $viewModel.drawdownGoal,
@@ -413,9 +413,9 @@ struct TradingAnalyticsPreferencesView: View {
             resetID: "settings.tradingAnalytics.rules.reset"
         ) {
             Button("Target R:R") { viewModel.reset(\.targetRr) }
-            Button("Minimum acceptable R:R") { viewModel.reset(\.minAcceptableRr) }
-            Button("Maximum contracts per trade") { viewModel.reset(\.maxContractsPerTrade) }
-            Button("Maximum trades per day") { viewModel.reset(\.maxTradesPerDay) }
+            Button(TradingRulesFieldInfo.minAcceptableRr.title) { viewModel.reset(\.minAcceptableRr) }
+            Button(TradingRulesFieldInfo.maxContractsPerTrade.title) { viewModel.reset(\.maxContractsPerTrade) }
+            Button(TradingRulesFieldInfo.maxTradesPerDay.title) { viewModel.reset(\.maxTradesPerDay) }
             Divider()
             Button("Reset All") {
                 viewModel.reset(\.targetRr)
@@ -436,7 +436,7 @@ struct TradingAnalyticsPreferencesView: View {
                 )
                 settingsInlineDivider()
                 numericField(
-                    "Minimum acceptable R:R",
+                    TradingRulesFieldInfo.minAcceptableRr.title,
                     info: .minAcceptableRr,
                     placeholder: "1.5",
                     text: $viewModel.minAcceptableRr,
@@ -445,7 +445,7 @@ struct TradingAnalyticsPreferencesView: View {
                 )
                 settingsInlineDivider()
                 numericField(
-                    "Maximum contracts / trade",
+                    TradingRulesFieldInfo.maxContractsPerTrade.title,
                     info: .maxContractsPerTrade,
                     placeholder: "4",
                     text: $viewModel.maxContracts,
@@ -455,7 +455,7 @@ struct TradingAnalyticsPreferencesView: View {
                 )
                 settingsInlineDivider()
                 scopedNumericField(
-                    "Maximum trades per day",
+                    TradingRulesFieldInfo.maxTradesPerDay.title,
                     info: .maxTradesPerDay,
                     placeholder: "5",
                     text: $viewModel.maxTrades,
@@ -670,7 +670,7 @@ struct TradingAnalyticsPreferencesView: View {
                 )
                 settingsInlineDivider()
                 accountOverrideField(
-                    "Maximum drawdown goal",
+                    TradingRulesFieldInfo.accountMaxDrawdownGoal.title,
                     info: .accountMaxDrawdownGoal,
                     placeholder: "2000",
                     text: $viewModel.accountDrawdown,
@@ -716,7 +716,7 @@ struct TradingAnalyticsPreferencesView: View {
             Menu {
                 Button("Daily loss limit") { viewModel.clearAccountDailyLossDraft() }
                 Button("Daily profit target") { viewModel.clearAccountProfitDraft() }
-                Button("Maximum drawdown goal") { viewModel.clearAccountDrawdownDraft() }
+                Button(TradingRulesFieldInfo.accountMaxDrawdownGoal.title) { viewModel.clearAccountDrawdownDraft() }
                 Divider()
                 Button("Reset selected account") { viewModel.resetSelectedAccountOverrides() }
             } label: {

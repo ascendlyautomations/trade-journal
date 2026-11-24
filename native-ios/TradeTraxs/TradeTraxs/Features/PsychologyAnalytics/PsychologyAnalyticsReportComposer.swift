@@ -119,7 +119,7 @@ nonisolated enum PsychologyAnalyticsTradeScope {
         return DashboardChartMetrics.filteredTrades(from: inputs, scope: filter)
     }
 
-    /// Trading Rules compliance — Eastern entry-time windows aligned with rule day/week keys.
+    /// Trading Rules compliance, Eastern entry-time windows aligned with rule day/week keys.
     static func complianceScopedTrades(
         ownerTrades: [Trade],
         accounts: [TradingAccount],

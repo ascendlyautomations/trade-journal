@@ -2,7 +2,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Native Create Achievement — mirrors web `AchievementUploadModal` required fields.
+/// Native Create Achievement, mirrors web `AchievementUploadModal` required fields.
 struct CreateAchievementView: View {
     @State private var viewModel: CreateAchievementViewModel
     @State private var photoItem: PhotosPickerItem?

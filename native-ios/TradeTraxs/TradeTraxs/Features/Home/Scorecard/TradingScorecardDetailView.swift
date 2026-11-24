@@ -123,8 +123,7 @@ struct TradingScorecardDetailView: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity)
-        .background(colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        .experienceGroupedPanel(cornerRadius: ExperienceRadius.lg, prominence: .featured)
         .padding(.horizontal, ExperienceSpacing.md)
         .accessibilityIdentifier("scorecard.detail")
     }
@@ -158,8 +157,7 @@ struct TradingScorecardDetailView: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        .experienceGroupedPanel(cornerRadius: ExperienceRadius.lg)
         .padding(.horizontal, ExperienceSpacing.md)
     }
 
@@ -174,8 +172,7 @@ struct TradingScorecardDetailView: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        .experienceGroupedPanel(cornerRadius: ExperienceRadius.lg)
         .padding(.horizontal, ExperienceSpacing.md)
     }
 

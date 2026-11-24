@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// Inbox preview vs open-thread consistency — detect when summary is ahead of local rows.
+/// Inbox preview vs open-thread consistency, detect when summary is ahead of local rows.
 nonisolated enum ConversationThreadSyncPolicy {
     /// Inbox row references a message not present in the local thread window.
     static func isInboxAheadOfThread(inbox: Conversation?, threadMessages: [Message]) -> Bool {

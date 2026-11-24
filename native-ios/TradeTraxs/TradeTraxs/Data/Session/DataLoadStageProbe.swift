@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// Safe staged load tracing — one correlation ID per screen load.
+/// Safe staged load tracing, one correlation ID per screen load.
 nonisolated enum DataLoadStageProbe {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var sessions: [String: Session] = [:]

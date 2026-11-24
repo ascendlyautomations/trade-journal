@@ -74,7 +74,7 @@ final class CreatePostViewModel {
         phase != .publishing && phase != .idle
     }
 
-    /// True when the draft has text or an image — used to enable the Publish button.
+    /// True when the draft has text or an image, used to enable the Publish button.
     var hasValidDraft: Bool {
         !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || finalImageData != nil

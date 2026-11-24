@@ -1,6 +1,6 @@
 import Foundation
 
-/// Inline Sign In / Sign in with Apple copy — never expose raw Supabase or transport strings.
+/// Inline Sign In / Sign in with Apple copy, never expose raw Supabase or transport strings.
 nonisolated enum SignInFormErrorPresentation {
     static let incorrectCredentials = "Incorrect email or password."
     static let genericFailure = "Sign in failed. Please try again."

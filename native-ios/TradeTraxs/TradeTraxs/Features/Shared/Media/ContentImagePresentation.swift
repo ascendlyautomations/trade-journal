@@ -79,7 +79,7 @@ nonisolated struct ContentImagePresentation: Equatable, Hashable, Codable, Senda
         }
     }
 
-    /// Crop rect used for rendering — falls back to a centered crop when metadata is partial.
+    /// Crop rect used for rendering, falls back to a centered crop when metadata is partial.
     func resolvedCrop(imagePixelSize: CGSize) -> NormalizedImageCrop? {
         if let normalizedCrop { return normalizedCrop }
         guard requiresFramedViewport else { return nil }
@@ -214,7 +214,7 @@ extension ContentImagePresentation {
         )
     }
 
-    /// Backward-compatible helper — derives editor viewport from container width.
+    /// Backward-compatible helper, derives editor viewport from container width.
     static func make(
         aspectOption: ImageCropAspectOption,
         imagePixelSize: CGSize,
@@ -234,7 +234,7 @@ extension ContentImagePresentation {
         )
     }
 
-    /// Feed card — show the full decoded bitmap at its natural aspect (no display-time crop).
+    /// Feed card, show the full decoded bitmap at its natural aspect (no display-time crop).
     static func naturalFit(imageAspect: CGFloat) -> ContentImagePresentation {
         ContentImagePresentation(
             presentationAspectRatio: max(imageAspect, 0.01),
@@ -256,7 +256,7 @@ extension ContentImagePresentation {
         return stored
     }
 
-    /// Legacy rows without stored metadata — centered 4:5 fallback only when taller than 4:5.
+    /// Legacy rows without stored metadata, centered 4:5 fallback only when taller than 4:5.
     static func inferredLegacy(imageAspect: CGFloat) -> ContentImagePresentation {
         let safeAspect = max(imageAspect, 0.01)
         if FeedMediaLayout.exceedsFeedPortraitLimit(imageAspect: safeAspect) {
@@ -374,7 +374,7 @@ nonisolated struct LegacyFeedMediaPresentationV1: Decodable {
 
 typealias FeedMediaPresentation = ContentImagePresentation
 
-/// Result from the shared crop editor — `image` contains the physically cropped pixels.
+/// Result from the shared crop editor, `image` contains the physically cropped pixels.
 nonisolated struct ImageCropSelectionResult: Sendable {
     let image: UIImage
     let aspectMode: ImageCropAspectOption
@@ -564,7 +564,7 @@ nonisolated enum ContentImagePresentationCodec {
         switch value {
         case let string as String:
             return .string(string)
-        // NSNumber must precede Bool — NSNumber(0/1) otherwise casts to false/true.
+        // NSNumber must precede Bool, NSNumber(0/1) otherwise casts to false/true.
         case let number as NSNumber:
             if CFGetTypeID(number) == CFBooleanGetTypeID() {
                 return .bool(number.boolValue)
@@ -588,7 +588,7 @@ nonisolated enum ContentImagePresentationCodec {
     }
 }
 
-/// Insert body for `profile_posts` — omits `image_crop` when the column is not deployed yet.
+/// Insert body for `profile_posts`, omits `image_crop` when the column is not deployed yet.
 nonisolated struct ProfileWallPostInsertBody: Encodable, Sendable {
     var user_id: String
     var content: String?
@@ -630,7 +630,7 @@ nonisolated struct ProfileWallPostInsertBody: Encodable, Sendable {
     }
 }
 
-/// Insert body for `achievements` — omits `image_crop` when the column is not deployed yet.
+/// Insert body for `achievements`, omits `image_crop` when the column is not deployed yet.
 nonisolated struct AchievementInsertBody: Encodable, Sendable {
     var user_id: String
     var achievement_type: String

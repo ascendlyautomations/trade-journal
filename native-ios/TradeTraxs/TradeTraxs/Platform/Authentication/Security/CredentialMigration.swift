@@ -22,7 +22,7 @@ nonisolated struct CredentialMigration: CredentialMigrating, @unchecked Sendable
     func migrateIfNeeded() throws {
         let stored = defaults.integer(forKey: versionKey)
         guard stored < currentVersion else { return }
-        // v1 is the initial Keychain layout — no transform required.
+        // v1 is the initial Keychain layout, no transform required.
         _ = configuration
         defaults.set(currentVersion, forKey: versionKey)
     }

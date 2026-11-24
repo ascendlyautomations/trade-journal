@@ -339,11 +339,7 @@ struct PropFirmExpensesView: View {
                         }
                     }
                 }
-                .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                        .stroke(colors.border.opacity(0.22), lineWidth: ExperienceBorder.hairline)
-                )
+                .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
                 .padding(.horizontal, ExperienceSpacing.md)
                 if yearScopedIncome.count > historyPreviewLimit {
                     viewMoreButton {
@@ -368,7 +364,7 @@ struct PropFirmExpensesView: View {
             .padding(.horizontal, ExperienceSpacing.md)
             Text(
                 "This amount is a bookkeeping estimate from recorded prop firm expenses. "
-                    + "Consult a tax professional before claiming deductions — nothing here is guaranteed."
+                    + "Consult a tax professional before claiming deductions, nothing here is guaranteed."
             )
             .experienceStyle(.caption, color: colors.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -448,11 +444,7 @@ struct PropFirmExpensesView: View {
         }
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                .stroke(colors.border.opacity(0.28), lineWidth: ExperienceBorder.hairline)
-        )
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
         .onChange(of: viewModel.reservePercent) { _, newValue in
             guard !PropFirmYearOverviewBuilder.isPreset(newValue) else { return }
             showsCustomPercent = true
@@ -510,11 +502,7 @@ struct PropFirmExpensesView: View {
                 .padding(.horizontal, ExperienceSpacing.md)
             monthly(overview.months)
                 .padding(ExperienceSpacing.md)
-                .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                        .stroke(colors.border.opacity(0.28), lineWidth: ExperienceBorder.hairline)
-                )
+                .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
                 .padding(.horizontal, ExperienceSpacing.md)
         }
     }
@@ -566,11 +554,7 @@ struct PropFirmExpensesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(ExperienceSpacing.sm)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                .stroke(colors.border.opacity(0.28), lineWidth: ExperienceBorder.hairline)
-        )
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
     }
 
     private func monthly(_ points: [PropFirmMonthComparison]) -> some View {
@@ -633,7 +617,7 @@ struct PropFirmExpensesView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .foregroundStyle(colors.primaryText)
-                    .background(colors.fillSecondary.opacity(0.55), in: Capsule())
+                    .experienceFilterCapsule()
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("propFirmExpenses.filter")
@@ -676,11 +660,7 @@ struct PropFirmExpensesView: View {
                         }
                     }
                 }
-                .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                        .stroke(colors.border.opacity(0.22), lineWidth: ExperienceBorder.hairline)
-                )
+                .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
                 .padding(.horizontal, ExperienceSpacing.md)
                 if yearScopedFilteredExpenses.count > historyPreviewLimit {
                     viewMoreButton {
@@ -801,10 +781,12 @@ struct PropFirmExpensesView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .foregroundStyle(selected ? colors.primaryText : colors.secondaryText)
-                .background(
-                    selected ? colors.accent.opacity(0.85) : colors.fillSecondary.opacity(0.45),
-                    in: Capsule()
-                )
+                .background {
+                    if selected {
+                        Capsule().fill(colors.accent.opacity(0.85))
+                    }
+                }
+                .modifier(PropFirmReservePercentChipChrome(isSelected: selected))
         }
         .buttonStyle(.plain)
     }
@@ -1288,5 +1270,21 @@ private struct TrackerIncomeEditorSheet: View {
         guard let income else { return }
         let ok = await viewModel.deleteIncome(income)
         if ok { isPresented = false }
+    }
+}
+
+private struct PropFirmReservePercentChipChrome: ViewModifier {
+    var isSelected: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if isSelected {
+            content
+        } else if colorScheme == .light {
+            content.experienceFilterCapsule()
+        } else {
+            content.background(colors.fillSecondary.opacity(0.45), in: Capsule())
+        }
     }
 }

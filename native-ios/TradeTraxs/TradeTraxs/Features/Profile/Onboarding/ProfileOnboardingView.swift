@@ -315,7 +315,7 @@ struct ProfileOnboardingView: View {
 
             ProfileBioTextField(
                 text: $viewModel.bio,
-                placeholder: "Optional — tell traders about yourself",
+                placeholder: "Optional: tell traders about yourself",
                 minHeight: 44,
                 maxHeight: 88
             )

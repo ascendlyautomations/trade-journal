@@ -1,6 +1,6 @@
 import Foundation
 
-/// Viewer-scoped Vault presentation snapshot — references only (no authoritative detail).
+/// Viewer-scoped Vault presentation snapshot, references only (no authoritative detail).
 nonisolated enum VaultDiskCache {
     static let folderName = "VaultDiskCache"
     static let schemaVersion = 1
@@ -96,7 +96,7 @@ nonisolated enum VaultDiskCache {
             let data = try JSONEncoder().encode(blob)
             try data.write(to: url, options: [.atomic])
         } catch {
-            // Soft-fail — network remains authoritative.
+            // Soft-fail, network remains authoritative.
         }
     }
 

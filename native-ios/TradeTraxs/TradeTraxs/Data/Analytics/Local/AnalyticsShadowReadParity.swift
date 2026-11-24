@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// Shadow-read parity — compares GRDB reconstruction to production analytical state (no UI effect).
+/// Shadow-read parity, compares GRDB reconstruction to production analytical state (no UI effect).
 nonisolated enum AnalyticsShadowReadParity {
     private static let moneyTolerance = 0.01
 

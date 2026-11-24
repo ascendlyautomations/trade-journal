@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Compact suggested-trader card for the horizontal discovery rail — fixed geometry for every slot.
+/// Compact suggested-trader card for the horizontal discovery rail, fixed geometry for every slot.
 struct ExploreTraderCard: View {
     /// Height reserved for the horizontal Explore rail (must match ``cardHeight``).
     static let railHeight: CGFloat = 176

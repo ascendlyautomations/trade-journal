@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Startup validation for public client configuration — never logs credentials.
+/// Startup validation for public client configuration, never logs credentials.
 nonisolated enum AppConfigurationValidator {
     enum APIBaseKind: String, Sendable {
         case production

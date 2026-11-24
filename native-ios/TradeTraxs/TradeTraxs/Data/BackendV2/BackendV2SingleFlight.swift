@@ -30,7 +30,7 @@ enum UncancelledRefresh {
     }
 }
 
-/// Process-wide Backend V2 RPC single-flight — one underlying Task per canonical key.
+/// Process-wide Backend V2 RPC single-flight, one underlying Task per canonical key.
 ///
 /// Equivalent callers share one detached fetch. One waiter cancelling does **not**
 /// cancel the shared transport for other active waiters.
@@ -124,7 +124,7 @@ actor BackendV2SingleFlight {
         }
     }
 
-    /// Test seam — whether a key currently has an in-flight shared task.
+    /// Test seam, whether a key currently has an in-flight shared task.
     func hasInFlight(key: String) -> Bool {
         inFlight[key] != nil
     }

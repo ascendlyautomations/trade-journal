@@ -4,7 +4,7 @@ import SwiftUI
 /// Caps multiline message text at ``maxWidth`` while preserving intrinsic width for short strings.
 ///
 /// Unlike ``View/frame(maxWidth:)``, this layout asks the text subview for its ideal width up to the cap
-/// and sizes itself to that answer — short DMs stay compact.
+/// and sizes itself to that answer, short DMs stay compact.
 struct ConversationMessageTextLayout: Layout {
     var maxWidth: CGFloat
     var horizontalAlignment: HorizontalAlignment = .leading
@@ -49,7 +49,7 @@ struct ConversationMessageTextLayout: Layout {
 }
 
 extension ConversationMessageTextLayout {
-    /// UIKit reference width for unit tests — mirrors body font wrapping up to ``maxWidth``.
+    /// UIKit reference width for unit tests, mirrors body font wrapping up to ``maxWidth``.
     static func referenceTextWidth(
         _ text: String,
         maxWidth: CGFloat,

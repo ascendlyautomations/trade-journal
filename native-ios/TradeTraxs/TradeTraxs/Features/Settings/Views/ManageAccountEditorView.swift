@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Add / Edit Account — web `CreateAccountModal` fields, native form.
+/// Add / Edit Account, web `CreateAccountModal` fields, native form.
 struct ManageAccountEditorView: View {
     enum Mode {
         case create
@@ -159,7 +159,7 @@ struct ManageAccountEditorView: View {
                 if draft.category == .personal || draft.category == .broker {
                     Text(
                         "Account Value is the starting balance for equity and drawdown tracking. "
-                            + "Use the amount you began trading with — not current equity or imported P&L."
+                            + "Use the amount you began trading with, not current equity or imported P&L."
                     )
                     .experienceStyle(.footnote, color: colors.tertiaryText)
                 }

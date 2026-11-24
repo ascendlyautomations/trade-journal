@@ -4,7 +4,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Fast composer poster from PhotoKit — no full video transferable load.
+/// Fast composer poster from PhotoKit, no full video transferable load.
 enum ReelPhotosLightweightPoster {
     struct Result: Sendable {
         var image: UIImage

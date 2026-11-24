@@ -19,7 +19,7 @@ nonisolated enum ProfileAnalyticsOwnerInvalidation {
         invalidateOwnerSnapshot(viewerID: owner)
     }
 
-    /// Owner header + analytics — any journal change that can alter Trades / Win % / Profit Factor.
+    /// Owner header + analytics, any journal change that can alter Trades / Win % / Profit Factor.
     static func affectsOwnerJournalHeaderMetrics(old: Trade?, new: Trade?) -> Bool {
         switch (old, new) {
         case (nil, _?):
@@ -41,7 +41,7 @@ nonisolated enum ProfileAnalyticsOwnerInvalidation {
         }
     }
 
-    /// Legacy name — tests and GRDB shadow paths.
+    /// Legacy name, tests and GRDB shadow paths.
     static func affectsPublicProfileAnalytics(old: Trade?, new: Trade?) -> Bool {
         affectsOwnerJournalHeaderMetrics(old: old, new: new)
     }

@@ -141,14 +141,7 @@ struct ReportDetailBlocksView: View {
         }
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(colors.fillSecondary.opacity(0.5))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                        .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
-                }
-        }
+        .modifier(ReportDetailSectionSurface())
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reports.detail.section.\(title.lowercased())")
     }
@@ -163,21 +156,21 @@ struct ReportDetailBlocksView: View {
         ) {
             metricCell(
                 "Net P&L",
-                metrics.knownResultCount > 0 ? formatPnl(metrics.netPnl) : "—"
+                metrics.knownResultCount > 0 ? formatPnl(metrics.netPnl) : "–"
             )
             metricCell(
                 "Win Rate",
                 metrics.knownResultCount > 0
                     ? NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1)
-                    : "—"
+                    : "–"
             )
             metricCell(
                 "Average RR",
-                metrics.averageRr.map { formatRR($0) } ?? "—"
+                metrics.averageRr.map { formatRR($0) } ?? "–"
             )
             metricCell(
                 "Profit Factor",
-                metrics.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
+                metrics.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "–"
             )
             metricCell("Trades Taken", NumberDisplay.integer(metrics.tradesTaken))
             labelAndPnLMetricCell(
@@ -200,10 +193,10 @@ struct ReportDetailBlocksView: View {
                 dayLabel: metrics.worstSessionLabel,
                 pnl: metrics.worstSessionPnl
             )
-            metricCell("Most Traded", metrics.mostTradedSymbol ?? "—")
+            metricCell("Most Traded", metrics.mostTradedSymbol ?? "–")
             metricCell(
                 "Avg Hold Time",
-                metrics.averageHoldTimeSeconds.map(formatHold) ?? "—"
+                metrics.averageHoldTimeSeconds.map(formatHold) ?? "–"
             )
         }
     }
@@ -227,7 +220,7 @@ struct ReportDetailBlocksView: View {
                         .minimumScaleFactor(0.8)
                 }
             } else {
-                Text("—")
+                Text("–")
                     .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
                     .foregroundStyle(colors.primaryText)
             }
@@ -290,6 +283,6 @@ struct ReportDetailBlocksView: View {
     }
 
     private func formatHold(_ seconds: Int) -> String {
-        TradeHoldDuration.formatSeconds(seconds) ?? "—"
+        TradeHoldDuration.formatSeconds(seconds) ?? "–"
     }
 }

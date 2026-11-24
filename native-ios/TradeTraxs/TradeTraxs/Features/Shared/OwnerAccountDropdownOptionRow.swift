@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// List/sheet account row — not for the account filter overlay.
+/// List/sheet account row, not for the account filter overlay.
 struct OwnerAccountDropdownOptionRow: View {
     let account: TradingAccount
 
@@ -15,7 +15,7 @@ struct OwnerAccountDropdownOptionRow: View {
     }
 }
 
-/// Filter overlay row — fixed checkmark column + one composed account line.
+/// Filter overlay row, fixed checkmark column + one composed account line.
 struct OwnerAccountDropdownFilterRow: View {
     let account: TradingAccount
     let isSelected: Bool
@@ -48,7 +48,7 @@ struct OwnerAccountDropdownFilterRow: View {
     }
 }
 
-/// Native ``Menu`` label — composed ``Text`` so mode and masked suffix render reliably.
+/// Native ``Menu`` label, composed ``Text`` so mode and masked suffix render reliably.
 struct OwnerAccountDropdownMenuLabel: View {
     let account: TradingAccount
     let isSelected: Bool
@@ -63,7 +63,7 @@ struct OwnerAccountDropdownMenuLabel: View {
     }
 }
 
-/// ``Picker`` row label — composed line (may wrap in Form pickers).
+/// ``Picker`` row label, composed line (may wrap in Form pickers).
 struct OwnerAccountDropdownPickerLabel: View {
     let account: TradingAccount
 

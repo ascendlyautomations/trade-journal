@@ -27,7 +27,7 @@ nonisolated enum LiveKitBFFResponse {
         if path.contains("/obs/") {
             return """
             OBS livestream API is not available at this server (HTTP \(status), \(ct)). \
-            The deployed backend may be missing /api/livekit/broadcast/obs/* routes — deploy the latest web app, \
+            The deployed backend may be missing /api/livekit/broadcast/obs/* routes, deploy the latest web app, \
             or set API_BASE_URL in Secrets.plist to your dev server (e.g. http://YOUR_MAC_LAN_IP:3000). \
             URL: \(url)
             """

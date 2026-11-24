@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared bottom publish bar — matches `CreatePostView`.
+/// Shared bottom publish bar, matches `CreatePostView`.
 struct CreateComposerPublishBar: View {
     let title: String
     var loadingTitle: String? = nil
@@ -37,7 +37,7 @@ struct CreateComposerPublishBar: View {
     }
 }
 
-/// Teal attachment action — matches New Post `Add photo`.
+/// Teal attachment action, matches New Post `Add photo`.
 struct CreateComposerAttachmentAction: View {
     let systemImage: String
     let title: String

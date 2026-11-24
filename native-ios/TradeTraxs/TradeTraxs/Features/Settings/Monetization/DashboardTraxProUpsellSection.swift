@@ -16,11 +16,6 @@ struct DashboardTraxProUpsellSection: View {
         )
     }
 
-    private var showsInteractivePreview: Bool {
-        TraxsProPreviewCatalog.supportsInteractivePreview(for: .premiumAnalytics)
-            && TraxsProPreviewCoordinator.shared.canPresentPreview
-    }
-
     var body: some View {
         Group {
             switch presentation {
@@ -61,34 +56,14 @@ struct DashboardTraxProUpsellSection: View {
                 )
             }
 
-            if showsInteractivePreview {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    TraxsProPreviewCoordinator.shared.presentDashboardPreview(entryPoint: .dashboardUpsell)
-                } label: {
-                    Text(MonetizationPlanCopy.previewWithSampleDataButtonTitle)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .accessibilityIdentifier("dashboard.traxpro.preview")
-            }
+            MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
+                feature: .premiumAnalytics,
+                previewEntryPoint: .dashboardUpsell,
+                previewAccessibilityIdentifier: "dashboard.traxpro.preview",
+                unlockAccessibilityIdentifier: "dashboard.traxpro.upgrade"
+            )
 
-            if canPresentPaywall {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
-                } label: {
-                    Text(MonetizationPlanCopy.exploreTraxsProButtonTitle)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .padding(.top, ExperienceSpacing.xxs)
-                .accessibilityIdentifier("dashboard.traxpro.upgrade")
-            } else if IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled {
+            if !canPresentPaywall, IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled {
                 Text(
                     "TraxsPro upgrades aren't available in this build yet. "
                         + "Check back soon or contact support if you already subscribe."

@@ -1,5 +1,3 @@
-import OpenAI from "openai"
-import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 import {
   ANALYZE_TRADE_SYSTEM_PROMPT,
@@ -12,18 +10,17 @@ import {
   consumeDurableUserRateLimit,
   rateLimitExceededResponse,
 } from "@/lib/server/durableUserRateLimit"
+import {
+  analyzeTradeFailureFromError,
+  getOpenAiClient,
+  openAiApiKey,
+} from "@/lib/server/openAiRouteSupport"
 import { requireAIFeatureEntitlement } from "@/lib/server/requireAIFeatureEntitlement"
 import type { Database } from "@/lib/database.types"
+import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
-// 🔥 SERVER-LEVEL SUPABASE CLIENT
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export const runtime = "nodejs"
+export const maxDuration = 60
 
 function resolveScreenshotPublicUrl(imagePath: string | null | undefined) {
   return tradeScreenshotPublicUrl(imagePath)
@@ -82,6 +79,13 @@ async function createTradeAnalysisCompletion(
   imageUrl: string | null,
   priorMessages: Array<{ role: string; content: string }> = []
 ) {
+  const openai = getOpenAiClient()
+  if (!openai) {
+    throw Object.assign(new Error("OPENAI_API_KEY missing"), {
+      code: "openai_not_configured",
+    })
+  }
+
   const run = (withImage: boolean) =>
     openai.chat.completions.create({
       model: "gpt-4o",
@@ -111,25 +115,104 @@ async function createTradeAnalysisCompletion(
 }
 
 export async function POST(req: Request) {
-  const token = req.headers.get("authorization")?.replace("Bearer ", "")
-
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    }
-  )
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { user, authError } = await getRouteUserAuth(req)
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    console.warn("[analyze-trade] Unauthorized", {
+      code: authError?.code,
+      message: authError?.message,
+    })
+    return NextResponse.json(
+      {
+        error: "Unauthorized",
+        reply: "Sign in to use Trade AI.",
+        code: "unauthorized",
+      },
+      { status: 401 }
+    )
+  }
+
+  if (!openAiApiKey()) {
+    console.error("[analyze-trade] OPENAI_API_KEY is not configured")
+    const failure = analyzeTradeFailureFromError(
+      new Error("OPENAI_API_KEY missing")
+    )
+    return NextResponse.json(
+      {
+        error: failure.error,
+        reply: failure.reply,
+        code: failure.code,
+      },
+      { status: failure.status }
+    )
+  }
+
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json(
+      {
+        error: "Invalid JSON",
+        reply: "Invalid request. Please try again.",
+        code: "invalid_json",
+      },
+      { status: 400 }
+    )
+  }
+
+  const trade = (body as { trade?: { id?: unknown } })?.trade
+  const messages = (body as { messages?: unknown })?.messages
+  const tradeId = trade?.id
+  if (!tradeId) {
+    return NextResponse.json(
+      {
+        error: "Missing trade id",
+        reply: "Select a trade before running analysis.",
+        code: "missing_trade_id",
+      },
+      { status: 400 }
+    )
+  }
+
+  const entitlement = await requireAIFeatureEntitlement(user.id, {
+    reply: "AI Analyst is a Pro feature.",
+  })
+  if (!entitlement.ok) {
+    return entitlement.response
+  }
+
+  const { data: existingTrade, error: tradeLookupError } = await supabaseServiceRole
+    .from("trades")
+    .select("id, user_id, image_url")
+    .eq("id", String(tradeId))
+    .single()
+
+  if (tradeLookupError) {
+    console.error("[analyze-trade] Trade lookup failed", {
+      tradeId: String(tradeId),
+      userId: user.id,
+      error: tradeLookupError,
+    })
+    return NextResponse.json(
+      {
+        error: "Trade not found",
+        reply: "We couldn't find that trade. Refresh and try again.",
+        code: "trade_not_found",
+      },
+      { status: 404 }
+    )
+  }
+
+  if (!existingTrade || existingTrade.user_id !== user.id) {
+    return NextResponse.json(
+      {
+        error: "Forbidden",
+        reply: "You can only analyze your own trades.",
+        code: "forbidden",
+      },
+      { status: 403 }
+    )
   }
 
   const rate = await consumeDurableUserRateLimit(user.id, "ai_analyze_trade")
@@ -138,38 +221,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const body = await req.json()
-    const { trade, messages } = body
-    const tradeId = trade?.id
-    if (!tradeId) {
-      return NextResponse.json({ error: "Missing trade id" }, { status: 400 })
-    }
-
-    const entitlement = await requireAIFeatureEntitlement(user.id, {
-      reply: "AI Analyst is a Pro feature.",
-    })
-    if (!entitlement.ok) {
-      return entitlement.response
-    }
-
-    const { data: existingTrade, error: tradeLookupError } = await supabaseAdmin
-      .from("trades")
-      .select("id, user_id, image_url")
-      .eq("id", tradeId)
-      .single()
-
-    if (tradeLookupError) {
-      console.error("ERROR:", JSON.stringify(tradeLookupError, null, 2))
-      return NextResponse.json({ error: "Trade not found" }, { status: 404 })
-    }
-
-    if (!existingTrade || existingTrade.user_id !== user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
     const imageUrl = resolveScreenshotPublicUrl(existingTrade.image_url)
 
-    const { data: historyRows } = await supabaseAdmin
+    const { data: historyRows, error: historyError } = await supabaseServiceRole
       .from("trades")
       .select(
         "id, ticker, pnl, rr, direction, session, strategy, created_at, duration_seconds, duration_text, entry_time, exit_time"
@@ -178,14 +232,30 @@ export async function POST(req: Request) {
       .order("created_at", { ascending: false })
       .limit(120)
 
+    if (historyError) {
+      console.error("[analyze-trade] History lookup failed", historyError)
+    }
+
     const historyContext = buildAnalyzeTradeHistoryContext(
       historyRows ?? [],
       String(tradeId)
     )
-    const prompt = buildTradeAnalysisPrompt(trade, historyContext, {
-      hasScreenshot: Boolean(imageUrl),
-    })
-    const priorMessages = Array.isArray(messages) ? messages : []
+    const prompt = buildTradeAnalysisPrompt(
+      (body as { trade: Record<string, unknown> }).trade,
+      historyContext,
+      {
+        hasScreenshot: Boolean(imageUrl),
+      }
+    )
+    const priorMessages = Array.isArray(messages)
+      ? messages.filter(
+          (m): m is { role: string; content: string } =>
+            !!m &&
+            typeof m === "object" &&
+            typeof (m as { role?: unknown }).role === "string" &&
+            typeof (m as { content?: unknown }).content === "string"
+        )
+      : []
 
     const response = await createTradeAnalysisCompletion(
       prompt,
@@ -193,35 +263,56 @@ export async function POST(req: Request) {
       priorMessages
     )
 
-    const rawResult = response.choices[0].message.content
-    const aiResult = normalizeAIProseResponse(rawResult) ?? rawResult
+    const rawResult = response.choices[0]?.message?.content
+    const aiResult = normalizeAIProseResponse(rawResult) ?? rawResult?.trim()
 
-    await supabaseAdmin
-      .from("trades")
-      .update({ ai_feedback: aiResult })
-      .eq("id", tradeId)
-      .eq("user_id", user.id)
-
-    if (aiResult) {
-      return NextResponse.json({
-        result: aiResult,
-        reply: aiResult,
+    if (!aiResult) {
+      console.error("[analyze-trade] Empty model response", {
+        tradeId: String(tradeId),
+        finishReason: response.choices[0]?.finish_reason,
       })
+      return NextResponse.json(
+        {
+          error: "No response generated",
+          reply:
+            "The AI returned an empty response. Try again with a different question.",
+          code: "empty_model_response",
+        },
+        { status: 502 }
+      )
     }
 
-    return NextResponse.json(
-      { error: "No response generated" },
-      { status: 500 }
-    )
+    const { error: persistError } = await supabaseServiceRole
+      .from("trades")
+      .update({ ai_feedback: aiResult })
+      .eq("id", String(tradeId))
+      .eq("user_id", user.id)
+
+    if (persistError) {
+      console.error("[analyze-trade] ai_feedback persist failed", persistError)
+      // Still return analysis to the client even if cache write fails.
+    }
+
+    return NextResponse.json({
+      result: aiResult,
+      reply: aiResult,
+    })
   } catch (error) {
-    console.error("[analyze-trade] Analysis error:", error)
+    const failure = analyzeTradeFailureFromError(error)
+    console.error("[analyze-trade] Analysis error", {
+      code: failure.code,
+      tradeId: String(tradeId),
+      userId: user.id,
+      detail: failure.detail,
+      error,
+    })
     return NextResponse.json(
       {
-        error: "Analysis failed. Please try again.",
-        reply:
-          "We couldn't complete the analysis right now. Please try again in a moment.",
+        error: failure.error,
+        reply: failure.reply,
+        code: failure.code,
       },
-      { status: 500 }
+      { status: failure.status }
     )
   }
 }

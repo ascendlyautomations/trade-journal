@@ -1,6 +1,6 @@
 import Foundation
 
-/// Fire-and-forget product analytics — never blocks UI.
+/// Fire-and-forget product analytics, never blocks UI.
 @MainActor
 final class ProductAnalyticsCoordinator {
     static let shared = ProductAnalyticsCoordinator()

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Subtle pre-trade psychology context from today's check-in — non-blocking.
+/// Subtle pre-trade psychology context from today's check-in, non-blocking.
 struct AddTradePreTradePsychologyNotice: View {
     let focusLevel: Int?
     let message: String?

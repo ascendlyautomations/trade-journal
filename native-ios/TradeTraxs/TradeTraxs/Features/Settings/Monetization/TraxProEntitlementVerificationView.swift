@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shown while TraxsPro entitlement is unknown — avoids fail-open premium access when enforcement is on.
+/// Shown while TraxsPro entitlement is unknown, avoids fail-open premium access when enforcement is on.
 struct TraxProEntitlementVerificationView: View {
     let profileID: ProfileID?
     var onRetry: (() -> Void)?

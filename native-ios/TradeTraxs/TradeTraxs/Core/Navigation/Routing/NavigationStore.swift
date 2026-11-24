@@ -18,7 +18,7 @@ final class NavigationStore {
     var restoresLastContentTab: Bool
 
     /// Bumped by external navigation so the matching destination view and model are recreated.
-    /// Session-only — omitted from ``snapshot`` so restoration does not replay a refresh.
+    /// Session-only, omitted from ``snapshot`` so restoration does not replay a refresh.
     var externalDestinationEpochs: [String: Int] = [:]
     /// Channel/message token for the latest external room open (keyed by ``ExternalDestinationIdentity`` room epoch key).
     var externalRoomFocusTokens: [String: String] = [:]

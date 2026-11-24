@@ -68,7 +68,7 @@ enum SettingsHomeModel {
         return items
     }
 
-    /// Trading, vault, and appearance tools — formerly the TradeTraxs section plus vault/appearance.
+    /// Trading, vault, and appearance tools, formerly the TradeTraxs section plus vault/appearance.
     private static var personalItems: [SettingsHomeItem] {
         var items: [SettingsHomeItem] = [
             SettingsHomeItem(
@@ -96,7 +96,7 @@ enum SettingsHomeModel {
         return items
     }
 
-    /// Product help and walkthrough — formerly Support; App Walkthrough and Leave a Rating are injected in the view.
+    /// Product help and walkthrough, formerly Support; App Walkthrough and Leave a Rating are injected in the view.
     private static var tradetraxsItems: [SettingsHomeItem] {
         [
             SettingsHomeItem(route: .whatsNew, systemImage: "sparkles"),

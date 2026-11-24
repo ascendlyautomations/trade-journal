@@ -1,6 +1,6 @@
 import Foundation
 
-/// In-memory GRDB presentation cache — avoids repeated full-table reads and JSON decode per cold path.
+/// In-memory GRDB presentation cache, avoids repeated full-table reads and JSON decode per cold path.
 nonisolated enum AnalyticsDashboardGRDBSessionCache {
     struct PresentationSnapshot: Sendable {
         var revision: Int64

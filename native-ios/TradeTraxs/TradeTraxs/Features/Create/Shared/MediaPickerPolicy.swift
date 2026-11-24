@@ -2,15 +2,15 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Shared PhotosPicker filters — keep upload surfaces from exposing the wrong library media.
+/// Shared PhotosPicker filters, keep upload surfaces from exposing the wrong library media.
 enum MediaPickerPolicy: Sendable {
     /// Trades, posts, achievements, chat, room avatars, etc.
     case imageOnly
-    /// Profile avatars — still images only (no Live Photo motion in the picker).
+    /// Profile avatars, still images only (no Live Photo motion in the picker).
     case profilePhoto
     /// Clips / reel uploads.
     case videoOnly
-    /// Stories — still image or short video.
+    /// Stories, still image or short video.
     case storyMedia
 
     var matching: PHPickerFilter {

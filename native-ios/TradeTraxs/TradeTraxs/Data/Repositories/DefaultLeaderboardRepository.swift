@@ -1,6 +1,6 @@
 import Foundation
 
-/// Legacy leaderboard repository — full trade corpus download retired.
+/// Legacy leaderboard repository, full trade corpus download retired.
 ///
 /// Rankings are loaded via `rpc_v1_leaderboard_bootstrap` when `backendV2.leaderboard` is enabled.
 nonisolated struct DefaultLeaderboardRepository: LeaderboardRepository {
@@ -21,7 +21,7 @@ nonisolated struct DefaultLeaderboardRepository: LeaderboardRepository {
     }
 }
 
-/// Retained for session cache invalidation hooks — no longer stores full trade corpora.
+/// Retained for session cache invalidation hooks, no longer stores full trade corpora.
 actor LeaderboardTradeRowsCache {
     static let shared = LeaderboardTradeRowsCache()
 

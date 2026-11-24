@@ -89,7 +89,7 @@ nonisolated protocol AppleCredentialProviding: Sendable {
     func requestCredential() async throws -> AppleIDCredentialPayload
 }
 
-/// Test double — inject Apple credentials without AuthenticationServices UI.
+/// Test double, inject Apple credentials without AuthenticationServices UI.
 nonisolated struct StaticAppleCredentialSource: AppleCredentialProviding {
     let payload: AppleIDCredentialPayload
 

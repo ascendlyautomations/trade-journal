@@ -175,7 +175,7 @@ enum ActivityNotificationRouting {
         }
     }
 
-    /// Push onto the Activity screen's tab stack — never switches tabs for preset Feed/Profile parents.
+    /// Push onto the Activity screen's tab stack, never switches tabs for preset Feed/Profile parents.
     @MainActor
     static func open(
         _ notification: ActivityNotification,
@@ -376,7 +376,7 @@ enum ActivityNotificationRouting {
         }
     }
 
-    /// Activity-local destination resolution (legacy — prefer ``open(_:host:coordinator:router:)``).
+    /// Activity-local destination resolution (legacy, prefer ``open(_:host:coordinator:router:)``).
     static func appDestination(
         for notification: ActivityNotification,
         router: any NotificationRouting = NotificationRouter()

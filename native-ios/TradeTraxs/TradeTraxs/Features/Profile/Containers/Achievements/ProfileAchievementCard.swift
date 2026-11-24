@@ -23,7 +23,7 @@ struct ProfileAchievementCard: View {
 
     private var target: InteractionTarget { .achievement(achievement.id) }
 
-    /// Attachment presence only — matches Achievement detail (not load/failure state).
+    /// Attachment presence only, matches Achievement detail (not load/failure state).
     private var mediaReference: MediaReference? {
         guard let image = achievement.image else { return nil }
         let trimmed = image.id.trimmingCharacters(in: .whitespacesAndNewlines)

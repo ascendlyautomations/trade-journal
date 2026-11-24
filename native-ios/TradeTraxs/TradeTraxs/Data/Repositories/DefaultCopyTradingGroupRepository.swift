@@ -188,6 +188,9 @@ nonisolated struct DefaultCopyTradingGroupRepository: CopyTradingGroupRepository
         if text.localizedCaseInsensitiveContains("must belong to the group owner") {
             return .message("You can only add accounts you own.")
         }
+        if text.localizedCaseInsensitiveContains("TRAXPRO_COPY_TRADING_REQUIRED") {
+            return .message("TRAXPRO_COPY_TRADING_REQUIRED")
+        }
         return .message("Couldn't save this copy trading group.")
     }
 }

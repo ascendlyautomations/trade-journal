@@ -128,7 +128,7 @@ final class ExploreViewModel {
     var suggestedRooms: [ExploreRoomSuggestion] { store.suggestedRooms }
     var popularRooms: [ExploreRoomSuggestion] { store.popularRooms }
 
-    /// Suggested discovery rows — excludes rooms the viewer already joined (inbox / RPC flags).
+    /// Suggested discovery rows, excludes rooms the viewer already joined (inbox / RPC flags).
     var suggestedTradeRooms: [ExploreRoomSuggestion] {
         let joinedInbox = Set(MessagesInboxStore.shared.rooms.map(\.id))
         func eligible(_ rooms: [ExploreRoomSuggestion]) -> [ExploreRoomSuggestion] {
@@ -185,7 +185,7 @@ final class ExploreViewModel {
         }
     }
 
-    /// Called when Explore becomes visible — one fetch per visit (see `exploreScreenDidDisappear`).
+    /// Called when Explore becomes visible, one fetch per visit (see `exploreScreenDidDisappear`).
     func exploreScreenDidAppear(imagePipeline: any ImagePipeline) {
         loadLiveTradersForVisit()
         suggestedTradersPrepareTask?.cancel()

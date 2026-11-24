@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 
 #if DEBUG
-/// Passive DEBUG tracing for Login field focus / keyboard — no gestures, no credentials.
+/// Passive DEBUG tracing for Login field focus / keyboard, no gestures, no credentials.
 enum LoginFocusProbe {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var marks: [String: CFAbsoluteTime] = [:]
@@ -24,7 +24,7 @@ enum LoginFocusProbe {
         let fromPassword = durationMs(since: "focus.password")
         let dtFromFocus = fromEmail ?? fromPassword
         print(
-            "[LoginFocus] event=keyboardWillShow dtFromFocusMs=\(dtFromFocus.map(String.init) ?? "—")"
+            "[LoginFocus] event=keyboardWillShow dtFromFocusMs=\(dtFromFocus.map(String.init) ?? "–")"
         )
     }
 
@@ -35,7 +35,7 @@ enum LoginFocusProbe {
         let dtFromFocus = fromEmail ?? fromPassword
         let fromWillShow = durationMs(since: "keyboardWillShow")
         print(
-            "[LoginFocus] event=keyboardDidShow dtFromFocusMs=\(dtFromFocus.map(String.init) ?? "—") dtFromKeyboardWillShowMs=\(fromWillShow.map(String.init) ?? "—")"
+            "[LoginFocus] event=keyboardDidShow dtFromFocusMs=\(dtFromFocus.map(String.init) ?? "–") dtFromKeyboardWillShowMs=\(fromWillShow.map(String.init) ?? "–")"
         )
     }
 

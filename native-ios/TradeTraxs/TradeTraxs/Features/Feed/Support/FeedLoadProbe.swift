@@ -1,6 +1,6 @@
 import Foundation
 
-/// Why a Feed bootstrap was requested — one log line per load in DEBUG builds.
+/// Why a Feed bootstrap was requested, one log line per load in DEBUG builds.
 nonisolated enum FeedLoadTrigger: String, Sendable {
     case initial
     case pullRefresh

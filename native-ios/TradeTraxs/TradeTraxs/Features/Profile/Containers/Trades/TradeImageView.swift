@@ -12,7 +12,7 @@ struct TradeImageView: View {
     var purpose: ImagePurpose = .tradeScreenshot
     var contentMode: ContentMode = .fit
     var side: CGFloat = 96
-    /// Optional override — journal cards use a wide compact strip.
+    /// Optional override, journal cards use a wide compact strip.
     var width: CGFloat? = nil
     var height: CGFloat? = nil
 
@@ -43,7 +43,7 @@ struct TradeImageView: View {
             }
         }
         .frame(width: resolvedWidth, height: resolvedHeight)
-        // Clip only rounds the container — with `.fit` the bitmap itself is not cropped.
+        // Clip only rounds the container, with `.fit` the bitmap itself is not cropped.
         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
         .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(Int(resolvedWidth))x\(Int(resolvedHeight))|\(contentMode == .fill)") {
             await load()

@@ -37,6 +37,9 @@ enum DashboardAnalyticsAggregateChartsCoordinator {
             )
         } catch {
             if token == selectionToken, inFlight {
+                if !TraxsProPreviewSupport.isAnyPreviewActive {
+                    _ = ProLimitPresentation.presentUpgradeIfProGate(error)
+                }
                 let nonRetryable = DashboardAnalyticsChartsFailurePolicy.shouldNotRetry(error)
                 store.markFailed(revision: revision, nonRetryable: nonRetryable)
             }

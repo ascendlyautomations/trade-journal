@@ -57,7 +57,7 @@ final class RecordPayoutFlowViewModel {
     }
 
     var balanceBeforeDisplay: String {
-        guard let value = setupContext?.balanceBeforePayout else { return "—" }
+        guard let value = setupContext?.balanceBeforePayout else { return "–" }
         return CurrencyAmountFieldSupport.formatDisplay(value)
     }
 

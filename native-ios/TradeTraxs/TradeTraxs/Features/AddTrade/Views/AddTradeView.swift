@@ -3,7 +3,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Native Add Trade — compact trading-first layout; progressive disclosure for review/media.
+/// Native Add Trade, compact trading-first layout; progressive disclosure for review/media.
 struct AddTradeView: View {
     @State private var viewModel: AddTradeViewModel
     @State private var photoItem: PhotosPickerItem?
@@ -1335,7 +1335,7 @@ private enum AddTradeFormLayout {
 }
 
 private extension View {
-    /// Matches Manage Account / Add Trade pickers — cool grouped row lift in dark mode (not system brown).
+    /// Matches Manage Account / Add Trade pickers, cool grouped row lift in dark mode (not system brown).
     func addTradeFormRow() -> some View {
         experienceDashboardListRow()
             .listRowInsets(AddTradeFormLayout.rowInsets)
@@ -1390,7 +1390,7 @@ struct AddTradeInstrumentPickerView: View {
         } header: {
             Text(showsCustomEntry ? "Custom Instrument" : "")
         } footer: {
-            Text("Custom symbols are saved for your account and stored on trades as the ticker — same as web.")
+            Text("Custom symbols are saved for your account and stored on trades as the ticker, same as web.")
         }
     }
 
@@ -1443,7 +1443,7 @@ struct AddTradeInstrumentPickerView: View {
 
         if !searchText.isEmpty, !filtered.hasVisibleSymbols {
             Section {
-                Text("No match — add a custom instrument below.")
+                Text("No match, add a custom instrument below.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
         }
@@ -1479,7 +1479,7 @@ struct AddTradeInstrumentPickerView: View {
     }
 }
 
-/// Legacy sheet views removed — Trade Review is inline on ``AddTradeView``.
+/// Legacy sheet views removed, Trade Review is inline on ``AddTradeView``.
 struct AddTradeNewClipComposerView: View {
     var isPreparing: Bool
     var draft: ReelDraft?

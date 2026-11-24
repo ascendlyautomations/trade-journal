@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Create-account sheet — same presentation as ``SettingsTradingAccountsView`` editor `.create`` branch.
+/// Create-account sheet, same presentation as ``SettingsTradingAccountsView`` editor `.create`` branch.
 struct ManageAccountCreateAccountSheet: View {
     let data: DataEnvironment
     let navigationCoordinator: NavigationCoordinator?

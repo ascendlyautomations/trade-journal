@@ -2,11 +2,11 @@ import Foundation
 
 /// Bounded transport timeout for Session/Dashboard bootstrap RPC paths.
 nonisolated enum BootstrapTransportTimeout {
-    /// Default bootstrap ceiling — prevents indefinitely suspended RPC tasks.
+    /// Default bootstrap ceiling, prevents indefinitely suspended RPC tasks.
     static let defaultNanoseconds: UInt64 = 45_000_000_000
 
     #if DEBUG
-    /// Test hook — set to a short value in unit tests; never in production builds.
+    /// Test hook, set to a short value in unit tests; never in production builds.
     nonisolated(unsafe) static var overrideNanoseconds: UInt64?
     #endif
 
@@ -44,7 +44,7 @@ nonisolated enum BootstrapTransportTimeout {
                         continuation: continuation
                     )
                 } catch is CancellationError {
-                    // Work finished first — gate already resumed.
+                    // Work finished first, gate already resumed.
                 } catch {
                     await gate.resumeOnce(with: .failure(error), continuation: continuation)
                 }

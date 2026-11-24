@@ -1,6 +1,6 @@
 import Foundation
 
-/// Leaderboard V2 bootstrap — `rpc_v1_leaderboard_bootstrap`.
+/// Leaderboard V2 bootstrap, `rpc_v1_leaderboard_bootstrap`.
 nonisolated struct LeaderboardRpcBootstrapRepository: LeaderboardBootstrapProviding {
     private let client: BackendV2RPCClient
 

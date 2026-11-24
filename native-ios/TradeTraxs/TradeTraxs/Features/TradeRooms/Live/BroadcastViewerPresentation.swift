@@ -1,6 +1,6 @@
 import Foundation
 
-/// Viewer livestream UI — one LiveKit session; presentation does not connect/disconnect.
+/// Viewer livestream UI, one LiveKit session; presentation does not connect/disconnect.
 enum BroadcastViewerPresentation: String, Equatable, Sendable {
     case off
     case mini

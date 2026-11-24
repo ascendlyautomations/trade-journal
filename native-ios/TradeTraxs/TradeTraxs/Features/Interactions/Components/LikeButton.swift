@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Reusable like control — content type injected via ``InteractionTarget``.
+/// Reusable like control, content type injected via ``InteractionTarget``.
 struct LikeButton: View {
     let target: InteractionTarget
     @Bindable var store: EngagementStore

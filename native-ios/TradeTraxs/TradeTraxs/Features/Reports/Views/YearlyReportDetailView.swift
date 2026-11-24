@@ -40,6 +40,7 @@ struct YearlyReportDetailView: View {
         .experienceNavigationTitle(viewModel.title)
         .toolbar(.hidden, for: .tabBar)
         .task { await viewModel.bootstrapIfNeeded() }
+        .onOwnerAccountMutation { viewModel.handleAccountMutation(detailCache: nil) }
         .accessibilityIdentifier("reports.yearly.detail")
     }
 
@@ -96,19 +97,7 @@ struct YearlyReportDetailView: View {
         }
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            colors.accent.opacity(0.14),
-                            colors.fillSecondary.opacity(0.6),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        }
+        .modifier(YearlyReportHeroSurface())
     }
 
     private var loadingContent: some View {
@@ -239,17 +228,8 @@ struct YearlyReportSummaryMetricsView: View {
         }
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
+        .modifier(ReportDetailSectionSurface())
         .accessibilityIdentifier("reports.yearly.summary")
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-            .fill(colors.fillSecondary.opacity(0.5))
-            .overlay {
-                RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                    .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
-            }
     }
 
     private func labelAndPnLMetricCell(_ title: String, dayLabel: String?, pnl: Decimal?) -> some View {
@@ -271,7 +251,7 @@ struct YearlyReportSummaryMetricsView: View {
                         .minimumScaleFactor(0.8)
                 }
             } else {
-                Text("—")
+                Text("–")
                     .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
                     .foregroundStyle(colors.primaryText)
             }
@@ -318,12 +298,12 @@ struct YearlyReportSummaryMetricsView: View {
     }
 
     private func formatOptionalDecimal(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.ratio(value, fractionDigits: 2)
     }
 
     private func formatWinRate(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.percent(value * 100, minimumFractionDigits: 1, maximumFractionDigits: 1)
     }
 }
@@ -393,14 +373,7 @@ struct YearlyReportChartsSection: View {
         }
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(colors.fillSecondary.opacity(0.5))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                        .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
-                }
-        }
+        .modifier(ReportDetailSectionSurface())
     }
 
     private func monthHighlightRow(title: String, month: String, pnl: Decimal, tone: Color) -> some View {
@@ -480,14 +453,7 @@ struct YearlyReportMonthBreakdownView: View {
         }
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(colors.fillSecondary.opacity(0.5))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                        .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
-                }
-        }
+        .modifier(ReportDetailSectionSurface())
         .accessibilityIdentifier("reports.yearly.months")
     }
 
@@ -549,7 +515,7 @@ struct YearlyReportMonthBreakdownView: View {
     }
 
     private func formatWinRate(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.percent(value * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 }

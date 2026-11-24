@@ -1,6 +1,6 @@
 import Foundation
 
-/// Derived violation pattern analytics — built from compliance checks (not a second engine).
+/// Derived violation pattern analytics, built from compliance checks (not a second engine).
 nonisolated enum TradingRulesViolationPatterns {
     static let worstDayMinimumEvaluatedChecks = 3
     static let recurringMinimumEvaluatedDays = 3
@@ -19,7 +19,7 @@ nonisolated enum TradingRulesViolationPatterns {
         var violationRatePercent: Double?
 
         var accessibilitySummary: String {
-            let rate = violationRatePercent.map { String(format: "%.1f%%", $0) } ?? "—"
+            let rate = violationRatePercent.map { String(format: "%.1f%%", $0) } ?? "–"
             return "\(ruleLabel): \(violated) violations, \(rate) rate, \(evaluated) checks"
         }
     }

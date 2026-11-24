@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared channel post permission control — maps to `room_sections.allow_members_chat`.
+/// Shared channel post permission control, maps to `room_sections.allow_members_chat`.
 struct RoomChannelPostingPermissionPicker: View {
     @Binding var allowMembersChat: Bool
     var isDisabled: Bool = false

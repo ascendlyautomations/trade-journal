@@ -56,7 +56,7 @@ struct TradeClipLinkRowView: View {
     }
 }
 
-/// Portrait clip poster — matches other TradeTraxs media picker rows (~56×72).
+/// Portrait clip poster, matches other TradeTraxs media picker rows (~56×72).
 struct TradeClipLinkThumbnail: View {
     static let width: CGFloat = 56
     static let height: CGFloat = 72

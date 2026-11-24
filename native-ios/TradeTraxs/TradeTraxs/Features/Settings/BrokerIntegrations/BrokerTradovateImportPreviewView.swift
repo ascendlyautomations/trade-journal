@@ -90,7 +90,7 @@ struct BrokerTradovateImportPreviewView: View {
     }
 
     private func pnlLine(_ pnl: Double?) -> String {
-        guard let pnl else { return "P&L —" }
+        guard let pnl else { return "P&L: \(NumberDisplay.missingValueSymbol)" }
         return TradeDisplay.pnlText(Money(amount: Decimal(pnl)))
     }
 

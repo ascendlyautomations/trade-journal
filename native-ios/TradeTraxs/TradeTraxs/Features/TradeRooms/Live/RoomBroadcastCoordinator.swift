@@ -39,7 +39,7 @@ struct BroadcastRosterParticipant: Identifiable, Hashable, Sendable {
     var isHandRaised: Bool
     var isLocal: Bool
 
-    /// Trailing roster chrome — omit generic viewers; local row is always **You**.
+    /// Trailing roster chrome, omit generic viewers; local row is always **You**.
     var rosterRoleDisplay: String? {
         if isLocal { return "You" }
         switch roleLabel {
@@ -140,7 +140,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var isMicrophoneEnabledInStream = false
     private(set) var watchSession: BroadcastWatchSession?
     private(set) var obsHostBarSession: ObsHostBarSession?
-    /// Stable sheet anchor — survives ``clearObsHostBarSession()`` during private OBS prep (see ``syncObsHostBarSession()``).
+    /// Stable sheet anchor, survives ``clearObsHostBarSession()`` during private OBS prep (see ``syncObsHostBarSession()``).
     private(set) var obsManageStreamPresentation: ObsHostBarSession?
     private(set) var isObsManageStreamPresented = false
     private(set) var viewerPresentation: BroadcastViewerPresentation = .off
@@ -167,7 +167,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     /// Bumped to ask ``RoomBroadcastWatchView`` to exit immersive fullscreen before stream-ended UI.
     private(set) var streamFullscreenDismissSignal: UInt = 0
 
-    // MARK: - OBS host preview (private prep — separate LiveKit connection from viewer watch)
+    // MARK: - OBS host preview (private prep, separate LiveKit connection from viewer watch)
 
     private var obsHostPreviewRoom: Room?
     private var obsHostPreviewDelegateBag: ObsHostPreviewRoomDelegate?
@@ -187,18 +187,18 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         viewerPresentation == .mini && watchSession != nil && (isWatching || isBusy)
     }
 
-    /// Full viewer sheet + OBS manage program surface — never attached while mini player holds the track.
+    /// Full viewer sheet + OBS manage program surface, never attached while mini player holds the track.
     var videoTrackForExpandedViewer: VideoTrack? {
         guard viewerPresentation == .expanded || isObsManageStreamPresented else { return nil }
         return videoTrack
     }
 
-    /// Floating in-app mini-player — single renderer while minimized.
+    /// Floating in-app mini-player, single renderer while minimized.
     var videoTrackForMiniPlayer: VideoTrack? {
         viewerPresentation == .mini ? videoTrack : nil
     }
 
-    /// Legacy alias — use ``videoTrackForExpandedViewer`` or ``videoTrackForMiniPlayer``.
+    /// Legacy alias, use ``videoTrackForExpandedViewer`` or ``videoTrackForMiniPlayer``.
     var videoTrackForDisplay: VideoTrack? {
         videoTrackForExpandedViewer
     }
@@ -365,12 +365,12 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private var pollRoomTitle: String?
     private var currentSessionId: String?
     private var broadcasterIdentity: String?
-    /// OBS program feed (LiveKit Ingress) — distinct from host UUID.
+    /// OBS program feed (LiveKit Ingress), distinct from host UUID.
     private var programPublisherIdentity: String?
     private var broadcastSourceIsObs = false
     private var preferredVideoSource = "screen"
     private var playbackSessionHandle: SessionRequirementHandle?
-    /// Separate from viewer ``playbackSessionHandle`` — OBS host preview uses playback-only audio.
+    /// Separate from viewer ``playbackSessionHandle``, OBS host preview uses playback-only audio.
     private var obsHostPreviewPlaybackHandle: SessionRequirementHandle?
     private var raisedHandIdentities: Set<String> = [] {
         didSet { broadcastRaisedHandIdentities = raisedHandIdentities }
@@ -442,7 +442,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         broadcastSessionBlockUserIds.contains(userId)
     }
 
-    /// Host/broadcaster moderation — reuses web `/api/livekit/broadcast/moderate`.
+    /// Host/broadcaster moderation, reuses web `/api/livekit/broadcast/moderate`.
     func executeBroadcastModeration(
         roomID: RoomID,
         targetUserId: String,
@@ -591,7 +591,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         }
     }
 
-    /// Wired from ``MainTabShellView`` — uses ``NavigationCoordinator/openExternal`` so broadcast stays connected.
+    /// Wired from ``MainTabShellView``, uses ``NavigationCoordinator/openExternal`` so broadcast stays connected.
     func bindOpenProfile(_ handler: @escaping @MainActor (ProfileID) -> Void) {
         openProfileHandler = handler
     }
@@ -613,7 +613,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         return true
     }
 
-    /// Viewer minimize + host OBS manage dismiss — playback session stays on tab-shell chrome.
+    /// Viewer minimize + host OBS manage dismiss, playback session stays on tab-shell chrome.
     private func collapseLivestreamChromeForExternalNavigation() {
         if viewerPresentation == .expanded {
             minimizeViewer()
@@ -863,7 +863,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     func refreshStatus(roomID: RoomID, lite: Bool = false) async {
         guard let client else {
             #if DEBUG
-            print("[TradeTraxs Broadcast] status skipped — LiveKitBroadcastClient not configured")
+            print("[TradeTraxs Broadcast] status skipped, LiveKitBroadcastClient not configured")
             #endif
             return
         }
@@ -1524,7 +1524,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         Task { await stopBroadcastRealtimeWatch() }
     }
 
-    /// Legacy name — ends interactive HTTP sync + Realtime watch.
+    /// Legacy name, ends interactive HTTP sync + Realtime watch.
     private func stopInteractivePolling() {
         stopBroadcastSessionSync()
     }

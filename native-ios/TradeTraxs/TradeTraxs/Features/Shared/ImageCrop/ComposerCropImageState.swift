@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/// Applies a physically cropped image to composer upload state — single entry point for create flows.
+/// Applies a physically cropped image to composer upload state, single entry point for create flows.
 enum ComposerCropImageState {
     struct Applied: Sendable {
         let finalImage: UIImage

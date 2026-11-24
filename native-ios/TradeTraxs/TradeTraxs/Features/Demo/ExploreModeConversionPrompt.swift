@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// TEST configuration — conversion prompts after Explore Mode dwell time.
+/// TEST configuration, conversion prompts after Explore Mode dwell time.
 enum ExploreModeConversionPrompt {
     /// Cumulative seconds from Explore entry for each prompt (2m, 3.5m, 5m, 10m).
     static let presentationOffsetsSeconds: [TimeInterval] = [

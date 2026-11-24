@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// App logo avatar for TradeTraxs system Activity rows (`Image("AppLogo")` — same asset as login branding).
+/// App logo avatar for TradeTraxs system Activity rows (`Image("AppLogo")`, same asset as login branding).
 struct ActivityTradeTraxsBrandAvatarView: View {
     var size: CGFloat = 40
 

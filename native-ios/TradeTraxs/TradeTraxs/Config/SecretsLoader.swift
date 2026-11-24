@@ -1,7 +1,7 @@
 import Foundation
 
 /// Loads non-secret public client configuration from local Secrets.plist / Info.plist / process env.
-/// Never commits real Secrets.plist — use ``Secrets.example.plist`` as the template.
+/// Never commits real Secrets.plist, use ``Secrets.example.plist`` as the template.
 nonisolated enum SecretsLoader {
     struct Values: Sendable, Equatable {
         var supabaseURL: URL?

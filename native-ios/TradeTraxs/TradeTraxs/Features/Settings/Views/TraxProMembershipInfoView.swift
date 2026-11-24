@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// TraxsPro gate surface — routes to in-app subscription purchase, never web checkout.
+/// TraxsPro gate surface, routes to in-app subscription purchase, never web checkout.
 struct TraxProMembershipInfoView: View {
     let onClose: () -> Void
     var onViewSubscription: (() -> Void)?

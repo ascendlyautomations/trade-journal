@@ -78,9 +78,10 @@ struct DashboardTradingScorecardSection: View {
             }
 
             if let insight = result.insights.first {
-                Text(insight.text)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                DashboardExpandableInsightText(
+                    text: insight.text,
+                    accessibilityIdentifier: "dashboard.scorecard.insight"
+                )
             }
         }
         .padding(ExperienceSpacing.md)

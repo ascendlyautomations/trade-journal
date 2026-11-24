@@ -27,8 +27,9 @@ struct ReportsPreviewContainerView: View {
                 embeddedInTraxsProPreview: true
             )
             .safeAreaInset(edge: .top, spacing: 0) {
-                TraxsProPreviewSampleDataBanner(
+                TraxsProSampleDataHeader(
                     unlockFeature: .tradingReports,
+                    subtitle: MonetizationPlanCopy.reportsPreviewSampleDataSubtitle,
                     onExit: exitPreview,
                     onUnlock: {
                         ExperienceHaptics.play(.selection)
@@ -44,7 +45,11 @@ struct ReportsPreviewContainerView: View {
         .environment(\.traxsProPreviewReadOnly, true)
         .onAppear {
             navigationStore.sessionPhase = .authenticated
-            TraxsProPreviewSession.shared.beginReportsPreview(detailCache: data.detailCache)
+            let viewer = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+            TraxsProPreviewSession.shared.beginReportsPreview(
+                detailCache: data.detailCache,
+                viewer: viewer
+            )
         }
         .accessibilityIdentifier("traxspro.preview.reports.container")
     }
@@ -95,7 +100,7 @@ struct ReportsPreviewContainerView: View {
     }
 }
 
-/// Report detail within preview — no Pro gate or paywall auto-present.
+/// Report detail within preview, no Pro gate or paywall auto-present.
 private struct ReportsPreviewReportDetailRouteView: View {
     let reportID: ReportID
     let data: DataEnvironment

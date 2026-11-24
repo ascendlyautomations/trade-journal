@@ -1,7 +1,7 @@
 import Foundation
 
 enum BrokerIntegrationDisplay {
-    /// Broker-side account identifier — last four characters only (no masking bullets).
+    /// Broker-side account identifier, last four characters only (no masking bullets).
     static func brokerAccountNumberTail(_ externalAccountId: String, name: String?) -> String {
         let source = name?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? externalAccountId
         if let tail = TradingAccountDisplay.ownerDropdownAccountNumberTail(source) {

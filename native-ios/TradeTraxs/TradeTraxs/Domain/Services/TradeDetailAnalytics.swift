@@ -1,6 +1,6 @@
 import Foundation
 
-/// Owner-only trade detail comparisons — RPC-first with scoped local fallback.
+/// Owner-only trade detail comparisons, RPC-first with scoped local fallback.
 nonisolated enum TradeDetailAnalytics {
     static let minCohortTrades = 5
     static let minTickerTradesForComparison = 3

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Channel post permission — maps to `room_sections.allow_members_chat` (boolean).
+/// Channel post permission, maps to `room_sections.allow_members_chat` (boolean).
 enum RoomChannelPostingPermission: CaseIterable, Hashable {
     case everyone
     case moderatorsOnly

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `parseCsvNumeric` — currency, commas, accounting negatives.
+/// Web `parseCsvNumeric`, currency, commas, accounting negatives.
 nonisolated enum CSVNumericParser {
     static func parse(_ raw: String?) -> Decimal? {
         guard var s = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else {
@@ -9,7 +9,7 @@ nonisolated enum CSVNumericParser {
         if (s.hasPrefix("\"") && s.hasSuffix("\"")) || (s.hasPrefix("'") && s.hasSuffix("'")) {
             s = String(s.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        if s.isEmpty || s == "-" || s == "—" { return nil }
+        if s.isEmpty || s == "-" || s == "–" { return nil }
 
         var neg = false
         if s.range(of: #"^\(.*\)$"#, options: .regularExpression) != nil

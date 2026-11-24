@@ -88,7 +88,7 @@ enum SupportTicketDisplay {
 
     static func previewText(_ message: String, max: Int) -> String {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "—" }
+        guard !trimmed.isEmpty else { return "–" }
         let collapsed = trimmed.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         if collapsed.count <= max { return collapsed }
         return String(collapsed.prefix(max)) + "…"

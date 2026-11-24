@@ -24,7 +24,7 @@ struct BrokerIntegrationComingSoonFooter: View {
     }
 }
 
-/// Card-style connect control — onboarding and compact broker chooser surfaces.
+/// Card-style connect control, onboarding and compact broker chooser surfaces.
 struct BrokerIntegrationProviderConnectCard: View {
     let provider: BrokerIntegrationProvider
     var isDisabled = false
@@ -83,7 +83,7 @@ struct BrokerIntegrationProviderConnectOptionsStack: View {
     }
 }
 
-/// Provider picker sheet — Tradovate / Rithmic connect entry reused by dashboard and onboarding-style flows.
+/// Provider picker sheet, Tradovate / Rithmic connect entry reused by dashboard and onboarding-style flows.
 struct BrokerIntegrationConnectBrokerSheet: View {
     @Bindable var viewModel: BrokerIntegrationsViewModel
     @Environment(\.dismiss) private var dismiss

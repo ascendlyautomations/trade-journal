@@ -109,7 +109,7 @@ final class ConversationViewModel {
     private var didMarkReadThisOpen = false
     private var loadGeneration: UInt64 = 0
     private var bootstrapMarkReadApplied = false
-    /// Soft-deleted / locally removed rows — excluded from merge/realtime reconciliation.
+    /// Soft-deleted / locally removed rows, excluded from merge/realtime reconciliation.
     private var suppressedMessageIDs: Set<MessageID> = []
     private var reactionBusyKeys: Set<String> = []
     private var outboundSharedContentObserver: NSObjectProtocol?
@@ -536,7 +536,7 @@ final class ConversationViewModel {
                 await realtimeHub?.releaseWatch(previous)
                 conversationRealtimeConsumer = nil
             }
-            // Register topic + join web-equivalent messages postgres_changes. Remain idle — no polling.
+            // Register topic + join web-equivalent messages postgres_changes. Remain idle, no polling.
             let channel = RealtimeChannelID(
                 kind: .conversation,
                 topic: conversationID.rawValue
@@ -1354,7 +1354,7 @@ final class ConversationViewModel {
         if !paintedBeforeLoad {
             phase = .loading
         }
-        // Web optimistic clear on open — badge drops before history finishes loading.
+        // Web optimistic clear on open, badge drops before history finishes loading.
         inboxStore.markRead(conversationID: conversationID)
         inboxStore.setActiveConversation(conversationID)
 
@@ -1413,7 +1413,7 @@ final class ConversationViewModel {
                 phase = .failed(ConversationThreadSupport.message(for: error))
             }
         } catch ConversationThreadBootstrapLoader.LoaderError.staleResponse {
-            // Navigation away — keep cached state if already painted.
+            // Navigation away, keep cached state if already painted.
             if phase == .loading, conversation != nil {
                 phase = .loaded
             }
@@ -1429,7 +1429,7 @@ final class ConversationViewModel {
         loadTask = nil
     }
 
-    /// Web `markMessageNotificationsRead` on conversation open — `mark_conversation_read` is owned by
+    /// Web `markMessageNotificationsRead` on conversation open, `mark_conversation_read` is owned by
     /// ``InboxMarkReadCoordinator`` (legacy) or thread bootstrap RPC (V2).
     private func markConversationSeenIfNeeded() async {
         inboxStore.markRead(conversationID: conversationID)
@@ -1450,7 +1450,7 @@ final class ConversationViewModel {
         inboxStore.markRead(conversationID: conversationID)
     }
 
-    /// Web `markMessageNotificationsRead` — one bulk update, no inbox page fetch.
+    /// Web `markMessageNotificationsRead`, one bulk update, no inbox page fetch.
     private func markMessageNotificationsRead() async {
         guard let notifications else { return }
         let started = CFAbsoluteTimeGetCurrent()
@@ -1657,7 +1657,7 @@ final class ConversationViewModel {
                 )
                 await markConversationSeenIfNeeded()
             } catch ConversationThreadBootstrapLoader.LoaderError.staleResponse {
-                // Navigation superseded — keep painted thread.
+                // Navigation superseded, keep painted thread.
             } catch {
                 if messages.isEmpty {
                     phase = .failed(ConversationThreadSupport.message(for: error))
@@ -1841,7 +1841,7 @@ final class ConversationViewModel {
         }
     }
 
-    /// Web `mergeMessageLists(wire, existing)` — bootstrap must not wipe newer local rows.
+    /// Web `mergeMessageLists(wire, existing)`, bootstrap must not wipe newer local rows.
     private func applyBootstrapMessages(_ incoming: [Message]) {
         let beforeCount = messages.count
         let beforeOldest = messages.first?.id.rawValue
@@ -1909,12 +1909,12 @@ final class ConversationViewModel {
     }
 #endif
 
-    /// Pull-to-refresh / explicit refresh — not used on a timer.
+    /// Pull-to-refresh / explicit refresh, not used on a timer.
     private func fetchIncrementalUpdates() async {
         await applyRealtimeSignal(MessageRealtimeSignal(kind: .insert, messageID: nil))
     }
 
-    /// Incremental apply from Realtime — never reloads the whole conversation on V2.
+    /// Incremental apply from Realtime, never reloads the whole conversation on V2.
     private func applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
         if let reaction = signal.reactionEvent {
             applyReactionRealtime(reaction, kind: signal.kind)
@@ -1963,7 +1963,7 @@ final class ConversationViewModel {
         }
     }
 
-    /// Bounded merge after Realtime reconnect — one page, ID-deduped (Phase 10F).
+    /// Bounded merge after Realtime reconnect, one page, ID-deduped (Phase 10F).
     fileprivate func repairMissedMessagesAfterReconnect() async {
         guard viewerID != nil else { return }
         guard !isApplyingRealtime else { return }
@@ -1980,11 +1980,11 @@ final class ConversationViewModel {
                 patchInbox(with: newest, source: "reconnectRepair")
             }
         } catch {
-            // Non-destructive — keep cached thread.
+            // Non-destructive, keep cached thread.
         }
     }
 
-    /// V2 — dedupe local confirmed sends; never run legacy inbox refresh waterfall.
+    /// V2, dedupe local confirmed sends; never run legacy inbox refresh waterfall.
     private func applyRealtimeSignalV2(_ signal: MessageRealtimeSignal) async {
         if signal.kind == .update, signal.deletedForEveryone, let rawID = signal.messageID {
             removeMessage(id: MessageID(rawID))
@@ -2148,7 +2148,7 @@ final class ConversationViewModel {
         hydrateSharedContent(from: [incoming])
     }
 
-    /// Sole write path for thread rows — web `mergeMessages` semantics.
+    /// Sole write path for thread rows, web `mergeMessages` semantics.
     private func scheduleSenderHydration(for messages: [Message]) {
         guard let viewerID else { return }
         guard !ConversationThreadSupport.isLocalDevelopment(viewerID) else { return }
@@ -2399,7 +2399,7 @@ final class ConversationViewModel {
             syncThreadSessionCache(context: "delete.backfill")
             hydrateSharedContent(from: result.applied.messages)
         } catch {
-            // Soft-fail — synced local state remains authoritative for non-deleted rows.
+            // Soft-fail, synced local state remains authoritative for non-deleted rows.
         }
     }
 
@@ -2499,7 +2499,7 @@ final class ConversationViewModel {
         unavailableSharedContentKeys.formUnion(snapshot.unavailableSharedContentKeys)
     }
 
-    /// Cache-first shared card hydration — never blocks the thread on network metadata.
+    /// Cache-first shared card hydration, never blocks the thread on network metadata.
     private func hydrateSharedContent(from messages: [Message]) {
         guard !messages.isEmpty else { return }
         primeSharedContentFromCaches(messages: messages)

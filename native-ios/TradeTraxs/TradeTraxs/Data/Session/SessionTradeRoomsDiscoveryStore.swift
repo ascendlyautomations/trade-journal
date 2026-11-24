@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped Trade Rooms home bootstrap — viewer + scope + category keyed, survives tab switches.
+/// Session-scoped Trade Rooms home bootstrap, viewer + scope + category keyed, survives tab switches.
 @Observable
 @MainActor
 final class SessionTradeRoomsDiscoveryStore {

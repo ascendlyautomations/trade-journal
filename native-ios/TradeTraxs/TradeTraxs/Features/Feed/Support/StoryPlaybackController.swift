@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-/// Single authority for Story auto-advance — image timers, video completion, pause/resume.
+/// Single authority for Story auto-advance, image timers, video completion, pause/resume.
 @MainActor
 final class StoryPlaybackController {
     enum PauseReason: Hashable {

@@ -30,7 +30,7 @@ final class DirectConversationPairIndex {
         let ids = conversation.participantProfileIDs.map { $0.rawValue.lowercased() }.sorted()
         let key = "\(ids[0])|\(ids[1])"
         if let existing = byPairKey[key] {
-            // Deterministic duplicate-data rule — keep lexicographically smallest ID.
+            // Deterministic duplicate-data rule, keep lexicographically smallest ID.
             if conversation.id.rawValue < existing.rawValue {
                 byPairKey[key] = conversation.id
             }

@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// UIKit crop preview — positions pixels with the same frame math used for export.
+/// UIKit crop preview, positions pixels with the same frame math used for export.
 struct CropEditorImagePreview: UIViewRepresentable {
     let image: UIImage
     let geometry: CropViewportGeometry

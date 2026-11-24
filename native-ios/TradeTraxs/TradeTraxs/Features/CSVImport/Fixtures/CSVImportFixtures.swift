@@ -7,7 +7,7 @@ nonisolated enum CSVImportFixtures {
     MNQM6,28331.75,28320.25,1,$(69.00),05/05/2026 20:11:36,05/05/2026 20:13:52
     """
 
-    /// Full Performance export header (13 columns) with CRLF — matches real device file shape.
+    /// Full Performance export header (13 columns) with CRLF, matches real device file shape.
     static let tradovatePerformanceExportCRLF: String = {
         let rows = [
             "symbol,priceFormat,priceFormatType,tickSize,buyFillId,sellFillId,qty,buyPrice,sellPrice,pnl,boughtTimestamp,soldTimestamp,duration",
@@ -43,7 +43,7 @@ nonisolated enum CSVImportFixtures {
     2026-01-16,MNQ,Buy,220,21400,21411,3,1.8
     """
 
-    /// Unknown headers — requires manual mapping.
+    /// Unknown headers, requires manual mapping.
     static let unknownCSV = """
     Widget,Flip,Beans,Cash
     Alpha,Up,2,100
@@ -57,7 +57,7 @@ nonisolated enum CSVImportFixtures {
     NQ,2026-02-01 10:00:00,2026-02-01 10:02:00,18500,18495,-100,1,Short
     """
 
-    /// Golden Math Audit header — separate `date` + 24-hour `entry time` / `exit time`.
+    /// Golden Math Audit header, separate `date` + 24-hour `entry time` / `exit time`.
     static let goldenMathAuditHeader =
         "date,symbol,direction,pnl,entry price,exit price,contracts,entry time,exit time,rr,points,session,strategy,notes,commission,fees"
 

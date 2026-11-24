@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import os
 
-/// Session-scoped broker import eligibility — one fetch, cached for Dashboard visibility (no polling).
+/// Session-scoped broker import eligibility, one fetch, cached for Dashboard visibility (no polling).
 @Observable
 @MainActor
 final class BrokerImportEligibilityStore {
@@ -50,7 +50,7 @@ final class BrokerImportEligibilityStore {
         self.session = session
     }
 
-    /// Presentation-only hydrate — does not hit the network.
+    /// Presentation-only hydrate, does not hit the network.
     func hydrateFromDiskIfNeeded(viewerID: String) {
         guard !isReady else { return }
         guard let blob = BrokerImportEligibilityDiskCache.load(viewerID: viewerID) else { return }
@@ -64,7 +64,7 @@ final class BrokerImportEligibilityStore {
         #endif
     }
 
-    /// Deferred startup — refresh only when disk cache is missing or stale.
+    /// Deferred startup, refresh only when disk cache is missing or stale.
     func loadIfNeeded() {
         guard refreshTask == nil else { return }
         refreshTask = Task { [weak self] in
@@ -86,7 +86,7 @@ final class BrokerImportEligibilityStore {
         }
     }
 
-    /// Background refresh — skips network when last-known state is still fresh.
+    /// Background refresh, skips network when last-known state is still fresh.
     func refreshIfStale(fromUserAction: Bool = false) {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in

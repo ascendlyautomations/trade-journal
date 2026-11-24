@@ -27,12 +27,12 @@ enum LiveVoiceLeaveReason: Sendable {
 }
 
 enum TradeRoomGeneralVoice {
-    /// Internal LiveKit channel naming — user-facing copy uses ``userChannelTitle``.
+    /// Internal LiveKit channel naming, user-facing copy uses ``userChannelTitle``.
     static let channelTitle = "General Voice"
     static let userChannelTitle = "Voice"
 }
 
-/// App-scoped live voice session — survives Trade Room navigation and text-channel switches.
+/// App-scoped live voice session, survives Trade Room navigation and text-channel switches.
 @Observable
 @MainActor
 final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
@@ -96,7 +96,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         return nil
     }
 
-    /// One best-effort presence read when opening a room — no background timer.
+    /// One best-effort presence read when opening a room, no background timer.
     func startGeneralVoicePresencePolling(for roomID: RoomID) {
         presenceEnsureTasks[roomID]?.cancel()
         presenceEnsureTasks[roomID] = Task { @MainActor in
@@ -151,7 +151,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
                 fetchedAt: Date()
             )
         } catch {
-            // Best-effort — avoid surfacing transient BFF errors in chrome.
+            // Best-effort, avoid surfacing transient BFF errors in chrome.
         }
     }
 

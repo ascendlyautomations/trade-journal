@@ -2,7 +2,7 @@ import LiveKit
 import SwiftUI
 import UIKit
 
-/// LiveKit video in a pinch-zoom scroll view — zoom applies to the view layer, not the track subscription.
+/// LiveKit video in a pinch-zoom scroll view, zoom applies to the view layer, not the track subscription.
 struct BroadcastStreamZoomableVideoView: UIViewRepresentable {
     var track: VideoTrack?
     var isFullscreen: Bool

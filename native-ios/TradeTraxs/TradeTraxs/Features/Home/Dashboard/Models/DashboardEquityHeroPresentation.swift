@@ -29,7 +29,7 @@ nonisolated enum DashboardEquityHeroPresentation {
         title(showsAccountValue: propStartingBalance != nil)
     }
 
-    /// Tracked balance for one account — prefers payout-aware prop metrics when supplied.
+    /// Tracked balance for one account, prefers payout-aware prop metrics when supplied.
     static func trackedAccountValue(
         authoritativeBalance: Decimal?,
         lifetimeRealizedPnL: Decimal,
@@ -73,7 +73,7 @@ nonisolated enum DashboardEquityHeroPresentation {
     /// Offsets cumulative realized P&L into account balance for V3 analytics equity.
     ///
     /// Drawdown floors from ``LivePersonalDrawdownEngine`` are already absolute balance
-    /// levels — never add `propStartingBalance` to them (would push the red line above equity).
+    /// levels, never add `propStartingBalance` to them (would push the red line above equity).
     static func chartPoints(
         _ points: [ProfileStatisticsMetrics.EquityPoint],
         propStartingBalance: Decimal?

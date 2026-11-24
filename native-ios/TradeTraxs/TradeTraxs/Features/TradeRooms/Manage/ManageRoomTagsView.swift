@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Manage Room → Tags — Create Tag + editable tag list with inline section Edit/Done.
+/// Manage Room → Tags, Create Tag + editable tag list with inline section Edit/Done.
 struct ManageRoomTagsView: View {
     @Bindable var viewModel: ManageRoomViewModel
     @Binding var newTagName: String

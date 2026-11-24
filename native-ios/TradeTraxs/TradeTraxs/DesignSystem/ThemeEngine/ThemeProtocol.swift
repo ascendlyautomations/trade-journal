@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Contract every plug-and-play theme must satisfy.
 ///
-/// Themes define semantic meaning only — never layout, typography, or feature chrome.
+/// Themes define semantic meaning only, never layout, typography, or feature chrome.
 protocol AppThemeProtocol: Sendable {
     var metadata: ThemeMetadata { get }
 

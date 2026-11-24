@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// These are **not** product screens. They prove the production navigation
 /// framework (tabs, stacks, sheets, covers) without building features.
-/// Feature modules replace the bodies later — not the navigation architecture.
+/// Feature modules replace the bodies later, not the navigation architecture.
 
 struct NavigationInfrastructurePlaceholder: View {
     let title: String

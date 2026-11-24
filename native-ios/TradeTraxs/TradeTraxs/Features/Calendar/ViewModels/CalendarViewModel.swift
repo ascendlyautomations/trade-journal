@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Trading Calendar — bounded month load → aggregate → Realtime idle.
+/// Trading Calendar, bounded month load → aggregate → Realtime idle.
 @Observable
 @MainActor
 final class CalendarViewModel {
@@ -37,7 +37,7 @@ final class CalendarViewModel {
     private var loadTask: Task<Void, Never>?
     private var viewerLoadGeneration: UInt64 = 0
     private var hasLoadedAccounts = false
-    /// Calendar V2 — full-granularity month payloads (account buckets); filter client-side.
+    /// Calendar V2, full-granularity month payloads (account buckets); filter client-side.
     var analyticsV2Memory: [String: AnalyticsDailyRangeBootstrapV1] = [:]
     var analyticsV2YearMemory: [Int: AnalyticsDailyRangeBootstrapV1] = [:]
     var analyticsV2PayloadStorage: AnalyticsDailyRangeBootstrapV1?
@@ -106,7 +106,7 @@ final class CalendarViewModel {
 
     var ownerAccountsProfileID: ProfileID? { profileID }
 
-    /// Synchronous warm-path before async load — accounts + owner-trade month seed.
+    /// Synchronous warm-path before async load, accounts + owner-trade month seed.
     func primeFromKnownViewer(_ profileID: ProfileID?) {
         guard let profileID else { return }
         self.profileID = profileID
@@ -246,20 +246,23 @@ final class CalendarViewModel {
 
     func handleAccountMutation() {
         guard let profileID else { return }
-        if let cached = SessionAccountsStore.shared.cached(for: profileID)
-            ?? detailCache.accounts(for: profileID)
-        {
-            accounts = cached.sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-            accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
-            hasLoadedAccounts = true
-            if usesCalendarAnalyticsV2 {
-                recomputeAnalyticsV2()
-            } else {
-                recompute()
-                recomputeYearOverview()
-            }
+        guard let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: profileID,
+            detailCache: detailCache
+        ) else { return }
+        accounts = loaded
+        accountNames = OwnerAccountMutationSync.accountNamesMap(from: loaded)
+        hasLoadedAccounts = true
+        OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(accountFilter, accounts: loaded)
+        if sanitized != accountFilter {
+            accountFilter = sanitized
+        }
+        if usesCalendarAnalyticsV2 {
+            recomputeAnalyticsV2()
+        } else {
+            recompute()
+            recomputeYearOverview()
         }
     }
 

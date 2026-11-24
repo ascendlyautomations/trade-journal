@@ -141,7 +141,7 @@ struct CommentRowView: View {
 }
 
 /// Loads the comment author's avatar via the shared ``ImagePipeline`` cache.
-/// Uses the avatar URL already joined on the comment — never fetches profiles per row.
+/// Uses the avatar URL already joined on the comment, never fetches profiles per row.
 private struct CommentAuthorAvatarView: View {
     let comment: InteractionComment
     let imagePipeline: any ImagePipeline

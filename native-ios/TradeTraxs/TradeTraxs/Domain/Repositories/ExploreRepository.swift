@@ -1,11 +1,11 @@
 import Foundation
 
-/// Bounded discovery queries for native Explore — reuses web RPCs / public profile pools.
+/// Bounded discovery queries for native Explore, reuses web RPCs / public profile pools.
 nonisolated protocol ExploreRepository: Sendable {
     /// Public discoverable profiles for ranking (offset via `page.cursor` as Int string).
     func discoverableProfiles(page: PageRequest) async throws -> CursorPage<Profile>
 
-    /// Filtered discoverable profiles — category (`trader_type`) and strategy (`trading_style` / `trading_model`).
+    /// Filtered discoverable profiles, category (`trader_type`) and strategy (`trading_style` / `trading_model`).
     func discoverableProfiles(
         page: PageRequest,
         filter: ExploreDiscoverableProfileFilter
@@ -30,7 +30,7 @@ nonisolated protocol ExploreRepository: Sendable {
         limit: Int
     ) async throws -> [ExploreRoomSuggestion]
 
-    /// Single-call home bootstrap — Your Rooms + Suggested + Popular with is_owner/is_member.
+    /// Single-call home bootstrap, Your Rooms + Suggested + Popular with is_owner/is_member.
     func tradeRoomsHomeBootstrap(
         scope: TradeRoomDiscoveryScope,
         limit: Int,

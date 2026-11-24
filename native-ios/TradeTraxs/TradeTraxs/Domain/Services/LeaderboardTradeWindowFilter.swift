@@ -1,6 +1,6 @@
 import Foundation
 
-/// One public trade row — same shape as web `TradeForLeaderboard` / GET `/api/leaderboard/trades`.
+/// One public trade row, same shape as web `TradeForLeaderboard` / GET `/api/leaderboard/trades`.
 nonisolated struct LeaderboardTradeRow: Hashable, Sendable, Codable {
     var userID: String
     var pnl: Decimal?
@@ -23,7 +23,7 @@ nonisolated struct LeaderboardTradeRow: Hashable, Sendable, Codable {
     }
 }
 
-/// Custom YYYY-MM-DD range — web `LeaderboardCustomRange`.
+/// Custom YYYY-MM-DD range, web `LeaderboardCustomRange`.
 nonisolated struct LeaderboardCustomRange: Hashable, Sendable {
     var startDate: String
     var endDate: String
@@ -32,7 +32,7 @@ nonisolated struct LeaderboardCustomRange: Hashable, Sendable {
 /// Port of web `lib/leaderboardChart.ts` → `filterTradesForLeaderboardWindow` + `buildLeaderboardRankings`.
 ///
 /// Web fetches the full public trade set once, then filters client-side. Native mirrors that
-/// exactly — no timeframe parameters are sent to SQL.
+/// exactly, no timeframe parameters are sent to SQL.
 nonisolated enum LeaderboardTradeWindowFilter {
     private static let dayMS: TimeInterval = 24 * 60 * 60
     private static let nyTimeZone = TimeZone(identifier: "America/New_York") ?? .gmt
@@ -90,7 +90,7 @@ nonisolated enum LeaderboardTradeWindowFilter {
         }
     }
 
-    /// Web `buildLeaderboardRankings` — sort by total PnL descending; avg RR when present.
+    /// Web `buildLeaderboardRankings`, sort by total PnL descending; avg RR when present.
     static func buildRankings(
         from windowTrades: [LeaderboardTradeRow],
         offset: Int = 0,

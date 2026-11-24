@@ -1,6 +1,6 @@
 import Foundation
 
-/// Backend V2 RPC naming + contract version metadata (Phase 1 — no SQL yet).
+/// Backend V2 RPC naming + contract version metadata (Phase 1, no SQL yet).
 nonisolated enum BackendV2Versioning {
     static let contractVersion = "v1"
 
@@ -24,7 +24,7 @@ nonisolated enum BackendV2Versioning {
         case profileUnpinContent = "rpc_v1_profile_unpin_content"
         case profileReorderPinned = "rpc_v1_profile_reorder_pinned"
         case messaging = "rpc_v2_messaging_bootstrap"
-        /// Lighter inbox reconcile — denormalized conversation rows, no notification writes.
+        /// Lighter inbox reconcile, denormalized conversation rows, no notification writes.
         case messagingCatchUp = "rpc_v1_messaging_bootstrap"
         case conversation = "rpc_v1_conversation_bootstrap"
         case conversationThread = "rpc_v1_conversation_thread_bootstrap"

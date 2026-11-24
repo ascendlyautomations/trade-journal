@@ -16,7 +16,7 @@ enum ExperienceInfoPopoverMetrics {
     }
 }
 
-/// Popover body — matches Dashboard **TradeTraxs Scorecard** ⓘ (title + explanation).
+/// Popover body, matches Dashboard **TradeTraxs Scorecard** ⓘ (title + explanation).
 struct ExperienceInfoPopoverContent: View {
     let title: String
     let bodyText: String
@@ -29,14 +29,16 @@ struct ExperienceInfoPopoverContent: View {
     }
 
     var body: some View {
+        let displayTitle = GeneratedProseNormalizer.normalize(title)
+        let displayBody = GeneratedProseNormalizer.normalize(bodyText)
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text(title)
+            Text(displayTitle)
                 .font(ExperienceTypography.subheadline.weight(.semibold))
                 .foregroundStyle(colors.primaryText)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(bodyText)
+            Text(displayBody)
                 .font(ExperienceTypography.footnote)
                 .foregroundStyle(colors.secondaryText)
                 .lineSpacing(ExperienceInfoPopoverMetrics.bodyLineSpacing)

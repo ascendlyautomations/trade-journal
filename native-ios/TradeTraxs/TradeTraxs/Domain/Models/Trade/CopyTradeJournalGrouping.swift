@@ -1,6 +1,6 @@
 import Foundation
 
-/// One Trades list row — single journal trade or one copy-trade action (presentation only).
+/// One Trades list row, single journal trade or one copy-trade action (presentation only).
 nonisolated enum TradeHistoryDisplayItem: Equatable, Sendable, Identifiable {
     case single(TradeOwnerJournalSummary)
     case copyGroup(CopyTradeJournalGroup)
@@ -29,7 +29,7 @@ nonisolated struct CopyTradeJournalGroup: Equatable, Sendable {
     var participatingAccountLines: [String]
 }
 
-/// Groups owner journal rows for Trades list — mirrors web `groupTradesForTradesPageDisplay`.
+/// Groups owner journal rows for Trades list, mirrors web `groupTradesForTradesPageDisplay`.
 nonisolated enum CopyTradeJournalGrouping {
     static func group(
         _ items: [TradeOwnerJournalSummary],

@@ -50,7 +50,7 @@ actor FeedVisibleImageFetchLimiter {
 }
 
 nonisolated enum FeedVisibleImageFetchPolicy {
-    /// Feed on-screen media at feedDisplay quality — not prefetch, not detail surfaces.
+    /// Feed on-screen media at feedDisplay quality, not prefetch, not detail surfaces.
     static func requiresVisibleFetchSlot(for request: ImageRequest) -> Bool {
         !request.isSpeculativePrefetch
             && request.auditSurface == "feed"

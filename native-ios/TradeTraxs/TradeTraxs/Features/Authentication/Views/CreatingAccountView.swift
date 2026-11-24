@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Post-registration bootstrap chrome — matches auth launch branding, not storyboard splash.
+/// Post-registration bootstrap chrome, matches auth launch branding, not storyboard splash.
 struct CreatingAccountView: View {
     var failureMessage: String?
     var isRetrying: Bool = false

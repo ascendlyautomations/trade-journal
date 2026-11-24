@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Trade Detail analysis card — results first, custom question + Analyze below.
+/// Trade Detail analysis card, results first, custom question + Analyze below.
 struct TradeAISectionView: View {
     @Bindable var viewModel: TradeAISectionViewModel
 
@@ -107,7 +107,7 @@ struct TradeAISectionView: View {
         }
     }
 
-    /// Preset analysis type — shown when no results yet; still used when custom question is blank.
+    /// Preset analysis type, shown when no results yet; still used when custom question is blank.
     private var analysisSelectorRow: some View {
         Menu {
             ForEach(viewModel.analysisOptions) { option in

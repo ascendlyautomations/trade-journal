@@ -5,7 +5,7 @@ import UIKit
 @Observable
 @MainActor
 final class AddTradeViewModel {
-    /// Sentinel ``Picker`` tag — not a real account id (Add Trade account menu only).
+    /// Sentinel ``Picker`` tag, not a real account id (Add Trade account menu only).
     static let addAccountPickerTag = "__add_trade_add_account__"
     enum Phase: Equatable {
         case idle
@@ -117,16 +117,16 @@ final class AddTradeViewModel {
         return TradeHoldDuration.compute(entryAt: entryAt, exitAt: exitAt)?.text
     }
 
-    /// Local new-clip draft — uploaded + inserted with `trade_id` after trade save.
+    /// Local new-clip draft, uploaded + inserted with `trade_id` after trade save.
     var reelDraft: ReelDraft?
     private(set) var isPreparingClipVideo = false
     /// Secondary path: link an already-uploaded unattached clip (`reels.trade_id`).
     var linkedReel: Reel?
     private(set) var unattachedReels: [Reel] = []
     private(set) var isLoadingReels = false
-    /// Trade saved but clip create/link failed — retry clip only (no duplicate trade).
+    /// Trade saved but clip create/link failed, retry clip only (no duplicate trade).
     private(set) var tradeAwaitingClip: TradeID?
-    /// After create save — optional post-trade reflection before dismiss.
+    /// After create save, optional post-trade reflection before dismiss.
     private(set) var pendingPostTradeReflection: Trade?
     /// Back-compat alias used by older tests / UI identifiers.
     var tradeAwaitingReelLink: TradeID? { tradeAwaitingClip }
@@ -202,7 +202,7 @@ final class AddTradeViewModel {
         }
     }
 
-    /// Tests and legacy call sites — constructs the default detail repository boundary.
+    /// Tests and legacy call sites, constructs the default detail repository boundary.
     convenience init(
         trades: any TradeRepository,
         feed: any FeedRepository,
@@ -276,7 +276,7 @@ final class AddTradeViewModel {
         ownerAccountSource().filter { !$0.isActive }
     }
 
-    /// Picker list — active accounts toggled ON in Settings (`show_in_account_dropdowns`).
+    /// Picker list, active accounts toggled ON in Settings (`show_in_account_dropdowns`).
     var accountsForPicker: [TradingAccount] {
         let preserveID = isEditing ? editingOriginalAccountID : selectedAccountID
         let tier = viewerID.map { TradeEntryEntitlementGate.viewerTier(profileID: $0) } ?? .free
@@ -299,7 +299,7 @@ final class AddTradeViewModel {
     }
 
 
-    /// SwiftUI `Picker` tag — must match a row in ``accountsForPicker`` (avoids stale selection warnings).
+    /// SwiftUI `Picker` tag, must match a row in ``accountsForPicker`` (avoids stale selection warnings).
     var accountPickerSelectionTag: String {
         let visible = Set(accountsForPicker.map(\.id.rawValue))
         guard let raw = selectedAccountID?.rawValue, visible.contains(raw) else { return "" }
@@ -424,7 +424,7 @@ final class AddTradeViewModel {
     /// Web stores `trades.rr` as a decimal ratio (e.g. `2.35`); UI shows `1 : 2.35`.
     var riskRewardDisplay: String {
         guard let value = Self.parseDecimal(rrText, style: .riskReward) else {
-            return rrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "—" : rrText
+            return rrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "–" : rrText
         }
         return Self.formatRiskReward(value)
     }
@@ -441,7 +441,7 @@ final class AddTradeViewModel {
         raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
 
-    /// Web `parseOptionalRr` — finite number, blank → nil. Accepts `1:2.35` reward-multiple input.
+    /// Web `parseOptionalRr`, finite number, blank → nil. Accepts `1:2.35` reward-multiple input.
     static func parseOptionalRiskReward(_ raw: String) -> Decimal? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -497,7 +497,7 @@ final class AddTradeViewModel {
         return copyGroups.first(where: { $0.id == selectedCopyGroupID })
     }
 
-    /// Copy-group membership in sort order — not filtered by `can_add_trades` or dropdown visibility.
+    /// Copy-group membership in sort order, not filtered by `can_add_trades` or dropdown visibility.
     func resolvedCopyGroupAccounts(_ group: CopyTradingGroup) -> [TradingAccount] {
         let source = ownerAccountSource()
         let byID = Dictionary(uniqueKeysWithValues: source.map { ($0.id.rawValue, $0) })
@@ -693,14 +693,17 @@ final class AddTradeViewModel {
     func reloadAccountsAfterMutation() {
         guard let viewerID else { return }
         let createdID = AccountMutationStore.shared.latestAccountID
+        if let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: viewerID,
+            detailCache: detailCache
+        ) {
+            accounts = loaded
+            OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: viewerID, detailCache: detailCache)
+            applyAccountSelectionAfterReload(preferredID: createdID)
+            return
+        }
         Task {
-            if let cached = SessionAccountsStore.shared.cached(for: viewerID)
-                ?? detailCache.accounts(for: viewerID)
-            {
-                accounts = cached
-            } else {
-                await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: true)
-            }
+            await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: false)
             applyAccountSelectionAfterReload(preferredID: createdID)
         }
     }
@@ -1056,7 +1059,7 @@ final class AddTradeViewModel {
                 screenshotPreview = image
             }
         } catch {
-            // Preview is optional — save still preserves existingImageURL.
+            // Preview is optional, save still preserves existingImageURL.
         }
     }
 
@@ -1685,7 +1688,7 @@ final class AddTradeViewModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Blank → `nil`; positive values only — never derived from P&L or R:R.
+    /// Blank → `nil`; positive values only, never derived from P&L or R:R.
     private static func parseOptionalPlannedDollarRisk(_ raw: String) -> Decimal? {
         let plain = NumericInputFieldSupport.plainNumericString(from: raw)
         guard !plain.isEmpty else { return nil }

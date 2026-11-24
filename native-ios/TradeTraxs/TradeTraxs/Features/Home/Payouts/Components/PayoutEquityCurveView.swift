@@ -1,7 +1,7 @@
 import Charts
 import SwiftUI
 
-/// Cumulative withdrawals over time — reuses TradeTraxs equity curve styling.
+/// Cumulative withdrawals over time, reuses TradeTraxs equity curve styling.
 struct PayoutEquityCurveView: View {
     let points: [PayoutEquityCurvePoint]
     let totalWithdrawals: Decimal
@@ -37,10 +37,7 @@ struct PayoutEquityCurveView: View {
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.top, ExperienceSpacing.xs)
         .padding(.bottom, ExperienceSpacing.md)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
         .accessibilityIdentifier("withdrawals.equityCurve")
     }
 

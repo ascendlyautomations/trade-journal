@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated enum ProfileSectionSupport {
-    /// Bundled local profiles — debug `dev.*` and production Explore Mode demo trader.
+    /// Bundled local profiles, debug `dev.*` and production Explore Mode demo trader.
     static func isLocalDevelopmentProfile(_ id: ProfileID) -> Bool {
         DemoExperienceSupport.usesLocalBundledData(id)
     }

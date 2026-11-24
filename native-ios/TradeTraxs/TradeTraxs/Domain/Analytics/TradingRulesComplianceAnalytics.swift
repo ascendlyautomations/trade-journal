@@ -45,11 +45,11 @@ nonisolated enum TradingRulesComplianceAnalytics {
             case .primaryInstrument: return "Primary instrument"
             case .plannedHours: return "Planned trading hours"
             case .allowedTradingDay: return "Allowed trading day"
-            case .minPlannedRr: return "Minimum planned R:R"
-            case .maxContracts: return "Maximum contracts per trade"
-            case .maxRiskPerTrade: return "Maximum risk per trade"
+            case .minPlannedRr: return "Min Planned R:R"
+            case .maxContracts: return "Max Contracts / Trade"
+            case .maxRiskPerTrade: return "Max Risk / Trade"
             case .targetRrMax: return "Target R:R (max reached)"
-            case .maxTradesPerDay: return "Daily trade cap"
+            case .maxTradesPerDay: return "Max Trades / Day"
             case .dailyLossLimit: return "Daily loss limit"
             case .dailyProfitStop: return "Daily profit stop"
             case .weeklyLossLimit: return "Weekly loss limit"
@@ -105,7 +105,7 @@ nonisolated enum TradingRulesComplianceAnalytics {
         var expectancy: Double?
         var avgRealizedRr: Double?
 
-        /// Legacy field used by older UI paths — same as `totalNetPnl`.
+        /// Legacy field used by older UI paths, same as `totalNetPnl`.
         var totalPnl: Double { totalNetPnl }
     }
 
@@ -154,7 +154,7 @@ nonisolated enum TradingRulesComplianceAnalytics {
         /// Trades scored with current rules because they predate the first saved revision.
         var retrospectivelyEvaluatedTrades: Int
         var violationPatterns: TradingRulesViolationPatterns.Bundle
-        /// Internal — used for day drill-down without re-running the engine.
+        /// Internal, used for day drill-down without re-running the engine.
         var complianceChecks: [Check]
         var impactHighlights: [TradingRulesRuleImpact.ComparisonHighlight]
         var disciplineProgress: TradingRulesDisciplineProgress.Bundle
@@ -335,7 +335,7 @@ nonisolated enum TradingRulesComplianceAnalytics {
             let coverage = coverageByKey[key]
             let note: String?
             if (coverage?.count ?? 0) > 1 {
-                note = "Rule configuration changed during this period — compare cautiously."
+                note = "Rule configuration changed during this period, compare cautiously."
             } else {
                 note = nil
             }
@@ -722,7 +722,7 @@ nonisolated enum TradingRulesComplianceAnalytics {
                 if let pnl = input.pnl { running += pnl }
                 if running <= -limit {
                     breached = true
-                    let weekLabel = input.weekKey ?? "—"
+                    let weekLabel = input.weekKey ?? "–"
                     state.pushCheck(
                         rule: .weeklyLossLimit,
                         outcome: .violated,
@@ -782,7 +782,7 @@ nonisolated enum TradingRulesComplianceAnalytics {
             unevaluated: unevaluated,
             evaluated: evaluated,
             explanation:
-                "Adherence % = rules followed ÷ (followed + violations) among checks we could evaluate with reliable data. Unevaluated checks are excluded — never counted as compliant. Not-applicable checks are excluded from adherence and unevaluated counts."
+                "Adherence % = rules followed ÷ (followed + violations) among checks we could evaluate with reliable data. Unevaluated checks are excluded, never counted as compliant. Not-applicable checks are excluded from adherence and unevaluated counts."
         )
     }
 

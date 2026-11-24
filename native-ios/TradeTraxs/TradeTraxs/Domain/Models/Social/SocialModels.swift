@@ -57,7 +57,7 @@ nonisolated struct LeaderboardEntry: Hashable, Codable, Sendable, Identifiable {
     var winStreak: Int
     /// Share of trading days with positive net PnL (`0...100`).
     var profitPercent: Decimal?
-    /// Inverse win concentration — higher means profits are less dominated by one trade (`0...100`).
+    /// Inverse win concentration, higher means profits are less dominated by one trade (`0...100`).
     var consistency: Decimal?
 
     init(

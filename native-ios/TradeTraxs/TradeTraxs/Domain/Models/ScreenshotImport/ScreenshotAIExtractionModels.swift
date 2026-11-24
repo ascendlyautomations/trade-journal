@@ -1,6 +1,6 @@
 import Foundation
 
-/// Phase 3 — versioned BFF contract for AI screenshot extraction.
+/// Phase 3, versioned BFF contract for AI screenshot extraction.
 nonisolated struct ScreenshotAIExtractRequest: Hashable, Codable, Sendable {
     var schemaVersion: String
     var requestFingerprint: String?

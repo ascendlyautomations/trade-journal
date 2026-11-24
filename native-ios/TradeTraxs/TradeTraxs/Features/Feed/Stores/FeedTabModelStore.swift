@@ -2,7 +2,7 @@ import Foundation
 
 /// Retains the Feed tab root presentation across `TabView` teardown and shallow rebuilds.
 ///
-/// Matches ``DashboardTabModelStore`` — keeps timeline pagination and scroll anchors on the
+/// Matches ``DashboardTabModelStore``, keeps timeline pagination and scroll anchors on the
 /// same ``FeedScreenViewModel`` instance instead of cold-booting when the shell re-mounts.
 @MainActor
 enum FeedTabModelStore {

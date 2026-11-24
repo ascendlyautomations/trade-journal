@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Canonical Feed screen owner — one bootstrap, one ``FeedState``, render-only children.
+/// Canonical Feed screen owner, one bootstrap, one ``FeedState``, render-only children.
 ///
 /// Matches Profile Bootstrap V2:
 /// Screen ViewModel → coordinated bootstrap → shared state → views render / paginate only.
@@ -132,7 +132,7 @@ final class FeedScreenViewModel {
         listScrollPresentationEpoch &+= 1
     }
 
-    /// Home-style tab reselect at feed root — programmatic scroll-to-top (UIKit scrollsToTop is off).
+    /// Home-style tab reselect at feed root, programmatic scroll-to-top (UIKit scrollsToTop is off).
     func scrollToTopForTabReselect() {
         resetScrollPresentation()
     }
@@ -193,7 +193,7 @@ final class FeedScreenViewModel {
         await refresh(trigger: .pullRefresh)
     }
 
-    /// Phase 10F — bounded first-page head reconcile after Realtime reconnect (merge, no pagination reset).
+    /// Phase 10F, bounded first-page head reconcile after Realtime reconnect (merge, no pagination reset).
     func reconcileHeadAfterSocialReconnect(expectedViewerGeneration: UInt64) async {
         guard state.didBootstrap else { return }
         guard state.phase == .loaded else { return }
@@ -211,7 +211,7 @@ final class FeedScreenViewModel {
         }
     }
 
-    /// Following-scope edge — refresh timeline without postgres_changes author watches.
+    /// Following-scope edge, refresh timeline without postgres_changes author watches.
     func reconcileFollowingAfterRelationshipChange() async {
         reconcileSharedFeedScopeWithState()
         guard state.scope == .following, state.didBootstrap else { return }
@@ -309,7 +309,7 @@ final class FeedScreenViewModel {
         return postIDRawValues.contains(entry.id)
     }
 
-    /// Standard lifecycle — pages using the last visible entry when available.
+    /// Standard lifecycle, pages using the last visible entry when available.
     func loadMore() async {
         guard let currentID = state.cachedVisibleEntries.last?.id else { return }
         await loadMoreIfNeeded(currentID: currentID)
@@ -408,7 +408,7 @@ final class FeedScreenViewModel {
         }
     }
 
-    /// User tapped a filter chip — never invoked from SwiftUI bindings on appear.
+    /// User tapped a filter chip, never invoked from SwiftUI bindings on appear.
     func userSelectedContentFilter(_ next: FeedContentFilter) {
         guard state.contentFilter != next else { return }
         ExperienceHaptics.play(.selection)
@@ -427,7 +427,7 @@ final class FeedScreenViewModel {
         }
     }
 
-    /// Tests / previews — same semantics as an explicit user filter tap.
+    /// Tests / previews, same semantics as an explicit user filter tap.
     func setContentFilter(_ next: FeedContentFilter) {
         userSelectedContentFilter(next)
     }
@@ -875,7 +875,7 @@ final class FeedScreenViewModel {
         return true
     }
 
-    /// First-page network delta after Realtime reconnect — no pagination reset.
+    /// First-page network delta after Realtime reconnect, no pagination reset.
     private func performReconnectHeadReconcile(generation: UInt64) async {
         guard BackendV2FeatureFlags.isEnabled(.feed), let rpc else { return }
         if let sessionUserID = await session.currentUserID,
@@ -934,7 +934,7 @@ final class FeedScreenViewModel {
             state.lastUpdated = Date()
             persistFeedFirstPage()
         } catch {
-            // Soft-fail — keep cached timeline and pagination cursors.
+            // Soft-fail, keep cached timeline and pagination cursors.
         }
     }
 
@@ -1436,5 +1436,5 @@ final class FeedScreenViewModel {
 
 extension FeedScreenViewModel: ScreenLifecycle, ScreenRealtimeHandling {}
 
-/// Compatibility alias — tests and call sites may still reference ``FeedViewModel``.
+/// Compatibility alias, tests and call sites may still reference ``FeedViewModel``.
 typealias FeedViewModel = FeedScreenViewModel

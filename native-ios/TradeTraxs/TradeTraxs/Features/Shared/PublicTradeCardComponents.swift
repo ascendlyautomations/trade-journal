@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Ticker + P&L headline row for public trade cards — matched size, weight, and baseline.
+/// Ticker + P&L headline row for public trade cards, matched size, weight, and baseline.
 struct PublicTradeHeadlineRow: View {
     let ticker: String
     let realizedPnL: Money?
@@ -36,9 +36,9 @@ struct PublicTradeHeadlineRow: View {
 /// Side, account-type, RR, quantity (and optional session) chips for public trade surfaces.
 struct PublicTradeMetaChipRow: View {
     enum LayoutStyle: Sendable {
-        /// Feed / detail — horizontal scroll when chips overflow.
+        /// Feed / detail, horizontal scroll when chips overflow.
         case horizontalScroll
-        /// Profile compact cards — wrap onto additional lines within available width.
+        /// Profile compact cards, wrap onto additional lines within available width.
         case wrap
     }
 
@@ -47,9 +47,9 @@ struct PublicTradeMetaChipRow: View {
     private let showsQuantity: Bool
     private let showsSession: Bool
     private let layout: LayoutStyle
-    /// Profile grouped copy line — replaces per-row account badge (`copyTradePublicModeSummary`).
+    /// Profile grouped copy line, replaces per-row account badge (`copyTradePublicModeSummary`).
     private let copyTradeGroupedModeSummary: String?
-    /// Sanitized provider label — type comes from trade/summary badge fields.
+    /// Sanitized provider label, type comes from trade/summary badge fields.
     private let accountProviderName: String?
 
     init(
@@ -230,7 +230,7 @@ nonisolated enum TradeExecutionMetricsContentAlignment: Sendable {
     case centered
 }
 
-/// Two-row execution block — R:R / Contracts / Duration, then Entry / Exit / Points (times under prices).
+/// Two-row execution block, R:R / Contracts / Duration, then Entry / Exit / Points (times under prices).
 struct TradeExecutionMetricsTwoRowGrid: View {
     private let riskReward: Decimal?
     private let quantity: Decimal
@@ -298,7 +298,7 @@ struct TradeExecutionMetricsTwoRowGrid: View {
             HStack(alignment: .top, spacing: ExperienceSpacing.xxs) {
                 TradeExecutionMetricsCell(
                     label: "R:R",
-                    value: TradeDisplay.compactRRText(riskReward) ?? "—",
+                    value: TradeDisplay.compactRRText(riskReward) ?? "–",
                     textAlignment: contentAlignment
                 )
                 .frame(maxWidth: .infinity, alignment: columnAlignment)
@@ -310,7 +310,7 @@ struct TradeExecutionMetricsTwoRowGrid: View {
                 .frame(maxWidth: .infinity, alignment: columnAlignment)
                 TradeExecutionMetricsCell(
                     label: "Duration",
-                    value: durationText ?? "—",
+                    value: durationText ?? "–",
                     textAlignment: contentAlignment
                 )
                 .frame(maxWidth: .infinity, alignment: columnAlignment)
@@ -344,7 +344,7 @@ struct TradeExecutionMetricsTwoRowGrid: View {
                 if showsPoints {
                     TradeExecutionMetricsCell(
                         label: "Points",
-                        value: TradeDisplay.pointsText(points) ?? "—",
+                        value: TradeDisplay.pointsText(points) ?? "–",
                         textAlignment: contentAlignment
                     )
                 } else {
@@ -396,7 +396,7 @@ private struct TradeExecutionMetricsCell: View {
     }
 }
 
-/// Entry / Exit column — one shared price + time style so columns cannot diverge.
+/// Entry / Exit column, one shared price + time style so columns cannot diverge.
 private struct TradeExecutionEntryExitColumn: View {
     let label: String
     let price: String

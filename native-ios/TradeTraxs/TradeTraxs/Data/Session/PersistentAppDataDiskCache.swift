@@ -34,7 +34,7 @@ nonisolated enum PersistentAppDataDiskCache {
             do {
                 try FileManager.default.copyItem(at: legacyURL, to: destURL)
             } catch {
-                // Soft-fail — network remains authoritative.
+                // Soft-fail, network remains authoritative.
             }
         }
     }

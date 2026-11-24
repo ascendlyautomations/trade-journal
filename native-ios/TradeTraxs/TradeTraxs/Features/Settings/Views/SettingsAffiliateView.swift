@@ -38,7 +38,7 @@ struct SettingsAffiliateView: View {
             }
 
             Section {
-                SettingsInfoRow(title: "Code", value: viewModel.referral?.code ?? "—")
+                SettingsInfoRow(title: "Code", value: viewModel.referral?.code ?? "–")
                     .experienceDashboardListRow()
                 if let code = viewModel.referral?.code, !code.isEmpty {
                     Button {

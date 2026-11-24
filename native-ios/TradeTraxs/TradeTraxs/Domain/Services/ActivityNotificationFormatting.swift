@@ -1,6 +1,6 @@
 import Foundation
 
-/// Display copy for Activity rows — mirrors web `lib/notificationsDisplay.ts` semantics.
+/// Display copy for Activity rows, mirrors web `lib/notificationsDisplay.ts` semantics.
 nonisolated enum ActivityNotificationFormatting {
     static func actorDisplayName(
         profile: Profile?,

@@ -195,7 +195,7 @@ nonisolated enum AdminContentReportHydration {
         for trade in rows {
             let owner = trade.user_id.map { ProfileID($0) }
             let pnl = AdminContentReportParsing.formatPnL(trade.pnl)
-            let ticker = (trade.ticker ?? "—").uppercased()
+            let ticker = (trade.ticker ?? "–").uppercased()
             previews[targetKey(.trade, trade.id)] = AdminReportTargetPreview(
                 targetType: .trade,
                 targetID: trade.id,
@@ -468,7 +468,7 @@ nonisolated enum AdminContentReportParsing {
     }
 
     static func formatPnL(_ value: Double?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         let formatted = String(format: "%+.2f", value)
         return formatted
     }

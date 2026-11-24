@@ -48,7 +48,7 @@ enum ProfilePersistedCacheCoordinator {
         return state
     }
 
-    /// Owner Profile — reuse session owner trades when header is already warm.
+    /// Owner Profile, reuse session owner trades when header is already warm.
     static func hydrateOwnerTradesIfNeeded(
         ownerID: ProfileID,
         detailCache: DetailPresentationCache
@@ -194,7 +194,7 @@ enum ProfilePersistedCacheCoordinator {
         )
     }
 
-    /// Phase 9 — authoritative Profile → Clips tab load (lazy section; not in Stage-1 bootstrap).
+    /// Phase 9, authoritative Profile → Clips tab load (lazy section; not in Stage-1 bootstrap).
     static func persistClipsSection(
         viewerID: ProfileID,
         targetProfileID: ProfileID,
@@ -253,7 +253,7 @@ enum ProfilePersistedCacheCoordinator {
         )
     }
 
-    /// Owner Settings save — keep tab/disk profile snapshots aligned with the session store.
+    /// Owner Settings save, keep tab/disk profile snapshots aligned with the session store.
     static func patchOwnerProfileHeader(
         profile: Profile,
         session: any SessionProviding

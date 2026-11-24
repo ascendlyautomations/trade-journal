@@ -57,7 +57,7 @@ enum DashboardVisualExpansionDebug {
 
     static func logStaleChartsCache(scope: String, revision: Int64) {
         print(
-            "[DashboardVisualExpansion] staleChartsCache scope=\(scope) revision=\(revision) — refetching charts RPC"
+            "[DashboardVisualExpansion] staleChartsCache scope=\(scope) revision=\(revision), refetching charts RPC"
         )
     }
 }

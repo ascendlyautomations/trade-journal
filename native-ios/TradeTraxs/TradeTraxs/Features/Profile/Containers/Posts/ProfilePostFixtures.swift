@@ -2,10 +2,10 @@ import Foundation
 
 /// Deterministic sample posts for DEBUG development sessions / screenshots.
 nonisolated enum ProfilePostFixtures {
-    /// Landscape sample — verifies aspect-fit (not square crop / zoom).
+    /// Landscape sample, verifies aspect-fit (not square crop / zoom).
     private static let sampleLandscapeURL =
         "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80"
-    /// Portrait sample — verifies tall images are contained, not forced-fill.
+    /// Portrait sample, verifies tall images are contained, not forced-fill.
     private static let samplePortraitURL =
         "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&q=80"
 
@@ -15,7 +15,7 @@ nonisolated enum ProfilePostFixtures {
             Post(
                 id: PostID("dev-post-1"),
                 authorProfileID: profileID,
-                body: "Session recap — waited for the level, took the continuation. Held through the open drive with clean level respect and size management. Process notes for later review.",
+                body: "Session recap, waited for the level, took the continuation. Held through the open drive with clean level respect and size management. Process notes for later review.",
                 media: [
                     MediaReference(id: sampleLandscapeURL, kind: .image, altText: "Session chart"),
                 ],
@@ -38,11 +38,11 @@ nonisolated enum ProfilePostFixtures {
                 createdAt: now.addingTimeInterval(-120_000),
                 updatedAt: now.addingTimeInterval(-120_000)
             ),
-            /// Text-only — feed Layout B (no media container / likes below caption).
+            /// Text-only, feed Layout B (no media container / likes below caption).
             Post(
                 id: PostID("dev-post-text-only"),
                 authorProfileID: profileID,
-                body: "No screenshot today — just process. Waited for the open, skipped the first impulse, and only took the second touch at the level. Size stayed small. That is the edge.",
+                body: "No screenshot today, just process. Waited for the open, skipped the first impulse, and only took the second touch at the level. Size stayed small. That is the edge.",
                 media: [],
                 visibility: .public,
                 linkedTradeID: nil,

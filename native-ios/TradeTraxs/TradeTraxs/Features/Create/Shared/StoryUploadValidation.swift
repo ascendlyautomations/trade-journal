@@ -1,6 +1,6 @@
 import Foundation
 
-/// Client-side guards — mirrors web `lib/uploadValidation.ts` (`validateImageUpload`).
+/// Client-side guards, mirrors web `lib/uploadValidation.ts` (`validateImageUpload`).
 enum StoryUploadValidation {
     static let maxBytes = 15 * 1024 * 1024
 

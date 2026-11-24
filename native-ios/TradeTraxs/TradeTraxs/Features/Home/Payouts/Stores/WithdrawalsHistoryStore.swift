@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Authoritative in-memory withdrawal history — ledger entries + funded prop payout cycles.
+/// Authoritative in-memory withdrawal history, ledger entries + funded prop payout cycles.
 @Observable
 @MainActor
 final class WithdrawalsHistoryStore {
@@ -110,7 +110,7 @@ final class WithdrawalsHistoryStore {
         }
     }
 
-    /// Confirmed prop payout — visible immediately without waiting on refetch.
+    /// Confirmed prop payout, visible immediately without waiting on refetch.
     func prependCompletedPropCycle(_ cycle: AccountPayoutCycle, profileID: ProfileID) {
         self.profileID = profileID
         var grouped = cyclesByAccount

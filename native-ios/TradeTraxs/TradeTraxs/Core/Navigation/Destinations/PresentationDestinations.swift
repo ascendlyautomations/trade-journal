@@ -1,6 +1,6 @@
 import Foundation
 
-/// Light presentations — filters, pickers, choosers, comments, follow lists.
+/// Light presentations, filters, pickers, choosers, comments, follow lists.
 enum SheetDestination: String, Identifiable, Hashable, Codable, Sendable {
     case composeChooser
     case quickTrade
@@ -16,7 +16,7 @@ enum SheetDestination: String, Identifiable, Hashable, Codable, Sendable {
     var id: String { rawValue }
 }
 
-/// Focused multi-step flows — compose, import, onboarding adjacent, upgrade, media.
+/// Focused multi-step flows, compose, import, onboarding adjacent, upgrade, media.
 enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
     case addTrade
     case editTrade(TradeID)

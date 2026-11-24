@@ -1,6 +1,6 @@
 import Foundation
 
-/// Sample-size policy for psychology analytics — avoids misleading small-n stats.
+/// Sample-size policy for psychology analytics, avoids misleading small-n stats.
 nonisolated enum PsychologySampleReliability: String, Hashable, Codable, Sendable {
     case insufficient
     case earlySignal
@@ -129,7 +129,7 @@ nonisolated struct PsychologyEnrichedTrade: Hashable, Sendable {
     var previousTradeWasLoss: Bool
 }
 
-/// Dashboard-only gate copy — does not change analytics thresholds or insight generation.
+/// Dashboard-only gate copy, does not change analytics thresholds or insight generation.
 nonisolated struct PsychologyInsightsUnlockProgress: Equatable, Sendable {
     static let requiredCount = 5
 
@@ -142,7 +142,7 @@ nonisolated struct PsychologyInsightsUnlockProgress: Equatable, Sendable {
         tradingDayCheckInCount < Self.requiredCount || tradeCount < Self.requiredCount
     }
 
-    /// Dashboard coaching Insights empty state — trades only (not Psychology Insights).
+    /// Dashboard coaching Insights empty state, trades only (not Psychology Insights).
     var showsDashboardInsightsRequirementMessage: Bool {
         tradeCount < Self.requiredCount
     }
@@ -155,7 +155,7 @@ nonisolated struct PsychologyInsightsUnlockProgress: Equatable, Sendable {
         min(tradingDayCheckInCount, Self.requiredCount)
     }
 
-    /// Matches web `computePsychologyInsightsUnlockProgress` — filtered trade count + Check-In History → Psychology day count.
+    /// Matches web `computePsychologyInsightsUnlockProgress`, filtered trade count + Check-In History → Psychology day count.
     static func compute(trades: [Trade], checkIns: [TraderDailyCheckIn]) -> Self {
         Self(
             tradingDayCheckInCount: PsychologyCheckInHistoryGate.countPsychologyCheckInHistoryDays(checkIns),

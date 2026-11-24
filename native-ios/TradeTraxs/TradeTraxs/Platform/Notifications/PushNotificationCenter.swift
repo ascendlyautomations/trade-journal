@@ -13,7 +13,7 @@ private final class PushUserInfoBox: @unchecked Sendable {
     }
 }
 
-/// Centralized APNs ownership — features never register for remote notifications themselves.
+/// Centralized APNs ownership, features never register for remote notifications themselves.
 ///
 /// Responsibilities:
 /// - Permission + `registerForRemoteNotifications`
@@ -118,7 +118,7 @@ final class PushNotificationCenter: NSObject {
             }
             guard self.authorizationStatus.isEnabled else {
                 AppLog.notifications.info(
-                    "Push pipeline: skipping APNs — status=\(Self.diagnosticLabel(for: self.authorizationStatus), privacy: .public)"
+                    "Push pipeline: skipping APNs, status=\(Self.diagnosticLabel(for: self.authorizationStatus), privacy: .public)"
                 )
                 return
             }
@@ -146,13 +146,13 @@ final class PushNotificationCenter: NSObject {
         }
     }
 
-    /// Call on logout — removes this install's token from the shared backend.
+    /// Call on logout, removes this install's token from the shared backend.
     /// Must be awaited **before** clearing the auth session when possible.
     func unregisterForLogout() async {
         await unregisterPush(allDevices: false)
     }
 
-    /// Call after successful account deletion — mirrors web Settings delete flow.
+    /// Call after successful account deletion, mirrors web Settings delete flow.
     func unregisterForAccountDeletion() async {
         await unregisterPush(allDevices: true)
     }
@@ -192,14 +192,14 @@ final class PushNotificationCenter: NSObject {
     func applicationDidFailToRegisterForRemoteNotifications(error: Error) {
         lastRegistrationError = error.localizedDescription
         AppLog.notifications.error(
-            "Push pipeline: APNs registration failed — \(error.localizedDescription, privacy: .public)"
+            "Push pipeline: APNs registration failed, \(error.localizedDescription, privacy: .public)"
         )
     }
 
     func handleNotificationResponse(_ response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
         route(userInfo: userInfo)
-        // Mirror backend BadgeService — do not trust a stale APNs payload integer alone.
+        // Mirror backend BadgeService, do not trust a stale APNs payload integer alone.
         AppIconBadgeSync.refresh(animated: false, force: true)
         Task { await softRefreshActivityUnread() }
     }
@@ -241,7 +241,7 @@ final class PushNotificationCenter: NSObject {
         } catch {
             lastRegistrationError = error.localizedDescription
             AppLog.notifications.error(
-                "Push pipeline: BFF token registration failed — \(error.localizedDescription, privacy: .public)"
+                "Push pipeline: BFF token registration failed, \(error.localizedDescription, privacy: .public)"
             )
         }
     }

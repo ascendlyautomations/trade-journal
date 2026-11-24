@@ -1,7 +1,7 @@
 import Foundation
 import LiveKit
 
-/// Browser host program feed — mirrors web `findBrowserBroadcasterProgramVideoPublication`.
+/// Browser host program feed, mirrors web `findBrowserBroadcasterProgramVideoPublication`.
 enum BroadcastBrowserProgramVideo {
     struct PublicationChoice: Equatable {
         var source: Track.Source

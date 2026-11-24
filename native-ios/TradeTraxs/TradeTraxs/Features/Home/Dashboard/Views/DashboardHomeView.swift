@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Permanent Home tab root — Apple Fitness / Stocks style analytics cockpit.
+/// Permanent Home tab root, Apple Fitness / Stocks style analytics cockpit.
 struct DashboardHomeView: View {
     @State private var viewModel: DashboardViewModel
     @State private var activityStore = ActivityInboxStore.shared
@@ -314,7 +314,6 @@ struct DashboardHomeView: View {
     }
 
     private var showsDashboardFilterBar: Bool {
-        guard !embeddedInTraxsProPreview else { return false }
         switch viewModel.phase {
         case .idle:
             return viewModel.hasLoaded || !viewModel.accounts.isEmpty
@@ -441,20 +440,81 @@ struct DashboardHomeView: View {
 
     @ViewBuilder
     private func traxsProPreviewDashboardSections(summary: DashboardChartMetrics.Summary) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            DashboardEquityHero(
+                summary: viewModel.equityHeroSummary ?? summary,
+                periodTitle: viewModel.dateRange.title,
+                title: viewModel.equityHeroTitle,
+                displayEquity: viewModel.equityHeroDisplayValue,
+                chartPoints: viewModel.equityHeroChartPoints,
+                isChartLoading: false,
+                withdrawalSummary: accountValueWithdrawalSummary,
+                onWithdrawalSummaryTap: viewModel.openWithdrawalsHistory,
+                showsDrawdownSettings: false,
+                onDrawdownSettingsTap: {}
+            )
+
+            DashboardMetricStrip(chips: viewModel.metricChips, layout: .gridTwoByTwo)
+        }
+        .padding(.bottom, ExperienceSpacing.lg)
+
+        DashboardPreviewStatisticsSection(
+            summary: summary,
+            reportMetrics: viewModel.traxsProPreviewScopeMetrics
+        )
+        .padding(.bottom, ExperienceSpacing.xl)
+
+        sectionHeader(
+            DashboardScorecardDisplayCopy.sectionTitle,
+            info: "The ring is the overall score for this filter once the sample is large enough. It blends consistency, risk, discipline, and psychology."
+        )
+        DashboardTradingScorecardSection(showsTitle: false) {
+            viewModel.openTradingScorecard()
+        }
+        .padding(.bottom, ExperienceSpacing.lg)
+
         DashboardTradingRulesComplianceSection(
             compliancePresentation: premiumAnalyticsPresentation,
             onOpenDetail: { viewModel.openTradingRulesAnalytics() },
             onOpenSettings: { viewModel.openTradingRulesSettings() }
         )
-        .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, ExperienceSpacing.xl)
 
         DashboardChartsSection(
             summary: summary,
+            onBrowseWins: { viewModel.browseWins() },
+            onBrowseLosses: { viewModel.browseLosses() },
+            onBrowseSession: { viewModel.browseSession($0) },
+            onBrowseWeekday: { viewModel.browseWeekday(label: $0) },
             onBrowseHour: { viewModel.browseHour(label: $0) },
+            onBrowseLong: { viewModel.browseLong() },
+            onBrowseShort: { viewModel.browseShort() },
             onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) },
             premiumChartsPresentation: premiumAnalyticsPresentation,
-            showsStandardCharts: false
+            showsStandardCharts: true
+        )
+        .padding(.bottom, ExperienceSpacing.xl)
+
+        DashboardInsightsSection(presentation: viewModel.insightsPresentation)
+            .padding(.bottom, ExperienceSpacing.lg)
+
+        PsychologyInsightsSection(
+            title: "Psychology Insights",
+            info: Self.psychologyInsightsInfo,
+            cards: viewModel.dashboardPsychologyInsightCards,
+            unlockProgress: viewModel.psychologyInsightsUnlockProgress,
+            insightsReady: viewModel.psychologyInsightsReady,
+            unlockMetricsReady: viewModel.psychologyUnlockMetricsReady,
+            hasMatchedCheckInDays: viewModel.psychologyHasMatchedCheckInDays,
+            postUnlockGapMessages: viewModel.psychologyPostUnlockGapMessages,
+            onSelect: { card in
+                viewModel.openPsychologyAnalytics(
+                    highlightSection: viewModel.psychologySectionID(for: card.category)
+                )
+            },
+            onViewAll: {
+                viewModel.openPsychologyAnalytics()
+            }
         )
         .padding(.bottom, ExperienceSpacing.xxxl)
     }

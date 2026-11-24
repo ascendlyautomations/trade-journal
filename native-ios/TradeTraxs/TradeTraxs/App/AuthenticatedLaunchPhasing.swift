@@ -18,7 +18,7 @@ enum AuthenticatedLaunchPhasing {
         activeTab = tab
     }
 
-    /// Phase B — cached first paint for the active tab (Home Dashboard or Feed).
+    /// Phase B, cached first paint for the active tab (Home Dashboard or Feed).
     static func markCriticalVisibleSurfaceReady(tab: TabIdentifier) {
         guard !criticalVisibleSurfaceReady else { return }
         criticalVisibleSurfaceReady = true

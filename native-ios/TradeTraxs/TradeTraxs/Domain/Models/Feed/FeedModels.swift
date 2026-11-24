@@ -19,7 +19,7 @@ nonisolated enum ReactionKind: String, Hashable, Codable, Sendable {
     case insight
 }
 
-/// Timeline entry — Feed aggregate projection over posts/trades/reels/etc.
+/// Timeline entry, Feed aggregate projection over posts/trades/reels/etc.
 nonisolated struct FeedItem: Hashable, Codable, Sendable, Identifiable {
     var id: String
     var kind: FeedItemKind
@@ -34,7 +34,7 @@ nonisolated struct FeedItem: Hashable, Codable, Sendable, Identifiable {
     var likeCount: Int
     var commentCount: Int
     var viewerHasLiked: Bool
-    /// Web feed embed `profiles.username` — seeded into DetailPresentationCache (no N+1).
+    /// Web feed embed `profiles.username`, seeded into DetailPresentationCache (no N+1).
     var authorUsername: String? = nil
     /// Web feed embed `profiles` display label (`name` when present, else username).
     var authorDisplayName: String? = nil

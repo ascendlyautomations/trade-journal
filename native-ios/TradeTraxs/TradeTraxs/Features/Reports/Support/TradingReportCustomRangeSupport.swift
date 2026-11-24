@@ -1,7 +1,7 @@
 import Foundation
 
 enum TradingReportCustomRangeSupport {
-  /// Default sheet state — current calendar month through today (eastern).
+  /// Default sheet state, current calendar month through today (eastern).
     static func defaultMonthSelection(now: Date = Date()) -> (year: Int, month: Int, start: Date, end: Date) {
         let calendar = TradingReportPeriods.eastern
         let year = calendar.component(.year, from: now)

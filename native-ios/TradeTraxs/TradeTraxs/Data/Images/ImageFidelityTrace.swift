@@ -4,7 +4,7 @@ import ImageIO
 import OSLog
 import UIKit
 
-/// End-to-end image fidelity probe — logs pixel dimensions at each pipeline stage.
+/// End-to-end image fidelity probe, logs pixel dimensions at each pipeline stage.
 ///
 /// Enable with launch argument `-uitesting-feed-image-diagnostics` or DEBUG builds
 /// when `ImageFidelityTrace.isEnabled` is true.
@@ -102,14 +102,14 @@ nonisolated enum ImageFidelityTrace {
         let heightRatio = Double(displayPixels.height) / Double(sourcePixels.height)
         if widthRatio > 1.01 || heightRatio > 1.01 {
             return String(
-                format: "UPSCALE at render — display needs %.2f× width / %.2f× height vs bitmap",
+                format: "UPSCALE at render, display needs %.2f× width / %.2f× height vs bitmap",
                 widthRatio,
                 heightRatio
             )
         }
         if widthRatio < 0.99 || heightRatio < 0.99 {
             return String(
-                format: "Downscale at render — display is %.2f× width / %.2f× height of bitmap (expected; use high interpolation)",
+                format: "Downscale at render, display is %.2f× width / %.2f× height of bitmap (expected; use high interpolation)",
                 widthRatio,
                 heightRatio
             )
@@ -138,7 +138,7 @@ nonisolated enum ImageFidelityTrace {
         AppLog.networking.info("\(parts.joined(separator: " | "), privacy: .public)")
     }
 
-    /// Full offline probe for a downloaded (or synthetic) payload — used by tests + DEBUG.
+    /// Full offline probe for a downloaded (or synthetic) payload, used by tests + DEBUG.
     static func probePipeline(
         label: String,
         data: Data,

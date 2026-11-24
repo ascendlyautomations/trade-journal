@@ -14,7 +14,7 @@ private struct ProfileSectionPlaceholderFillModifier: ViewModifier {
     }
 }
 
-/// Shared chrome for section containers — loading / empty / error / content slot.
+/// Shared chrome for section containers, loading / empty / error / content slot.
 struct ProfileSectionContainerChrome<Content: View>: View {
     let section: ProfileSection
     let state: ProfileSectionLoadState

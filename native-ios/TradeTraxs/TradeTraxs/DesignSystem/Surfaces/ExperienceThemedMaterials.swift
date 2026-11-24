@@ -18,27 +18,27 @@ import SwiftUI
 // Intentional system materials: only inside this file (light mode) and `SurfaceStyle` light branch.
 
 extension View {
-    /// Inset grouped `List` — cool row lift in dark mode; light mode unchanged.
+    /// Inset grouped `List`, cool row lift in dark mode; light mode unchanged.
     func experienceInsetGroupedListStyle(pageBackground: Bool = false) -> some View {
         modifier(ExperienceInsetGroupedListModifier(pageBackground: pageBackground))
     }
 
-    /// Plain `List` on the semantic page canvas — Activity, Trades, share pickers, etc.
+    /// Plain `List` on the semantic page canvas, Activity, Trades, share pickers, etc.
     func experiencePlainListStyle() -> some View {
         modifier(ExperiencePlainListModifier())
     }
 
-    /// `Form` / grouped sections — same row treatment as inset grouped lists.
+    /// `Form` / grouped sections, same row treatment as inset grouped lists.
     func experienceTradeTraxsFormStyle(pageBackground: Bool = false) -> some View {
         modifier(ExperienceTradeTraxsFormModifier(pageBackground: pageBackground))
     }
 
-    /// Bottom chrome / toolbars — opaque cool surface in dark mode; system bar in light.
+    /// Bottom chrome / toolbars, opaque cool surface in dark mode; system bar in light.
     func experienceChromeBarBackground() -> some View {
         modifier(ExperienceChromeBarBackgroundModifier())
     }
 
-    /// Chart scrubbers, floating pickers, media chrome — cool panel in dark mode; thin material in light.
+    /// Chart scrubbers, floating pickers, media chrome, cool panel in dark mode; thin material in light.
     func experienceFloatingPanelBackground<S: InsettableShape>(
         in shape: S,
         borderOpacity: Double = 0.5
@@ -55,7 +55,7 @@ extension View {
 // MARK: - Themed material (replaces raw `.experienceMaterial` + system Material)
 
 extension View {
-    /// Semantic material — dark mode uses opaque theme surfaces; light mode uses system Material.
+    /// Semantic material, dark mode uses opaque theme surfaces; light mode uses system Material.
     func experienceMaterial(_ token: MaterialToken) -> some View {
         modifier(ExperienceThemedMaterialModifier(token: token))
     }
@@ -154,10 +154,19 @@ private struct ExperienceFloatingPanelBackgroundModifier<S: InsettableShape>: Vi
                 }
         } else {
             content
-                .background(.ultraThinMaterial, in: shape)
+                .background(colors.surfacePrimary, in: shape)
                 .overlay {
-                    shape.stroke(colors.border.opacity(borderOpacity), lineWidth: ExperienceBorder.hairline)
+                    shape.stroke(
+                        colors.border.opacity(ExperienceDashboardSurface.LightChrome.controlBorderOpacity),
+                        lineWidth: ExperienceBorder.hairline
+                    )
                 }
+                .shadow(
+                    color: colors.surfaceOverlay.opacity(ExperienceDashboardSurface.LightChrome.controlShadowOpacity),
+                    radius: ExperienceDashboardSurface.LightChrome.controlShadowRadius,
+                    x: 0,
+                    y: ExperienceDashboardSurface.LightChrome.controlShadowY
+                )
         }
     }
 }

@@ -24,7 +24,7 @@ nonisolated enum ConversationThreadFixtures {
                 conversationID: conversationID,
                 senderProfileID: viewerID,
                 kind: .text,
-                body: "Yes — clean displacement off the FVG.",
+                body: "Yes, clean displacement off the FVG.",
                 attachments: [],
                 replyToMessageID: nil,
                 createdAt: now.addingTimeInterval(-3_400),

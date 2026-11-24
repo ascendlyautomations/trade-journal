@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// System Material tokens — prefer ``View/experienceMaterial(_:)`` in feature code.
+/// System Material tokens, prefer ``View/experienceMaterial(_:)`` in feature code.
 /// Raw ``MaterialToken/material`` is light-mode / legacy; dark mode should never use it directly in views.
 enum MaterialToken: Sendable {
     case ultraThin
@@ -9,7 +9,7 @@ enum MaterialToken: Sendable {
     case thick
     case chrome
 
-    /// System Material (light appearance). Do not apply directly in features — use ``experienceMaterial(_:)``.
+    /// System Material (light appearance). Do not apply directly in features, use ``experienceMaterial(_:)``.
     var material: Material {
         switch self {
         case .ultraThin: return .ultraThinMaterial

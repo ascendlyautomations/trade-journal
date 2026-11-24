@@ -1,6 +1,6 @@
 import Foundation
 
-/// URLSession for **public** Supabase Storage GETs — honors HTTP/CDN cache headers.
+/// URLSession for **public** Supabase Storage GETs, honors HTTP/CDN cache headers.
 nonisolated enum MediaURLSession {
     static let shared: URLSession = {
         let config = URLSessionConfiguration.default

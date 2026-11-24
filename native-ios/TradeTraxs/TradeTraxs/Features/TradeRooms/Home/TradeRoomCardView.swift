@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Compact Trade Room card for the dedicated Rooms home — avatar + metadata only.
+/// Compact Trade Room card for the dedicated Rooms home, avatar + metadata only.
 struct TradeRoomCardView: View {
     let item: TradeRoomInboxItem
     let imagePipeline: any ImagePipeline

@@ -137,7 +137,7 @@ final class RoomNavigationFocusStore {
         )
     }
 
-    /// Manual sub-room selection or explicit cancel — drops pending intent for this room.
+    /// Manual sub-room selection or explicit cancel, drops pending intent for this room.
     func cancelIntent(for roomID: RoomID, resolvedRoomID: RoomID? = nil) {
         let canonical = canonicalRoomID(forRoute: roomID, resolved: resolvedRoomID)
         guard intentsByCanonicalRoom[canonical] != nil else { return }
@@ -161,7 +161,7 @@ final class RoomNavigationFocusStore {
         cancelIntent(for: roomID)
     }
 
-    /// Tests only — production defers acknowledgement to ``RoomConversationViewModel/applyNavigationIntentIfNeeded()``.
+    /// Tests only, production defers acknowledgement to ``RoomConversationViewModel/applyNavigationIntentIfNeeded()``.
     @available(*, deprecated, message: "Prefer pendingIntent + VM acknowledgeIntent in app code")
     func consume(for roomID: RoomID, resolvedRoomID: RoomID? = nil) -> Focus? {
         guard let intent = pendingIntent(for: roomID, resolvedRoomID: resolvedRoomID) else {

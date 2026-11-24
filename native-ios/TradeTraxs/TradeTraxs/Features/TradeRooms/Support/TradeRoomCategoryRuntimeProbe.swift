@@ -1,10 +1,10 @@
 import Foundation
 
-/// DEBUG instrumentation for Trade Room category — filter in Xcode console: `TRADE_ROOM_CATEGORY`
+/// DEBUG instrumentation for Trade Room category, filter in Xcode console: `TRADE_ROOM_CATEGORY`
 #if DEBUG
 enum TradeRoomCategoryRuntimeProbe {
-    static let demoTradeRoomID = RoomID("ab8e192f-5da0-477e-958b-1a83fc6e31af")
-    private static let optionsOfficialID = RoomID("9d38241f-6ac5-4781-9468-d6d252417778")
+    nonisolated static let demoTradeRoomID = RoomID("ab8e192f-5da0-477e-958b-1a83fc6e31af")
+    nonisolated private static let optionsOfficialID = RoomID("9d38241f-6ac5-4781-9468-d6d252417778")
 
     nonisolated static func logDecode(
         roomID: RoomID,
@@ -127,7 +127,7 @@ enum TradeRoomCategoryRuntimeProbe {
 }
 #else
 enum TradeRoomCategoryRuntimeProbe {
-    static let demoTradeRoomID = RoomID("ab8e192f-5da0-477e-958b-1a83fc6e31af")
+    nonisolated static let demoTradeRoomID = RoomID("ab8e192f-5da0-477e-958b-1a83fc6e31af")
 
     nonisolated static func logDecode(
         roomID: RoomID,

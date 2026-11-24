@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Outcome filter + sort controls — lives inside ``ProfileSectionContainerChrome`` (Stats parity).
+/// Outcome filter + sort controls, lives inside ``ProfileSectionContainerChrome`` (Stats parity).
 struct ProfileTradesFilterBar: View {
     @Bindable var viewModel: TradesContainerViewModel
     @Binding var browseLayout: ProfileBrowseLayout
@@ -51,8 +51,7 @@ struct ProfileTradesFilterBar: View {
                 }
                 .padding(.horizontal, ExperienceSpacing.xs)
                 .padding(.vertical, 5)
-                .background(colors.fillSecondary)
-                .clipShape(Capsule())
+                .experienceFilterCapsule()
                 .experienceControlHitTarget()
             }
             .buttonStyle(.experiencePlain)

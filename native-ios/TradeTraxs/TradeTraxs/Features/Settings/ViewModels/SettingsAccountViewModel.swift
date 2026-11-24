@@ -358,7 +358,7 @@ final class SettingsAccountViewModel {
         return """
         You currently have an active \(planLabel). Deleting your TradeTraxs account removes your profile and data. \
         Web (Stripe) billing tied to this account is cancelled when deletion succeeds. Deleting here does not \
-        automatically cancel an Apple App Store subscription—manage Apple billing separately in Settings → Apple ID \
+        automatically cancel an Apple App Store subscription–manage Apple billing separately in Settings → Apple ID \
         → Subscriptions.
         """
     }

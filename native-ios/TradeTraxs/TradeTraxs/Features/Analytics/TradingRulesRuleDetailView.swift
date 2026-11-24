@@ -76,7 +76,7 @@ struct TradingRulesRuleDetailView: View {
     @ViewBuilder
     private func statsCard(_ snapshot: TradingRulesViolationPatterns.RuleDrillDownSnapshot) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            Text(snapshot.adherencePercent.map { String(format: "%.1f%% compliance", $0) } ?? "—")
+            Text(snapshot.adherencePercent.map { String(format: "%.1f%% compliance", $0) } ?? "–")
                 .font(.title2.weight(.bold).monospacedDigit())
                 .foregroundStyle(colors.primaryText)
 
@@ -105,7 +105,7 @@ struct TradingRulesRuleDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, ExperienceSpacing.sm)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
     }
 
     @ViewBuilder

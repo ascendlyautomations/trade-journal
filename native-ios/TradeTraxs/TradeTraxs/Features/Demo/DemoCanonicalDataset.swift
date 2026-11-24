@@ -1,12 +1,15 @@
 import Foundation
 
-/// Single canonical demo journal — dashboard, calendar, trades, profile stats derive from here.
+/// Single canonical demo journal, dashboard, calendar, trades, profile stats derive from here.
 nonisolated enum DemoCanonicalDataset {
     static let profileID = DemoExperienceSupport.profileID
 
     static let evaluationAccountID = TradingAccountID("demo.account.evaluation")
     static let fundedAccountID = TradingAccountID("demo.account.funded")
     static let liveAccountID = TradingAccountID("demo.account.live")
+
+    /// Eastern-anchored history depth for ``DemoRollingJournal`` (TraxsPro preview uses a 1Y scope).
+    static let rollingJournalHistoryMonths = 12
 
     private static let sampleScreenshotURL =
         "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80"

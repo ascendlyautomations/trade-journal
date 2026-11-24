@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only thread cache / delete diagnostics — message IDs and counts only, no bodies.
+/// DEBUG-only thread cache / delete diagnostics, message IDs and counts only, no bodies.
 enum ConversationThreadDiagnostics {
     private static let logger = Logger(subsystem: AppLog.subsystem, category: "ConversationThread")
 

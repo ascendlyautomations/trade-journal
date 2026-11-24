@@ -2,9 +2,9 @@ import Foundation
 
 /// Mirrors web `useProfileStatistics` + `ProfileStatisticsTab` analytics formulas.
 ///
-/// Mode filter uses authoritative ``TradingAccountMode`` only — from linked
+/// Mode filter uses authoritative ``TradingAccountMode`` only, from linked
 /// `accounts.mode` (profile bootstrap) or denormalized trade `account_type` / `mode`.
-/// Backtest rows are excluded from All / Eval / Funded / Live / Sim — same as web.
+/// Backtest rows are excluded from All / Eval / Funded / Live / Sim, same as web.
 nonisolated enum ProfileStatisticsMetrics {
     enum Mode: String, CaseIterable, Identifiable, Sendable {
         case all
@@ -38,7 +38,7 @@ nonisolated enum ProfileStatisticsMetrics {
             }
         }
 
-        /// Profile Statistics filter chips — Sim/Backtest remain valid modes elsewhere.
+        /// Profile Statistics filter chips, Sim/Backtest remain valid modes elsewhere.
         static let profileFilterCases: [Mode] = [.all, .live, .funded, .eval]
     }
 
@@ -104,7 +104,7 @@ nonisolated enum ProfileStatisticsMetrics {
     struct EquityPoint: Sendable, Equatable, Identifiable {
         var index: Int
         var equity: Decimal
-        /// Trade timestamp when available — presentation only (does not affect equity math).
+        /// Trade timestamp when available, presentation only (does not affect equity math).
         var date: Date? = nil
         /// Live personal drawdown floor (informational), web `drawdownFloor` series.
         var drawdownFloor: Decimal? = nil
@@ -172,7 +172,7 @@ nonisolated enum ProfileStatisticsMetrics {
         }
     }
 
-    /// Single series for chart render + scrubber — ascending index with monotonic dates.
+    /// Single series for chart render + scrubber, ascending index with monotonic dates.
     static func chartOrderedEquityPoints(_ points: [EquityPoint]) -> [EquityPoint] {
         guard points.count >= 2 else { return points }
         let sorted = points.sorted { lhs, rhs in

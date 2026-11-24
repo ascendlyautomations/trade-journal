@@ -111,7 +111,7 @@ final class ManageAccountsExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.accounts.first { $0.id == id }?.isActive, false)
     }
 
-    func testSetShowInAccountDropdownsUpdatesSessionAndBroadcastsMutation() async {
+    func testSaveAccountDisplayPreferencesUpdatesSessionAndBroadcastsMutation() async {
         let repository = ManageAccountsMutatingTradeRepository()
         let cache = DetailPresentationCache()
         let viewModel = ManageAccountsViewModel(
@@ -125,17 +125,44 @@ final class ManageAccountsExperienceTests: XCTestCase {
         let accountID = viewModel.accounts[0].id
         let beforeRevision = AccountMutationStore.shared.revision
 
-        await viewModel.setShowInAccountDropdowns(id: accountID, show: false)
+        XCTAssertTrue(viewModel.hasUnsavedAccountDisplayChanges == false)
+        viewModel.setDraftShowInAccountDropdowns(id: accountID, show: false)
+        XCTAssertTrue(viewModel.hasUnsavedAccountDisplayChanges)
+
+        let saved = await viewModel.saveAccountDisplayPreferences()
+        XCTAssertTrue(saved)
         XCTAssertEqual(AccountMutationStore.shared.revision, beforeRevision + 1)
+        XCTAssertFalse(viewModel.hasUnsavedAccountDisplayChanges)
         XCTAssertFalse(viewModel.showInAccountDropdowns(for: accountID))
         XCTAssertFalse(viewModel.accounts.first { $0.id == accountID }!.showInAccountDropdowns)
         XCTAssertEqual(
             cache.accounts(for: SettingsFixtures.viewerID)?.first(where: { $0.id == accountID })?.showInAccountDropdowns,
             false
         )
+        XCTAssertEqual(
+            SessionAccountsStore.shared.cached(for: SettingsFixtures.viewerID)?
+                .first(where: { $0.id == accountID })?.showInAccountDropdowns,
+            false
+        )
 
-        await viewModel.setShowInAccountDropdowns(id: accountID, show: true)
+        viewModel.setDraftShowInAccountDropdowns(id: accountID, show: true)
+        _ = await viewModel.saveAccountDisplayPreferences()
         XCTAssertTrue(viewModel.showInAccountDropdowns(for: accountID))
+    }
+
+    func testSessionAccountsStoreRestReseedHonorsDropdownVisibility() {
+        let profile = SettingsFixtures.viewerID
+        var accounts = SettingsFixtures.accounts(owner: profile)
+        let accountID = accounts[0].id
+        SessionAccountsStore.shared.seed(accounts, for: profile, kind: .rest)
+
+        accounts[0].showInAccountDropdowns = false
+        SessionAccountsStore.shared.seed(accounts, for: profile, kind: .rest)
+
+        XCTAssertFalse(
+            SessionAccountsStore.shared.cached(for: profile)?
+                .first(where: { $0.id == accountID })?.showInAccountDropdowns ?? true
+        )
     }
 
     func testWriteBodyMatchesWebAccountFields() {

@@ -8,6 +8,12 @@ enum TradingRulesCompliancePresentationBridge {
         dashboardViewModel = viewModel
     }
 
+    /// Fan-out when Manage Accounts saves display preferences while Home is off-screen.
+    static func handleOwnerAccountMutation() {
+        guard case .generic = AccountMutationStore.shared.latestKind else { return }
+        dashboardViewModel?.handleAccountMutation()
+    }
+
     static func refresh(
         dependencies: TradingRulesComplianceLoadDependencies
     ) async -> TradingRulesComplianceLoadOutcome {

@@ -117,6 +117,11 @@ struct MainTabShellView: View {
             }
             viewerStoryStore.reconcileExpired()
         }
+        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            guard case .generic = AccountMutationStore.shared.latestKind else { return }
+            OwnerAccountFilterDropdownController.shared.dismiss()
+            TradingRulesCompliancePresentationBridge.handleOwnerAccountMutation()
+        }
         .onAppear {
             ProductAnalyticsCoordinator.shared.bind(repository: appEnvironment.data.analytics)
             ProductAnalyticsCoordinator.shared.noteScreen(
@@ -168,7 +173,7 @@ struct MainTabShellView: View {
             }
 
             Tab(TabIdentifier.create.displayName, systemImage: TabIdentifier.create.systemImage, value: TabIdentifier.create) {
-                // Action tab — selection is intercepted; keep a real view so the tab bar never blanks.
+                // Action tab, selection is intercepted; keep a real view so the tab bar never blanks.
                 CreateTabPlaceholder()
             }
 
@@ -182,7 +187,7 @@ struct MainTabShellView: View {
                 .tabActivation(isActive: store.selectedTab == .messages)
             }
 
-            // Profile tab — circular session avatar when available; SF Symbol fallback.
+            // Profile tab, circular session avatar when available; SF Symbol fallback.
             Tab(value: TabIdentifier.profile) {
                 ProfileNavigationStack(
                     store: store,
@@ -309,7 +314,7 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .reports:
-            ReportsScreenView(
+            ReportsHomeRouteView(
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
@@ -467,7 +472,7 @@ struct HomeNavigationStack: View {
                 currentUserProfile: currentUserProfile
             )
         case .analyst:
-            // Legacy /analyst links — Trade AI lives on trade detail, not a standalone screen.
+            // Legacy /analyst links, Trade AI lives on trade detail, not a standalone screen.
             // Own model so this destination's onDisappear does not stop the Home tab's realtime.
             DashboardHomeView(
                 data: appEnvironment.data,
@@ -1373,7 +1378,7 @@ private struct CreateTabSelectionGate: UIViewRepresentable {
     }
 }
 
-/// Create tab content is never shown — coordinator intercepts selection.
+/// Create tab content is never shown, coordinator intercepts selection.
 private struct CreateTabPlaceholder: View {
     var body: some View {
         Color.clear
@@ -1382,7 +1387,7 @@ private struct CreateTabPlaceholder: View {
     }
 }
 
-/// Gates `HomeRoute.propFirm` — confirmed Free users get the upgrade sheet instead of Prop Firm Mode detail.
+/// Gates `HomeRoute.propFirm`, confirmed Free users get the upgrade sheet instead of Prop Firm Mode detail.
 private struct PropFirmHomeRouteView: View {
     let accountID: TradingAccountID
     let data: DataEnvironment
@@ -1431,14 +1436,15 @@ private struct PropFirmHomeRouteView: View {
     }
 
     private func presentUpgradeGateIfNeeded() {
-        guard restrictsPropFirmMode else { return }
-        guard !didPresentUpgradeGate else { return }
-        didPresentUpgradeGate = true
-        ProUpgradeCoordinator.shared.present(reason: .feature(.propFirm))
+        ProUpgradeAutoPresent.presentFeatureGateIfNeeded(
+            isRestricted: restrictsPropFirmMode,
+            didPresent: &didPresentUpgradeGate,
+            feature: .propFirm
+        )
     }
 }
 
-/// Gates `HomeRoute.propFirmPayouts` — same Pro gate as Prop Firm detail.
+/// Gates `HomeRoute.propFirmPayouts`, same Pro gate as Prop Firm detail.
 private struct PropFirmPayoutsHomeRouteView: View {
     let accountID: TradingAccountID
     let data: DataEnvironment
@@ -1487,10 +1493,11 @@ private struct PropFirmPayoutsHomeRouteView: View {
     }
 
     private func presentUpgradeGateIfNeeded() {
-        guard restrictsPropFirmMode else { return }
-        guard !didPresentUpgradeGate else { return }
-        didPresentUpgradeGate = true
-        ProUpgradeCoordinator.shared.present(reason: .feature(.propFirm))
+        ProUpgradeAutoPresent.presentFeatureGateIfNeeded(
+            isRestricted: restrictsPropFirmMode,
+            didPresent: &didPresentUpgradeGate,
+            feature: .propFirm
+        )
     }
 }
 
@@ -1657,11 +1664,10 @@ struct PsychologyAnalyticsHomeRouteView: View {
     }
 
     private func presentUpgradeGateIfNeeded() {
-        guard restrictsPremiumPsychologyAndAI else { return }
-        guard !didPresentUpgradeGate else { return }
-        didPresentUpgradeGate = true
-        ProUpgradeCoordinator.shared.present(
-            reason: .feature(.premiumAnalytics),
+        ProUpgradeAutoPresent.presentFeatureGateIfNeeded(
+            isRestricted: restrictsPremiumPsychologyAndAI,
+            didPresent: &didPresentUpgradeGate,
+            feature: .premiumAnalytics,
             suppressPreview: true
         )
     }
@@ -1716,17 +1722,16 @@ private struct PsychologyCoachHomeRouteView: View {
     }
 
     private func presentUpgradeGateIfNeeded() {
-        guard restrictsPremiumPsychologyAndAI else { return }
-        guard !didPresentUpgradeGate else { return }
-        didPresentUpgradeGate = true
-        ProUpgradeCoordinator.shared.present(
-            reason: .feature(.premiumAnalytics),
+        ProUpgradeAutoPresent.presentFeatureGateIfNeeded(
+            isRestricted: restrictsPremiumPsychologyAndAI,
+            didPresent: &didPresentUpgradeGate,
+            feature: .premiumAnalytics,
             suppressPreview: true
         )
     }
 }
 
-/// Gates `HomeRoute.report` — confirmed Free users see the upgrade sheet instead of report detail.
+/// Gates `HomeRoute.report`, confirmed Free users see the upgrade sheet instead of report detail.
 private struct ReportDetailHomeRouteView: View {
     let reportID: ReportID
     let data: DataEnvironment
@@ -1807,14 +1812,16 @@ private struct ReportDetailHomeRouteView: View {
     }
 
     private func presentUpgradeGateIfNeeded() {
-        guard restrictsTradingReportsCatalog else { return }
-        guard !didPresentUpgradeGate else { return }
-        didPresentUpgradeGate = true
-        ProUpgradeCoordinator.shared.present(reason: .feature(.tradingReports))
+        guard !showsEntitlementVerification else { return }
+        ProUpgradeAutoPresent.presentFeatureGateIfNeeded(
+            isRestricted: restrictsTradingReportsCatalog,
+            didPresent: &didPresentUpgradeGate,
+            feature: .tradingReports
+        )
     }
 }
 
-/// Bottom-tab profile glyph — reuses the session avatar cache from ``CurrentUserProfileStore``.
+/// Bottom-tab profile glyph, reuses the session avatar cache from ``CurrentUserProfileStore``.
 ///
 /// Tab labels propose a very large size to custom icon views. A bare `Image.resizable()`
 /// expands to fill that proposal (giant rectangle). Hard-cap the layout at 28×28 and use the

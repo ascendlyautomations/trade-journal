@@ -4,7 +4,7 @@ import OSLog
 /// Stack-scoped navigation actions for views rendered inside a tab `NavigationStack`.
 ///
 /// Shared destinations (Settings, etc.) append to the path of the stack that is
-/// currently rendering them — never a global tab guess or host-tab variable.
+/// currently rendering them, never a global tab guess or host-tab variable.
 @MainActor
 struct StackNavigation {
     private let appendSettingsRoute: (SettingsRoute) -> Void

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Paginated `get_conversation_shared_media` — same contract as web `conversationSharedMedia.ts`.
+/// Paginated `get_conversation_shared_media`, same contract as web `conversationSharedMedia.ts`.
 nonisolated enum ConversationSharedMediaFetcher {
     private struct RPCParams: Encodable {
         let p_conversation_id: String
@@ -61,7 +61,7 @@ nonisolated enum ConversationSharedMediaFetcher {
     }
 }
 
-/// In-memory gallery cache for the app session — avoids refetching page 1 on every open.
+/// In-memory gallery cache for the app session, avoids refetching page 1 on every open.
 actor ConversationSharedMediaSessionCache {
     static let shared = ConversationSharedMediaSessionCache()
 

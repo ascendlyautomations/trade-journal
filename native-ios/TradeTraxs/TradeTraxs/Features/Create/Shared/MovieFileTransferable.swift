@@ -2,7 +2,7 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
-/// PhotosPicker video import — copies into a temp file without full in-memory buffering of the transferable.
+/// PhotosPicker video import, copies into a temp file without full in-memory buffering of the transferable.
 struct MovieFileTransferable: Transferable {
     let url: URL
 

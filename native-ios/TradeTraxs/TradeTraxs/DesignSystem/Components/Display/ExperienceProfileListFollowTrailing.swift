@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Trailing affordance on profile list rows — ``Follow`` / ``Following`` or static ``You`` for the signed-in user.
+/// Trailing affordance on profile list rows, ``Follow`` / ``Following`` or static ``You`` for the signed-in user.
 enum ExperienceProfileListFollowStyle {
     case exploreList
     case followList

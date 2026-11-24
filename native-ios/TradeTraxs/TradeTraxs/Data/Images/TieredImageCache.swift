@@ -60,7 +60,7 @@ nonisolated final class TieredImageCache: ImageCaching, @unchecked Sendable {
     }
 
     func removeImages(matchingPrefix prefix: String) async {
-        // Best-effort — memory cache has no prefix index; disk index is keyed.
+        // Best-effort, memory cache has no prefix index; disk index is keyed.
         await memory.removeAllImages()
         await disk.removeAllImages()
         _ = prefix

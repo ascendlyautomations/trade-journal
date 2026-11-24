@@ -1,6 +1,6 @@
 import Foundation
 
-/// Yearly + month drill-down Performance Reports — reuses ``DashboardChartMetrics``.
+/// Yearly + month drill-down Performance Reports, reuses ``DashboardChartMetrics``.
 nonisolated enum TradingYearlyReportGenerator {
     static func availableYears(
         from trades: [Trade],
@@ -113,7 +113,7 @@ nonisolated enum TradingYearlyReportGenerator {
         )
     }
 
-    /// Month drill-down — same filters and trade scope as yearly reports.
+    /// Month drill-down, same filters and trade scope as yearly reports.
     static func generateMonthReport(
         ref: TradingReportMonthRef,
         trades: [Trade],

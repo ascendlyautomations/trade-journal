@@ -29,7 +29,7 @@ struct OnboardingView: View {
                         .foregroundStyle(colors.primaryText)
                         .multilineTextAlignment(.center)
 
-                    Text("Track performance, share wins, and stay consistent — built natively for iPhone.")
+                    Text("Track performance, share wins, and stay consistent, built natively for iPhone.")
                         .experienceStyle(.body, color: colors.secondaryText)
                         .multilineTextAlignment(.center)
                 }

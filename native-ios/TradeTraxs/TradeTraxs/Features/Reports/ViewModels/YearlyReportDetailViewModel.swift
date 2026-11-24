@@ -106,6 +106,26 @@ final class YearlyReportDetailViewModel: ScreenLifecycle {
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
     }
 
+    func handleAccountMutation(detailCache: DetailPresentationCache?) {
+        guard let profileID = state.profileID else { return }
+        guard let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: profileID,
+            detailCache: detailCache
+        ) else { return }
+        var next = state
+        next.accounts = loaded.filter(\.isActive)
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
+            next.filters.accountFilter,
+            accounts: loaded
+        )
+        if sanitized != next.filters.accountFilter {
+            next.filters.accountFilter = sanitized
+            TradingReportSessionStore.shared.filters.accountFilter = sanitized
+        }
+        state = next
+        OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
+    }
+
     func openMonth(_ ref: TradingReportMonthRef) {
         ExperienceHaptics.play(.selection)
         TradingReportSessionStore.shared.filters = state.filters

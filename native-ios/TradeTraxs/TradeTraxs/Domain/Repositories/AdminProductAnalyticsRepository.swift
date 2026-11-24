@@ -86,7 +86,7 @@ enum AdminProductAnalyticsDefinition {
         "Distinct users per UTC day with session or app-open engagement (product rollups). Broker sync is excluded."
 
     static let legacyActivityDau =
-        "Legacy: distinct users with trade/post/support activity in a rolling window — not product sessions."
+        "Legacy: distinct users with trade/post/support activity in a rolling window, not product sessions."
 
     static let maxProductSeriesDays = 90
 }

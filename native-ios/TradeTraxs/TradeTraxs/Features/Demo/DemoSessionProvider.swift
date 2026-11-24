@@ -1,6 +1,6 @@
 import Foundation
 
-/// Local demo viewer id for Profile/Messages UI — never an access token or Supabase session.
+/// Local demo viewer id for Profile/Messages UI, never an access token or Supabase session.
 nonisolated struct DemoSessionProvider: SessionProviding {
     let profileID: ProfileID
 

@@ -1,14 +1,18 @@
 import SwiftUI
 
-/// Shared trade detail shell — presentation differs by ``TradeDetailExperience``.
+/// Shared trade detail shell, presentation differs by ``TradeDetailExperience``.
 ///
 /// Prefer ``JournalTradeDetailView`` / ``SocialTradeDetailView`` at call sites.
 struct TradeDetailView: View {
     @State private var viewModel: TradeDetailViewModel
     @State private var tradeAI: TradeAISectionViewModel?
     @State private var showsDeleteConfirm = false
-    @State private var showsShareSheet = false
     @State private var showsVaultSheet = false
+    @State private var journalSharePresentation: JournalTradeShareSupport.Presentation?
+    @State private var showsMakePublicCopyConfirm = false
+    @State private var pendingCopyLinkTrade: Trade?
+    @State private var isMakingPublicForCopyLink = false
+    @State private var copyLinkPublicError: String?
     @State private var contentRevealed = false
     @State private var entitlementGateRevision = 0
     private let imagePipeline: any ImagePipeline
@@ -136,10 +140,14 @@ struct TradeDetailView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
-        .sheet(isPresented: $showsShareSheet) {
-            if let trade = viewModel.trade, let url = DetailContentLink.trade(trade.id).url {
-                DetailShareSheet(items: [shareText(for: trade), url])
-            }
+        .sheet(item: $journalSharePresentation) { presentation in
+            SharedContentShareSheet(
+                target: presentation.target,
+                data: data,
+                tradeOwnerShareAccess: presentation.ownerAccess,
+                onTradeVisibilityUpdated: { viewModel.applyUpdated($0) },
+                onClose: { journalSharePresentation = nil }
+            )
         }
         .sheet(isPresented: $showsVaultSheet) {
             VaultDestinationSheet(ref: tradeVaultRef, store: data.vaultStore)
@@ -162,6 +170,34 @@ struct TradeDetailView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
             entitlementGateRevision += 1
+        }
+        .confirmationDialog(
+            "Share this private trade?",
+            isPresented: $showsMakePublicCopyConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Make Public & Copy Link") {
+                Task { await makePublicAndCopyLink() }
+            }
+            .disabled(isMakingPublicForCopyLink)
+            Button("Cancel", role: .cancel) {
+                pendingCopyLinkTrade = nil
+            }
+        } message: {
+            Text(
+                "This trade is private. People you share the link with can't open it on TradeTraxs unless sharing access is enabled."
+            )
+        }
+        .alert(
+            "Couldn't update trade",
+            isPresented: Binding(
+                get: { copyLinkPublicError != nil },
+                set: { if !$0 { copyLinkPublicError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { copyLinkPublicError = nil }
+        } message: {
+            Text(copyLinkPublicError ?? "")
         }
     }
 
@@ -260,9 +296,11 @@ struct TradeDetailView: View {
     private var ownerOverflowMenu: some View {
         DetailOverflowMenu(
             isOwner: true,
-            onShare: viewModel.trade.map { _ in { showsShareSheet = true } },
+            onShare: viewModel.trade.map { trade in
+                { presentJournalShare(for: trade) }
+            },
             onCopyLink: viewModel.trade.map { trade in
-                { DetailOverflowActions.copyLink(.trade(trade.id)) }
+                { requestCopyLink(for: trade) }
             },
             onAddToVault: traxsProPreviewReadOnly ? nil : (isTradeVaulted ? nil : { openVaultSheet() }),
             onManageInVault: traxsProPreviewReadOnly ? nil : (isTradeVaulted ? { openVaultSheet() } : nil),
@@ -286,6 +324,43 @@ struct TradeDetailView: View {
         let pnl = TradeDisplay.pnlText(trade.realizedPnL)
         let side = trade.side == .long ? "Long" : "Short"
         return "\(trade.symbol.ticker) \(side) \(pnl) on TradeTraxs"
+    }
+
+    private func presentJournalShare(for trade: Trade) {
+        guard experience == .journal, viewModel.isOwner else { return }
+        ExperienceHaptics.play(.selection)
+        journalSharePresentation = JournalTradeShareSupport.presentation(for: trade)
+    }
+
+    private func requestCopyLink(for trade: Trade) {
+        guard experience == .journal, viewModel.isOwner else {
+            DetailOverflowActions.copyLink(.trade(trade.id))
+            return
+        }
+        if trade.visibility == .private {
+            pendingCopyLinkTrade = trade
+            showsMakePublicCopyConfirm = true
+            return
+        }
+        DetailOverflowActions.copyLink(.trade(trade.id))
+    }
+
+    private func makePublicAndCopyLink() async {
+        guard let trade = pendingCopyLinkTrade else { return }
+        pendingCopyLinkTrade = nil
+        isMakingPublicForCopyLink = true
+        defer { isMakingPublicForCopyLink = false }
+        do {
+            let updated = try await JournalTradeShareSupport.makePublicForSharing(
+                trade: trade,
+                trades: data.trades,
+                session: data.session
+            )
+            viewModel.applyUpdated(updated)
+            DetailOverflowActions.copyLink(.trade(updated.id))
+        } catch {
+            copyLinkPublicError = ProfileSectionSupport.message(for: error)
+        }
     }
 
     // MARK: - Journal (owner analytics)

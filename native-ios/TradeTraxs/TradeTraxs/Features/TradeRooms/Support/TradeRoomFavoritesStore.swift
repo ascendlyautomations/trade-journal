@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Viewer-scoped Trade Room favorites — backed by `room_members.is_favorited`.
+/// Viewer-scoped Trade Room favorites, backed by `room_members.is_favorited`.
 @MainActor
 @Observable
 final class TradeRoomFavoritesStore {

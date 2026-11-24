@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Add Trade hub — manual entry or CSV import.
+/// Add Trade hub, manual entry or CSV import.
 struct TradeEntryHubView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case manual = "Manual"

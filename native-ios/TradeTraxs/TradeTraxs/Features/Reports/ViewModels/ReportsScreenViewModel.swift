@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Reports catalog — performance + psychology report groups.
+/// Reports catalog, performance + psychology report groups.
 @Observable
 @MainActor
 final class ReportsScreenViewModel: ScreenLifecycle {
@@ -80,6 +80,17 @@ final class ReportsScreenViewModel: ScreenLifecycle {
 
     func openManageAccounts() {
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
+    }
+
+    func handleAccountMutation() {
+        guard let profileID else { return }
+        guard let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: profileID,
+            detailCache: detailCache
+        ) else { return }
+        accounts = loaded.filter(\.isActive)
+        OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
+        sanitizeAccountFilter()
     }
 
     func syncFiltersFromSession() {

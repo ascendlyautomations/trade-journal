@@ -7,7 +7,7 @@ nonisolated enum AnalyticsRevisionRepairReason: String, Sendable {
     case realtimeReconnect
 }
 
-/// Cheap revision RPC + coordinator handoff — not a second reconciliation state machine.
+/// Cheap revision RPC + coordinator handoff, not a second reconciliation state machine.
 actor AnalyticsRevisionRepairCoordinator {
     static let shared = AnalyticsRevisionRepairCoordinator()
 
@@ -84,7 +84,7 @@ actor AnalyticsRevisionRepairCoordinator {
         scheduleRepairIfNeeded()
     }
 
-    /// Single coalesced analytics repair cycle — invoked by ``SupabaseReconnectRepairCoordinator`` only.
+    /// Single coalesced analytics repair cycle, invoked by ``SupabaseReconnectRepairCoordinator`` only.
     func performCoalescedRepair(reasons: Set<AnalyticsRevisionRepairReason>) async {
         guard AnalyticsRevisionRepairGate.isEnabled else { return }
         guard let viewer = viewerID else { return }
@@ -106,7 +106,7 @@ actor AnalyticsRevisionRepairCoordinator {
         await performRepair(viewerID: viewer, generation: generation, reasons: reasons)
     }
 
-    /// Shared reconnect coordinator — communication domains only (Phase 3).
+    /// Shared reconnect coordinator, communication domains only (Phase 3).
     private static func isReconnectBurstReason(_ reason: AnalyticsRevisionRepairReason) -> Bool {
         switch reason {
         case .networkRegain, .realtimeReconnect:

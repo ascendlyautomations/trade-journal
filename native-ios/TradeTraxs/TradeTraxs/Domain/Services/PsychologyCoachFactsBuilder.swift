@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// Builds structured coach facts from Phase 4 analytics — never raw trades or check-in notes.
+/// Builds structured coach facts from Phase 4 analytics, never raw trades or check-in notes.
 nonisolated enum PsychologyCoachFactsBuilder {
     static func build(
         report: PsychologyAnalyticsReport,

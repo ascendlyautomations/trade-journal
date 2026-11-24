@@ -1,6 +1,6 @@
 import Foundation
 
-/// Video broadcast duration limits — mirrors `tradeRoomBroadcastDurationLimit.ts`.
+/// Video broadcast duration limits, mirrors `tradeRoomBroadcastDurationLimit.ts`.
 enum BroadcastDurationLimitSupport {
     static let maxDuration: TimeInterval = 2 * 60 * 60
     static let cooldownDuration: TimeInterval = 15 * 60
@@ -52,7 +52,7 @@ enum BroadcastDurationLimitSupport {
         case .fifteenMinutes:
             return "15 minutes left on this broadcast."
         case .fiveMinutes:
-            return "5 minutes left — the stream will end automatically at the 2-hour limit."
+            return "5 minutes left, the stream will end automatically at the 2-hour limit."
         case .expired:
             return broadcasterEndedMessage
         case .none:

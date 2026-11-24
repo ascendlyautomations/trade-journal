@@ -123,6 +123,9 @@ final class PropFirmExpensesViewModel {
             }
             loadedProfileID = profileID
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                return
+            }
             errorMessage = UserFacingError.message(for: error)
         }
     }
@@ -165,6 +168,9 @@ final class PropFirmExpensesViewModel {
             }
             return true
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                return false
+            }
             formError = UserFacingError.message(for: error)
             return false
         }
@@ -184,6 +190,9 @@ final class PropFirmExpensesViewModel {
             expenses.removeAll { $0.id == expense.savedID }
             return true
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                return false
+            }
             formError = UserFacingError.message(for: error)
             return false
         }
@@ -217,6 +226,9 @@ final class PropFirmExpensesViewModel {
             }
             return true
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                return false
+            }
             formError = UserFacingError.message(for: error)
             return false
         }
@@ -236,6 +248,9 @@ final class PropFirmExpensesViewModel {
             income.removeAll { $0.id == incomeRow.savedID }
             return true
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                return false
+            }
             formError = UserFacingError.message(for: error)
             return false
         }
@@ -370,6 +385,9 @@ final class PropFirmExpensesViewModel {
             )
             reserveError = nil
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                return
+            }
             reserveError = "Couldn't save your tax reserve percentage."
         }
     }

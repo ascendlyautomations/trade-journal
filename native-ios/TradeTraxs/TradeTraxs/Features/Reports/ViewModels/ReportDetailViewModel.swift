@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Report Detail — renders the web-parity ``TradingReport`` payload.
+/// Report Detail, renders the web-parity ``TradingReport`` payload.
 @Observable
 @MainActor
 final class ReportDetailViewModel: ScreenLifecycle {

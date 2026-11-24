@@ -69,7 +69,7 @@ struct SharedContentShareRoomChannelPickerView: View {
     }
 }
 
-/// Sub-room destination row for internal share — matches DM / Trade Room selection styling.
+/// Sub-room destination row for internal share, matches DM / Trade Room selection styling.
 struct ShareRecipientSubRoomRow: View {
     let channel: RoomChannel
     var isSelected: Bool = false

@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 #if DEBUG
-/// DEBUG scroll lifecycle for dedicated Clips pager — one line per milestone.
+/// DEBUG scroll lifecycle for dedicated Clips pager, one line per milestone.
 nonisolated enum ClipsPagerScrollProbe {
     static func dragBegin(index: Int, offset: CGFloat, viewportHeight: CGFloat) {
         print(

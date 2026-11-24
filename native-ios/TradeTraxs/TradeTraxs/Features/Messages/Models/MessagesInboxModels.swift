@@ -15,7 +15,7 @@ struct DirectMessageInboxItem: Identifiable, Hashable, Sendable {
     var isPinned: Bool
     var isTyping: Bool
     var isOnline: Bool
-    /// Viewer has no unread — iMessage-style read affordance when preview exists.
+    /// Viewer has no unread, iMessage-style read affordance when preview exists.
     var showsReadReceipt: Bool
 }
 

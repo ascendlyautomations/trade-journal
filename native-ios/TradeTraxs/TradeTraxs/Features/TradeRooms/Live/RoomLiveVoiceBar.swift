@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Persistent compact voice chrome — room label, mute, leave.
+/// Persistent compact voice chrome, room label, mute, leave.
 struct RoomLiveVoiceBar: View {
     @Bindable var coordinator: RoomLiveVoiceCoordinator
     @State private var showsParticipants = false

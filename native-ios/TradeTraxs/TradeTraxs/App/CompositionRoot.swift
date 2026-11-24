@@ -29,7 +29,7 @@ enum CompositionRoot {
     static func bootstrap() -> CompositionBootstrapResult {
         StartupTrace.begin("CompositionRoot.bootstrap")
         defer { StartupTrace.end("CompositionRoot.bootstrap") }
-        AppLog.application.info("CompositionRoot.bootstrap — Phase 4B Supabase integration")
+        AppLog.application.info("CompositionRoot.bootstrap, Phase 4B Supabase integration")
         UnauthLaunchProbe.recordAppStart()
 
         let configuration = StartupTrace.measure("AppConfiguration.make") {
@@ -105,7 +105,7 @@ enum CompositionRoot {
         }
     }
 
-    /// Production stack for logged-out shell — heavy construction off MainActor; wiring on MainActor.
+    /// Production stack for logged-out shell, heavy construction off MainActor; wiring on MainActor.
     @MainActor
     static func completeDeferredBootstrap(context: DeferredBootstrapContext) async -> AppEnvironment {
         let configuration = context.configuration
@@ -257,7 +257,7 @@ enum CompositionRoot {
         )
     }
 
-    /// Explore Mode shell — local demo journal + guest public repository injection.
+    /// Explore Mode shell, local demo journal + guest public repository injection.
     static func buildExploreDemoEnvironment(
         configuration: AppConfiguration,
         featureFlags: FeatureFlags,
@@ -710,7 +710,7 @@ enum CompositionRoot {
         )
     }
 
-    /// Test helper — authentication graph with in-memory keychain + backend.
+    /// Test helper, authentication graph with in-memory keychain + backend.
     static func bootstrapAuthenticationForTests(
         navigation: NavigationEnvironment? = nil,
         backend: any AuthenticationBackend = InMemoryAuthenticationBackend()

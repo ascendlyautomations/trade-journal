@@ -1,6 +1,6 @@
 import Foundation
 
-/// Explore Mode Messages inbox — local DMs only (viewer = ``DemoExperienceSupport/profileID``).
+/// Explore Mode Messages inbox, local DMs only (viewer = ``DemoExperienceSupport/profileID``).
 nonisolated enum DemoExploreInboxFixtures {
     static let tradeRoomConversationID = ConversationID("demo.explore.dm.traders")
 
@@ -75,7 +75,7 @@ nonisolated enum DemoExploreInboxFixtures {
                     conversationID: conversationID,
                     senderProfileID: DemoExploreTradeRoom.hostProfileID,
                     kind: .text,
-                    body: "Welcome to Explore Mode — your journal stays on-device while Feed and Rooms use live public data.",
+                    body: "Welcome to Explore Mode, your journal stays on-device while Feed and Rooms use live public data.",
                     attachments: [],
                     replyToMessageID: nil,
                     createdAt: now.addingTimeInterval(-7_200),

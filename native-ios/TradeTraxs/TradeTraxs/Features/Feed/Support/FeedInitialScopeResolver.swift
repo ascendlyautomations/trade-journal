@@ -9,7 +9,7 @@ enum FeedInitialScopeResolver {
         followingCount >= followingThreshold ? .following : .global
     }
 
-    /// Authoritative following count from session bootstrap / profile stats — never fetches the full list.
+    /// Authoritative following count from session bootstrap / profile stats, never fetches the full list.
     @MainActor
     static func authoritativeFollowingCount(
         userID: UserID,

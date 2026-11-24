@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared message reaction semantics — web `lib/roomMessageReactions.ts` parity.
+/// Shared message reaction semantics, web `lib/roomMessageReactions.ts` parity.
 nonisolated enum MessageReactionSemantics {
     static let supportedEmojis: [String] = ["❤️", "👍", "🔥", "😂", "‼️"]
     /// Double-tap toggles heart (schema constraint).

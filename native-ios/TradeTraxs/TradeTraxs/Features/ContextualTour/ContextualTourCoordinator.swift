@@ -85,7 +85,7 @@ final class ContextualTourCoordinator {
         }
     }
 
-    /// Full explanation card — hidden during cross-surface transitions and section prompts.
+    /// Full explanation card, hidden during cross-surface transitions and section prompts.
     var showsExplanationCard: Bool {
         phase == .presenting && (currentStep?.role.countsTowardProgress ?? false)
     }
@@ -111,7 +111,7 @@ final class ContextualTourCoordinator {
         phase == .presenting ? stepIndex : displayedStepIndex
     }
 
-    /// Feed filters step — keep the horizontal filter strip visible and sized intrinsically for measurement.
+    /// Feed filters step, keep the horizontal filter strip visible and sized intrinsically for measurement.
     var pinsFeedFilterBar: Bool {
         guard phase == .measuring || phase == .presenting else { return false }
         return currentStep?.target == .feedContentFilters

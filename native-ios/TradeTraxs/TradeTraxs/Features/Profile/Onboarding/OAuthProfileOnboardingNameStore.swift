@@ -5,10 +5,10 @@ import Foundation
 enum OAuthProfileOnboardingNameStore {
     private static var manualSignupByUserID: [String: String] = [:]
     private static var providerByUserID: [String: String] = [:]
-    /// Email sign-up awaiting confirmation — promoted to ``manualSignupByUserID`` on first session.
+    /// Email sign-up awaiting confirmation, promoted to ``manualSignupByUserID`` on first session.
     private static var manualSignupByEmail: [String: String] = [:]
 
-    /// Create Account form (email/password) — beats provider names.
+    /// Create Account form (email/password), beats provider names.
     static func stageManualSignup(fullName: String?, for userID: UserID) {
         guard let normalized = ProfileDisplayNamePolicy.normalized(fullName) else { return }
         manualSignupByUserID[userID.rawValue] = normalized
@@ -22,7 +22,7 @@ enum OAuthProfileOnboardingNameStore {
         manualSignupByEmail[key] = normalized
     }
 
-    /// Apple / Google (or other) — never overwrites manual signup name.
+    /// Apple / Google (or other), never overwrites manual signup name.
     static func stageProvider(fullName: String?, for userID: UserID) {
         guard let normalized = ProfileDisplayNamePolicy.normalized(fullName) else { return }
         guard manualSignupByUserID[userID.rawValue] == nil else { return }

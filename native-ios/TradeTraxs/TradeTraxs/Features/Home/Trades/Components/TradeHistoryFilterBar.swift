@@ -30,7 +30,7 @@ struct TradeHistoryFilterBar: View {
             }
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
-            .background(colors.fillSecondary, in: Capsule())
+            .experienceFilterCapsule()
             .overlay(alignment: .topTrailing) {
                 if viewModel.showsFilterIndicator {
                     Circle()
@@ -71,7 +71,7 @@ struct TradeHistoryFilterBar: View {
             }
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
-            .background(colors.fillSecondary, in: Capsule())
+            .experienceFilterCapsule()
         }
         .accessibilityLabel("Account")
         .accessibilityValue(viewModel.accountMenuTitle)

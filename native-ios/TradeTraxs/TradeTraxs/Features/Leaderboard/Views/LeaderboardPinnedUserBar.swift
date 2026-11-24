@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Strava-style pinned “You” ranking strip — render-only.
+/// Strava-style pinned “You” ranking strip, render-only.
 struct LeaderboardPinnedUserBar: View {
     let row: LeaderboardRow
     let onOpen: () -> Void

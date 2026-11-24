@@ -108,7 +108,7 @@ struct ExperienceBanner: View {
     }
 }
 
-/// Compact centered copy — profile section tabs, Messages home, list empty rows.
+/// Compact centered copy, profile section tabs, Messages home, list empty rows.
 struct ExperienceCompactEmptyState: View {
     var icon: AppIcon? = nil
     let title: String

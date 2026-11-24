@@ -24,8 +24,7 @@ struct ExperienceSearchField: View {
         .padding(.horizontal, ExperienceSpacing.sm)
         .padding(.vertical, ExperienceSpacing.xs)
         .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-        .background(colors.fillSecondary)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .experienceFilterSearchField()
         .experienceAccessibility(label: placeholder, identifier: accessibilityIdentifier)
     }
 }

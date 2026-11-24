@@ -30,7 +30,7 @@ struct ConversationBubbleView: View {
     var onReport: (() -> Void)? = nil
     var replyParentPresentation: MessageReplySupport.ParentPresentation? = nil
     var onReplyParentTap: (() -> Void)? = nil
-    /// Trade Rooms — tap sender avatar to open public profile (uses message sender ID).
+    /// Trade Rooms, tap sender avatar to open public profile (uses message sender ID).
     var onSenderAvatarTap: ((ProfileID) -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
@@ -527,7 +527,7 @@ struct ConversationBubbleView: View {
     }
 
     /// Tap opens shared entity; long-press uses the same message action menu as text/image bubbles.
-    /// Avoid `Button` — it consumes press-and-hold before the bubble row can show reactions/delete.
+    /// Avoid `Button`, it consumes press-and-hold before the bubble row can show reactions/delete.
     @ViewBuilder
     private func sharedMessageOpenInteraction<Content: View>(
         isEnabled: Bool,

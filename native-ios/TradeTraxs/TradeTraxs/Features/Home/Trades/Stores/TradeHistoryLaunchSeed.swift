@@ -2,7 +2,7 @@ import Foundation
 
 /// Ephemeral handoff from Dashboard chart taps → Trade History.
 ///
-/// Not a domain model — presentation-only seed consumed once on Trade History open.
+/// Not a domain model, presentation-only seed consumed once on Trade History open.
 /// Uses existing ``TradeHistoryFilters`` plus optional local-only constraints.
 @MainActor
 enum TradeHistoryLaunchSeed {

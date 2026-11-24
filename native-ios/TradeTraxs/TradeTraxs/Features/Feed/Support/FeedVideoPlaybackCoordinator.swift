@@ -3,7 +3,7 @@ import Foundation
 import Observation
 import UIKit
 
-/// Instagram-style feed clip autoplay — exactly one retained ``AVPlayer`` at a time.
+/// Instagram-style feed clip autoplay, exactly one retained ``AVPlayer`` at a time.
 @Observable
 @MainActor
 final class FeedVideoPlaybackCoordinator {
@@ -33,7 +33,7 @@ final class FeedVideoPlaybackCoordinator {
     private(set) var isClipsExperience = false
     /// False when Feed tab is inactive or another screen covers Feed home (stack push).
     private(set) var isSurfaceActive = true
-    /// Feed-session mute preference — shared across inline Feed clips until toggled.
+    /// Feed-session mute preference, shared across inline Feed clips until toggled.
     var isMuted = true {
         didSet {
             for (reelID, player) in players {
@@ -267,7 +267,7 @@ final class FeedVideoPlaybackCoordinator {
         logPlayerState()
     }
 
-    /// Lightweight neighbor preparation — one paused player ahead/behind the active clip.
+    /// Lightweight neighbor preparation, one paused player ahead/behind the active clip.
     func prepareNeighborClip(_ reel: Reel, atIndex index: Int) {
         guard isSurfaceActive else { return }
         guard isClipsExperience else { return }

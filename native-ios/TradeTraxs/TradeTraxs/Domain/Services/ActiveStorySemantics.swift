@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `lib/activeStories.ts` — rolling 24h window from `created_at` (UTC epoch ms).
+/// Web `lib/activeStories.ts`, rolling 24h window from `created_at` (UTC epoch ms).
 ///
 /// Web: `nowMs - created < STORY_WINDOW_MS` and `Number.isNaN(created) → false`.
 /// Native must not substitute `Date.distantPast` for unparseable timestamps.
@@ -16,7 +16,7 @@ nonisolated enum ActiveStorySemantics {
         stories.filter { isActive(createdAt: $0.createdAt, now: now) }
     }
 
-    /// Groups active stories by author — oldest first within each author (Instagram slide order).
+    /// Groups active stories by author, oldest first within each author (Instagram slide order).
     static func groupByAuthor(_ active: [Story]) -> [ProfileID: [Story]] {
         var grouped: [ProfileID: [Story]] = [:]
         for story in active {
@@ -28,7 +28,7 @@ nonisolated enum ActiveStorySemantics {
         return grouped
     }
 
-    /// Author ring order for the story viewer — matches ``stripStories`` author sequence.
+    /// Author ring order for the story viewer, matches ``stripStories`` author sequence.
     static func authorOrder(from active: [Story], viewerID: ProfileID) -> [ProfileID] {
         stripStories(from: active, viewerID: viewerID).map(\.authorProfileID)
     }

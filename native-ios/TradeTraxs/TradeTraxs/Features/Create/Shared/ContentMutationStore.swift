@@ -3,7 +3,7 @@ import Observation
 
 /// Broadcasts Post / Achievement / Clip mutations for Feed and non-owner surfaces.
 ///
-/// Owner Profile UI must absorb creates via ``OwnerProfileOptimisticStore`` —
+/// Owner Profile UI must absorb creates via ``OwnerProfileOptimisticStore`` –
 /// do not treat this store as Profile list state.
 @Observable
 @MainActor

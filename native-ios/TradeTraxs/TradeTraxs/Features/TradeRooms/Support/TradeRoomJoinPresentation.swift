@@ -35,9 +35,9 @@ nonisolated enum TradeRoomJoinRequestResolution: String, Sendable {
     case decline
 }
 
-/// Shared join/request presentation — one source of truth for all discovery surfaces.
+/// Shared join/request presentation, one source of truth for all discovery surfaces.
 nonisolated enum TradeRoomJoinPresentation {
-    /// Discovery row status — Your Rooms shows Owner/Joined; Suggested/Popular keep join CTAs.
+    /// Discovery row status, Your Rooms shows Owner/Joined; Suggested/Popular keep join CTAs.
     static func discoveryStatusTitle(
         isYourRoomsContext: Bool,
         isOwner: Bool,
@@ -106,7 +106,7 @@ nonisolated enum TradeRoomJoinPresentation {
         }
     }
 
-    /// In-room header — join CTA only for viewers who are not yet members (no Owner/Joined pill).
+    /// In-room header, join CTA only for viewers who are not yet members (no Owner/Joined pill).
     static func showsConversationHeaderJoinButton(
         isOwner: Bool,
         isMember: Bool,
@@ -160,7 +160,7 @@ nonisolated enum TradeRoomJoinPresentation {
         joinPolicy == .approval ? .requestJoin : .directJoin
     }
 
-    /// Matches web `roomRequiresJoinApproval` — private rooms always require owner approval.
+    /// Matches web `roomRequiresJoinApproval`, private rooms always require owner approval.
     static func requiresJoinApproval(isPrivate: Bool, joinPolicy: TradeRoomJoinPolicy) -> Bool {
         if isPrivate { return true }
         return joinPolicy == .approval

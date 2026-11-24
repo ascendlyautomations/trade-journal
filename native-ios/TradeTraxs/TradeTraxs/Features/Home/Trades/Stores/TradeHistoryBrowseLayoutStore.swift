@@ -1,6 +1,6 @@
 import Foundation
 
-/// Owner journal Trades screen — grid/list preference (separate from Profile tab persistence).
+/// Owner journal Trades screen, grid/list preference (separate from Profile tab persistence).
 enum TradeHistoryBrowseLayoutStore {
     private static let key = "journal.trades.browseLayout"
 

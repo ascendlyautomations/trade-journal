@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Opaque modal presentation fill — replaces system sheet material (warm brown in dark mode).
+/// Opaque modal presentation fill, replaces system sheet material (warm brown in dark mode).
 struct ExperienceThemedPresentationBackground: ViewModifier {
     enum Surface {
         case sheet
@@ -18,7 +18,7 @@ struct ExperienceThemedPresentationBackground: ViewModifier {
     }
 }
 
-/// Shared sheet chrome — Apple-style detents, drag indicator, and corner radius.
+/// Shared sheet chrome, Apple-style detents, drag indicator, and corner radius.
 ///
 /// Presentation-only. Does not change navigation destinations or business logic.
 struct ExperienceSheetChrome: ViewModifier {
@@ -86,7 +86,7 @@ extension View {
         interactiveDismissDisabled(disabled)
     }
 
-    /// Soft content reveal for detail screens — respects Reduce Motion.
+    /// Soft content reveal for detail screens, respects Reduce Motion.
     func experienceDetailEntry(
         revealed: Bool,
         reduceMotion: Bool

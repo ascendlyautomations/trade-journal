@@ -3,10 +3,10 @@ import UIKit
 
 extension View {
     /// Dark mode only. Prefer `experienceInsetGroupedListStyle()` / `experienceTradeTraxsFormStyle()`
-    /// in `ExperienceThemedMaterials.swift` for new screens — they bundle list/form chrome with this installer.
+    /// in `ExperienceThemedMaterials.swift` for new screens, they bundle list/form chrome with this installer.
     ///
     /// Inset-grouped rows use the Dashboard card lift (`fillSecondary` at 35% over the page) instead of
-    /// the system warm grouped fill. Light mode is left untouched.
+    /// the system warm grouped fill. Light mode paints explicit `surfacePrimary` rows on the page canvas.
     func experienceDashboardGroupedRows() -> some View {
         modifier(ExperienceDashboardGroupedRowsModifier())
     }
@@ -31,7 +31,7 @@ private struct ExperienceDashboardListRowModifier: ViewModifier {
                 )
             )
         } else {
-            content
+            content.listRowBackground(colors.surfacePrimary)
         }
     }
 }
@@ -41,23 +41,26 @@ private struct ExperienceDashboardGroupedRowsModifier: ViewModifier {
     @Environment(\.themeColors) private var colors
 
     func body(content: Content) -> some View {
-        if colorScheme == .dark {
-            content
-                .scrollContentBackground(.hidden)
-                .background {
-                    ExperienceDashboardGroupedRowInstaller(
-                        rowColor: ExperienceDashboardGroupedSurface.rowUIColor(
-                            page: colors.backgroundPrimary,
-                            lift: colors.fillSecondary
-                        ),
-                        pageColor: UIColor(colors.backgroundPrimary)
-                    )
-                    .allowsHitTesting(false)
-                }
-                .background(colors.backgroundPrimary.ignoresSafeArea())
-        } else {
-            content
-        }
+        let rowUIColor: UIColor = {
+            if colorScheme == .dark {
+                return ExperienceDashboardGroupedSurface.rowUIColor(
+                    page: colors.backgroundPrimary,
+                    lift: colors.fillSecondary
+                )
+            }
+            return UIColor(colors.surfacePrimary)
+        }()
+
+        content
+            .scrollContentBackground(.hidden)
+            .background {
+                ExperienceDashboardGroupedRowInstaller(
+                    rowColor: rowUIColor,
+                    pageColor: UIColor(colors.backgroundPrimary)
+                )
+                .allowsHitTesting(false)
+            }
+            .background(colors.backgroundPrimary.ignoresSafeArea())
     }
 }
 

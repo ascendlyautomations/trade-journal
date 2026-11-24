@@ -4,7 +4,7 @@ import Foundation
 nonisolated enum AchievementDetailPresentation {
     typealias MetadataRow = (label: String, value: String)
 
-    /// Legacy row builder — date omitted (identity header shows achieved date).
+    /// Legacy row builder, date omitted (identity header shows achieved date).
     static func metadataRows(for achievement: Achievement) -> [MetadataRow] {
         var rows: [MetadataRow] = []
         rows.append(("Type", achievementKindDisplayName(achievement.kind)))
@@ -21,13 +21,13 @@ nonisolated enum AchievementDetailPresentation {
         return rows
     }
 
-    /// Trailing title accessory — milestone / evaluation (not used for payout headlines).
+    /// Trailing title accessory, milestone / evaluation (not used for payout headlines).
     static func titleTrailingAccessory(for achievement: Achievement) -> String? {
         guard !ProfilePayoutTotals.isPayout(achievement.kind) else { return nil }
         return milestoneOrAmountDisplay(for: achievement)
     }
 
-    /// Compact caption under the description — type and firm when relevant.
+    /// Compact caption under the description, type and firm when relevant.
     static func contextCaption(for achievement: Achievement) -> String? {
         var parts: [String] = [achievementKindDisplayName(achievement.kind)]
         if let firm = trimmedFirm(achievement.firm) {
@@ -72,7 +72,7 @@ nonisolated enum AchievementDetailPresentation {
         }
     }
 
-    /// Non-payout amounts / eval labels — payout headline carries payout totals.
+    /// Non-payout amounts / eval labels, payout headline carries payout totals.
     static func milestoneOrAmountDisplay(for achievement: Achievement) -> String? {
         if ProfilePayoutTotals.isPayout(achievement.kind) {
             return nil

@@ -25,7 +25,7 @@ enum StoryTextColor: String, CaseIterable, Identifiable, Equatable {
     var swiftUIColor: Color { Color(uiColor) }
 }
 
-/// Text plate behind story captions — cycles none → black → white in the editor.
+/// Text plate behind story captions, cycles none → black → white in the editor.
 enum StoryTextBackgroundStyle: String, Equatable, Sendable {
     case none
     case black
@@ -56,7 +56,7 @@ enum StoryTextBackgroundStyle: String, Equatable, Sendable {
     }
 }
 
-/// Canonical RGBA for a Story text element — presets and custom picker colors.
+/// Canonical RGBA for a Story text element, presets and custom picker colors.
 struct StoryTextFill: Equatable, Sendable {
     var red: Double
     var green: Double

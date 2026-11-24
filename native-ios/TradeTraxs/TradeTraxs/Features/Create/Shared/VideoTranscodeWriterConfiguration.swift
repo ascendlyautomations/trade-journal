@@ -107,7 +107,7 @@ nonisolated enum VideoTranscodeWriterConfiguration {
         return Int(nearest)
     }
 
-    /// Session end must not precede any appended sample — use max track end (last PTS + duration when known).
+    /// Session end must not precede any appended sample, use max track end (last PTS + duration when known).
     nonisolated static func sessionEndSourceTime(from summary: VideoTranscodeTimelineAudit.Summary) -> CMTime {
         let endSeconds = sessionEndSeconds(from: summary)
         return CMTime(seconds: endSeconds, preferredTimescale: 60_000)

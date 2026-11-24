@@ -14,7 +14,7 @@ enum TradeRoomBroadcastStreamTitle {
         return collapsed
     }
 
-    /// Viewer sheet — stream title first, then trade room name, single-line with truncation.
+    /// Viewer sheet, stream title first, then trade room name, single-line with truncation.
     static func viewerPopupHeadline(streamTitle: String?, roomName: String) -> String {
         let room = roomName.trimmingCharacters(in: .whitespacesAndNewlines)
         let roomDisplay = room.isEmpty ? "Trade Room" : room

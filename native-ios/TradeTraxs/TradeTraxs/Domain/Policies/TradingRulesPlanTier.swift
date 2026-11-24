@@ -1,6 +1,6 @@
 import Foundation
 
-/// Free vs TraxsPro Trading Rules — rule families and settings copy (presentation + client compliance scope).
+/// Free vs TraxsPro Trading Rules, rule families and settings copy (presentation + client compliance scope).
 nonisolated enum TradingRulesPlanTier {
     typealias RuleID = TradingRulesComplianceAnalytics.RuleID
 
@@ -34,7 +34,7 @@ nonisolated enum TradingRulesPlanTier {
         PremiumRuleCard(
             ruleID: .maxRiskPerTrade,
             category: .riskManagement,
-            title: "Maximum risk per trade",
+            title: TradingRulesDisplayLabels.maxRiskPerTrade,
             detail: "Cap dollar risk on each entry against your plan.",
             systemImage: "dollarsign.circle"
         ),
@@ -55,7 +55,7 @@ nonisolated enum TradingRulesPlanTier {
         PremiumRuleCard(
             ruleID: .weeklyLossLimit,
             category: .riskManagement,
-            title: "Maximum weekly loss",
+            title: TradingRulesDisplayLabels.maxWeeklyLoss,
             detail: "Weekly cumulative loss guardrails across your scope.",
             systemImage: "calendar"
         ),
@@ -76,7 +76,7 @@ nonisolated enum TradingRulesPlanTier {
         PremiumRuleCard(
             ruleID: .minPlannedRr,
             category: .performanceTargets,
-            title: "Minimum planned R:R",
+            title: TradingRulesDisplayLabels.minPlannedRr,
             detail: "Require a minimum reward-to-risk before entry.",
             systemImage: "arrow.up.right"
         ),
@@ -100,7 +100,7 @@ nonisolated enum TradingRulesPlanTier {
         premiumRuleCards.filter { $0.category == category }
     }
 
-    /// @deprecated Use ``premiumRuleCards`` — kept for brief upsell lists.
+    /// @deprecated Use ``premiumRuleCards``, kept for brief upsell lists.
     static var premiumRuleSummaries: [PremiumRuleCard] { premiumRuleCards }
 
     /// `nil` = evaluate all rule families (TraxsPro).

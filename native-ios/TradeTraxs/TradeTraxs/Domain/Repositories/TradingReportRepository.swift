@@ -1,11 +1,11 @@
 import Foundation
 
-/// Trading Reports — same deterministic engine as web Dashboard Trading Reports.
+/// Trading Reports, same deterministic engine as web Dashboard Trading Reports.
 ///
 /// There is no generate/fetch BFF for report bodies. Persistence is the session
 /// snapshot (web `tradingReportCache`). Weekly push is scheduled by Supabase pg_cron.
 nonisolated protocol TradingReportRepository: Sendable {
-    /// Web `ensureTradingReportsLoaded` — load owner trades, generate all periods, cache.
+    /// Web `ensureTradingReportsLoaded`, load owner trades, generate all periods, cache.
     func ensureSnapshot(forceNetwork: Bool) async throws -> TradingReportsSnapshot
 
     /// Returns a cached report or generates the full snapshot first.

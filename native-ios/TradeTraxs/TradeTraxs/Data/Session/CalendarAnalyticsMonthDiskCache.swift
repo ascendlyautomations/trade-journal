@@ -1,6 +1,6 @@
 import Foundation
 
-/// Persistent Calendar V2 month analytical cache (Application Support — not `Caches/`).
+/// Persistent Calendar V2 month analytical cache (Application Support, not `Caches/`).
 nonisolated enum CalendarAnalyticsMonthDiskCache {
     static let folderName = "CalendarAnalyticsMonthDiskCache"
     static let schemaVersion = 1

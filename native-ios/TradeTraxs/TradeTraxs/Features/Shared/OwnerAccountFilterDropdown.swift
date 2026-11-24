@@ -58,7 +58,7 @@ final class OwnerAccountFilterDropdownController: ObservableObject {
 
 // MARK: - Selector button
 
-/// Owner account filter dropdown — root overlay presentation (not ``Menu`` / ``popover``).
+/// Owner account filter dropdown, root overlay presentation (not ``Menu`` / ``popover``).
 struct OwnerAccountFilterDropdown<Trigger: View>: View {
     let accounts: [TradingAccount]
     let isAllAccountsSelected: Bool
@@ -161,7 +161,7 @@ private struct OwnerAccountFilterDropdownOverlayRoot<Content: View>: View {
 }
 
 extension View {
-    /// Hosts the floating account filter panel above the tab shell — not clipped by scroll views.
+    /// Hosts the floating account filter panel above the tab shell, not clipped by scroll views.
     func ownerAccountFilterDropdownOverlay() -> some View {
         modifier(OwnerAccountFilterDropdownOverlayHost())
     }

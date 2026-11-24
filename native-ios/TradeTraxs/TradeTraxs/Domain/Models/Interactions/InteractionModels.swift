@@ -1,6 +1,6 @@
 import Foundation
 
-/// Content surface for likes/comments — mirrors web table routing.
+/// Content surface for likes/comments, mirrors web table routing.
 ///
 /// | Kind | Likes table | Comments table |
 /// |------|-------------|----------------|
@@ -18,7 +18,7 @@ nonisolated enum InteractionContentKind: String, Hashable, Codable, Sendable {
     case achievement
 }
 
-/// Typed target injected into reusable Like/Comment UI — never hard-codes a screen.
+/// Typed target injected into reusable Like/Comment UI, never hard-codes a screen.
 nonisolated struct InteractionTarget: Hashable, Codable, Sendable {
     var kind: InteractionContentKind
     var id: String
@@ -46,7 +46,7 @@ nonisolated struct InteractionTarget: Hashable, Codable, Sendable {
     }
 }
 
-/// Aggregated engagement — web `LikeMeta` + comment count.
+/// Aggregated engagement, web `LikeMeta` + comment count.
 nonisolated struct EngagementSnapshot: Hashable, Codable, Sendable {
     var likeCount: Int
     var commentCount: Int
@@ -75,20 +75,20 @@ nonisolated enum CommentSortOrder: String, Hashable, Codable, Sendable, CaseIter
     case newest
 }
 
-/// Presentation comment — domain ``Comment`` plus optional author display.
+/// Presentation comment, domain ``Comment`` plus optional author display.
 nonisolated struct InteractionComment: Hashable, Codable, Sendable, Identifiable {
     var id: CommentID
     var target: InteractionTarget
     var authorProfileID: ProfileID
     var authorUsername: String?
-    /// Display name from profiles join — used for initials / a11y; list UI keeps @username.
+    /// Display name from profiles join, used for initials / a11y; list UI keeps @username.
     var authorDisplayName: String? = nil
     /// Avatar storage URL / public path from the same comments list join (no N+1 profile fetch).
     var authorAvatarURL: String? = nil
     var body: String
     var parentCommentID: CommentID?
     var createdAt: Date
-    /// Architecture-ready — pin UI ships later.
+    /// Architecture-ready, pin UI ships later.
     var isPinned: Bool
 
     var isReply: Bool { parentCommentID != nil }

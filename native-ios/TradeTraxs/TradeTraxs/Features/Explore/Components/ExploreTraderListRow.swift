@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Vertical trader row — avatar, identity, and Follow/Following (Explore search + full list).
+/// Vertical trader row, avatar, identity, and Follow/Following (Explore search + full list).
 struct ExploreTraderListRow: View {
     let trader: ExploreTraderSuggestion
     let profile: Profile

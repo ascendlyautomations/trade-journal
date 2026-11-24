@@ -1,6 +1,6 @@
 import Foundation
 
-/// Process-wide production ``AppEnvironment`` — created at most once per launch.
+/// Process-wide production ``AppEnvironment``, created at most once per launch.
 ///
 /// SwiftUI may read ``EnvironmentKey/defaultValue`` on every view refresh. That
 /// path must never call ``CompositionRoot/bootstrap()`` directly or the entire

@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Trade Room workspace — compact header + channel switcher + DM-style conversation.
+/// Trade Room workspace, compact header + channel switcher + DM-style conversation.
 struct RoomConversationView: View {
     @State private var viewModel: RoomConversationViewModel
     @State private var contentRevealed = false

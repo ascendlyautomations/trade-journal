@@ -56,8 +56,8 @@ struct SettingsAccountView: View {
             }
 
             Section {
-                SettingsInfoRow(title: "Email", value: viewModel.email ?? "—")
-                SettingsInfoRow(title: "Username", value: viewModel.username.map { "@\($0)" } ?? "—")
+                SettingsInfoRow(title: "Email", value: viewModel.email ?? "–")
+                SettingsInfoRow(title: "Username", value: viewModel.username.map { "@\($0)" } ?? "–")
                 if let createdAt = viewModel.createdAt {
                     SettingsInfoRow(
                         title: "Member since",
@@ -236,7 +236,7 @@ struct SettingsAccountView: View {
     }
 }
 
-/// Full-screen final delete confirmation — shown alone after the first alert.
+/// Full-screen final delete confirmation, shown alone after the first alert.
 private struct AccountDeletionFinalConfirmationView: View {
     let title: String
     let message: String
@@ -545,7 +545,7 @@ struct SettingsSecurityView: View {
     var body: some View {
         List {
             Section {
-                SettingsInfoRow(title: "Email", value: viewModel.email ?? "—")
+                SettingsInfoRow(title: "Email", value: viewModel.email ?? "–")
             } header: {
                 Text("Sign-In")
             } footer: {

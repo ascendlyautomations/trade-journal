@@ -2,7 +2,12 @@ import Foundation
 
 /// PostgREST / Postgres failures that should not trigger chart overlay retry loops.
 nonisolated enum DashboardAnalyticsChartsFailurePolicy {
-    static func shouldNotRetry(_ error: Error) -> Bool {
+    nonisolated static func isProEntitlementDenial(_ error: Error) -> Bool {
+        ProGateReasonParser.reason(from: error) != nil
+    }
+
+    nonisolated static func shouldNotRetry(_ error: Error) -> Bool {
+        if isProEntitlementDenial(error) { return true }
         let pieces = [
             String(describing: error),
             (error as NSError).localizedDescription,

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Dedicated Trade Rooms home — member rooms with search, refresh, and empty/error states.
+/// Dedicated Trade Rooms home, member rooms with search, refresh, and empty/error states.
 struct TradeRoomsHomeView: View {
     @State private var viewModel: TradeRoomsHomeViewModel
     private let data: DataEnvironment?

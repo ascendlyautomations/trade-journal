@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pure trade analytics — no I/O.
+/// Pure trade analytics, no I/O.
 nonisolated protocol TradeAnalysisService: Sendable {
     func analyze(trade: Trade, notes: [TradeNote]) -> TradeAnalysis
 }

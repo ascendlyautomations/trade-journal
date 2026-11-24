@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Reusable share affordance — matches ``LikeButton`` / ``CommentButton`` chrome.
+/// Reusable share affordance, matches ``LikeButton`` / ``CommentButton`` chrome.
 struct ShareButton: View {
     var action: () -> Void
 

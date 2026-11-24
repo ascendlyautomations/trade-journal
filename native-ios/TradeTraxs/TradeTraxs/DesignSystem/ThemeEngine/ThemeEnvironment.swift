@@ -31,7 +31,7 @@ extension EnvironmentValues {
         set { self[ThemeEnvironmentKey.self] = newValue }
     }
 
-    /// Semantic colors for the active theme — preferred API for Experience components.
+    /// Semantic colors for the active theme, preferred API for Experience components.
     var themeColors: SemanticColorPalette {
         get { self[ThemeColorsKey.self] }
         set { self[ThemeColorsKey.self] = newValue }

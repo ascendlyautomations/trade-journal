@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// True when this tab's content is the selected tab — offscreen TabView children stay false.
+/// True when this tab's content is the selected tab, offscreen TabView children stay false.
 private struct TabIsActiveKey: EnvironmentKey {
     static let defaultValue = true
 }

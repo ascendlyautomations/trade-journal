@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Tappable Best Trade reference — never shows raw trade IDs.
+/// Tappable Best Trade reference, never shows raw trade IDs.
 struct ReportBestTradeCard: View {
     enum Presentation: Equatable {
         case loading
@@ -32,10 +32,7 @@ struct ReportBestTradeCard: View {
                     .experienceStyle(.subheadline, color: colors.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(ExperienceSpacing.md)
-                    .background(colors.fillSecondary.opacity(0.55), in: RoundedRectangle(
-                        cornerRadius: ExperienceRadius.md,
-                        style: .continuous
-                    ))
+                    .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
                     .accessibilityIdentifier("reports.detail.bestTrade.unavailable")
 
             case .available(let trade):
@@ -72,14 +69,7 @@ struct ReportBestTradeCard: View {
         }
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(colors.fillSecondary.opacity(0.5))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                        .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
-                }
-        }
+        .modifier(ReportDetailSectionSurface())
         .accessibilityIdentifier("reports.detail.section.best trade")
     }
 

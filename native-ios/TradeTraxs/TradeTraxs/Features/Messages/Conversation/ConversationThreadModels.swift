@@ -33,7 +33,7 @@ nonisolated enum ConversationThreadSupport {
         return UserFacingError.map(AppError.unknown(message: error.localizedDescription)).message
     }
 
-    /// Trade Room incoming sender label — never raw UUIDs.
+    /// Trade Room incoming sender label, never raw UUIDs.
     static func senderDisplayName(for profile: Profile?) -> String {
         guard let profile else { return ProfileIdentitySanitizer.neutralFallbackName }
         return ProfileIdentitySanitizer.leaderboardDisplayName(
@@ -42,7 +42,7 @@ nonisolated enum ConversationThreadSupport {
         )
     }
 
-    /// Trade Rooms — first bubble when the chronological predecessor is a different sender.
+    /// Trade Rooms, first bubble when the chronological predecessor is a different sender.
     static func tradeRoomStartsSenderGroup(message: Message, previous: Message?) -> Bool {
         guard let previous else { return true }
         return previous.senderProfileID != message.senderProfileID

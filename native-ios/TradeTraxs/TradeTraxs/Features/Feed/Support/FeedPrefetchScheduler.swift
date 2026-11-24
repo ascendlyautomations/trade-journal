@@ -1,6 +1,6 @@
 import Foundation
 
-/// Prefetch waits for background network capacity — no speculative storm while slots are full.
+/// Prefetch waits for background network capacity, no speculative storm while slots are full.
 enum FeedPrefetchScheduler {
     static func waitForBackgroundCapacity() async {
         let limit = NetworkConcurrencyCoordinator.maxBackgroundConcurrent

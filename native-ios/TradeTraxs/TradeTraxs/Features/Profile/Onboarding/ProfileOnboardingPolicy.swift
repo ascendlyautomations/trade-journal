@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web-parity gate fields — mirrors ``profileNeedsOnboarding`` in `lib/profileOnboardingGate.ts`.
+/// Web-parity gate fields, mirrors ``profileNeedsOnboarding`` in `lib/profileOnboardingGate.ts`.
 nonisolated struct ProfileOnboardingSnapshot: Sendable, Equatable {
     var profileID: ProfileID
     var username: String?

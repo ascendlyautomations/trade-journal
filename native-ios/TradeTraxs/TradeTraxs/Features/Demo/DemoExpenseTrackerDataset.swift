@@ -1,6 +1,6 @@
 import Foundation
 
-/// Six-month TraxsPro Expense Tracker preview book — isolated from Supabase and owner stores.
+/// Six-month TraxsPro Expense Tracker preview book, isolated from Supabase and owner stores.
 nonisolated enum DemoExpenseTrackerDataset {
     struct Bundle: Sendable {
         var expenses: [PropFirmExpense]

@@ -37,7 +37,7 @@ extension ObjectStorageProviding {
         )
     }
 
-    /// Default for test doubles — production Supabase storage streams from disk.
+    /// Default for test doubles, production Supabase storage streams from disk.
     func upload(
         bucket: String,
         path: String,

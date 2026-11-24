@@ -114,7 +114,7 @@ enum OwnerAccountDropdownSupport {
         return accounts.isEmpty ? "unknown" : "fallback"
     }
 
-    /// Menu panel width — 80% of screen, clamped to leave 16pt margins on each edge.
+    /// Menu panel width, 80% of screen, clamped to leave 16pt margins on each edge.
     static func filterMenuPanelWidth(screenWidth: CGFloat? = nil) -> CGFloat {
         let screen = screenWidth ?? currentScreenWidth()
         return min(screen * 0.80, screen - 32)

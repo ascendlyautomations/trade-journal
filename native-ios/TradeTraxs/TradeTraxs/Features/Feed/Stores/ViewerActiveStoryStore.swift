@@ -3,7 +3,7 @@ import Observation
 
 /// Session-local indicator for whether the signed-in user has an active story.
 ///
-/// Updated from Feed bootstrap/cache and ``ContentMutationStore`` — no Profile-specific fetch.
+/// Updated from Feed bootstrap/cache and ``ContentMutationStore``, no Profile-specific fetch.
 @Observable
 @MainActor
 final class ViewerActiveStoryStore {

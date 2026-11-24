@@ -16,7 +16,7 @@ final class LogoutCoordinator: Sendable {
         self.credentials = credentials
     }
 
-    /// Authoritative local sign-out — synchronous credential/session destruction.
+    /// Authoritative local sign-out, synchronous credential/session destruction.
     func performLocalTeardown() -> AuthenticationSession? {
         let session = sessionManager.currentSession
         try? sessionManager.destroy()
@@ -25,7 +25,7 @@ final class LogoutCoordinator: Sendable {
         return session
     }
 
-    /// Best-effort remote revoke — must not block local logout completion.
+    /// Best-effort remote revoke, must not block local logout completion.
     func signOutRemotely(session: AuthenticationSession) async {
         try? await emailProvider.signOut(session: session)
     }

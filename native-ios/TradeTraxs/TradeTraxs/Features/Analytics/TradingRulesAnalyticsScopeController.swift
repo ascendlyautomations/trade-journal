@@ -1,10 +1,11 @@
 import Foundation
 import Observation
 
-/// Client scope for Trading Rules Analytics — persisted and synced with Home when the dashboard is bound.
+/// Client scope for Trading Rules Analytics, persisted and synced with Home when the dashboard is bound.
 @MainActor
 @Observable
 final class TradingRulesAnalyticsScopeController {
+    private var traxsProPreviewInitialScopeApplied = false
     private(set) var profileID: ProfileID?
     private(set) var accounts: [TradingAccount] = []
 
@@ -47,6 +48,27 @@ final class TradingRulesAnalyticsScopeController {
         } else {
             loadPersistedScope(profileID: profileID, accounts: accounts)
         }
+    }
+
+    /// Fixed 1Y scope for the TraxsPro Trading Rules Analytics sample preview.
+    func applyTraxsProPreviewScopeDefaults() {
+        accountFilter = .all
+        dateRange = .oneYear
+        customDateInterval = nil
+        accountTypeFilter = .all
+        showPublicOnly = false
+        hasUserSelectedDateRange = false
+    }
+
+    /// Apply preview defaults once per preview session so refresh keeps the user's timeframe.
+    func applyTraxsProPreviewScopeDefaultsIfNeeded() {
+        guard !traxsProPreviewInitialScopeApplied else { return }
+        applyTraxsProPreviewScopeDefaults()
+        traxsProPreviewInitialScopeApplied = true
+    }
+
+    func resetTraxsProPreviewScopeState() {
+        traxsProPreviewInitialScopeApplied = false
     }
 
     func syncFromDashboardIfAvailable() {
@@ -100,6 +122,20 @@ final class TradingRulesAnalyticsScopeController {
         let sanitized = DashboardAccountScopePolicy.sanitizedFilter(filter, accounts: accounts)
         guard accountFilter != sanitized else { return }
         ExperienceHaptics.play(.selection)
+        accountFilter = sanitized
+        publishScopeChange()
+    }
+
+    func handleAccountMutation(detailCache: DetailPresentationCache?) {
+        guard let profileID else { return }
+        guard let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: profileID,
+            detailCache: detailCache
+        ) else { return }
+        accounts = loaded
+        OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(accountFilter, accounts: loaded)
+        guard sanitized != accountFilter else { return }
         accountFilter = sanitized
         publishScopeChange()
     }

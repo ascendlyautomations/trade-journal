@@ -1,6 +1,6 @@
 import Foundation
 
-/// Maps Pro-gated BFF responses to neutral native copy — never expose web checkout steering.
+/// Maps Pro-gated BFF responses to neutral native copy, never expose web checkout steering.
 nonisolated enum ProEntitlementResponseSanitizer {
     static func message(
         statusCode: Int,

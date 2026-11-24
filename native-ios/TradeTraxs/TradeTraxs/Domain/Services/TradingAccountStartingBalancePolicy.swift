@@ -1,6 +1,6 @@
 import Foundation
 
-/// Persisted `accounts.account_size` as opening equity — never inferred from trade history.
+/// Persisted `accounts.account_size` as opening equity, never inferred from trade history.
 nonisolated enum TradingAccountStartingBalancePolicy {
     static let requiredMessage = "Account Value is required."
 

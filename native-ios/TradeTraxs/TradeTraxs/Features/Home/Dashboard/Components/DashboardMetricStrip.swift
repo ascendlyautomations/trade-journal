@@ -5,7 +5,7 @@ enum DashboardMetricStripLayout: Equatable {
     case gridTwoByTwo
 }
 
-/// Compact glanceable KPI row — one metric system, no oversized cards.
+/// Compact glanceable KPI row, one metric system, no oversized cards.
 struct DashboardMetricStrip: View {
     let chips: [DashboardMetricChip]
     var layout: DashboardMetricStripLayout = .horizontalStrip
@@ -102,7 +102,7 @@ struct DashboardMetricStrip: View {
                 .experienceStyle(.caption2, color: colors.tertiaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-            Text(numbersReady ? chip.value : "—")
+            Text(numbersReady ? chip.value : "–")
                 .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
                 .foregroundStyle(toneColor(chip.tone))
                 .lineLimit(1)

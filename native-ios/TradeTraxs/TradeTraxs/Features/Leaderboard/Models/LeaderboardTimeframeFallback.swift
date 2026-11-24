@@ -1,6 +1,6 @@
 import Foundation
 
-/// Cross-platform timeframe fallback — smallest → largest preset order.
+/// Cross-platform timeframe fallback, smallest → largest preset order.
 enum LeaderboardTimeframeFallback {
     /// Native UI order: Today → Week → Month → Year → All Time.
     static let presetOrder: [LeaderboardTimeframe] = [
@@ -28,7 +28,7 @@ enum LeaderboardTimeframeFallback {
         return presetOrder[next]
     }
 
-    /// Window-level resolution (rankings exist) — used before profile hydration on bootstrap.
+    /// Window-level resolution (rankings exist), used before profile hydration on bootstrap.
     static func resolveWindow(
         trades: [LeaderboardTradeRow],
         requested: LeaderboardTimeframe,
@@ -84,7 +84,7 @@ enum LeaderboardTimeframeFallback {
         }
     }
 
-    /// Full presentation resolution — audience/category aware (cached refilter).
+    /// Full presentation resolution, audience/category aware (cached refilter).
     static func resolvePage(
         trades: [LeaderboardTradeRow],
         requested: LeaderboardTimeframe,
@@ -150,7 +150,7 @@ enum LeaderboardTimeframeFallback {
         effective: LeaderboardTimeframe
     ) -> String? {
         guard requested != effective else { return nil }
-        return "No results for \(requested.title) — showing \(effective.title)"
+        return "No results for \(requested.title), showing \(effective.title)"
     }
 
     /// Maps native presets to web view ids for cross-platform parity tests.

@@ -84,7 +84,7 @@ nonisolated protocol SettingsBootstrapProviding: Sendable {
     func loadSettingsBootstrap() async throws -> SettingsBootstrapV1
 }
 
-/// Placeholder Rpc adapter — throws until a future phase implements SQL RPCs.
+/// Placeholder Rpc adapter, throws until a future phase implements SQL RPCs.
 nonisolated struct UnimplementedRpcBootstrapRepository:
     SessionBootstrapProviding,
     DashboardBootstrapProviding,

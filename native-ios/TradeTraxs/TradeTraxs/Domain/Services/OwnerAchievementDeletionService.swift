@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single owner achievement deletion path — Achievement Detail and Profile cards.
+/// Single owner achievement deletion path, Achievement Detail and Profile cards.
 @MainActor
 enum OwnerAchievementDeletionService {
     static func deleteOwnedAchievement(

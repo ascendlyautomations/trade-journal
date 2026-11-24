@@ -3,7 +3,7 @@ import Foundation
 
 /// Stable cache identity for immutable public Supabase reel MP4 URLs.
 nonisolated enum ClipVideoCacheIdentity {
-    /// Canonical string for dedupe — host + path, no query/fragment (matches ``Reel/playbackURLIdentity``).
+    /// Canonical string for dedupe, host + path, no query/fragment (matches ``Reel/playbackURLIdentity``).
     nonisolated static func canonicalIdentity(for url: URL) -> String {
         var components = URLComponents()
         components.host = url.host?.lowercased()

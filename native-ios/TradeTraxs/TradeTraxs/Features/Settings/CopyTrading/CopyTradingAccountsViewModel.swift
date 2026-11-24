@@ -92,10 +92,18 @@ final class CopyTradingAccountsViewModel {
     }
 
     func beginCreate() {
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        if ProAccessGate.presentFeatureIfNeeded(.copyTrading, profileID: profileID) {
+            return
+        }
         editor = .create()
     }
 
     func beginEdit(_ group: CopyTradingGroup) {
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        if ProAccessGate.presentFeatureIfNeeded(.copyTrading, profileID: profileID) {
+            return
+        }
         editor = .edit(group)
     }
 
@@ -111,6 +119,11 @@ final class CopyTradingAccountsViewModel {
 
     func saveEditor() async -> Bool {
         guard let editor, !isSaving else { return false }
+        if let userID = await currentProfileID(),
+           ProAccessGate.presentFeatureIfNeeded(.copyTrading, profileID: userID)
+        {
+            return false
+        }
         let owned = Set(accounts.map(\.id.rawValue))
         if let message = CopyTradingGroupRules.validationError(
             name: editor.name,
@@ -147,28 +160,52 @@ final class CopyTradingAccountsViewModel {
             await refresh()
             return true
         } catch let failure as CopyTradingGroupFailure {
+            if ProLimitPresentation.presentUpgradeIfProGate(failure) {
+                return false
+            }
             errorMessage = message(for: failure)
             return false
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                return false
+            }
             errorMessage = "Couldn't save this copy trading group."
             return false
         }
     }
 
     func confirmDelete() async {
-        guard let pendingDelete, !isSaving else { return }
+        guard let groupToDelete = pendingDelete, !isSaving else { return }
         guard let userID = await currentProfileID() else { return }
+        if ProAccessGate.presentFeatureIfNeeded(.copyTrading, profileID: userID) {
+            self.pendingDelete = nil
+            return
+        }
         isSaving = true
         defer { isSaving = false }
         do {
-            try await groupsRepository.delete(userID: userID, groupID: pendingDelete.id)
+            try await groupsRepository.delete(userID: userID, groupID: groupToDelete.id)
             self.pendingDelete = nil
             await refresh()
         } catch let failure as CopyTradingGroupFailure {
+            if ProLimitPresentation.presentUpgradeIfProGate(failure) {
+                return
+            }
             errorMessage = message(for: failure)
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                return
+            }
             errorMessage = "Couldn't delete this copy trading group."
         }
+    }
+
+    func requestDelete(_ group: CopyTradingGroup) {
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        if ProAccessGate.presentFeatureIfNeeded(.copyTrading, profileID: profileID) {
+            return
+        }
+        pendingDelete = group
     }
 
     private func currentProfileID() async -> ProfileID? {

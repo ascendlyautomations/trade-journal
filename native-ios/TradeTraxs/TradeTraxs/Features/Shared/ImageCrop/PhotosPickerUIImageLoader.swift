@@ -43,7 +43,7 @@ nonisolated enum ProfilePhotoDebugLog {
 }
 #endif
 
-/// Profile avatars — still images only (no Live Photo motion components in the picker).
+/// Profile avatars, still images only (no Live Photo motion components in the picker).
 enum ProfilePhotoPickerFilter {
     static var matching: PHPickerFilter { MediaPickerPolicy.profilePhoto.matching }
 }
@@ -74,9 +74,9 @@ private struct PickedPhotoTransferable: Transferable {
     }
 }
 
-/// ImageIO / UIKit decode — safe off MainActor (Transferable import runs on a background executor).
+/// ImageIO / UIKit decode, safe off MainActor (Transferable import runs on a background executor).
 nonisolated enum PhotosPickerImageDecoder {
-    /// Sharp enough for crop/zoom before ~1440px uploads — avoids 12k×12k decode buffers.
+    /// Sharp enough for crop/zoom before ~1440px uploads, avoids 12k×12k decode buffers.
     static let pickerDecodeMaxPixelSize = 4096
 
     enum Stage: String, Sendable {
@@ -156,7 +156,7 @@ nonisolated enum PhotosPickerImageDecoder {
     }
 }
 
-/// Key still for Live Photos and library assets — never the paired video.
+/// Key still for Live Photos and library assets, never the paired video.
 private nonisolated enum ProfilePhotoAssetLoader {
     static func loadStillImage(from item: PhotosPickerItem) async -> UIImage? {
         guard let identifier = item.itemIdentifier else { return nil }
@@ -233,7 +233,7 @@ enum ImageCropSelectionSupport {
         }
     }
 
-    /// Profile onboarding avatar — PhotoKit key still first, then transferable decode.
+    /// Profile onboarding avatar, PhotoKit key still first, then transferable decode.
     static func loadProfileAvatarUIImageOutcome(from item: PhotosPickerItem?) async -> PhotoLoadOutcome {
         guard let item else {
 #if DEBUG

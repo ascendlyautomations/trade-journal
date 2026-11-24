@@ -113,7 +113,7 @@ struct StatsContainerView: View {
                 )
                 ProfileStatsExtremeCard(
                     title: "Worst Trade",
-                    value: metrics.biggestLoss.map { Self.pnlCurrencyText($0) } ?? "—",
+                    value: metrics.biggestLoss.map { Self.pnlCurrencyText($0) } ?? "–",
                     direction: .down,
                     tone: metrics.biggestLoss == nil ? colors.primaryText : colors.loss
                 )
@@ -267,10 +267,7 @@ struct StatsContainerView: View {
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            colors.fillSecondary.opacity(0.55),
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-        )
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
         .accessibilityIdentifier("profile.stats.equity")
     }
 
@@ -335,9 +332,9 @@ struct StatsContainerView: View {
     }
 
     static func winLossRatioText(winner: Decimal?, loser: Decimal?) -> String {
-        guard let winner, let loser else { return "—" }
+        guard let winner, let loser else { return "–" }
         let lossMagnitude = abs(NSDecimalNumber(decimal: loser).doubleValue)
-        guard lossMagnitude > 0 else { return "—" }
+        guard lossMagnitude > 0 else { return "–" }
         let ratio = NSDecimalNumber(decimal: winner).doubleValue / lossMagnitude
         return "\(NumberDisplay.decimal(ratio, minimumFractionDigits: 2, maximumFractionDigits: 2))x"
     }

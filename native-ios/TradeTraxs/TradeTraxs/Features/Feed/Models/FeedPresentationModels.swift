@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `FeedContentFilter` — All / Trades / Clips / Posts / Achievements.
+/// Web `FeedContentFilter`, All / Trades / Clips / Posts / Achievements.
 nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
     case all
     case trades
@@ -8,7 +8,7 @@ nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
     case clips
     case achievements
 
-    /// Filter strip order (UI only — `CaseIterable` order unchanged for cache/session code).
+    /// Filter strip order (UI only, `CaseIterable` order unchanged for cache/session code).
     static let filterStripOrder: [FeedContentFilter] = [
         .all, .trades, .clips, .posts, .achievements,
     ]
@@ -23,7 +23,7 @@ nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
         }
     }
 
-    /// RPC / REST filter token — maps UI "Clips" to server `reels` (includes trade-linked clips).
+    /// RPC / REST filter token, maps UI "Clips" to server `reels` (includes trade-linked clips).
     var rpcValue: String {
         switch self {
         case .clips: return "reels"
@@ -42,7 +42,7 @@ nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
         }
     }
 
-    /// Neighbor in ``filterStripOrder`` — positive offset is swipe-left (toward Achievements).
+    /// Neighbor in ``filterStripOrder``, positive offset is swipe-left (toward Achievements).
     func adjacentFilter(offset: Int) -> FeedContentFilter? {
         guard offset != 0,
               let index = Self.filterStripOrder.firstIndex(of: self)
@@ -53,7 +53,7 @@ nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-/// Hydrated feed row — wraps domain models already used by Profile cards / Detail.
+/// Hydrated feed row, wraps domain models already used by Profile cards / Detail.
 nonisolated enum FeedTimelineEntry: Identifiable, Hashable, Sendable, Codable {
     case trade(FeedItem, TradeSummary)
     case post(FeedItem, Post)
@@ -93,7 +93,7 @@ nonisolated enum FeedTimelineEntry: Identifiable, Hashable, Sendable, Codable {
         filter == .all || matches == filter
     }
 
-    /// Web-parity engagement target — always keyed by the feed row id (`FeedItem.id`).
+    /// Web-parity engagement target, always keyed by the feed row id (`FeedItem.id`).
     ///
     /// | Feed row | Likes / comments tables |
     /// |----------|-------------------------|
@@ -157,7 +157,7 @@ nonisolated enum FeedSupport {
         return UserFacingError.map(AppError.unknown(message: error.localizedDescription)).message
     }
 
-    /// Web `sortFeedItemsDesc` — newest `created_at` first.
+    /// Web `sortFeedItemsDesc`, newest `created_at` first.
     static func sortDescending(_ entries: [FeedTimelineEntry]) -> [FeedTimelineEntry] {
         entries.sorted { $0.createdAt > $1.createdAt }
     }

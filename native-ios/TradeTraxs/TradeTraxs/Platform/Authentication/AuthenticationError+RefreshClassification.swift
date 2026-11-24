@@ -1,7 +1,7 @@
 import Foundation
 
 extension AuthenticationError {
-    /// Failures that invalidate the persisted refresh session — user must sign in again.
+    /// Failures that invalidate the persisted refresh session, user must sign in again.
     var isTerminalRefreshFailure: Bool {
         switch self {
         case .invalidCredentials, .refreshFailed, .sessionExpired, .sessionMissing:
@@ -14,7 +14,7 @@ extension AuthenticationError {
         }
     }
 
-    /// Failures where the refresh token may still be valid — show recoverable UI and retry.
+    /// Failures where the refresh token may still be valid, show recoverable UI and retry.
     var isTransientRefreshFailure: Bool {
         if isTerminalRefreshFailure { return false }
         switch self {

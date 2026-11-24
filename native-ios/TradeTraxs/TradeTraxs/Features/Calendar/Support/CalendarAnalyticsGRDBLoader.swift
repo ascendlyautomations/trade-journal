@@ -1,12 +1,12 @@
 import Foundation
 
-/// Calendar V2 GRDB-first local read (Phase 5E — no network).
+/// Calendar V2 GRDB-first local read (Phase 5E, no network).
 nonisolated enum CalendarAnalyticsGRDBLoader {
     struct MonthPresentation: Sendable {
         var readState: AnalyticsLocalReadState
         var revision: Int64?
         var wireRows: [AnalyticsDailyStatRowV1]
-        /// Full month coverage at `revision` — safe to render (including known-zero).
+        /// Full month coverage at `revision`, safe to render (including known-zero).
         var canRenderMonth: Bool
         var elapsedMs: Int
     }

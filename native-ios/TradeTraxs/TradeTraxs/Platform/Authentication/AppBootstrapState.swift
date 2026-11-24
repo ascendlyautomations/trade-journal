@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped bootstrap progress — independent from authentication validity.
+/// Session-scoped bootstrap progress, independent from authentication validity.
 ///
 /// A valid Supabase session may exist while bootstrap is still loading or failed.
 @Observable

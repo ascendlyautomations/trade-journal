@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only creation-path telemetry — no PII, queries, or message bodies.
+/// DEBUG-only creation-path telemetry, no PII, queries, or message bodies.
 nonisolated enum ConversationCreationTelemetry {
     private static let logger = Logger(subsystem: AppLog.subsystem, category: "ConversationCreate")
 

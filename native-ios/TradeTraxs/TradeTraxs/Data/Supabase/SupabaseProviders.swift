@@ -70,7 +70,7 @@ typealias SupabaseRealtimeProvider = SupabaseRealtimeProviding
 typealias SupabaseRPCProvider = SupabaseRPCProviding
 typealias SupabaseEdgeFunctionProvider = SupabaseEdgeFunctionProviding
 
-/// Production Supabase client provider — single configured project, lazy readiness.
+/// Production Supabase client provider, single configured project, lazy readiness.
 nonisolated struct LiveSupabaseClientProvider: SupabaseClientProviding {
     let configuration: AppConfiguration
 
@@ -100,7 +100,7 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
     func publicURL(bucket: String, path: String) -> URL? {
         guard let base = transport.configuration.supabaseURL else { return nil }
         let cleaned = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        // String concat — `appendingPathComponent` percent-encodes `/` in multi-segment paths
+        // String concat, `appendingPathComponent` percent-encodes `/` in multi-segment paths
         // (e.g. `{userId}/{timestamp}-file.jpg`) and breaks public object URLs.
         var root = base.absoluteString
         while root.hasSuffix("/") { root.removeLast() }
@@ -336,7 +336,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     /// When true, receive-loop death must not auto-reconnect (explicit ``disconnect``).
     private var intentionalDisconnect = false
     private var refCounter = 0
-    /// Bumped on session teardown — stale consumers never receive events after logout/switch.
+    /// Bumped on session teardown, stale consumers never receive events after logout/switch.
     private var watchSessionGeneration: UInt64 = 0
     private struct MessageRouteConsumer {
         var sessionGeneration: UInt64
@@ -344,7 +344,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         var continuation: AsyncStream<MessageRealtimeSignal>.Continuation?
         var presenceContinuation: AsyncStream<[RoomPresenceWireUser]>.Continuation?
         var debugOwner: String?
-        /// Room live registers message + optional presence — each stream end decrements before route leave.
+        /// Room live registers message + optional presence, each stream end decrements before route leave.
         var openStreamsRemaining: Int
     }
     private struct CommentLikeRouteConsumer {
@@ -373,7 +373,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     private var accessTokensByRouteKey: [String: String?] = [:]
     private var presenceTrackConfigByRouteKey: [String: RoomPresenceTrackConfig] = [:]
     private var presenceTrackedByRouteKey: [String: Bool] = [:]
-    /// Ephemeral Phoenix presence state keyed by topic — never persisted.
+    /// Ephemeral Phoenix presence state keyed by topic, never persisted.
     private var presenceStateByTopic: [String: [String: [[String: Any]]]] = [:]
     private var commentLikeConsumersByRoute: [String: [UUID: CommentLikeRouteConsumer]] = [:]
     private var commentLikeSpecsByRouteKey: [String: CommentLikeWatchSpec] = [:]
@@ -382,9 +382,9 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     private var socialEntityConsumersByRoute: [String: [UUID: SocialEntityRouteConsumer]] = [:]
     private var socialEntitySpecsByRouteKey: [String: SocialEntityWatchSpec] = [:]
     private var commentPinConsumersByRoute: [String: [UUID: CommentPinRouteConsumer]] = [:]
-    /// Bumped when a route's last consumer leaves — stale async retain/join work must not rejoin.
+    /// Bumped when a route's last consumer leaves, stale async retain/join work must not rejoin.
     private var routeEpochByKey: [String: UInt64] = [:]
-    /// Consumers fully removed from the registry — duplicate releaseWatch is a no-op.
+    /// Consumers fully removed from the registry, duplicate releaseWatch is a no-op.
     private var releasedConsumerIDs: Set<UUID> = []
     #if DEBUG
     /// Registry-driven 0→1 joins only (excludes reconnect rejoin storms in unit tests).
@@ -485,7 +485,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         return nil
     }
 
-    /// Decide join vs reuse immediately before transport — avoids stale pre-await join flags.
+    /// Decide join vs reuse immediately before transport, avoids stale pre-await join flags.
     private func claimRegistryJoinLocked(
         routeKey: String,
         topic: String,
@@ -527,7 +527,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         releasedConsumerIDs.insert(consumerID)
     }
 
-    /// Registry retain + optional physical join — call after the consumer map mutation inside `withLocked`.
+    /// Registry retain + optional physical join, call after the consumer map mutation inside `withLocked`.
     private func applyRegistryRetainAndJoin(
         routeKey: String,
         topic: String,
@@ -801,7 +801,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             url: base.appendingPathComponent("realtime/v1/websocket"),
             resolvingAgainstBaseURL: false
         )
-        // URLSessionWebSocketTask requires ws/wss — map https → wss (http → ws).
+        // URLSessionWebSocketTask requires ws/wss, map https → wss (http → ws).
         if components?.scheme?.lowercased() == "https" {
             components?.scheme = "wss"
         } else if components?.scheme?.lowercased() == "http" {
@@ -859,7 +859,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         RealtimeLifecycleDebugLog.disconnect(activeRoutes: routesBeforeDisconnect)
     }
 
-    /// Foreground / network recovery — reconnect and rejoin active watches without
+    /// Foreground / network recovery, reconnect and rejoin active watches without
     /// finishing product streams (avoids duplicate subscriptions at the domain layer).
     func resumeAfterForeground() async {
         let (connected, hasSpecs) = withLocked {
@@ -959,13 +959,13 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         }
     }
 
-    /// Web Community `room-live-${id}` topic — messages + reactions (no presence track).
+    /// Web Community `room-live-${id}` topic, messages + reactions (no presence track).
     func watchRoomMessages(roomID: String, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
         let streams = watchRoomLive(roomID: roomID, accessToken: accessToken, presenceTrack: nil)
         return streams.messages
     }
 
-    /// Web `subscribeCommunityRoomLiveChannel` — messages, reactions, and optional presence.
+    /// Web `subscribeCommunityRoomLiveChannel`, messages, reactions, and optional presence.
     func watchRoomLive(
         roomID: String,
         accessToken: String?,
@@ -1077,7 +1077,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
-    /// Inbox read-cursor sync — `conversation_member_preferences` for the signed-in user.
+    /// Inbox read-cursor sync, `conversation_member_preferences` for the signed-in user.
     /// `MessageRealtimeSignal.conversationID` carries the affected conversation.
     func watchConversationReadCursors(
         userID: String,
@@ -1102,7 +1102,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
-    /// Inbox — `room_messages` for the viewer's member rooms (unread bump when not open).
+    /// Inbox, `room_messages` for the viewer's member rooms (unread bump when not open).
     func watchMemberRoomMessages(
         roomIDs: [String],
         accessToken: String?,
@@ -1140,7 +1140,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
     }
 
 
-    /// Inbox — `messages` for loaded DM conversations (preview + reorder when not in thread).
+    /// Inbox, `messages` for loaded DM conversations (preview + reorder when not in thread).
     func watchInboxConversationMessages(
         conversationIDs: [String],
         accessToken: String?,
@@ -1177,7 +1177,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
-    /// Inbox read-cursor sync — `room_members` for the signed-in user.
+    /// Inbox read-cursor sync, `room_members` for the signed-in user.
     func watchRoomReadCursors(
         userID: String,
         accessToken: String?,
@@ -1234,7 +1234,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
-    /// Activity inbox — idle until `notifications` postgres_changes for the viewer.
+    /// Activity inbox, idle until `notifications` postgres_changes for the viewer.
     func watchNotifications(
         userID: String,
         accessToken: String?,
@@ -1258,7 +1258,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
-    /// Livestream session interactive state — filtered per session; RLS scopes row visibility per viewer.
+    /// Livestream session interactive state, filtered per session; RLS scopes row visibility per viewer.
     func watchBroadcastInteractiveSession(
         roomID: String,
         sessionID: String,
@@ -2394,7 +2394,7 @@ nonisolated struct MessageRealtimeSignal: Sendable {
     var deletedForEveryone: Bool = false
     /// Present when the event originated from `room_message_reactions` or `message_reactions`.
     var reactionEvent: ReactionEvent? = nil
-    /// Phase 6D — `user_analytics_state.revision` on UPDATE (signal only, not authoritative metrics).
+    /// Phase 6D, `user_analytics_state.revision` on UPDATE (signal only, not authoritative metrics).
     var analyticsRevision: Int64? = nil
     var analyticsUpdatedAt: String? = nil
     /// Raw postgres `record` JSON when available (notifications, messages, followers, …).

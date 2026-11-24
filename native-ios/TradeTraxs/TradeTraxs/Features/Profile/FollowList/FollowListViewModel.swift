@@ -83,10 +83,10 @@ final class FollowListViewModel {
         phase == .loaded && !items.isEmpty && visibleItems.isEmpty
     }
 
-    /// Bumped by ``FollowMutationCoordinator`` — read from views so follow buttons stay in sync across screens.
+    /// Bumped by ``FollowMutationCoordinator``, read from views so follow buttons stay in sync across screens.
     var followRevision: Int { FollowMutationCoordinator.shared.revision }
 
-    /// Authenticated viewer — used to label the viewer's own row in the list.
+    /// Authenticated viewer, used to label the viewer's own row in the list.
     var authenticatedProfileID: ProfileID? { viewerID }
 
     func loadIfNeeded() {
@@ -255,7 +255,7 @@ final class FollowListViewModel {
             hasMorePages = page.nextCursor != nil
             seedListCache(items)
         } catch {
-            // Keep existing rows — user can retry by scrolling again.
+            // Keep existing rows, user can retry by scrolling again.
         }
     }
 
@@ -285,7 +285,7 @@ final class FollowListViewModel {
             viewerFollowingIDs = ids
             FollowMutationCoordinator.shared.seedViewerFollowingRelationships(ids: ids, viewer: viewerID)
         } catch {
-            // Soft-fail — buttons default to Follow.
+            // Soft-fail, buttons default to Follow.
         }
     }
 
@@ -457,7 +457,7 @@ final class FollowListViewModel {
         }
     }
 
-    /// Applies a single list snapshot — no implicit row animations that fight UITableView diffs.
+    /// Applies a single list snapshot, no implicit row animations that fight UITableView diffs.
     private func applyListItemsMutation(_ mutation: () -> Void) {
         var transaction = Transaction()
         transaction.disablesAnimations = true
@@ -475,7 +475,7 @@ final class FollowListViewModel {
     }
 
     private func applyFixtures() {
-        // Fixture owners are local-only — treat the list owner as the viewer when
+        // Fixture owners are local-only, treat the list owner as the viewer when
         // the session has no authenticated user (unit tests / offline screenshots).
         if viewerID == nil {
             viewerID = listOwnerID

@@ -1,10 +1,10 @@
 import Foundation
 
-/// Inbox bootstrap — conversations plus profiles already embedded in the PostgREST join.
+/// Inbox bootstrap, conversations plus profiles already embedded in the PostgREST join.
 nonisolated struct ConversationListResult: Sendable {
     var items: [Conversation]
     var nextCursor: String?
-    /// Participant profiles from `conversation_participants.profiles(...)` — seed session cache.
+    /// Participant profiles from `conversation_participants.profiles(...)`, seed session cache.
     var embeddedProfiles: [Profile]
 
     var page: CursorPage<Conversation> {
@@ -13,7 +13,7 @@ nonisolated struct ConversationListResult: Sendable {
 }
 
 nonisolated protocol MessageRepository: Sendable {
-    /// Inbox list — web `fetchUserDmConversations` + unread/mute pipeline.
+    /// Inbox list, web `fetchUserDmConversations` + unread/mute pipeline.
     func conversations(page: PageRequest) async throws -> ConversationListResult
     func conversation(id: ConversationID) async throws -> Conversation
     func messages(
@@ -23,18 +23,18 @@ nonisolated protocol MessageRepository: Sendable {
     /// Bounded single-row hydrate when Realtime payload is insufficient.
     func message(id: MessageID, in conversationID: ConversationID) async throws -> Message?
     func send(_ message: Message) async throws -> Message
-    /// Web `mark_conversation_read(p_conversation_id)` — no extra parameters.
+    /// Web `mark_conversation_read(p_conversation_id)`, no extra parameters.
     func markRead(conversationID: ConversationID) async throws
     /// Web `mark_conversation_unread(p_conversation_id)`.
     func markUnread(conversationID: ConversationID) async throws
-    /// Web `ensureDmConversation` — find existing 1:1 or create shell + participants.
+    /// Web `ensureDmConversation`, find existing 1:1 or create shell + participants.
     func createConversation(participantIDs: [ProfileID]) async throws -> Conversation
-    /// Targeted duplicate DM lookup — used by creation coordinator after local inbox scan.
+    /// Targeted duplicate DM lookup, used by creation coordinator after local inbox scan.
     func findExistingDirectConversationID(
         viewerID: ProfileID,
         recipientID: ProfileID
     ) async throws -> ConversationID?
-    /// Block check for DM/group creation — `users_have_active_block`.
+    /// Block check for DM/group creation, `users_have_active_block`.
     func usersHaveActiveBlock(viewerID: ProfileID, otherID: ProfileID) async -> Bool
     /// Create 1:1 shell + participants; returns domain from known profile without refetch.
     func createDirectConversation(viewerID: ProfileID, recipient: Profile) async throws -> Conversation
@@ -44,13 +44,13 @@ nonisolated protocol MessageRepository: Sendable {
         recipients: [Profile],
         name: String?
     ) async throws -> Conversation
-    /// Web messages `handleDeleteConversation` — delete own `conversation_participants` row.
+    /// Web messages `handleDeleteConversation`, delete own `conversation_participants` row.
     func deleteConversation(id: ConversationID) async throws
-    /// Web `deleteForEveryone` — soft-delete own DM (`messages.deleted_for_everyone = true`).
+    /// Web `deleteForEveryone`, soft-delete own DM (`messages.deleted_for_everyone = true`).
     func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws
-    /// Web `deleteForMe` — per-user hide via `message_deletions`.
+    /// Web `deleteForMe`, per-user hide via `message_deletions`.
     func deleteMessageForMe(_ messageID: MessageID, in conversationID: ConversationID) async throws
-    /// Web `setConversationNotificationsEnabled` — per-user mute via `conversation_member_preferences`.
+    /// Web `setConversationNotificationsEnabled`, per-user mute via `conversation_member_preferences`.
     func setConversationNotificationsEnabled(
         conversationID: ConversationID,
         enabled: Bool
@@ -61,15 +61,15 @@ nonisolated protocol MessageRepository: Sendable {
     func fetchUserBlockStatus(otherID: ProfileID) async throws -> DmBlockStatus
     /// Web `set_dm_user_block`.
     func setDmUserBlock(conversationID: ConversationID, blocked: Bool) async throws -> DmBlockStatus
-    /// Profile-level block without an existing conversation — `set_user_block`.
+    /// Profile-level block without an existing conversation, `set_user_block`.
     func setUserBlock(otherID: ProfileID, blocked: Bool) async throws -> DmBlockStatus
-    /// Blocked accounts list — `list_blocked_accounts` (definer profile read for blocked peers).
+    /// Blocked accounts list, `list_blocked_accounts` (definer profile read for blocked peers).
     func fetchBlockedAccounts() async throws -> [BlockedAccount]
-    /// Bidirectional block peers — `get_active_block_peer_ids` (Feed filtering).
+    /// Bidirectional block peers, `get_active_block_peer_ids` (Feed filtering).
     func fetchActiveBlockPeerIDs() async throws -> Set<ProfileID>
-    /// Muted 1:1 peers — `list_muted_dm_peers`.
+    /// Muted 1:1 peers, `list_muted_dm_peers`.
     func fetchMutedDirectMessagePeers() async throws -> [MutedDirectMessagePeer]
-    /// DM message reactions — same emoji set as Trade Rooms (`message_reactions` table).
+    /// DM message reactions, same emoji set as Trade Rooms (`message_reactions` table).
     func insertMessageReaction(
         conversationID: ConversationID,
         messageID: MessageID,

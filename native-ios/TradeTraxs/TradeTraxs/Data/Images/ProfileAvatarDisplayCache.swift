@@ -3,7 +3,7 @@ import UIKit
 
 /// Process-lifetime decoded profile avatars for list surfaces (Activity, Follow list, Feed chrome).
 ///
-/// Keys match ``ImageCacheKey`` / ``DefaultImagePipeline`` so avatar identity follows media reference + purpose + sizing — not row ids.
+/// Keys match ``ImageCacheKey`` / ``DefaultImagePipeline`` so avatar identity follows media reference + purpose + sizing, not row ids.
 nonisolated enum ProfileAvatarDisplayCache {
     private struct State {
         var storage: [String: UIImage] = [:]

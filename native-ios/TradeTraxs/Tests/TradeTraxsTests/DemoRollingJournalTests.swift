@@ -10,14 +10,14 @@ final class DemoRollingJournalTests: XCTestCase {
         super.tearDown()
     }
 
-    func testRollingJournalSpansEighteenMonthsWithoutFutureTrades() throws {
+    func testRollingJournalSpansTwelveMonthsWithoutFutureTrades() throws {
         let now = Date()
         let trades = DemoRollingJournal.shared.trades(now: now, forceRebuild: true)
         XCTAssertGreaterThan(trades.count, 200)
 
         let calendar = TradingReportPeriods.eastern
         let today = calendar.startOfDay(for: now)
-        guard let earliest = calendar.date(byAdding: .month, value: -18, to: today) else {
+        guard let earliest = calendar.date(byAdding: .month, value: -DemoCanonicalDataset.rollingJournalHistoryMonths, to: today) else {
             XCTFail("history start")
             return
         }
@@ -59,9 +59,69 @@ final class DemoRollingJournalTests: XCTestCase {
         let summary = DashboardChartMetrics.compute(from: inputs, scope: scope, payoutTotal: 0, now: now)
         XCTAssertGreaterThan(summary.tradeCount, 80, "1Y scope should include a rich sample")
         XCTAssertFalse(summary.holdTimeHistogram.isEmpty)
-        XCTAssertNotEqual(summary.holdTime.first(where: { $0.label == "Avg Winner" })?.value, "—")
+        XCTAssertNotEqual(summary.holdTime.first(where: { $0.label == "Avg Winner" })?.value, "–")
         XCTAssertGreaterThanOrEqual(summary.rrTargetAnalysis.pairedCount, 5)
         XCTAssertFalse(summary.drawdownSeries.isEmpty)
+        XCTAssertNotNil(summary.averageMaxRrReached)
+        let metrics = TradingReportGenerator.metrics(for: trades)
+        XCTAssertNotNil(metrics.bestDayLabel)
+        XCTAssertNotNil(metrics.worstDayLabel)
+        XCTAssertNotNil(metrics.bestSessionLabel)
+        XCTAssertNotNil(metrics.worstSessionLabel)
+        XCTAssertNotNil(metrics.profitFactor)
+    }
+
+    func testLastSevenDaysSupportsScopedReportExtremes() {
+        let now = Date()
+        DemoRollingJournal.shared.invalidateCache()
+        let trades = DemoRollingJournal.shared.trades(now: now, forceRebuild: true)
+
+        let scope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .sevenDays,
+            customInterval: nil,
+            accountMode: .all,
+            showPublicOnly: false,
+            linkedAccountModes: DemoCanonicalDataset.accountModes()
+        )
+        let inputs = trades.map {
+            DashboardChartMetrics.Input(trade: $0, accountType: nil)
+        }
+        let scoped = DashboardChartMetrics.filteredTrades(from: inputs, scope: scope, now: now)
+        XCTAssertGreaterThan(scoped.count, 8, "7D scope should include a dense sample")
+        let metrics = TradingReportGenerator.metrics(for: scoped)
+        XCTAssertNotNil(metrics.profitFactor)
+        XCTAssertNotNil(metrics.bestDayLabel)
+        XCTAssertNotNil(metrics.worstDayLabel)
+        XCTAssertNotNil(metrics.bestSessionLabel)
+        XCTAssertNotNil(metrics.worstSessionLabel)
+    }
+
+    func testLastNinetyDaysSupportsPremiumDashboardCharts() {
+        let now = Date()
+        DemoRollingJournal.shared.invalidateCache()
+        let trades = DemoRollingJournal.shared.trades(now: now, forceRebuild: true)
+
+        let scope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .ninetyDays,
+            customInterval: nil,
+            accountMode: .all,
+            showPublicOnly: false,
+            linkedAccountModes: DemoCanonicalDataset.accountModes()
+        )
+        let inputs = trades.map {
+            DashboardChartMetrics.Input(trade: $0, accountType: nil)
+        }
+        let summary = DashboardChartMetrics.compute(from: inputs, scope: scope, payoutTotal: 0, now: now)
+        XCTAssertGreaterThan(summary.tradeCount, 60, "90D scope should include a rich sample")
+        XCTAssertFalse(summary.holdTimeHistogram.isEmpty)
+        XCTAssertNotNil(summary.profitFactor)
+        XCTAssertFalse(summary.drawdownSeries.isEmpty)
+        let scoped = DashboardChartMetrics.filteredTrades(from: inputs, scope: scope, now: now)
+        let metrics = TradingReportGenerator.metrics(for: scoped)
+        XCTAssertNotNil(metrics.bestDayLabel)
+        XCTAssertNotNil(metrics.worstDayLabel)
     }
 
     func testLastThirtyDaysSupportsPremiumDashboardCharts() {
@@ -83,8 +143,8 @@ final class DemoRollingJournalTests: XCTestCase {
         let summary = DashboardChartMetrics.compute(from: inputs, scope: scope, payoutTotal: 0, now: now)
         XCTAssertGreaterThan(summary.tradeCount, 30, "30D scope should include a rich sample")
         XCTAssertFalse(summary.holdTimeHistogram.isEmpty)
-        XCTAssertNotEqual(summary.holdTime.first(where: { $0.label == "Avg Winner" })?.value, "—")
-        XCTAssertNotEqual(summary.holdTime.first(where: { $0.label == "Avg Loser" })?.value, "—")
+        XCTAssertNotEqual(summary.holdTime.first(where: { $0.label == "Avg Winner" })?.value, "–")
+        XCTAssertNotEqual(summary.holdTime.first(where: { $0.label == "Avg Loser" })?.value, "–")
         XCTAssertGreaterThanOrEqual(summary.holdExtremes.count, 2)
         XCTAssertNotNil(summary.hourHighlights)
         XCTAssertGreaterThanOrEqual(summary.rrTargetAnalysis.pairedCount, 5)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact Add/Manage Vault sheet — Quick Save, folders, and removal.
+/// Compact Add/Manage Vault sheet, Quick Save, folders, and removal.
 struct VaultDestinationSheet: View {
     let ref: VaultContentRef
     @Bindable var store: VaultStore

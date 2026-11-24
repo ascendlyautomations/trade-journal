@@ -2,7 +2,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Completed payout cycles from `account_payout_cycles` — funded prop-firm history.
+/// Completed payout cycles from `account_payout_cycles`, funded prop-firm history.
 struct FundedPayoutCycleHistoryContent: View {
     let cycles: [AccountPayoutCycle]
 
@@ -40,7 +40,7 @@ struct FundedPayoutCycleHistoryContent: View {
     }
 }
 
-/// Owner-only manual payout rows — shared by Manage Accounts and Dashboard Payouts.
+/// Owner-only manual payout rows, shared by Manage Accounts and Dashboard Payouts.
 struct AccountPayoutListContent: View {
     @Bindable var viewModel: ManageAccountsViewModel
     let accountID: TradingAccountID

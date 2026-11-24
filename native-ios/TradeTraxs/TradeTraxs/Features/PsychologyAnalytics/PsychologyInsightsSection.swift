@@ -131,11 +131,7 @@ struct PsychologyInsightsSection: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        }
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.xs)
         .accessibilityIdentifier("dashboard.psychologyInsights.gaps")
@@ -153,11 +149,7 @@ struct PsychologyInsightsSection: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        }
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.xs)
         .accessibilityIdentifier("dashboard.psychologyInsights.empty")
@@ -189,9 +181,7 @@ struct PsychologyInsightsSection: View {
                     .experienceStyle(.footnote, color: colors.primaryText)
                     .fontWeight(.semibold)
                     .multilineTextAlignment(.leading)
-                Text(card.displayDetail)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .lineLimit(2)
+                DashboardExpandableInsightText(text: card.displayDetail)
                     .multilineTextAlignment(.leading)
                 Text("\(card.reliability.label) • \(card.sampleSize) trades")
                     .experienceStyle(.caption2, color: colors.tertiaryText)

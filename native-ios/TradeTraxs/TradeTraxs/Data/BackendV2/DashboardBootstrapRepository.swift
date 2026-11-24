@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// Dashboard V2 bootstrap — `rpc_v1_dashboard_bootstrap`.
+/// Dashboard V2 bootstrap, `rpc_v1_dashboard_bootstrap`.
 nonisolated struct DashboardRpcBootstrapRepository: DashboardBootstrapProviding {
     private let client: BackendV2RPCClient
 
@@ -30,7 +30,7 @@ nonisolated struct DashboardRpcBootstrapRepository: DashboardBootstrapProviding 
     }
 }
 
-/// Recent trade window shipped in dashboard bootstrap — metrics/equity use full scoped history server-side.
+/// Recent trade window shipped in dashboard bootstrap, metrics/equity use full scoped history server-side.
 nonisolated enum DashboardBootstrapTradeLimit {
     static let `default` = 120
 }
@@ -63,7 +63,7 @@ enum DashboardBootstrapLoader {
         category: "BackendV2.Dashboard"
     )
 
-    /// Flag ON entry — one RPC or cache; legacy only on confirmed missing RPC.
+    /// Flag ON entry, one RPC or cache; legacy only on confirmed missing RPC.
     @MainActor
     static func load(
         viewerID: ProfileID,
@@ -141,7 +141,7 @@ enum DashboardBootstrapLoader {
         )
     }
 
-    /// Authoritative network fetch + apply — invoked only via ``DashboardAuthoritativeRefreshCoordinator``.
+    /// Authoritative network fetch + apply, invoked only via ``DashboardAuthoritativeRefreshCoordinator``.
     @MainActor
     static func loadFromNetwork(
         viewerID: ProfileID,

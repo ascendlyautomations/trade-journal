@@ -1,6 +1,6 @@
 import Foundation
 
-/// Explore-only profile avatar hydration — does not alter global SessionProfileStore policy.
+/// Explore-only profile avatar hydration, does not alter global SessionProfileStore policy.
 enum ExploreProfileHydration {
     struct Metrics: Sendable {
         var batchRequestCount: Int = 0

@@ -2,7 +2,7 @@ import Foundation
 
 /// Derives broker import / reconnect action visibility from persisted connection + account sync state.
 nonisolated enum BrokerImportActionAvailability {
-    /// Dashboard “Import From Broker” entry — shared with eligibility / import routing (not Settings-only).
+    /// Dashboard “Import From Broker” entry, shared with eligibility / import routing (not Settings-only).
     static func showsDashboardImportEntry(
         optOut: Bool,
         connectionCount: Int,

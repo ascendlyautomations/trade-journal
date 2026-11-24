@@ -1,6 +1,6 @@
 import Foundation
 
-/// Wire contract for `rpc_v1_conversation_thread_bootstrap` (Phase G — personal/group thread).
+/// Wire contract for `rpc_v1_conversation_thread_bootstrap` (Phase G, personal/group thread).
 nonisolated struct ConversationThreadBootstrapV1: Codable, Sendable, Equatable {
     var meta: BootstrapMetaV1
     var data: DataPayload
@@ -24,7 +24,7 @@ nonisolated struct ConversationThreadBootstrapV1: Codable, Sendable, Equatable {
         try BackendV2Versioning.assertContractVersion(meta.contract_version)
     }
 
-    /// Required envelope fields — missing `messages` must not decode as silent success.
+    /// Required envelope fields, missing `messages` must not decode as silent success.
     func validateRequiredFields() throws {
         let conversationID = data.conversation.id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !conversationID.isEmpty else {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Helpers for SwiftUI previews / future Settings swatches — not feature UI.
+/// Helpers for SwiftUI previews / future Settings swatches, not feature UI.
 enum ThemePreviewSupport {
     static func swatchColors(for palette: SemanticColorPalette) -> [Color] {
         [

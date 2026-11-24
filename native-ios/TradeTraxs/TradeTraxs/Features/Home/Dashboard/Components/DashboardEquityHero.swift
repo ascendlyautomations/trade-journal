@@ -21,7 +21,7 @@ enum DashboardEquityCurvePresentation: Equatable {
     }
 }
 
-/// Stocks-style equity centerpiece — period performance first, curve second.
+/// Stocks-style equity centerpiece, period performance first, curve second.
 ///
 /// For one selected account, title/value/curve use tracked account value
 /// (starting balance + lifetime realized P&L, prop payout-aware when available).
@@ -152,7 +152,7 @@ struct DashboardEquityHero: View {
                     .contentTransition(.numericText())
             }
 
-            Text(numbersReady ? DashboardViewModel.money(displayEquity) : "—")
+            Text(numbersReady ? DashboardViewModel.money(displayEquity) : "–")
                 .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(colors.primaryText)
                 .minimumScaleFactor(0.7)
@@ -165,7 +165,7 @@ struct DashboardEquityHero: View {
             }
 
             HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-                Text(numbersReady ? signedMoney(summary.netPnL) : "—")
+                Text(numbersReady ? signedMoney(summary.netPnL) : "–")
                     .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
                     .foregroundStyle(toneColor(for: summary.netPnL))
                     .contentTransition(.numericText())
@@ -213,11 +213,7 @@ struct DashboardEquityHero: View {
         Button(action: action) {
             ExperienceIcon(icon: .settings, size: .sm, color: colors.secondaryText)
                 .frame(width: 32, height: 32)
-                .background(colors.fillSecondary.opacity(0.45), in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(colors.border.opacity(0.35), lineWidth: ExperienceBorder.hairline)
-                }
+                .experienceFilterIconCircle()
         }
         .buttonStyle(.experiencePlain)
         .accessibilityLabel("Drawdown settings")

@@ -212,7 +212,7 @@ final class ConversationScrollCoordinator {
         showsNewMessagesIndicator = false
     }
 
-    /// Trade Room channel revisit — restore reading position without a bottom pin pass.
+    /// Trade Room channel revisit, restore reading position without a bottom pin pass.
     func restoreReadingHistory(
         anchorMessageID: MessageID,
         newestMessageID: MessageID?,

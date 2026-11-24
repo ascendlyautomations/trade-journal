@@ -1,6 +1,6 @@
 import Foundation
 
-/// SwiftUI path depth — when non-empty, the tab bar is hidden on pushed surfaces (DM thread, detail, etc.).
+/// SwiftUI path depth, when non-empty, the tab bar is hidden on pushed surfaces (DM thread, detail, etc.).
 enum CreateTabGateNavigationPolicy {
     static func shouldAllowCreateTabShield(
         selectedTab: TabIdentifier,

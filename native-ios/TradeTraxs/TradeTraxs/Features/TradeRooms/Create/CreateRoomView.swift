@@ -1,7 +1,7 @@
 import PhotosUI
 import SwiftUI
 
-/// Native Create Trade Room — full setup flow via authoritative `rpc_v1_create_trade_room`.
+/// Native Create Trade Room, full setup flow via authoritative `rpc_v1_create_trade_room`.
 struct CreateRoomView: View {
     @State private var viewModel: CreateRoomViewModel
     @State private var photoItem: PhotosPickerItem?
@@ -457,7 +457,7 @@ private enum CreateRoomFormLayout {
     static let sectionSpacing = ExperienceSpacing.xxs
 }
 
-/// Tighter sheet chrome — less space between the nav header and “WHO CAN POST”.
+/// Tighter sheet chrome, less space between the nav header and “WHO CAN POST”.
 private enum CreateRoomChannelPermissionsLayout {
     static let scrollContentTopMargin = ExperienceSpacing.xxs
     static let sectionSpacing = ExperienceSpacing.xxs

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Canonical Free / TraxsPro marketing copy for native monetization surfaces.
-/// Align with ``lib/tradeTraxsPlans.ts`` — presentation only (not billing enforcement).
+/// Align with ``lib/tradeTraxsPlans.ts``, presentation only (not billing enforcement).
 nonisolated enum MonetizationPlanCopy {
     static let freePlanName = "TradeTraxs Free"
     static let proPlanName = "TraxsPro"
@@ -11,10 +11,32 @@ nonisolated enum MonetizationPlanCopy {
     static let exploreTraxsProButtonTitle = "Explore TraxsPro"
     static let previewWithSampleDataButtonTitle = "Preview with Sample Data"
     static let previewProButtonTitle = "Preview Pro"
+    static let paywallPreviewProBadge = "(Pro)"
+    static let paywallImprovementSectionTitle = "How TraxsPro Helps You Improve"
+
+    static func paywallPreviewFeatureTitle(for feature: TraxsProPreviewFeature) -> String {
+        switch feature {
+        case .reports:
+            return "Preview Reports"
+        case .expenseTracker:
+            return "Preview Expense Tracker"
+        case .dashboard:
+            return "Preview Dashboard"
+        case .tradingRules:
+            return "Preview Trading Rules"
+        }
+    }
     static let previewTraxsProRulesButtonTitle = "Preview TraxsPro Rules"
     static let exitPreviewButtonTitle = "Exit Preview"
     static let traxsProPreviewGenericSubtitle = "You're exploring TraxsPro with read-only sample data."
     static let dashboardPreviewSampleDataSubtitle = "Explore TraxsPro analytics with sample trades."
+    static let reportsPreviewSampleDataSubtitle = "Review trading and psychology reports with sample trades."
+    static let expenseTrackerPreviewSampleDataSubtitle = "Track prop firm costs and payouts with sample data."
+    static let tradingRulesPreviewSampleDataSubtitle = "Explore TraxsPro rule compliance with sample trades."
+
+    static let reportsFeatureGateTitle = "TraxsPro Reports"
+    static let reportsFeatureGateMessage =
+        "Performance and psychology report reviews are included with TraxsPro."
 
     static let tradingRulesFreeTierSummary =
         "Free includes five rule families. Saved TraxsPro values stay on your account."
@@ -87,6 +109,101 @@ nonisolated enum MonetizationPlanCopy {
 
     static let proEverythingInFreeHeading = "Everything in Free, plus:"
 
+    static let settingsFreePlanIncludedTitle = "What's Included in TradeTraxs Free"
+    static let settingsTraxProUnlockTitle = "What You Unlock with TraxsPro"
+    static let settingsTraxProIncludedTitle = "What's Included in TraxsPro"
+    static let settingsChoosePlanTitle = "Choose Your Plan"
+    static let settingsCurrentPlanTitle = "Your Current Plan"
+    static let freePlanPriceLabel = "$0"
+    static let freePlanShortDescription = "Core journaling and community features at no cost."
+
+    /// Compact Settings → Plan summary (expandable, collapsed by default).
+    static let freePlanSummaryHighlights: [PaywallHighlight] = [
+        PaywallHighlight(
+            id: "journal",
+            title: "Journal & imports",
+            detail: "Unlimited manual trades, CSV imports, and broker sync where available.",
+            systemImage: "book.closed"
+        ),
+        PaywallHighlight(
+            id: "analytics",
+            title: "Basic analytics",
+            detail: "Trading Scorecard and essential performance views.",
+            systemImage: "chart.bar"
+        ),
+        PaywallHighlight(
+            id: "rules",
+            title: "Trading rules",
+            detail: "Five rule families on Free; saved values stay on your account.",
+            systemImage: "checkmark.shield"
+        ),
+        PaywallHighlight(
+            id: "social",
+            title: "Community & rooms",
+            detail: "Feed, messaging, Trade Rooms, profiles, and daily clips.",
+            systemImage: "person.2"
+        ),
+        PaywallHighlight(
+            id: "accounts",
+            title: "Up to 3 accounts",
+            detail: "Active accounts plus check-ins, payouts, and calendar.",
+            systemImage: "tray.full"
+        ),
+    ]
+
+    static let traxProUnlockHighlights: [PaywallHighlight] = [
+        PaywallHighlight(
+            id: "advancedAnalytics",
+            title: "Advanced analytics",
+            detail: "Premium dashboard charts, hold time, hours, R:R, setup, and drawdown.",
+            systemImage: "chart.bar.xaxis"
+        ),
+        PaywallHighlight(
+            id: "discipline",
+            title: "Trading discipline",
+            detail: "Rules compliance, violation trends, and accountability analytics.",
+            systemImage: "checkmark.shield.fill"
+        ),
+        PaywallHighlight(
+            id: "reports",
+            title: "Reports & backtesting",
+            detail: "Trading and psychology reports plus Backtest Lab.",
+            systemImage: "doc.text.magnifyingglass"
+        ),
+        PaywallHighlight(
+            id: "psychology",
+            title: "Psychology & AI",
+            detail: "Psychology Insights, Coach, and AI Trade Analyst.",
+            systemImage: "brain.head.profile"
+        ),
+        PaywallHighlight(
+            id: "prop",
+            title: "Prop firm toolkit",
+            detail: "Expense Tracker and advanced prop firm analytics.",
+            systemImage: "building.columns"
+        ),
+        PaywallHighlight(
+            id: "scale",
+            title: "Unlimited scale",
+            detail: "Unlimited accounts, clips, and copy trading.",
+            systemImage: "infinity"
+        ),
+    ]
+
+    static func settingsPlanPeriodBlurb(for product: StoreKitTraxProProduct) -> String {
+        let label = product.subscriptionPeriodLabel.lowercased()
+        if label.contains("year") {
+            return "One payment per year, best long-term value."
+        }
+        if label.contains("6") && label.contains("month") {
+            return "Six months of TraxsPro, billed once."
+        }
+        if label == "monthly" || (label.contains("month") && !label.contains("6")) {
+            return "Flexible monthly billing, cancel anytime."
+        }
+        return "Auto-renews until cancelled in Apple ID Subscriptions."
+    }
+
     struct PaywallHighlight: Identifiable, Hashable, Sendable {
         let id: String
         let title: String
@@ -140,6 +257,40 @@ nonisolated enum MonetizationPlanCopy {
         ),
     ]
 
+    /// Outcome-focused copy in the paywall improvement disclosure (not a feature checklist).
+    static let paywallOutcomeHighlights: [PaywallHighlight] = [
+        PaywallHighlight(
+            id: "edge",
+            title: "Find your trading edge",
+            detail: "Discover which setups, sessions, and habits produce your best results.",
+            systemImage: "lightbulb.max"
+        ),
+        PaywallHighlight(
+            id: "discipline",
+            title: "Improve discipline",
+            detail: "Identify rule violations and patterns behind avoidable losses.",
+            systemImage: "checkmark.shield"
+        ),
+        PaywallHighlight(
+            id: "psychology",
+            title: "Understand your psychology",
+            detail: "Recognize emotional triggers and behavioral trends.",
+            systemImage: "brain.head.profile"
+        ),
+        PaywallHighlight(
+            id: "expenses",
+            title: "Manage trading expenses",
+            detail: "Track prop firm costs, payouts, and profitability.",
+            systemImage: "dollarsign.circle"
+        ),
+        PaywallHighlight(
+            id: "strategy",
+            title: "Refine your strategy",
+            detail: "Use deeper reports and backtesting to evaluate performance.",
+            systemImage: "chart.xyaxis.line"
+        ),
+    ]
+
     /// Full TradeTraxs Free plan (Settings → Plan disclosure).
     static let freePlanFeatures: [String] = [
         "Up to 3 active trading accounts",
@@ -149,7 +300,7 @@ nonisolated enum MonetizationPlanCopy {
         "Basic performance analytics and Trading Scorecard",
         "Trading Rules configuration",
         "Psychology check-ins and payout recording",
-        "Trade Rooms and livestreams — join and host",
+        "Trade Rooms and livestreams, join and host",
         "Social feed, messaging, profiles, and leaderboards",
         "\(FreeTierPolicy.dailyClipLimit) clips per UTC calendar day",
     ]
@@ -168,6 +319,6 @@ nonisolated enum MonetizationPlanCopy {
         "Copy Trading",
     ]
 
-    /// Legacy single-line list — use ``proPlanFeatures`` in new UI.
+    /// Legacy single-line list, use ``proPlanFeatures`` in new UI.
     static var proBenefitLines: [String] { proPlanFeatures }
 }

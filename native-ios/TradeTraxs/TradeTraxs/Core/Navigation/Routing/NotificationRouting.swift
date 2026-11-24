@@ -94,7 +94,7 @@ nonisolated struct NotificationRouter: NotificationRouting {
                 return .home(.tradeDetail(tradeID))
             }
             if let postID = notification.postID {
-                // Achievement query may have been folded into postID — prefer achievement route when href says so.
+                // Achievement query may have been folded into postID, prefer achievement route when href says so.
                 if let achievementID = Self.achievementID(from: notification.rawUserInfo["href"]) {
                     return .feed(.achievement(AchievementID(achievementID)))
                 }

@@ -152,7 +152,7 @@ struct RoomInfoView: View {
                 }
             }
 
-            if viewModel.isMember, !viewModel.canManageRoom {
+            if viewModel.isMember, !viewModel.isOwner {
                 roomInfoCardDivider
                 roomInfoCardRow {
                     Button(role: .destructive) {

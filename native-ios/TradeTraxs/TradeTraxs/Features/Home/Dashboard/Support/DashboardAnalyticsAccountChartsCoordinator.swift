@@ -6,7 +6,7 @@ enum DashboardAnalyticsAccountChartsCoordinator {
     private static var selectionToken: UInt64 = 0
     private static var inFlightAccountID: TradingAccountID?
 
-    /// Call when the user changes account filter — invalidates pending apply for prior selection.
+    /// Call when the user changes account filter, invalidates pending apply for prior selection.
     static func bumpSelection() -> UInt64 {
         selectionToken &+= 1
         inFlightAccountID = nil
@@ -44,6 +44,9 @@ enum DashboardAnalyticsAccountChartsCoordinator {
             )
         } catch {
             if token == selectionToken, inFlightAccountID == selectedAccountID {
+                if !TraxsProPreviewSupport.isAnyPreviewActive {
+                    _ = ProLimitPresentation.presentUpgradeIfProGate(error)
+                }
                 let nonRetryable = DashboardAnalyticsChartsFailurePolicy.shouldNotRetry(error)
                 store.markFailed(
                     accountID: selectedAccountID,

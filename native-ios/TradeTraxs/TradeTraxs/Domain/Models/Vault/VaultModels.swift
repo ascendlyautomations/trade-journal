@@ -1,6 +1,6 @@
 import Foundation
 
-/// Stable Vault content key — mirrors ``InteractionTarget`` routing + Supabase `vault_items`.
+/// Stable Vault content key, mirrors ``InteractionTarget`` routing + Supabase `vault_items`.
 nonisolated struct VaultContentRef: Hashable, Codable, Sendable {
     var contentType: VaultContentType
     var contentID: String
@@ -60,7 +60,7 @@ nonisolated struct VaultItem: Hashable, Codable, Sendable, Identifiable {
     var folderIDs: [VaultFolderID]
 }
 
-/// Session snapshot for a content ref — used by cards and detail headers.
+/// Session snapshot for a content ref, used by cards and detail headers.
 nonisolated struct VaultItemState: Hashable, Codable, Sendable {
     var isVaulted: Bool
     var vaultItemID: VaultItemID?

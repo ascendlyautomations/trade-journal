@@ -3,7 +3,7 @@ import Foundation
 /// Mirrors web `useProfileStatistics` overview / profit-factor formulas.
 ///
 /// Source universe: public trades already filtered with `is_public = true`.
-/// Backtest rows (`mode` or `account_type` == "backtest") are excluded — same as web.
+/// Backtest rows (`mode` or `account_type` == "backtest") are excluded, same as web.
 nonisolated enum ProfileOverviewMetrics {
     struct TradeInput: Sendable, Equatable {
         var pnl: Decimal?
@@ -18,9 +18,9 @@ nonisolated enum ProfileOverviewMetrics {
         var winRate: Decimal
         var netPnL: Decimal
         var averageRR: Decimal?
-        /// `nil` when there are no losses — same as web `profitFactor`.
+        /// `nil` when there are no losses, same as web `profitFactor`.
         var profitFactor: Decimal?
-        /// Not shown on web Profile — always `nil` for parity.
+        /// Not shown on web Profile, always `nil` for parity.
         var expectancy: Decimal?
     }
 
@@ -34,7 +34,7 @@ nonisolated enum ProfileOverviewMetrics {
         }
     }
 
-    /// Public journal rows — same universe as web `fetchSummaryTrades` / REST profile stats.
+    /// Public journal rows, same universe as web `fetchSummaryTrades` / REST profile stats.
     static func tradeInputs(fromPublicJournal trades: [Trade]) -> [TradeInput] {
         trades
             .filter { $0.visibility == .public }

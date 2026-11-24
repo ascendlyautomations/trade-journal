@@ -2,7 +2,7 @@ import Foundation
 
 /// Short transport ceiling for the lightweight viewer sync fingerprint RPC.
 ///
-/// Missing/un deployed production RPCs must fail fast — never block cold launch for 45s.
+/// Missing/un deployed production RPCs must fail fast, never block cold launch for 45s.
 nonisolated enum ViewerSyncTransportTimeout {
     static let defaultNanoseconds: UInt64 = 5_000_000_000
 

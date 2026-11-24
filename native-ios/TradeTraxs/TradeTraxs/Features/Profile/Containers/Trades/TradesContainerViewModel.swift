@@ -6,7 +6,7 @@ import Observation
 final class TradesContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
     private(set) var journalItems: [TradeOwnerJournalSummary] = []
-    /// Grouped Profile Trades cards — rebuilt with ``updateStateForVisibleItems()`` (includes copy mode summary).
+    /// Grouped Profile Trades cards, rebuilt with ``updateStateForVisibleItems()`` (includes copy mode summary).
     private(set) var renderedTradeSummaries: [TradeSummary] = []
 
     /// Flat public trade rows backing the section (includes copy siblings before display grouping).
@@ -23,7 +23,7 @@ final class TradesContainerViewModel {
 
     var filter: ProfileTradesFilter = .all
     var sort: ProfileTradesSort = .newest
-    var sharePayload: SharePayload?
+    var journalSharePresentation: JournalTradeShareSupport.Presentation?
     var pendingDelete: TradeSummary?
     var deleteErrorMessage: String?
     private(set) var deletingTradeID: TradeID?
@@ -58,14 +58,14 @@ final class TradesContainerViewModel {
     var hasAuthoritativePayload: Bool { hasLoaded }
 
     #if DEBUG
-    /// Tests — loaded list with a stale pagination footer and an explicit cursor.
+    /// Tests, loaded list with a stale pagination footer and an explicit cursor.
     func testing_setLoadedPagination(nextCursor: String?, paginationError: String?) {
         hasLoaded = true
         self.nextCursor = nextCursor
         paginationErrorMessage = paginationError
     }
 
-    /// Tests — simulate successful `rpc_v1_profile_tab_trades_v2` hydration.
+    /// Tests, simulate successful `rpc_v1_profile_tab_trades_v2` hydration.
     func installAuthoritativeV2JournalForTests(_ rows: [TradeOwnerJournalSummary]) {
         hasAuthoritativeV2Journal = true
         journalItems = rows
@@ -73,11 +73,6 @@ final class TradesContainerViewModel {
         updateStateForVisibleItems()
     }
     #endif
-
-    struct SharePayload: Identifiable, Equatable {
-        let id = UUID()
-        let text: String
-    }
 
     init(
         profileID: ProfileID,
@@ -103,7 +98,7 @@ final class TradesContainerViewModel {
         self.isOwner = isOwner
     }
 
-    /// Screen-owned engagement prefetch — views must not call the repository path.
+    /// Screen-owned engagement prefetch, views must not call the repository path.
     func prefetchEngagement(for tradeIDs: [TradeID]) {
         let targets = tradeIDs.map { InteractionTarget.trade($0) }
         guard !targets.isEmpty else { return }
@@ -137,13 +132,13 @@ final class TradesContainerViewModel {
         }
     }
 
-    /// Shown when trades exist but the active filter/sort yields no rows — keeps filters visible (Stats parity).
+    /// Shown when trades exist but the active filter/sort yields no rows, keeps filters visible (Stats parity).
     var filterEmptyMessage: String? {
         guard hasLoaded, !journalItems.isEmpty, visibleItems.isEmpty else { return nil }
         return emptyMessage
     }
 
-    /// Applies screen bootstrap — uses section data when Stage 2 already filled it.
+    /// Applies screen bootstrap, uses section data when Stage 2 already filled it.
     func applyBootstrap(_ snapshot: ProfileState) {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
             isScreenOwned = true
@@ -259,7 +254,7 @@ final class TradesContainerViewModel {
         acceptBootstrapPreviewOrHydrate(snapshot)
     }
 
-    /// Profile → Trades tab — ensure V2 journal hydration even after bootstrap `didLoadTrades`.
+    /// Profile → Trades tab, ensure V2 journal hydration even after bootstrap `didLoadTrades`.
     func hydrateAuthoritativeJournalIfNeeded() {
         let decision = Self.v2HydrationDecision(profileID: profileID, rpc: rpc, hasV2Journal: hasAuthoritativeV2Journal)
         #if DEBUG
@@ -287,7 +282,7 @@ final class TradesContainerViewModel {
         if !snapshot.accountSizes.isEmpty { accountSizes = snapshot.accountSizes }
     }
 
-    /// Owner journal create/update — upsert immediately; optional page-1 reload uses generation guards.
+    /// Owner journal create/update, upsert immediately; optional page-1 reload uses generation guards.
     func noteJournalMutationSucceeded(_ trade: Trade, preservingExisting existingItems: [TradeSummary] = []) {
         guard trade.ownerProfileID == profileID else { return }
         guard trade.visibility == .public else {
@@ -427,12 +422,9 @@ final class TradesContainerViewModel {
     }
 
     func shareTrade(_ summary: TradeSummary) {
+        guard isOwner else { return }
         ExperienceHaptics.play(.selection)
-        let pnl = TradeDisplay.pnlText(summary.realizedPnL)
-        let side = summary.side == .long ? "Long" : "Short"
-        sharePayload = SharePayload(
-            text: "\(summary.symbol.ticker) \(side) \(pnl) on TradeTraxs"
-        )
+        journalSharePresentation = JournalTradeShareSupport.presentation(for: summary)
     }
 
     func openLinkedClip(_ reelID: ReelID) {
@@ -445,7 +437,7 @@ final class TradesContainerViewModel {
         linkedReelPresentationByTradeID[tradeID, default: 0]
     }
 
-    /// Owner link/unlink — merge reel into cache and refresh only affected trade cards.
+    /// Owner link/unlink, merge reel into cache and refresh only affected trade cards.
     func applyReelLinkMutation(_ reel: Reel) {
         guard reel.authorProfileID == profileID else { return }
         let priorTradeID = detailCache.reel(id: reel.id)?.linkedTradeID
@@ -459,7 +451,7 @@ final class TradesContainerViewModel {
         }
     }
 
-    /// Owner clip delete — clear trade→clip index and refresh the linked trade row.
+    /// Owner clip delete, clear trade→clip index and refresh the linked trade row.
     func applyLinkedReelDeleted(_ reelID: ReelID) {
         let priorTradeID = detailCache.reel(id: reelID)?.linkedTradeID
         invalidateInFlightLinkedReelsHydration()
@@ -487,7 +479,7 @@ final class TradesContainerViewModel {
         updateStateForVisibleItems()
     }
 
-    /// Pass ``summary`` from the confirmation dialog — `pendingDelete` is often cleared before the action runs.
+    /// Pass ``summary`` from the confirmation dialog, `pendingDelete` is often cleared before the action runs.
     func confirmDelete(summary explicitSummary: TradeSummary? = nil) async {
         guard isOwner, deletingTradeID == nil else { return }
         let summary = explicitSummary ?? pendingDelete
@@ -907,7 +899,7 @@ final class TradesContainerViewModel {
         scheduleLinkedReelsHydrationIfNeeded()
     }
 
-    /// Trade-card clip thumbnails — independent of Profile → Clips tab bootstrap.
+    /// Trade-card clip thumbnails, independent of Profile → Clips tab bootstrap.
     func scheduleLinkedReelsHydrationIfNeeded() {
         guard let feed, canViewContent else { return }
         let tradeIDs = visibleItems.map(\.id)
@@ -947,7 +939,7 @@ final class TradesContainerViewModel {
         )
     }
 
-    /// Public profile card / chip caption — provider from journal + account metadata, type from trade row.
+    /// Public profile card / chip caption, provider from journal + account metadata, type from trade row.
     func publicPostedAccountCaption(for summary: TradeSummary) -> String? {
         guard summary.mode != .copyTraded else { return nil }
         return TradeDisplay.publicPostedAccountCaption(
@@ -1238,7 +1230,7 @@ final class TradesContainerViewModel {
 }
 
 nonisolated enum TradeDisplay {
-    /// Trading-platform price — `$20,153.25` (USD grouping, preserved decimals).
+    /// Trading-platform price, `$20,153.25` (USD grouping, preserved decimals).
     private static let priceFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -1257,7 +1249,7 @@ nonisolated enum TradeDisplay {
         return formatter
     }()
 
-    /// Compact trade timestamp — `9:37AM 7/31/26`.
+    /// Compact trade timestamp, `9:37AM 7/31/26`.
     private static let compactDateTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1267,7 +1259,7 @@ nonisolated enum TradeDisplay {
         return formatter
     }()
 
-    /// Clock only — `1:05PM` (shared message cards).
+    /// Clock only, `1:05PM` (shared message cards).
     private static let compactClockFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1277,7 +1269,7 @@ nonisolated enum TradeDisplay {
         return formatter
     }()
 
-    /// Trade day on message cards — `11/20/26`.
+    /// Trade day on message cards, `11/20/26`.
     private static let compactShortDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1289,10 +1281,10 @@ nonisolated enum TradeDisplay {
         NumberDisplay.pnlWholeDollars(money)
     }
 
-    /// Web parity — null/empty tickers render as em dash (`ProfileTradeCard`).
+    /// Web parity, null/empty tickers render as a missing-value dash (`ProfileTradeCard`).
     static func tickerText(_ ticker: String) -> String {
         let trimmed = ticker.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "—" : trimmed
+        return trimmed.isEmpty ? "–" : trimmed
     }
 
     static func tickerText(_ symbol: Symbol) -> String {
@@ -1300,14 +1292,14 @@ nonisolated enum TradeDisplay {
     }
 
     static func priceText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return priceFormatter.string(from: NSDecimalNumber(decimal: value))
             ?? "$\(value)"
     }
 
-    /// Collapsed Profile card — nearest whole dollar, display only (`$29,406` from `29405.50`).
+    /// Collapsed Profile card, nearest whole dollar, display only (`$29,406` from `29405.50`).
     static func profileCardExecutionPriceText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         var input = value
         var rounded = Decimal()
         NSDecimalRound(&rounded, &input, 0, .plain)
@@ -1331,11 +1323,11 @@ nonisolated enum TradeDisplay {
     }
 
     static func rrText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return "RR \(NumberDisplay.decimal(value, minimumFractionDigits: 1, maximumFractionDigits: 1))"
     }
 
-    /// Compact R multiple — `+7.1R`.
+    /// Compact R multiple, `+7.1R`.
     static func compactRRText(_ value: Decimal?) -> String? {
         guard let value else { return nil }
         let formatted = "\(NumberDisplay.decimal(abs(value), minimumFractionDigits: 1, maximumFractionDigits: 1))R"
@@ -1344,12 +1336,12 @@ nonisolated enum TradeDisplay {
         return formatted
     }
 
-    /// Compact hold label — `8m 42s`.
+    /// Compact hold label, `8m 42s`.
     static func compactHoldDuration(seconds: Int) -> String? {
         durationTextFromSeconds(seconds)
     }
 
-    /// Journal-style R:R — `1:2.9` when value is the reward multiple.
+    /// Journal-style R:R, `1:2.9` when value is the reward multiple.
     static func journalRRText(_ value: Decimal?) -> String? {
         guard let value else { return nil }
         return NumberDisplay.journalRewardMultiple(value)
@@ -1371,9 +1363,9 @@ nonisolated enum TradeDisplay {
         return NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 8)
     }
 
-    /// Quick stats — em dash when contracts were absent on the wire (mapped as zero).
+    /// Quick stats, missing-value dash when contracts were absent on the wire (mapped as zero).
     static func contractsText(for quantity: Decimal) -> String {
-        guard quantity != 0 else { return "—" }
+        guard quantity != 0 else { return "–" }
         return contractsText(quantity)
     }
 
@@ -1388,7 +1380,7 @@ nonisolated enum TradeDisplay {
         return TradeHoldDuration.formatSeconds(seconds, allowSubMinuteSeconds: allowSubMinute)
     }
 
-    /// Public trade-card duration — derived only from entry/exit timestamps.
+    /// Public trade-card duration, derived only from entry/exit timestamps.
     static func cardDurationText(for trade: Trade) -> String? {
         cardDurationText(entryAt: trade.entryAt, exitAt: trade.exitAt)
     }
@@ -1433,7 +1425,7 @@ nonisolated enum TradeDisplay {
         holdDuration(for: TradeSummaryMapper.listMatchTrade(from: item))
     }
 
-    /// Personal Trades list — prefer entry→exit duration (full components) over stored abbreviations.
+    /// Personal Trades list, prefer entry→exit duration (full components) over stored abbreviations.
     static func journalCardDuration(for item: TradeOwnerJournalSummary) -> String? {
         let trade = TradeSummaryMapper.listMatchTrade(from: item)
         if let fromTimes = durationText(entryAt: trade.entryAt, exitAt: trade.exitAt) {
@@ -1496,7 +1488,7 @@ nonisolated enum TradeDisplay {
         compactDateTimeFormatter.string(from: date)
     }
 
-    /// Messages shared-trade card — `1:05PM - 2:00PM 11/20/26 (55m)` from execution timestamps.
+    /// Messages shared-trade card, `1:05PM - 2:00PM 11/20/26 (55m)` from execution timestamps.
     static func sharedMessageExecutionStamp(for trade: Trade) -> String {
         sharedMessageExecutionStamp(
             entryAt: trade.entryAt,
@@ -1561,7 +1553,7 @@ nonisolated enum TradeDisplay {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// `55m`, `1h 25m`, `2h` — no leading word “Duration”.
+    /// `55m`, `1h 25m`, `2h`, no leading word “Duration”.
     private static func messageCardCompactDuration(seconds: Int) -> String? {
         guard seconds > 0 else { return nil }
         if seconds >= 86_400 {
@@ -1580,7 +1572,7 @@ nonisolated enum TradeDisplay {
         return "\(secs)s"
     }
 
-    /// Entry/exit time in quick stats — time-only when paired timestamps share a day.
+    /// Entry/exit time in quick stats, time-only when paired timestamps share a day.
     static func entryExecutionTimeText(for trade: Trade) -> String {
         entryExecutionTimeText(entryAt: trade.entryAt, exitAt: trade.exitAt)
     }
@@ -1602,11 +1594,11 @@ nonisolated enum TradeDisplay {
     }
 
     static func exitExecutionTimeText(entryAt: Date, exitAt: Date?) -> String {
-        guard let exitAt else { return "—" }
+        guard let exitAt else { return "–" }
         return executionTimestampText(exitAt, compareTo: entryAt)
     }
 
-    /// Shared social trade detail — entry/exit clock times on one line.
+    /// Shared social trade detail, entry/exit clock times on one line.
     static func socialSharedExecutionTimeRangeText(for trade: Trade) -> String {
         socialSharedExecutionTimeRangeText(entryAt: trade.entryAt, exitAt: trade.exitAt)
     }
@@ -1619,13 +1611,13 @@ nonisolated enum TradeDisplay {
         return "\(entry) – \(exit)"
     }
 
-    /// Journal trade detail header — only when `exitAt` is set.
+    /// Journal trade detail header, only when `exitAt` is set.
     static func journalTradeDetailExecutionRangeText(for trade: Trade) -> String? {
         guard trade.exitAt != nil else { return nil }
         return journalExecutionTimeRangeText(entryAt: trade.entryAt, exitAt: trade.exitAt)
     }
 
-    /// Owner Trades list — `Nov 17 10:15 AM – 11:15 AM` or `Nov 17 10:30 AM – Nov 18 1:00 PM`.
+    /// Owner Trades list, `Nov 17 10:15 AM – 11:15 AM` or `Nov 17 10:30 AM – Nov 18 1:00 PM`.
     static func journalExecutionTimeRangeText(entryAt: Date, exitAt: Date?) -> String {
         let entry = journalExecutionStampFormatter.string(from: entryAt)
         guard let exitAt else { return entry }
@@ -1645,18 +1637,18 @@ nonisolated enum TradeDisplay {
         return formatter
     }()
 
-    /// Feed copy-trade metadata — execution clocks, then the canonical trade date.
+    /// Feed copy-trade metadata, execution clocks, then the canonical trade date.
     static func feedCopyExecutionMetadata(entryAt: Date, exitAt: Date?) -> String {
         let times = socialSharedExecutionTimeRangeText(entryAt: entryAt, exitAt: exitAt)
         return "\(times) • \(dateText(entryAt))"
     }
 
-    /// Shared social trade detail — calendar day for the execution (entry day).
+    /// Shared social trade detail, calendar day for the execution (entry day).
     static func socialSharedTradeDateText(for trade: Trade) -> String {
         dateText(trade.entryAt)
     }
 
-    /// Social trade detail metrics — calendar date under entry/exit clock time.
+    /// Social trade detail metrics, calendar date under entry/exit clock time.
     static func socialDetailExecutionDateText(for date: Date) -> String {
         dateText(date)
     }
@@ -1665,7 +1657,7 @@ nonisolated enum TradeDisplay {
         executionTimeOnlyFormatter.string(from: date)
     }
 
-    /// Public social header — `Live`, `Funded`, `Eval`, etc.
+    /// Public social header, `Live`, `Funded`, `Eval`, etc.
     static func socialHeaderAccountBadge(for trade: Trade) -> String? {
         if trade.mode == .copyTraded { return nil }
         if let badge = trade.publicAccountBadge?
@@ -1716,7 +1708,7 @@ nonisolated enum TradeDisplay {
         }
     }
 
-    /// Web `formatTradingAccountModeLabel` — short header status (`Eval`, not `Evaluation`).
+    /// Web `formatTradingAccountModeLabel`, short header status (`Eval`, not `Evaluation`).
     static func accountModeCompactTitle(_ mode: TradingAccountMode) -> String {
         switch mode {
         case .evaluation: return "Eval"
@@ -1727,7 +1719,7 @@ nonisolated enum TradeDisplay {
         }
     }
 
-    /// Web `formatAccountBalanceForDisplay` — `50000` → `50K`.
+    /// Web `formatAccountBalanceForDisplay`, `50000` → `50K`.
     static func accountSizeText(_ size: Decimal?) -> String {
         guard let size else { return "" }
         let number = NSDecimalNumber(decimal: size).doubleValue
@@ -1759,7 +1751,7 @@ nonisolated enum TradeDisplay {
         "Trading Account",
     ]
 
-    /// Posted trade caption — `Alpha Futures · Funded` (provider + compact type, no account ids).
+    /// Posted trade caption, `Alpha Futures · Funded` (provider + compact type, no account ids).
     static func publicPostedAccountCaption(
         providerName: String?,
         accountMode: TradingAccountMode? = nil,
@@ -1808,7 +1800,7 @@ nonisolated enum TradeDisplay {
         return nil
     }
 
-    /// Account identity line — journal+owner: `Name • Number`; public/social: provider · type.
+    /// Account identity line, journal+owner: `Name • Number`; public/social: provider · type.
     static func accountIdentityLine(
         name: String?,
         size: Decimal? = nil,

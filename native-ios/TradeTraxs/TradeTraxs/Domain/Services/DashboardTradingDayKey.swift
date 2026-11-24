@@ -1,6 +1,6 @@
 import Foundation
 
-/// Futures trading day key — web `getDashboardTradingDayKey` / `getTradingDayKey` (6 PM America/New_York).
+/// Futures trading day key, web `getDashboardTradingDayKey` / `getTradingDayKey` (6 PM America/New_York).
 nonisolated enum DashboardTradingDayKey {
     private static let eastern = TimeZone(identifier: "America/New_York") ?? .gmt
 

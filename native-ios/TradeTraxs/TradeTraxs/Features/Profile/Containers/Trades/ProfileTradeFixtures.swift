@@ -55,12 +55,12 @@ nonisolated enum ProfileTradeFixtures {
                 visibility: .private,
                 publicCaption: nil,
                 thumbnail: screenshot,
-                notePreview: "Stopped out — late entry.",
+                notePreview: "Stopped out, late entry.",
                 strategy: "Failed breakdown",
                 createdAt: now.addingTimeInterval(-172_800),
                 updatedAt: now.addingTimeInterval(-170_000)
             ),
-            // No image + no notes — dense execution card
+            // No image + no notes, dense execution card
             Trade(
                 id: TradeID("dev-trade-3"),
                 ownerProfileID: profileID,
@@ -146,7 +146,7 @@ nonisolated enum ProfileTradeFixtures {
         ]
     }
 
-    /// Web `accounts.account_number` — owner-only display.
+    /// Web `accounts.account_number`, owner-only display.
     static func accountNumbers() -> [TradingAccountID: String] {
         [
             TradingAccountID("dev-account"): "500123",

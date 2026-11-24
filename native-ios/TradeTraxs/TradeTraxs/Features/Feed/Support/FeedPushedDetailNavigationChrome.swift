@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Feed stack detail pushes — chevron-only back (no previous-screen "Feed" title).
+/// Feed stack detail pushes, chevron-only back (no previous-screen "Feed" title).
 struct FeedPushedDetailNavigationChrome: ViewModifier {
     @Environment(\.dismiss) private var dismiss
 

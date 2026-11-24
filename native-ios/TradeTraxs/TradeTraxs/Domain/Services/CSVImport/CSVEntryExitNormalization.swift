@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `normalizeCsvEntryExitTimestamps` — earliest entry, latest exit; optional price swap (Tradovate).
+/// Web `normalizeCsvEntryExitTimestamps`, earliest entry, latest exit; optional price swap (Tradovate).
 nonisolated enum CSVEntryExitNormalization {
     struct Result: Sendable {
         var entry: Date

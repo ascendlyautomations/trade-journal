@@ -1,12 +1,12 @@
 import Foundation
 
-/// Public copy-trade aggregate — safe account id + mode only.
+/// Public copy-trade aggregate, safe account id + mode only.
 nonisolated struct TradeParticipatingAccountModeWireV1: Codable, Sendable, Equatable {
     var account_id: String?
     var account_mode: String?
 }
 
-/// Phase 8B — canonical TradeSummary wire (`summary_schema = trade_summary_v1`).
+/// Phase 8B, canonical TradeSummary wire (`summary_schema = trade_summary_v1`).
 nonisolated struct TradeSummaryWireV1: Codable, Sendable, Equatable {
     static let schema = "trade_summary_v1"
 
@@ -46,7 +46,7 @@ nonisolated struct TradeSummaryWireV1: Codable, Sendable, Equatable {
     }
 }
 
-/// Phase 8D — owner Journal list row (`trade_summary_v1` + owner extension keys).
+/// Phase 8D, owner Journal list row (`trade_summary_v1` + owner extension keys).
 nonisolated struct TradeOwnerJournalSummaryWireV1: Codable, Sendable, Equatable {
     var summary_schema: String
     var id: String
@@ -81,7 +81,7 @@ nonisolated struct TradeOwnerJournalSummaryWireV1: Codable, Sendable, Equatable 
     var source_account_id: String?
     var copied_account_ids: [String]?
     var copy_trading_group_id: String?
-    /// Profile copy linkage — `accounts.mode` for this row's participating account.
+    /// Profile copy linkage, `accounts.mode` for this row's participating account.
     var account_mode: String?
     var participating_account_modes: [TradeParticipatingAccountModeWireV1]?
 
@@ -95,7 +95,7 @@ nonisolated struct TradeOwnerJournalSummaryWireV1: Codable, Sendable, Equatable 
     }
 }
 
-/// Trades list bootstrap — V2 envelope (`contract_version = v2`, TradeSummary rows).
+/// Trades list bootstrap, V2 envelope (`contract_version = v2`, TradeSummary rows).
 nonisolated struct TradesListBootstrapV2: Codable, Sendable, Equatable {
     var meta: Meta
     var data: DataPayload
@@ -129,7 +129,7 @@ nonisolated struct TradesListBootstrapV2: Codable, Sendable, Equatable {
     }
 }
 
-/// Profile tab trades bootstrap — V2 envelope (`contract_version = v2`).
+/// Profile tab trades bootstrap, V2 envelope (`contract_version = v2`).
 nonisolated struct ProfileTabBootstrapV2: Codable, Sendable, Equatable {
     var meta: ProfileTabBootstrapMetaV2
     var data: DataPayload

@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Classifies how a profile avatar identifier should be resolved — never log the raw value.
+/// Classifies how a profile avatar identifier should be resolved, never log the raw value.
 nonisolated enum ProfileAvatarSourceKind: String, Sendable, CaseIterable {
     case fullURL
     case storagePath

@@ -40,7 +40,7 @@ enum TradeHistoryOwnerSeed {
         return Result(
             items: page,
             nextCursor: cursor,
-            /// True when the owner snapshot itself may be incomplete — not local page pagination.
+            /// True when the owner snapshot itself may be incomplete, not local page pagination.
             isPartial: ownerTrades.count >= SessionDiskCache.ownerTradesMaxCount
         )
     }

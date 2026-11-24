@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Press-and-hold pause on the Story media area — cancels if the finger moves enough to swipe.
+/// Press-and-hold pause on the Story media area, cancels if the finger moves enough to swipe.
 struct StoryHoldToPauseGesture: ViewModifier {
     var isEnabled: Bool
     var onHoldChanged: (Bool) -> Void

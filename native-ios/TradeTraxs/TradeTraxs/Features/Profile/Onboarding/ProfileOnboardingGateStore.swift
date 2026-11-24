@@ -84,7 +84,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         OAuthProfileOnboardingNameStore.resetAll()
     }
 
-    /// Explore / Demo Mode — skip onboarding gates without touching Supabase auth.
+    /// Explore / Demo Mode, skip onboarding gates without touching Supabase auth.
     func markCompleteForDemoExperience() {
         resolveTask?.cancel()
         resolveTask = nil

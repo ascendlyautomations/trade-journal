@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 #if DEBUG
-/// Phase 12D — AVPlayer / AVPlayerItem lifecycle identity (one player+item per retained clip).
+/// Phase 12D, AVPlayer / AVPlayerItem lifecycle identity (one player+item per retained clip).
 nonisolated enum ClipPlayerIdentityTrace {
     enum Event: String, Sendable {
         case createPlayer

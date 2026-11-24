@@ -15,7 +15,7 @@ nonisolated enum CommentPinSemantics {
         comment.isPinned && !comment.isReply
     }
 
-    /// One pinned top-level comment max — unpins siblings when pinning.
+    /// One pinned top-level comment max, unpins siblings when pinning.
     static func applyPinnedState(
         _ comments: [InteractionComment],
         commentID: CommentID,

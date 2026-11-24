@@ -22,7 +22,7 @@ nonisolated enum TradingRulesComplianceInputFingerprint {
         ].joined(separator: "|")
     }
 
-    /// Trade-set identity — count + FNV digest of id/updatedAt so any edit invalidates stale cache.
+    /// Trade-set identity, count + FNV digest of id/updatedAt so any edit invalidates stale cache.
     private static func tradesContentSlice(_ trades: [Trade], label: String = "trades") -> String {
         guard !trades.isEmpty else { return "\(label):0" }
         guard let first = trades.first, let last = trades.last else { return "\(label):0" }

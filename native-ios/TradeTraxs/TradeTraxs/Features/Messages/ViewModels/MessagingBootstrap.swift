@@ -1,6 +1,6 @@
 import Foundation
 
-/// Coordinated messaging first-paint load — owned exclusively by ``MessagingDomain``.
+/// Coordinated messaging first-paint load, owned exclusively by ``MessagingDomain``.
 ///
 /// Conversations + member rooms run concurrently. Results are written into
 /// ``MessagesInboxStore`` (presentation cache) and session stores (network coalescing).
@@ -25,12 +25,12 @@ enum MessagingBootstrap: ScreenBootstrap {
         var loadedRooms: Bool
     }
 
-    /// ``ScreenBootstrap`` entry — same as ``loadHome``.
+    /// ``ScreenBootstrap`` entry, same as ``loadHome``.
     static func load(_ context: Context) async throws -> Result {
         try await loadHome(context)
     }
 
-    /// Full Messages home bootstrap — conversations ∥ member rooms + peer/owner hydrate.
+    /// Full Messages home bootstrap, conversations ∥ member rooms + peer/owner hydrate.
     static func loadHome(_ context: Context) async throws -> Result {
         let viewer = await context.session.currentUserID.map { ProfileID($0.rawValue) }
 

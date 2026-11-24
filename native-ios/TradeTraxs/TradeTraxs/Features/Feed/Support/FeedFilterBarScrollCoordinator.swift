@@ -21,7 +21,7 @@ enum FeedFilterBarTourLayoutGate {
 
 /// Auto-hide state for the feed horizontal content-filter strip (All / Trades / …).
 ///
-/// Driven by ``FeedHomeView`` scroll geometry — not used in Clips pager mode.
+/// Driven by ``FeedHomeView`` scroll geometry, not used in Clips pager mode.
 @Observable
 @MainActor
 final class FeedFilterBarScrollCoordinator {

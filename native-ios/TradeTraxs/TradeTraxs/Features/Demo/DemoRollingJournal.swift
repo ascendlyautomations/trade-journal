@@ -74,10 +74,55 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
 
     // MARK: - Build
 
+    private enum DemoDayProfile: Sendable {
+        case normal
+        case standoutWinDay
+        case standoutLossDay
+        case drawdownStretch
+    }
+
+    private enum DemoSessionBias: Sendable {
+        case favorLondon
+        case favorAsia
+    }
+
+    private static func dayProfile(dayOrdinal: Int) -> DemoDayProfile {
+        if dayOrdinal % 211 == 17 { return .standoutWinDay }
+        if dayOrdinal % 223 == 91 { return .standoutLossDay }
+        if dayOrdinal % 60 < 4, (dayOrdinal / 60) % 5 == 2 { return .drawdownStretch }
+        return .normal
+    }
+
+    /// Ensures short dashboard windows (7D–90D) include mixed win/loss days for report-style extremes.
+    private static func recentWindowDayProfile(
+        day: Date,
+        todayStart: Date,
+        dayOrdinal: Int,
+        calendar: Calendar
+    ) -> DemoDayProfile {
+        let daysFromToday = calendar.dateComponents([.day], from: day, to: todayStart).day ?? 999
+        if (1...14).contains(daysFromToday) {
+            switch daysFromToday % 5 {
+            case 1: return .standoutWinDay
+            case 3: return .standoutLossDay
+            case 0: return .drawdownStretch
+            default: break
+            }
+        }
+        return dayProfile(dayOrdinal: dayOrdinal)
+    }
+
+    private static func demoSessionBias(dayOrdinal: Int) -> DemoSessionBias? {
+        if dayOrdinal % 127 == 8 { return .favorLondon }
+        if dayOrdinal % 131 == 15 { return .favorAsia }
+        return nil
+    }
+
     private static func buildBook(now: Date) -> Book {
         let calendar = TradingReportPeriods.eastern
         let todayStart = calendar.startOfDay(for: now)
-        guard let historyStart = calendar.date(byAdding: .month, value: -18, to: todayStart) else {
+        let months = DemoCanonicalDataset.rollingJournalHistoryMonths
+        guard let historyStart = calendar.date(byAdding: .month, value: -months, to: todayStart) else {
             return Book(trades: [], checkIns: [], payouts: [])
         }
 
@@ -101,9 +146,13 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
 
         let currentWeekMonday = mondayOfWeek(containing: todayStart, calendar: calendar)
         let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: todayStart)) ?? todayStart
+        let sevenDayStart = calendar.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        let ninetyDayStart = calendar.date(byAdding: .day, value: -89, to: todayStart) ?? todayStart
 
         var trades: [Trade] = []
-        trades.reserveCapacity(420)
+        trades.reserveCapacity(520)
+
+        let oneYearStart = calendar.date(byAdding: .day, value: -364, to: todayStart) ?? historyStart
 
         var day = historyStart
         while day <= todayStart {
@@ -117,18 +166,39 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
             let dateKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: day)
             let dayOrdinal = calendar.dateComponents([.day], from: historyStart, to: day).day ?? 0
             var rng = SeededRNG(seed: hashSeed(dateKey))
+            let profile = recentWindowDayProfile(
+                day: day,
+                todayStart: todayStart,
+                dayOrdinal: dayOrdinal,
+                calendar: calendar
+            )
+            let sessionBias = demoSessionBias(dayOrdinal: dayOrdinal)
 
+            let inLast7Days = day >= sevenDayStart
             let inCurrentWeek = day >= currentWeekMonday
             let inCurrentMonth = day >= monthStart
             let thirtyDaysAgo = calendar.date(byAdding: .day, value: -29, to: todayStart) ?? todayStart
             let inLast30Days = day >= thirtyDaysAgo
+            let inLast90Days = day >= ninetyDayStart
+            let inLastYear = day >= oneYearStart
 
             let tradesThisDay: Int = {
-                if calendar.isDate(day, inSameDayAs: todayStart) { return 2 }
-                if inCurrentWeek { return rng.int(2) == 0 ? 2 : 1 }
+                switch profile {
+                case .standoutWinDay, .standoutLossDay:
+                    return 2 + rng.int(2)
+                case .drawdownStretch:
+                    return 2
+                case .normal:
+                    break
+                }
+                if calendar.isDate(day, inSameDayAs: todayStart) { return 2 + rng.int(2) }
+                if inLast7Days { return 2 + rng.int(2) }
+                if inCurrentWeek { return 2 + rng.int(2) }
+                if inLast30Days { return 2 + rng.int(2) }
+                if inLast90Days { return 2 + rng.int(2) }
+                if inLastYear { return 1 + rng.int(2) }
                 if inCurrentMonth { return 1 + rng.int(2) }
-                if inLast30Days { return 2 }
-                return dayOrdinal % 5 == 0 ? 0 : 1
+                return dayOrdinal % 7 == 0 ? 0 : 1
             }()
 
             for index in 0..<tradesThisDay {
@@ -137,22 +207,24 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
                 let side: TradeSide = (dayOrdinal + index) % 3 == 0 ? .short : .long
                 let account = accounts[(dayOrdinal + index) % accounts.count]
 
-                let strategy: String = {
-                    if inLast30Days {
-                        return strategies[(dayOrdinal + index * 2) % strategies.count]
-                    }
-                    return strategies[(dayOrdinal + index) % strategies.count]
-                }()
+                let strategy = strategies[(dayOrdinal + index) % strategies.count]
 
                 guard let entry = resolveEntry(
                     day: day,
                     index: index,
                     dayOrdinal: dayOrdinal,
+                    sessionBias: sessionBias,
                     now: now,
                     calendar: calendar
                 ) else { continue }
 
-                let pnl = realizedPnL(rng: &rng, dayOrdinal: dayOrdinal, index: index)
+                let pnl = realizedPnL(
+                    rng: &rng,
+                    dayOrdinal: dayOrdinal,
+                    index: index,
+                    profile: profile,
+                    sessionBias: sessionBias
+                )
                 let holdSeconds = holdDurationSeconds(
                     rng: &rng,
                     dayOrdinal: dayOrdinal,
@@ -175,11 +247,12 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
                     return pnl > 0 ? mag : -mag
                 }()
                 let exitPrice = entryPrice + (side == .long ? points : -points)
-                let rr = Decimal(string: String(format: "%.1f", 0.9 + Double(rng.int(12)) * 0.2)) ?? 1.2
-                let maxRr = demoMaxRrReached(targetRr: rr, rng: &rng)
+                let rr = Decimal(string: String(format: "%.1f", 1.0 + Double(rng.int(15)) * 0.15)) ?? 1.2
+                let maxRr = demoMaxRrReached(targetRr: rr, rng: &rng, winning: pnl > 0)
 
                 let win = pnl > 0
-                let followedPlan = win ? rng.int(10) < 8 : rng.int(10) < 4
+                let followedPlan = win ? rng.int(10) < 7 : rng.int(10) < 5
+                let earlyExit = !win && rng.int(4) == 0
                 let emotion = emotions[rng.int(emotions.count)]
                 let confidence = 2 + rng.int(4)
                 let executionRating = win ? 3 + rng.int(3) : 1 + rng.int(3)
@@ -216,6 +289,7 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
                         realizedPnL: Money(amount: pnl),
                         riskReward: rr,
                         maxRrReached: maxRr,
+                        earlyExit: earlyExit,
                         points: abs(points),
                         sessionLabel: TradingSessionLabel.session(from: entry) ?? sessionSlots[0].label,
                         visibility: isPublic ? .public : .private,
@@ -302,10 +376,21 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
         day: Date,
         index: Int,
         dayOrdinal: Int,
+        sessionBias: DemoSessionBias?,
         now: Date,
         calendar: Calendar
     ) -> Date? {
-        let startSlot = (dayOrdinal + index) % sessionSlots.count
+        let biasedStart: Int? = {
+            switch sessionBias {
+            case .favorLondon:
+                return sessionSlots.firstIndex(where: { $0.label == "London" })
+            case .favorAsia:
+                return sessionSlots.firstIndex(where: { $0.label == "Asia" })
+            case nil:
+                return nil
+            }
+        }()
+        let startSlot = biasedStart ?? ((dayOrdinal + index) % sessionSlots.count)
         for offset in 0..<sessionSlots.count {
             let slot = sessionSlots[(startSlot + offset) % sessionSlots.count]
             if let entry = easternSessionEntry(day: day, slot: slot, index: index, calendar: calendar),
@@ -349,7 +434,13 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
         let strategy = inLast30Days
             ? strategies[dayOrdinal % strategies.count]
             : strategies[(dayOrdinal + 1) % strategies.count]
-        let pnl = realizedPnL(rng: &rng, dayOrdinal: dayOrdinal, index: index)
+        let pnl = realizedPnL(
+            rng: &rng,
+            dayOrdinal: dayOrdinal,
+            index: index,
+            profile: dayProfile(dayOrdinal: dayOrdinal),
+            sessionBias: demoSessionBias(dayOrdinal: dayOrdinal)
+        )
         let holdSeconds = holdDurationSeconds(
             rng: &rng,
             dayOrdinal: dayOrdinal,
@@ -367,8 +458,9 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
         let points: Decimal = pnl == 0 ? 0 : (pnl > 0 ? Decimal(10 + rng.int(10)) : Decimal(-(8 + rng.int(6))))
         let exitPrice = entryPrice + (side == .long ? points : -points)
         let rr = Decimal(string: String(format: "%.1f", 1.1 + Double(rng.int(8)) * 0.2)) ?? 1.2
-        let maxRr = demoMaxRrReached(targetRr: rr, rng: &rng)
+        let maxRr = demoMaxRrReached(targetRr: rr, rng: &rng, winning: pnl > 0)
         let win = pnl > 0
+        let earlyExit = !win
         let mode: TradeMode = account == DemoCanonicalDataset.liveAccountID ? .live : .sim
         trades.append(
             Trade(
@@ -386,8 +478,9 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
                 realizedPnL: Money(amount: pnl),
                 riskReward: rr,
                 maxRrReached: maxRr,
+                earlyExit: earlyExit,
                 points: abs(points),
-                sessionLabel: sessionSlots[0].label,
+                sessionLabel: sessionSlots[slotIndex].label,
                 visibility: .public,
                 publicCaption: "Session recap",
                 strategy: strategy,
@@ -403,15 +496,27 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
         )
     }
 
-    private static func demoMaxRrReached(targetRr: Decimal, rng: inout SeededRNG) -> Decimal {
+    private static func demoMaxRrReached(
+        targetRr: Decimal,
+        rng: inout SeededRNG,
+        winning: Bool
+    ) -> Decimal {
         let roll = rng.int(10)
         let factor: Double
-        if roll < 3 {
-            factor = 0.55 + Double(rng.int(6)) * 0.07
+        if !winning {
+            if roll < 4 {
+                factor = 0.35 + Double(rng.int(5)) * 0.06
+            } else if roll < 8 {
+                factor = 0.65 + Double(rng.int(4)) * 0.05
+            } else {
+                factor = 0.95 + Double(rng.int(3)) * 0.04
+            }
+        } else if roll < 3 {
+            factor = 0.75 + Double(rng.int(5)) * 0.05
         } else if roll < 7 {
-            factor = 0.9 + Double(rng.int(5)) * 0.04
+            factor = 1.0 + Double(rng.int(4)) * 0.06
         } else {
-            factor = 1.08 + Double(rng.int(8)) * 0.14
+            factor = 1.15 + Double(rng.int(10)) * 0.12
         }
         let reached = (targetRr as NSDecimalNumber).doubleValue * factor
         return Decimal(string: String(format: "%.2f", max(0, reached))) ?? targetRr
@@ -438,11 +543,34 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
         return buckets[(dayOrdinal + index) % buckets.count] + rng.int(180)
     }
 
-    private static func realizedPnL(rng: inout SeededRNG, dayOrdinal: Int, index: Int) -> Decimal {
+    private static func realizedPnL(
+        rng: inout SeededRNG,
+        dayOrdinal: Int,
+        index: Int,
+        profile: DemoDayProfile,
+        sessionBias: DemoSessionBias?
+    ) -> Decimal {
+        switch profile {
+        case .standoutWinDay:
+            return Decimal(520 + index * 410 + rng.int(160))
+        case .standoutLossDay:
+            return Decimal(-(480 + index * 320 + rng.int(90)))
+        case .drawdownStretch:
+            return Decimal(-(140 + rng.int(6) * 65))
+        case .normal:
+            break
+        }
+        if sessionBias == .favorLondon {
+            return Decimal(180 + rng.int(7) * 95)
+        }
+        if sessionBias == .favorAsia {
+            return Decimal(-(160 + rng.int(6) * 70))
+        }
         let roll = (dayOrdinal * 3 + index + rng.int(7)) % 11
         switch roll {
         case 0, 1: return Decimal(-(120 + rng.int(5) * 45))
-        case 2: return 0
+        case 2: return Decimal(-(40 + rng.int(4) * 25))
+        case 3: return 0
         default: return Decimal(95 + rng.int(8) * 75)
         }
     }

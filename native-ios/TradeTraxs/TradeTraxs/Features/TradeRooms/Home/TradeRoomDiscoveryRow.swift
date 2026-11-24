@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// Compact discoverable Trade Room row — tap body to preview, Join/Request on the right.
+/// Compact discoverable Trade Room row, tap body to preview, Join/Request on the right.
 struct TradeRoomDiscoveryRow: View {
     enum Presentation {
-        /// Raised card — Trade Rooms discovery lists.
+        /// Raised card, Trade Rooms discovery lists.
         case elevatedCard
-        /// Flat row — Explore search, aligned with people results.
+        /// Flat row, Explore search, aligned with people results.
         case plainList
     }
 

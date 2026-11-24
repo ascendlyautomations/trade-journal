@@ -44,7 +44,7 @@ enum PushNotificationGrouping {
         }
     }
 
-    /// Engagement target key — never crosses trades / posts / reels.
+    /// Engagement target key, never crosses trades / posts / reels.
     static func engagementGroupKey(for notification: ActivityNotification) -> String? {
         switch notification.kind {
         case .like:

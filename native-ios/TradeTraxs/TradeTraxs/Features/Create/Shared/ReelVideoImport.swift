@@ -110,7 +110,7 @@ enum ReelVideoImport {
         return owned
     }
 
-    /// Camera / file URLs may be ephemeral — copy immediately into app-owned storage.
+    /// Camera / file URLs may be ephemeral, copy immediately into app-owned storage.
     static func importFromLocalFile(
         _ url: URL,
         contentType: String?,

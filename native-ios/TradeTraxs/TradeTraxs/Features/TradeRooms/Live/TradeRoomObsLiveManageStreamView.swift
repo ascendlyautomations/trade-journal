@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// OBS live host UI — viewer-style video + tabbed chat / members / hands.
+/// OBS live host UI, viewer-style video + tabbed chat / members / hands.
 struct TradeRoomObsLiveManageStreamView: View {
     let roomID: RoomID
     let roomTitle: String

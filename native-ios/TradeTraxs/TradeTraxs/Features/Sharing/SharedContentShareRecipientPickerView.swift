@@ -135,7 +135,7 @@ struct SharedContentShareRecipientPickerView: View {
                 .textFieldStyle(.plain)
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.vertical, ExperienceSpacing.sm)
-                .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                .experienceFilterSearchField()
                 .focused($messageFieldFocused)
                 .disabled(viewModel.phase == .sending)
                 .submitLabel(.done)

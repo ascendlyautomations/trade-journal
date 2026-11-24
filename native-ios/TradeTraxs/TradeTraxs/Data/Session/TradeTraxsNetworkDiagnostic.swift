@@ -1,30 +1,30 @@
 import Foundation
 
 #if DEBUG
-/// DEBUG manual network/media baseline — Cold Run A vs Warm Run B.
+/// DEBUG manual network/media baseline, Cold Run A vs Warm Run B.
 ///
 /// Log marker: `TRADETRAXS NETWORK SESSION`
 enum TradeTraxsNetworkDiagnostic {
     private static var sessionActive = false
 
-    /// `-networkDiagnosticCold` — clears media/API counters and image caches, then starts session.
+    /// `-networkDiagnosticCold`, clears media/API counters and image caches, then starts session.
     static func beginColdRun(data: DataEnvironment) async {
         await resetMediaCaches(data: data)
         resetCounters()
         sessionActive = true
-        print("[TradeTraxsNetworkDiagnostic] Cold Run A — caches cleared, session started.")
+        print("[TradeTraxsNetworkDiagnostic] Cold Run A, caches cleared, session started.")
     }
 
-    /// `-networkDiagnosticWarm` — starts session without clearing persistent image cache.
+    /// `-networkDiagnosticWarm`, starts session without clearing persistent image cache.
     static func beginWarmRun() {
         resetCounters()
         sessionActive = true
-        print("[TradeTraxsNetworkDiagnostic] Warm Run B — session started (caches preserved).")
+        print("[TradeTraxsNetworkDiagnostic] Warm Run B, session started (caches preserved).")
     }
 
     static func endSessionAndPrint() {
         guard sessionActive else {
-            print("[TradeTraxsNetworkDiagnostic] No active session — call beginColdRun or beginWarmRun first.")
+            print("[TradeTraxsNetworkDiagnostic] No active session, call beginColdRun or beginWarmRun first.")
             return
         }
         sessionActive = false

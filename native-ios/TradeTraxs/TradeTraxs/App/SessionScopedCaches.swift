@@ -1,6 +1,6 @@
 import Foundation
 
-/// Invalidates caches that belong to the authenticated user — not the process.
+/// Invalidates caches that belong to the authenticated user, not the process.
 ///
 /// Called from ``AuthenticationCoordinator`` on logout and authenticated-user changes.
 /// Features must not reset these stores themselves.

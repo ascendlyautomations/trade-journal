@@ -18,7 +18,7 @@ enum FeedLinkedContentResolver {
         }
     }
 
-    /// Card/overlay preview — prefer ``linkedTradeSummary(for:cache:)`` (no legacy full-trade accessor).
+    /// Card/overlay preview, prefer ``linkedTradeSummary(for:cache:)`` (no legacy full-trade accessor).
     static func linkedTrade(
         for entry: FeedTimelineEntry,
         cache: DetailPresentationCache
@@ -49,7 +49,7 @@ enum FeedLinkedContentResolver {
         }
     }
 
-    /// Trade detail / profile — respect reel visibility for the signed-in viewer when known.
+    /// Trade detail / profile, respect reel visibility for the signed-in viewer when known.
     static func visibleLinkedReel(
         for tradeID: TradeID,
         cache: DetailPresentationCache,
@@ -78,7 +78,7 @@ enum FeedLinkedContentResolver {
     }
 }
 
-/// Compact linked-trade preview — tap opens trade detail only.
+/// Compact linked-trade preview, tap opens trade detail only.
 struct FeedLinkedTradeEmbed: View {
     let summary: TradeSummary
     let imagePipeline: any ImagePipeline
@@ -134,7 +134,7 @@ struct FeedLinkedTradeEmbed: View {
     }
 }
 
-/// Portrait thumbnail + play overlay — shared by feed embeds and trade metrics accessory.
+/// Portrait thumbnail + play overlay, shared by feed embeds and trade metrics accessory.
 struct FeedLinkedClipThumbnail: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
@@ -160,7 +160,7 @@ struct FeedLinkedClipThumbnail: View {
     }
 }
 
-/// Small horizontal linked-clip row — thumbnail, label, duration (trade detail / profile cards).
+/// Small horizontal linked-clip row, thumbnail, label, duration (trade detail / profile cards).
 struct FeedLinkedClipCompactPreview: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
@@ -195,7 +195,7 @@ struct FeedLinkedClipCompactPreview: View {
     }
 }
 
-/// Compact clip control overlaid on trade screenshots — does not block image zoom outside the control.
+/// Compact clip control overlaid on trade screenshots, does not block image zoom outside the control.
 struct FeedLinkedClipImageOverlay: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
@@ -250,7 +250,7 @@ struct FeedLinkedClipImageOverlay: View {
     }
 }
 
-/// Trade detail header — horizontal clip row sized to align with entry/date/account lines.
+/// Trade detail header, horizontal clip row sized to align with entry/date/account lines.
 struct FeedLinkedClipTradeDetailHeaderRow: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
@@ -277,7 +277,7 @@ struct FeedLinkedClipTradeDetailHeaderRow: View {
     }
 }
 
-/// Compact linked clip beside trade Entry/Exit metrics — thumbnail, label, duration (seconds).
+/// Compact linked clip beside trade Entry/Exit metrics, thumbnail, label, duration (seconds).
 struct FeedLinkedClipMetricsAccessory: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
@@ -310,7 +310,7 @@ struct FeedLinkedClipMetricsAccessory: View {
     }
 }
 
-/// Linked clip preview for trade cards — thumbnail + play; tap opens clip detail only.
+/// Linked clip preview for trade cards, thumbnail + play; tap opens clip detail only.
 struct FeedLinkedClipEmbed: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline

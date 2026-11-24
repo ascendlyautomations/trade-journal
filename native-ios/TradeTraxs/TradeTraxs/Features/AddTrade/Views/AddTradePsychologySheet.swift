@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Focused trade psychology editor — opened from Add Trade Trade Review.
+/// Focused trade psychology editor, opened from Add Trade Trade Review.
 struct AddTradePsychologySheet: View {
     @Bindable var viewModel: AddTradeViewModel
     var onClose: () -> Void

@@ -24,7 +24,7 @@ struct TradeImportPreviewContent: View {
     let onCancelReview: () -> Void
     let onUpdateTrade: (CSVParsedTrade) -> Void
     let onImport: () -> Void
-    /// Screenshot Phase 2 — fill breakdown + duplicate badges (nil for CSV import).
+    /// Screenshot Phase 2, fill breakdown + duplicate badges (nil for CSV import).
     var screenshotMetadataByTradeID: [String: ScreenshotImportTradeMetadata] = [:]
     var onToggleImportSelection: ((String) -> Void)? = nil
 

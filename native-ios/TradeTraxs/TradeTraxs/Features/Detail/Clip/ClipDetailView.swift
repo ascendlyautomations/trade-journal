@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 
-/// Permanent Clip detail destination — same hierarchy as Trade Detail.
+/// Permanent Clip detail destination, same hierarchy as Trade Detail.
 struct ClipDetailView: View {
     @State private var viewModel: ClipDetailViewModel
     private let data: DataEnvironment

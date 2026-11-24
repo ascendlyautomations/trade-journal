@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Web `FeedRoomShareCard` — room snapshot on a profile post, with Join Room / Open Room.
+/// Web `FeedRoomShareCard`, room snapshot on a profile post, with Join Room / Open Room.
 struct FeedRoomShareCard: View {
     let share: RoomShareAttachment
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Snapshot of Leaderboard bootstrap / screen state — single source of truth.
+/// Snapshot of Leaderboard bootstrap / screen state, single source of truth.
 struct LeaderboardState: Equatable {
     enum Phase: Equatable {
         case idle

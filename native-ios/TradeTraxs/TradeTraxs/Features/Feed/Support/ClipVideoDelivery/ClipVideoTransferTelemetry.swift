@@ -1,6 +1,6 @@
 import Foundation
 
-/// Phase 12C — transfer ownership and cache-fill decisions (release-safe aggregates + DEBUG lines).
+/// Phase 12C, transfer ownership and cache-fill decisions (release-safe aggregates + DEBUG lines).
 nonisolated enum ClipVideoTransferTelemetry {
     enum NetworkOwner: String, Sendable {
         case avplayer

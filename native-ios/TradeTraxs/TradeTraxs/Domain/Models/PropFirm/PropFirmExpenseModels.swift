@@ -268,6 +268,18 @@ nonisolated enum PropFirmExpenseMoney {
         NumberDisplay.currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
+    /// Donut / breakdown hero totals, compact thousands without cents.
+    static func compactBreakdownTotal(_ value: Decimal) -> String {
+        let number = NSDecimalNumber(decimal: value).doubleValue
+        let absValue = abs(number)
+        if absValue >= 1_000 {
+            let scaled = absValue / 1_000
+            let text = NumberDisplay.decimal(scaled, minimumFractionDigits: 1, maximumFractionDigits: 1)
+            return "$\(text)K"
+        }
+        return NumberDisplay.currency(value, minimumFractionDigits: 0, maximumFractionDigits: 0)
+    }
+
     static func utcDayString(from date: Date) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt

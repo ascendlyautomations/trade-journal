@@ -16,7 +16,7 @@ nonisolated enum TradeFillWeightedPrice {
     }
 }
 
-/// Deterministic FIFO fill aggregation — emits completed round trips when flat.
+/// Deterministic FIFO fill aggregation, emits completed round trips when flat.
 nonisolated enum TradeFillAggregator {
     struct RoundTrip: Hashable, Sendable {
         var symbol: String

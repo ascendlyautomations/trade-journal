@@ -1,10 +1,13 @@
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { entitlementEnforcementEnabled } from "@/lib/server/monetizationConfig"
 import {
-  loadProEntitlementProfile,
   requireProEntitlement,
   type ProEntitlementCheck,
 } from "@/lib/server/requireProEntitlement"
+import {
+  loadTraxProEntitlementSnapshot,
+  minimalEntitlementProfile,
+} from "@/lib/traxProEntitlement"
 
 /**
  * Central gate for OpenAI-backed BFF routes.
@@ -22,7 +25,15 @@ export async function requireAIFeatureEntitlement(
 ): Promise<ProEntitlementCheck> {
   const enforced = await entitlementEnforcementEnabled(supabaseServiceRole)
   if (!enforced) {
-    return loadProEntitlementProfile(userId)
+    const loaded = await loadTraxProEntitlementSnapshot(
+      supabaseServiceRole,
+      userId
+    )
+    const profile =
+      loaded.ok && loaded.snapshot.profile
+        ? loaded.snapshot.profile
+        : minimalEntitlementProfile()
+    return { ok: true, profile }
   }
   return requireProEntitlement(userId, options)
 }

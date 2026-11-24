@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Permanent Post detail destination — same hierarchy as Trade Detail.
+/// Permanent Post detail destination, same hierarchy as Trade Detail.
 struct PostDetailView: View {
     @State private var viewModel: PostDetailViewModel
     @State private var contentRevealed = false

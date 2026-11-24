@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Pan + pinch inside the fixed crop viewport — anchor-aware pinch in viewport coordinates.
+/// Pan + pinch inside the fixed crop viewport, anchor-aware pinch in viewport coordinates.
 struct ImageCropViewportInteraction: UIViewRepresentable {
     let onPanBegan: () -> Void
     let onPan: (_ translationDelta: CGSize) -> Void

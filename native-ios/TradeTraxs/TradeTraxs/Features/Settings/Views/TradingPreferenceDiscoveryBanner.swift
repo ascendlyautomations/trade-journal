@@ -33,7 +33,7 @@ struct TradingPreferenceDiscoveryBanner: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("analyticsPreferences.invite")
     }
@@ -54,12 +54,12 @@ struct TradingPreferenceDiscoveryBanner: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary.opacity(0.7), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
         .accessibilityIdentifier("analyticsPreferences.banner")
     }
 }
 
-/// Reports entry point when no trading rules are configured — uses shared discovery + preference cache.
+/// Reports entry point when no trading rules are configured, uses shared discovery + preference cache.
 struct ReportsConfigureTradingRulesPrompt: View {
     var userID: ProfileID?
     var repository: (any TradingPreferencesRepository)?
@@ -102,7 +102,7 @@ struct ReportsConfigureTradingRulesPrompt: View {
                     }
                     .padding(ExperienceSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card))
+                    .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
                     .overlay {
                         RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
                             .stroke(colors.border, lineWidth: 1)

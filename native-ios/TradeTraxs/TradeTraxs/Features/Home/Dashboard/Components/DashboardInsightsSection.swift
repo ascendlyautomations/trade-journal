@@ -148,10 +148,7 @@ struct DashboardInsightsSection: View {
                     .fontWeight(.semibold)
                     .lineLimit(2)
 
-                Text(insight.displayBody)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                DashboardExpandableInsightText(text: insight.displayBody)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

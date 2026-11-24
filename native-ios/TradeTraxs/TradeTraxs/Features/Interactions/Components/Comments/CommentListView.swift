@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// Reusable comment list — Trade / Post / Clip detail and Clips bottom sheet.
+/// Reusable comment list, Trade / Post / Clip detail and Clips bottom sheet.
 struct CommentListView: View {
     enum Presentation {
-        /// Full detail section — header, sort, list, composer.
+        /// Full detail section, header, sort, list, composer.
         case detail
-        /// Sheet scroll body — list rows only (header/composer provided by sheet chrome).
+        /// Sheet scroll body, list rows only (header/composer provided by sheet chrome).
         case sheetScrollContent
     }
 
@@ -92,7 +92,7 @@ struct CommentListView: View {
             ExperienceEmptyState(
                 icon: .messages,
                 title: "No comments yet",
-                message: "Start the discussion — ask a question or share what you noticed."
+                message: "Start the discussion, ask a question or share what you noticed."
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {

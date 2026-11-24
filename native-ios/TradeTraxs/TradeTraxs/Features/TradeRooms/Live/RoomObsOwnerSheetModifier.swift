@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// OBS start-stream sheets — extracted from ``RoomConversationView`` to keep type-check fast.
+/// OBS start-stream sheets, extracted from ``RoomConversationView`` to keep type-check fast.
 struct RoomObsOwnerSheetModifier: ViewModifier {
     @Binding var step: ObsOwnerSheetStep?
     let roomID: RoomID

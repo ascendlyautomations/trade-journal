@@ -1,6 +1,6 @@
 import Foundation
 
-/// Confirmed TraxsPro access for client gating — backed by ``/api/billing/entitlement`` snapshots.
+/// Confirmed TraxsPro access for client gating, backed by ``/api/billing/entitlement`` snapshots.
 enum TraxProClientAccess: Equatable, Sendable {
     /// Monetization enforcement is off, or Demo Mode is exploring the app.
     case unrestricted

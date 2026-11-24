@@ -2,14 +2,14 @@ import Foundation
 
 /// Observable authentication state machine surface.
 nonisolated enum AuthenticationState: Sendable, Equatable {
-    /// Cold launch — restoration not finished.
+    /// Cold launch, restoration not finished.
     case unknown
     case unauthenticated
     case authenticating(AuthenticationProviderKind)
     case authenticated(AuthenticationSession)
-    /// Access token expired/near expiry — refresh in flight. Not a usable session.
+    /// Access token expired/near expiry, refresh in flight. Not a usable session.
     case refreshing(AuthenticationSession)
-    /// Refresh failed transiently — session remains in Keychain; user may retry.
+    /// Refresh failed transiently, session remains in Keychain; user may retry.
     case sessionValidationFailed(AuthenticationSession, AuthenticationError)
     case locked(AuthenticationSession)
     case failure(AuthenticationError)
@@ -41,7 +41,7 @@ nonisolated enum AuthenticationState: Sendable, Equatable {
         isSessionReady || preservesAuthenticatedShell
     }
 
-    /// Legacy alias — prefer ``isSessionReady`` for shell gating.
+    /// Legacy alias, prefer ``isSessionReady`` for shell gating.
     var isAuthenticated: Bool { isSessionReady }
 
     var isRestoringSession: Bool {

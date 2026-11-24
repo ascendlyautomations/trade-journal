@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only token refresh transport timeline — never logs credentials.
+/// DEBUG-only token refresh transport timeline, never logs credentials.
 nonisolated enum AuthRefreshTiming {
     private static let logger = Logger(
         subsystem: AppLog.subsystem,
@@ -54,7 +54,7 @@ nonisolated enum AuthRefreshTiming {
     }
 
     private static func generationLabel(_ generation: UInt64?) -> String {
-        guard let generation else { return "generation=—" }
+        guard let generation else { return "generation=–" }
         return "generation=\(generation)"
     }
 

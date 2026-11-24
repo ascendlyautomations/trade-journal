@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only Explore bootstrap timings — not used in Release.
+/// DEBUG-only Explore bootstrap timings, not used in Release.
 nonisolated enum ExploreLoadProbe {
     private static let log = Logger(subsystem: AppLog.subsystem, category: "ExploreLoad")
 

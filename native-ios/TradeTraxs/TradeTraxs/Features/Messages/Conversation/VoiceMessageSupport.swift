@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 enum VoiceMessageSupport {
-    /// Maximum recording length — matches common DM voice message limits.
+    /// Maximum recording length, matches common DM voice message limits.
     static let maxRecordingDuration: TimeInterval = 120
 
     static func formatDuration(_ seconds: TimeInterval) -> String {

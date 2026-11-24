@@ -1,6 +1,6 @@
 import Foundation
 
-/// Psychology discipline rules — consecutive-loss pause & wait-after-loss (trade-level checks).
+/// Psychology discipline rules, consecutive-loss pause & wait-after-loss (trade-level checks).
 nonisolated enum TradingRulesPsychologyCompliance {
     static func evaluate(
         contextTrades: [Trade],
@@ -142,7 +142,7 @@ nonisolated enum TradingRulesPsychologyCompliance {
                 rule: .waitAfterLoss,
                 input: input,
                 outcome: .notApplicable,
-                detail: "No prior priced losing trade on this account before entry — wait rule does not apply.",
+                detail: "No prior priced losing trade on this account before entry, wait rule does not apply.",
                 recordedKeys: &recordedKeys,
                 state: &state
             )
@@ -154,7 +154,7 @@ nonisolated enum TradingRulesPsychologyCompliance {
                 rule: .waitAfterLoss,
                 input: input,
                 outcome: .unevaluated,
-                detail: "Prior losing trade is missing an exit time — cannot measure wait from loss exit.",
+                detail: "Prior losing trade is missing an exit time, cannot measure wait from loss exit.",
                 recordedKeys: &recordedKeys,
                 state: &state
             )
@@ -167,7 +167,7 @@ nonisolated enum TradingRulesPsychologyCompliance {
                 rule: .waitAfterLoss,
                 input: input,
                 outcome: .unevaluated,
-                detail: "Entry overlaps or precedes the prior loss exit — wait time is ambiguous.",
+                detail: "Entry overlaps or precedes the prior loss exit, wait time is ambiguous.",
                 recordedKeys: &recordedKeys,
                 state: &state
             )

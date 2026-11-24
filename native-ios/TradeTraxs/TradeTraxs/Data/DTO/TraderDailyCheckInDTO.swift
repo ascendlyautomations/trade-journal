@@ -46,7 +46,7 @@ nonisolated enum TraderDailyCheckInDTO {
 }
 
 nonisolated enum TraderDailyCheckInMapper {
-    /// Web `mapCheckInRow` — skip invalid rows instead of failing the whole batch.
+    /// Web `mapCheckInRow`, skip invalid rows instead of failing the whole batch.
     static func mapIfValid(_ dto: TraderDailyCheckInDTO.Row) -> TraderDailyCheckIn? {
         let userID = dto.user_id.trimmingCharacters(in: .whitespacesAndNewlines)
         let checkInDate = normalizedCheckInDateKey(dto.check_in_date)

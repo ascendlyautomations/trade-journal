@@ -21,12 +21,12 @@ final class GlobalUploadCoordinator {
     private var storySuccessHandlers: [String: (Story) -> Void] = [:]
     /// Bumped on every new run / user cancellation so stale continuations cannot publish after terminal cleanup.
     private var jobRunGeneration: [String: UInt64] = [:]
-    /// Generation that reached `.completed` — blocks accidental re-starts until explicit retry after `.failed`.
+    /// Generation that reached `.completed`, blocks accidental re-starts until explicit retry after `.failed`.
     private var completedGenerations: [String: UInt64] = [:]
     /// In-flight worker generation (at most one active run per job ID).
     private var activeTaskGenerations: [String: UInt64] = [:]
     private var scheduledRemovalTasks: [String: Task<Void, Never>] = [:]
-    /// Job IDs fully finalized after success — blocks any accidental re-start of the same upload job.
+    /// Job IDs fully finalized after success, blocks any accidental re-start of the same upload job.
     private var terminalJobIDs: Set<String> = []
 
     private enum StartIntent {
@@ -502,7 +502,7 @@ final class GlobalUploadCoordinator {
         jobs.removeAll { $0.id == jobID }
     }
 
-    /// Logout / account switch — cancel uploads and drop session-scoped job state.
+    /// Logout / account switch, cancel uploads and drop session-scoped job state.
     func invalidateForSessionChange() {
         releasePendingUploadResources()
         purgeAllJobs(reason: "sessionChange")
@@ -2106,7 +2106,7 @@ final class GlobalUploadCoordinator {
         }
     }
 
-    /// Pro limits are not upload/network failures — drop the job quietly and keep retry payload for the user.
+    /// Pro limits are not upload/network failures, drop the job quietly and keep retry payload for the user.
     private func abandonJobForProGate(jobID: String, runGeneration: UInt64) async {
         guard jobRunIsLive(jobID: jobID, generation: runGeneration, stage: "abandonProGate") else { return }
         GlobalUploadJobDiagnostics.log(
@@ -2140,7 +2140,7 @@ final class GlobalUploadCoordinator {
         contentDraftFailureHandlers.removeValue(forKey: jobID)
     }
 
-    /// Success-path cleanup — does not cancel the worker task that just finished.
+    /// Success-path cleanup, does not cancel the worker task that just finished.
     private func finalizeCompletedJob(jobID: String, runGeneration: UInt64, kind: UploadJobKind) {
         guard completedGenerations[jobID] == runGeneration else { return }
         GlobalUploadJobDiagnostics.log(
@@ -2187,7 +2187,7 @@ final class GlobalUploadCoordinator {
         return live
     }
 
-    /// Post-upload / post-persist — allow finishing UI even if cooperative cancellation was set spuriously.
+    /// Post-upload / post-persist, allow finishing UI even if cooperative cancellation was set spuriously.
     @discardableResult
     private func jobRunMayFinalize(jobID: String, generation: UInt64, stage: String) -> Bool {
         let kind = jobs.first(where: { $0.id == jobID })?.kind ?? .trade

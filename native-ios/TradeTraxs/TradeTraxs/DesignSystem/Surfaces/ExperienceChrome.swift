@@ -5,7 +5,7 @@ import SwiftUI
 /// Rule:
 /// - Bar **backgrounds** extend to the physical screen edges (through safe areas).
 /// - Interactive bar **controls** remain laid out by the system inside safe areas.
-/// - Page content is inset exactly once by NavigationStack / TabView — never manually
+/// - Page content is inset exactly once by NavigationStack / TabView, never manually
 ///   re-padded with device-specific status-bar / home-indicator constants.
 struct ExperienceAppChromeModifier: ViewModifier {
     var usesFeedOpaqueChrome: Bool
@@ -90,7 +90,7 @@ extension View {
         modifier(ExperienceAppChromeModifier(usesFeedOpaqueChrome: usesFeedOpaqueChrome))
     }
 
-    /// Page fill behind NavigationStack content — background ignores safe areas;
+    /// Page fill behind NavigationStack content, background ignores safe areas;
     /// the content itself stays system-inset.
     func experienceScreenBackground(
         fillsContentArea: Bool = true,

@@ -36,7 +36,7 @@ enum VideoUploadDurationValidation {
         }
     }
 
-    /// Metadata-only duration gate for file URLs — before copy, transcode, or thumbnail work.
+    /// Metadata-only duration gate for file URLs, before copy, transcode, or thumbnail work.
     static func validateReelUploadDuration(at fileURL: URL) async throws {
         try await validateFileBeforeUpload(at: fileURL)
     }

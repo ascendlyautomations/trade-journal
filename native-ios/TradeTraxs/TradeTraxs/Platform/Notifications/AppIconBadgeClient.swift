@@ -6,7 +6,7 @@ protocol AppIconBadgeClienting: Sendable {
     func fetchBadge() async throws -> Int
 }
 
-/// GET `/api/push/badge` — server is the only calculator.
+/// GET `/api/push/badge`, server is the only calculator.
 struct AppIconBadgeClient: AppIconBadgeClienting {
     private let transport: SupabaseTransport
 

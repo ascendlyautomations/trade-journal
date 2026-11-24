@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `LivePersonalDrawdownType` — fixed vs trailing personal floor on live accounts.
+/// Web `LivePersonalDrawdownType`, fixed vs trailing personal floor on live accounts.
 nonisolated enum LivePersonalDrawdownType: String, Sendable, Hashable, CaseIterable, Codable {
     case fixed
     case trailing
@@ -38,7 +38,7 @@ nonisolated enum LiveWithdrawalDrawdownBehavior: String, Sendable {
     case keepTrailing = "keep_trailing"
 }
 
-/// Supabase `accounts` drawdown columns — encodes explicit JSON nulls when clearing.
+/// Supabase `accounts` drawdown columns, encodes explicit JSON nulls when clearing.
 nonisolated struct LivePersonalDrawdownAccountPatchBody: Encodable, Sendable {
     var max_drawdown: Double?
     var drawdown_type: String?

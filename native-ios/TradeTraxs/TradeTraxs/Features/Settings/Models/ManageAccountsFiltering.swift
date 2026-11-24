@@ -1,6 +1,6 @@
 import Foundation
 
-/// Session-local Manage Accounts filter/sort state — in-memory only.
+/// Session-local Manage Accounts filter/sort state, in-memory only.
 enum ManageAccountsFiltering {
     enum PropFirmFilter: Hashable {
         case all

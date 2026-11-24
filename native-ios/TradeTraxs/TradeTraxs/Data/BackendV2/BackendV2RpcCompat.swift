@@ -2,7 +2,7 @@ import Foundation
 
 /// Classifies Backend V2 RPC failures for controlled fallback (Native Batch N1).
 nonisolated enum BackendV2RpcCompat {
-    /// RPC function absent from PostgREST schema — safe to fall back once per app session.
+    /// RPC function absent from PostgREST schema, safe to fall back once per app session.
     static func isRpcUnavailable(_ error: Error, rpcName: String) -> Bool {
         let text = errorText(error).lowercased()
         let name = rpcName.lowercased()
@@ -38,7 +38,7 @@ nonisolated enum BackendV2RpcCompat {
         return false
     }
 
-    /// Network / 5xx / auth — never auto fan-out to legacy REST.
+    /// Network / 5xx / auth, never auto fan-out to legacy REST.
     static func isTransientFailure(_ error: Error, rpcName: String) -> Bool {
         if isRpcUnavailable(error, rpcName: rpcName) { return false }
 
@@ -92,7 +92,7 @@ nonisolated enum BackendV2RpcCompat {
     }
 }
 
-/// Per-viewer RPC availability — avoids repeated failed calls after confirmed missing RPC.
+/// Per-viewer RPC availability, avoids repeated failed calls after confirmed missing RPC.
 actor BackendV2RpcAvailability {
     static let shared = BackendV2RpcAvailability()
 

@@ -2,7 +2,7 @@ import Foundation
 
 nonisolated protocol TradeRepository: Sendable {
     func trade(id: TradeID) async throws -> Trade
-    /// Bounded batch by primary key — PostgREST `id=in.(…)`. Prefer ``SessionTradeEntityStore``.
+    /// Bounded batch by primary key, PostgREST `id=in.(…)`. Prefer ``SessionTradeEntityStore``.
     func trades(ids: [TradeID]) async throws -> [Trade]
     /// - Parameter publicOnly: When `true`, mirrors web Profile (`is_public = true`).
     func trades(
@@ -11,7 +11,7 @@ nonisolated protocol TradeRepository: Sendable {
         page: PageRequest,
         publicOnly: Bool
     ) async throws -> CursorPage<Trade>
-    /// Bounded Calendar fetch — `entry_time` window padded for futures trading days.
+    /// Bounded Calendar fetch, `entry_time` window padded for futures trading days.
     func trades(
         ownedBy profileID: ProfileID,
         accountID: TradingAccountID?,
@@ -19,17 +19,17 @@ nonisolated protocol TradeRepository: Sendable {
         entryTo: Date,
         limit: Int
     ) async throws -> [Trade]
-    /// Owner journal / Trade History — bounded keyset page with server-side filters.
+    /// Owner journal / Trade History, bounded keyset page with server-side filters.
     func tradeHistory(
         ownedBy profileID: ProfileID,
         query: TradeHistoryQuery,
         page: PageRequest
     ) async throws -> CursorPage<Trade>
     func save(_ draft: TradeDraft) async throws -> Trade
-    /// Web `insertCopyTradedTrades` — one journal row per linked account. Returns the source row first.
+    /// Web `insertCopyTradedTrades`, one journal row per linked account. Returns the source row first.
     func saveCopyTraded(_ draft: TradeDraft) async throws -> [Trade]
     func update(_ trade: Trade) async throws -> Trade
-    /// Web `InputTradeForm` edit path — draft fields + preserve `created_at` / sync public post.
+    /// Web `InputTradeForm` edit path, draft fields + preserve `created_at` / sync public post.
     func update(id: TradeID, draft: TradeDraft, previous: Trade) async throws -> Trade
     func delete(id: TradeID) async throws
     func images(for tradeID: TradeID) async throws -> [TradeImage]
@@ -48,7 +48,7 @@ nonisolated protocol TradeRepository: Sendable {
     ) async throws
     /// Web `updateTradingAccount` (+ denormalized trade name/size sync).
     func updateAccount(id: TradingAccountID, ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount
-    /// Soft-hide from pickers — web `setTradingAccountActive` (not delete).
+    /// Soft-hide from pickers, web `setTradingAccountActive` (not delete).
     func setAccountActive(id: TradingAccountID, isActive: Bool) async throws
     /// Web `updateTradingAccountNote`.
     func updateAccountNote(id: TradingAccountID, note: String?) async throws
@@ -77,10 +77,10 @@ nonisolated protocol TradeRepository: Sendable {
         image: PayoutEntryImageWrite
     ) async throws -> AccountPayoutEntry
     func deletePayoutEntry(id: AccountPayoutEntryID) async throws
-    /// Prop-firm payout cycle history — `account_payout_cycles`.
+    /// Prop-firm payout cycle history, `account_payout_cycles`.
     func payoutCycleHistory(for accountID: TradingAccountID) async throws -> [AccountPayoutCycle]
     func payoutCycleHistory(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutCycle]
-    /// Web `record_account_payout` — closes open cycle and starts the next.
+    /// Web `record_account_payout`, closes open cycle and starts the next.
     func recordAccountPayout(
         accountID: TradingAccountID,
         input: RecordAccountPayoutInput
@@ -90,9 +90,9 @@ nonisolated protocol TradeRepository: Sendable {
         cycleID: String,
         drawdownBehavior: PayoutDrawdownBehavior
     ) async throws
-    /// Whitelisted public profile account cards — `rpc_v1_profile_account_insights`.
+    /// Whitelisted public profile account cards, `rpc_v1_profile_account_insights`.
     func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight]
-    /// Web `insertCsvTradesWithAccount` — one bulk `trades` insert (not per-row).
+    /// Web `insertCsvTradesWithAccount`, one bulk `trades` insert (not per-row).
     func importCSVTrades(
         _ drafts: [TradeDraft],
         isInitialImport: Bool
@@ -108,7 +108,7 @@ extension TradeRepository {
         throw AppError.unknown(message: "Live drawdown settings are unavailable.")
     }
 
-    /// Web Backtest Lab — owner rows where `mode == backtest` (journal list excludes these).
+    /// Web Backtest Lab, owner rows where `mode == backtest` (journal list excludes these).
     func backtestLabTrades(ownedBy profileID: ProfileID) async throws -> [Trade] {
         let loaded = try await trades(
             ownedBy: profileID,
@@ -139,7 +139,7 @@ extension TradeRepository {
         return result
     }
 
-    /// Default for stubs — synthesize domain trade then call ``update(_:)``.
+    /// Default for stubs, synthesize domain trade then call ``update(_:)``.
     func update(id: TradeID, draft: TradeDraft, previous: Trade) async throws -> Trade {
         var trade = previous
         trade.id = id

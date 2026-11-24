@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact prop-aware Dashboard card — actionable rules summary.
+/// Compact prop-aware Dashboard card, actionable rules summary.
 struct PropFirmStatusCard: View {
     let snapshot: PropFirmStatusSnapshot
     let onOpenDetails: () -> Void
@@ -86,18 +86,12 @@ struct PropFirmStatusCard: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.55), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
         .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                .stroke(
-                    snapshot.riskTone == .negative
-                        ? colors.loss.opacity(0.45)
-                        : colors.border.opacity(0.4),
-                    lineWidth: ExperienceBorder.hairline
-                )
+            if snapshot.riskTone == .negative {
+                RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    .stroke(colors.loss.opacity(0.45), lineWidth: ExperienceBorder.hairline)
+            }
         }
         .accessibilityIdentifier("dashboard.propFirm.status")
     }

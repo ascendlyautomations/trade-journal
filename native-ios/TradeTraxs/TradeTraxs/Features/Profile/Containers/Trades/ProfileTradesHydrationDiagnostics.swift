@@ -1,6 +1,6 @@
 import Foundation
 
-/// Temporary device diagnostics — Profile Trades journal hydration (no private fields).
+/// Temporary device diagnostics, Profile Trades journal hydration (no private fields).
 enum ProfileTradesHydrationDiagnostics {
     enum Source: String, Sendable {
         case bootstrap

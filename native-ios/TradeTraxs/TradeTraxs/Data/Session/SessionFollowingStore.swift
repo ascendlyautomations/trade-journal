@@ -1,6 +1,6 @@
 import Foundation
 
-/// Session-scoped following state — canonical **complete** following ID set when marked complete.
+/// Session-scoped following state, canonical **complete** following ID set when marked complete.
 ///
 /// Pairwise edges may exist without a complete set; absence in a partial/unknown set is not proof of not-following.
 actor SessionFollowingStore {
@@ -31,14 +31,14 @@ actor SessionFollowingStore {
         return false
     }
 
-    /// Complete following IDs when known — nil when set is unknown/incomplete.
+    /// Complete following IDs when known, nil when set is unknown/incomplete.
     func cached(viewerID: String) -> Set<String>? {
         let key = normalizedViewer(viewerID)
         guard case .complete(let ids) = stateByViewer[key]?.completeness else { return nil }
         return ids
     }
 
-    /// Resolved follow edge when known — nil when relationship is unknown.
+    /// Resolved follow edge when known, nil when relationship is unknown.
     func knownIsFollowing(viewerID: String, targetID: String) -> Bool? {
         let key = normalizedViewer(viewerID)
         let target = targetID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -57,7 +57,7 @@ actor SessionFollowingStore {
         return stateByViewer[key]?.pairwiseRequested[target]
     }
 
-    /// Cache-first network load — always marks the loaded set **complete**.
+    /// Cache-first network load, always marks the loaded set **complete**.
     func followingIDs(
         viewerID: String,
         forceNetwork: Bool = false,

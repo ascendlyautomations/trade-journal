@@ -4,7 +4,7 @@ import Observation
 /// Session-level Activity source of truth (list + unread). Survives leaving Activity.
 ///
 /// Dashboard bell and Activity home both observe this store. Realtime patches mutate
-/// in place — no polling.
+/// in place, no polling.
 @Observable
 @MainActor
 final class ActivityInboxStore {
@@ -17,7 +17,7 @@ final class ActivityInboxStore {
     private(set) var pendingFollowRequestCount = 0
     /// True once the Activity feed page has been hydrated (not merely unread count).
     private(set) var hasLoaded = false
-    /// True after a full first-page fetch (network/RPC) this session — disk cache alone does not set this.
+    /// True after a full first-page fetch (network/RPC) this session, disk cache alone does not set this.
     private(set) var hasAuthoritativeFeedForSession = false
     /// True once unread count (+ Realtime) is available for the Dashboard bell.
     private(set) var hasBootstrappedUnread = false
@@ -169,7 +169,7 @@ final class ActivityInboxStore {
         _ = removeLocally(ids: [id])
     }
 
-    /// Optimistic swipe-delete — returns removed rows for rollback.
+    /// Optimistic swipe-delete, returns removed rows for rollback.
     @discardableResult
     func removeLocally(ids: [NotificationID]) -> [ActivityNotification] {
         let targets = Set(ids)
@@ -289,7 +289,7 @@ final class ActivityInboxStore {
         unreadCount = 0
     }
 
-    /// Confirms server-side mark-all-read — keeps rows read and reconciles badge count.
+    /// Confirms server-side mark-all-read, keeps rows read and reconciles badge count.
     func confirmMarkAllRead(unreadCount: Int) {
         markAllReadLocally()
         setUnreadCount(unreadCount)
@@ -300,7 +300,7 @@ final class ActivityInboxStore {
         AppIconBadgeSync.refresh(animated: true)
     }
 
-    /// Dashboard bell path — unread count + Realtime only (no Activity feed hydration).
+    /// Dashboard bell path, unread count + Realtime only (no Activity feed hydration).
     func ensureUnreadBootstrap(
         notifications: any NotificationRepository,
         session: any SessionProviding,
@@ -319,7 +319,7 @@ final class ActivityInboxStore {
         }
     }
 
-    /// Legacy alias — prefer ``ensureUnreadBootstrap`` from Dashboard.
+    /// Legacy alias, prefer ``ensureUnreadBootstrap`` from Dashboard.
     func ensureStarted(
         notifications: any NotificationRepository,
         followRequests: (any FollowRequestRepository)?,
@@ -334,7 +334,7 @@ final class ActivityInboxStore {
         )
     }
 
-    /// Activity screen path — hydrate first feed page (+ follow requests) when needed.
+    /// Activity screen path, hydrate first feed page (+ follow requests) when needed.
     func startIfNeeded(
         notifications: any NotificationRepository,
         followRequests: (any FollowRequestRepository)?,
@@ -393,7 +393,7 @@ final class ActivityInboxStore {
         isStarting = true
         defer { isStarting = false }
 
-        // Fixture / session cache already painted — attach Realtime without refetch.
+        // Fixture / session cache already painted, attach Realtime without refetch.
         if hasLoaded, startedForUserID == nil {
             startedForUserID = userID
             hasBootstrappedUnread = true
@@ -507,7 +507,7 @@ final class ActivityInboxStore {
                 pendingFollowRequestCount: followCount
             )
         } catch {
-            // Soft-fail — keep prior cache; do not mark loaded when the feed is still empty.
+            // Soft-fail, keep prior cache; do not mark loaded when the feed is still empty.
             if !hasLoaded, !items.isEmpty {
                 hasLoaded = true
             }
@@ -625,7 +625,7 @@ final class ActivityInboxStore {
             setUnreadCount(unread)
             hasBootstrappedUnread = true
         } catch {
-            // Soft-fail — bell stays at 0 until next successful bootstrap.
+            // Soft-fail, bell stays at 0 until next successful bootstrap.
             hasBootstrappedUnread = true
         }
 
@@ -811,7 +811,7 @@ final class ActivityInboxStore {
         }
     }
 
-    /// Unread-only reconnect repair — bell/badge correctness without full feed bootstrap.
+    /// Unread-only reconnect repair, bell/badge correctness without full feed bootstrap.
     func repairUnreadAfterReconnect(
         viewerID: ProfileID,
         notifications: any NotificationRepository,
@@ -836,7 +836,7 @@ final class ActivityInboxStore {
         }
     }
 
-    /// Bounded Activity catch-up after Realtime reconnect — merge only, no wipe.
+    /// Bounded Activity catch-up after Realtime reconnect, merge only, no wipe.
     func repairAfterReconnect(
         viewerID: ProfileID,
         detailCache: DetailPresentationCache?,

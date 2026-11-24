@@ -21,7 +21,7 @@ nonisolated struct SignupFailureReport: Equatable, Sendable {
     }
 }
 
-/// Lock-protected signup failure facts — safe to record from networking/auth backend tasks.
+/// Lock-protected signup failure facts, safe to record from networking/auth backend tasks.
 nonisolated enum SignupFailureDiagnostics {
     private static let lock = NSLock()
     private static var latest: SignupFailureReport?

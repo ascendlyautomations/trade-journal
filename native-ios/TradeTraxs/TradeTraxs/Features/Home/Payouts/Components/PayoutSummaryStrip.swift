@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact payout totals — mirrors Dashboard metric strip density.
+/// Compact payout totals, mirrors Dashboard metric strip density.
 struct PayoutSummaryStrip: View {
     let total: Decimal
     let count: Int
@@ -16,15 +16,12 @@ struct PayoutSummaryStrip: View {
             divider
             metricCell(
                 label: "Average Payout",
-                value: average.map { ProfileDisplay.formatMoney($0) } ?? "—"
+                value: average.map { ProfileDisplay.formatMoney($0) } ?? "–"
             )
         }
         .padding(.vertical, ExperienceSpacing.sm)
         .padding(.horizontal, ExperienceSpacing.xs)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
         .accessibilityIdentifier("payouts.summary")
     }
 

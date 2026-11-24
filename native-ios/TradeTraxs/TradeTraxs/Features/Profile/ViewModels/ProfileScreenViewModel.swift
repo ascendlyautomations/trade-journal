@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import UIKit
 
-/// Canonical Profile screen owner — one bootstrap, one ``ProfileState``, render-only children.
+/// Canonical Profile screen owner, one bootstrap, one ``ProfileState``, render-only children.
 ///
 /// Reference architecture for every TradeTraxs screen:
 /// Screen ViewModel → coordinated bootstrap → shared state → section VMs apply / paginate only.
@@ -342,7 +342,7 @@ final class ProfileScreenViewModel {
         return try? TradeMapper.mapToDomain(dto)
     }
 
-    /// Owner journal header metrics — patch the header only. Section lists stay as loaded.
+    /// Owner journal header metrics, patch the header only. Section lists stay as loaded.
     func applyExternalOwnerHeaderStats(_ stats: ProfileStats) {
         guard state.isOwner, state.profileID == stats.profileID else { return }
         var next = state
@@ -350,7 +350,7 @@ final class ProfileScreenViewModel {
         commitProfileHeaderState(next)
     }
 
-    /// FollowMutationCoordinator — keep ProfileState aligned with shared caches.
+    /// FollowMutationCoordinator, keep ProfileState aligned with shared caches.
     func applyExternalFollowState(isFollowing: Bool, stats: ProfileStats?) {
         var next = state
         if !next.isOwner {
@@ -377,12 +377,12 @@ final class ProfileScreenViewModel {
         applyLocalState(next)
     }
 
-    /// Standard lifecycle — first coordinated bootstrap (no-op when already done).
+    /// Standard lifecycle, first coordinated bootstrap (no-op when already done).
     func bootstrapIfNeeded() async {
         await performBootstrap(force: false)
     }
 
-    /// Pull-to-refresh — explicit full-screen re-bootstrap.
+    /// Pull-to-refresh, explicit full-screen re-bootstrap.
     func refresh() async {
         ExperienceHaptics.play(.selection)
         state.isRefreshing = true
@@ -402,7 +402,7 @@ final class ProfileScreenViewModel {
 
     func unsubscribeRealtime() {}
 
-    /// Header retry button — same as pull-to-refresh.
+    /// Header retry button, same as pull-to-refresh.
     func retryBootstrap() {
         bootstrapIfNeeded(force: true)
     }
@@ -780,7 +780,7 @@ final class ProfileScreenViewModel {
         shellViewModel?.adoptLatestState(next)
     }
 
-    /// Authoritative journal trade — update Profile state + trades section without stale bootstrap overwrite.
+    /// Authoritative journal trade, update Profile state + trades section without stale bootstrap overwrite.
     func applyJournalTradeMutation(_ trade: Trade) {
         guard isOwnerTarget else { return }
         guard matchesOwner(trade.ownerProfileID) else { return }
@@ -1092,7 +1092,7 @@ final class ProfileScreenViewModel {
         if let profileID = state.profileID ?? contentStore.resolvedProfileID {
             return authorID == profileID
         }
-        // Pre-bootstrap owner tab — accept creates for the session user once known.
+        // Pre-bootstrap owner tab, accept creates for the session user once known.
         return isOwnerTarget
     }
 

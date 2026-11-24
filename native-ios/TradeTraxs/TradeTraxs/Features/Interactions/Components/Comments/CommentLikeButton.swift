@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Comment-level like control — mirrors ``LikeButton`` styling.
+/// Comment-level like control, mirrors ``LikeButton`` styling.
 struct CommentLikeButton: View {
     let snapshot: CommentLikeSnapshot
     let isEnabled: Bool

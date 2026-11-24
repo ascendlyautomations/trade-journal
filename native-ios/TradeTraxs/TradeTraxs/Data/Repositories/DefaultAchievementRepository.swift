@@ -50,7 +50,7 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
                     return try Self.mapAchievement(dto)
                 } catch {
                     AppLog.networking.error(
-                        "Skipping achievement \(dto.id ?? "unknown", privacy: .public) — \(String(describing: error), privacy: .public)"
+                        "Skipping achievement \(dto.id ?? "unknown", privacy: .public), \(String(describing: error), privacy: .public)"
                     )
                     return nil
                 }

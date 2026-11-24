@@ -80,7 +80,7 @@ nonisolated final class TokenRefreshCoordinator: @unchecked Sendable {
             let handler = state.withLock { $0.onFailed }
             handler?(.cancelled)
         } catch AuthBootstrapError.staleSessionResult {
-            // Superseded by a newer login — ignore.
+            // Superseded by a newer login, ignore.
         } catch {
             let handler = state.withLock { $0.onFailed }
             handler?(.refreshFailed)

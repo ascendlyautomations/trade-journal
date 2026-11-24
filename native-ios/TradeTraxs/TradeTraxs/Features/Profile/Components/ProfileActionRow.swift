@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared Profile action chrome for owner + visitor — only the available actions change.
+/// Shared Profile action chrome for owner + visitor, only the available actions change.
 struct ProfileActionRow: View {
     enum Mode: Equatable {
         case owner(hasTradeRoom: Bool)
@@ -224,7 +224,7 @@ enum ProfileActionChipStyle {
     case emphasis
 }
 
-/// Full-width destination row for profile trade room — below action chips, not in the chip row.
+/// Full-width destination row for profile trade room, below action chips, not in the chip row.
 struct ProfileTradeRoomDestinationRow: View {
     var title: String = "View Trade Room"
     var accessibilityIdentifier: String = "profile.viewTradeRoom"

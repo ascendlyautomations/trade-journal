@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Premium top-three podium — render-only, subtle entrance animation owned by the screen.
+/// Premium top-three podium, render-only, subtle entrance animation owned by the screen.
 struct LeaderboardPodiumView: View {
     let podium: [LeaderboardRow]
     let profileFor: (ProfileID) -> Profile

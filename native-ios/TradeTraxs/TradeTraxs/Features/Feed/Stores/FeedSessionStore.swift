@@ -1,6 +1,6 @@
 import Foundation
 
-/// Session memory for Feed timeline — survives tab switches within the authenticated session.
+/// Session memory for Feed timeline, survives tab switches within the authenticated session.
 @MainActor
 final class FeedSessionStore {
     static let shared = FeedSessionStore()
@@ -84,7 +84,7 @@ final class FeedSessionStore {
         }
     }
 
-    /// In-memory snapshots only — preserves on-disk feed pages (warm relaunch / unit tests).
+    /// In-memory snapshots only, preserves on-disk feed pages (warm relaunch / unit tests).
     func dropMemorySnapshots(viewerID: ProfileID? = nil) {
         if let viewerID {
             let prefix = viewerID.rawValue + "|"
@@ -126,7 +126,7 @@ final class FeedSessionStore {
         }
     }
 
-    /// Lookup hydrated feed entities for shared message cards — reuses session feed snapshots.
+    /// Lookup hydrated feed entities for shared message cards, reuses session feed snapshots.
     func lookup(reference: SharedContentReference, viewerID: ProfileID) -> SharedContentSeed? {
         let prefix = "\(viewerID.rawValue)|"
         for snapshot in snapshots.values where snapshot.cacheKey.hasPrefix(prefix) {

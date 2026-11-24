@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Compact avatar for follow lists — reuses the shared image pipeline / memory cache.
+/// Compact avatar for follow lists, reuses the shared image pipeline / memory cache.
 struct FollowListAvatarView: View {
     let profile: Profile
     let imagePipeline: any ImagePipeline

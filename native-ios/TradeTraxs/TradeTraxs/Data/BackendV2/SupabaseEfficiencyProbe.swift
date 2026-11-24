@@ -2,7 +2,7 @@ import Foundation
 import os
 
 #if DEBUG
-/// Lightweight Phase A evidence — one line per decision, no per-row noise.
+/// Lightweight Phase A evidence, one line per decision, no per-row noise.
 nonisolated enum SupabaseEfficiencyProbe {
     enum ActivityReconnectMode: String {
         case unreadOnly

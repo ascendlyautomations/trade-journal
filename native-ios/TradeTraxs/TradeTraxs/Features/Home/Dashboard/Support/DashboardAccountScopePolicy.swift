@@ -1,6 +1,6 @@
 import Foundation
 
-/// Dashboard-only account/trade scope — backtest data lives in Backtest Lab, not Home analytics.
+/// Dashboard-only account/trade scope, backtest data lives in Backtest Lab, not Home analytics.
 nonisolated enum DashboardAccountScopePolicy {
     static func includesAccountInDashboard(_ account: TradingAccount) -> Bool {
         account.mode != .backtest

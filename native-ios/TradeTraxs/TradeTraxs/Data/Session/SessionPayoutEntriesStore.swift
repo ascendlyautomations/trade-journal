@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session cache for manual `account_payout_entries` — shared across Withdrawals and Manage Accounts.
+/// Session cache for manual `account_payout_entries`, shared across Withdrawals and Manage Accounts.
 @Observable
 @MainActor
 final class SessionPayoutEntriesStore {

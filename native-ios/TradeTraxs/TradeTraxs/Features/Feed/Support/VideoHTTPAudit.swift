@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// Temporary DEBUG probe — verifies Supabase/public object Range support without replacing AVPlayer.
+/// Temporary DEBUG probe, verifies Supabase/public object Range support without replacing AVPlayer.
 enum VideoHTTPAudit {
     static func probe(url: URL, clipID: String, surface: String, role: String) {
         Task.detached(priority: .utility) {

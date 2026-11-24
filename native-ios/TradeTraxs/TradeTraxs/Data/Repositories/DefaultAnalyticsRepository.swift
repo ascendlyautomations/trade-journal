@@ -1,6 +1,6 @@
 import Foundation
 
-/// Batched `rpc_v1_product_events_ingest` — failures are ignored (never block UX).
+/// Batched `rpc_v1_product_events_ingest`, failures are ignored (never block UX).
 actor ProductAnalyticsIngestQueue {
     static let shared = ProductAnalyticsIngestQueue()
 

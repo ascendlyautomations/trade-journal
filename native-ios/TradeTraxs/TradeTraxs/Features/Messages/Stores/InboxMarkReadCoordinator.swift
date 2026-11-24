@@ -26,10 +26,10 @@ final class InboxMarkReadCoordinator {
         self.session = session
     }
 
-    /// Optimistic inbox clear + RPC — badge mirrors server after the cursor advances.
+    /// Optimistic inbox clear + RPC, badge mirrors server after the cursor advances.
     ///
     /// When ``BackendV2FeatureFlag/messageThreads`` is enabled, thread bootstrap RPC owns
-    /// `mark_conversation_read` on intentional cold open — no duplicate coordinator RPC.
+    /// `mark_conversation_read` on intentional cold open, no duplicate coordinator RPC.
     func prepareOpenConversation(_ conversationID: ConversationID) {
         MessagesInboxStore.shared.markRead(conversationID: conversationID)
         guard !BackendV2FeatureFlags.isEnabled(.messageThreads) else {
@@ -51,13 +51,13 @@ final class InboxMarkReadCoordinator {
         Task { await confirmRoomRead(roomID, previousUnread: previousUnread) }
     }
 
-    /// Inbox swipe / menu — mark read with server + badge sync.
+    /// Inbox swipe / menu, mark read with server + badge sync.
     func markConversationReadFromInbox(_ conversationID: ConversationID) {
         MessagesInboxStore.shared.markRead(conversationID: conversationID)
         Task { await confirmConversationRead(conversationID) }
     }
 
-    /// Inbox swipe / menu — mark unread with server + badge sync.
+    /// Inbox swipe / menu, mark unread with server + badge sync.
     func markConversationUnreadFromInbox(_ conversationID: ConversationID) {
         MessagesInboxStore.shared.markUnread(conversationID: conversationID)
         Task { await confirmConversationUnread(conversationID) }
@@ -112,7 +112,7 @@ final class InboxMarkReadCoordinator {
         do {
             try await rooms.markRead(roomID: roomID)
             MessagesInboxStore.shared.markRoomRead(roomID: roomID)
-            // Room unread is not part of the app-icon formula — no badge fetch required.
+            // Room unread is not part of the app-icon formula, no badge fetch required.
         } catch {
             MessagesInboxStore.shared.dropRoomUnreadOverride(roomID: roomID)
             if previousUnread > 0 {

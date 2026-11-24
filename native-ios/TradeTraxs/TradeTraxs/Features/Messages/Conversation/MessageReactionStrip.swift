@@ -73,7 +73,7 @@ enum MessageReactionLayout {
     }
 }
 
-/// Compact floating reaction pills — shared by DMs and Trade Rooms.
+/// Compact floating reaction pills, shared by DMs and Trade Rooms.
 struct MessageReactionStrip: View {
     let summaries: [MessageReactionSummary]
     let isOutgoing: Bool

@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// Account deletion milestones — never log tokens, codes, or secrets.
+/// Account deletion milestones, never log tokens, codes, or secrets.
 nonisolated enum AccountDeletionDebugLog {
     private static let logger = Logger(
         subsystem: AppLog.subsystem,

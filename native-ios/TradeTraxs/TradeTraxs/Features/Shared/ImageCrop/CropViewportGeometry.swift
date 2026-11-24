@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// Canonical crop-viewport geometry — preview and export both derive from this model.
+/// Canonical crop-viewport geometry, preview and export both derive from this model.
 struct CropViewportGeometry: Equatable {
     let sourcePixelSize: CGSize
     let viewportSize: CGSize
@@ -64,7 +64,7 @@ struct CropViewportGeometry: Equatable {
         )
     }
 
-    /// Source-pixel rect used for `CGImage.cropping(to:)` — clamped to bitmap bounds.
+    /// Source-pixel rect used for `CGImage.cropping(to:)`, clamped to bitmap bounds.
     func sourcePixelCropRect() -> CGRect {
         ImageCropViewportMath.sourcePixelCrop(
             layout: layout,

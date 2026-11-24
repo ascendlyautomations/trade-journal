@@ -1,6 +1,6 @@
 import Foundation
 
-/// Canonical clip caption — `reels.caption` first; legacy trade-linked rows before Sep 2026 may use trade text.
+/// Canonical clip caption, `reels.caption` first; legacy trade-linked rows before Sep 2026 may use trade text.
 enum ReelCaptionDisplay {
     static let emptyFallback = "Clip"
 

@@ -99,7 +99,7 @@ nonisolated final class InMemoryChannelRegistry: ChannelRegistry, @unchecked Sen
         )
     }
 
-    /// Testing / DEBUG — current retain count for a channel.
+    /// Testing / DEBUG, current retain count for a channel.
     func retainCount(for channel: RealtimeChannelID) -> Int {
         lock.lock(); defer { lock.unlock() }
         return retainCounts[channel] ?? 0
@@ -119,7 +119,7 @@ nonisolated protocol SubscriptionManaging: Sendable {
     func unsubscribeAll() async
 }
 
-/// Registry-only subscription manager — product channels are not joined in Phase 4B.
+/// Registry-only subscription manager, product channels are not joined in Phase 4B.
 nonisolated struct RegistrySubscriptionManager: SubscriptionManaging {
     private let registry: any ChannelRegistry
 
@@ -162,7 +162,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         self.reconnectPolicy = reconnectPolicy
     }
 
-    /// Boots connection infrastructure only — does not open product channels.
+    /// Boots connection infrastructure only, does not open product channels.
     func start() {
         guard !isActive else { return }
         isActive = true
@@ -172,7 +172,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         }
     }
 
-    /// App foreground — reconnect socket and rejoin active watches if the WS died.
+    /// App foreground, reconnect socket and rejoin active watches if the WS died.
     func resumeIfNeeded() {
         guard isActive else { return }
         RealtimeLifecycleDebugLog.hubResumeIfNeeded()
@@ -239,12 +239,12 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Web Community room channel — idle until `room_messages` postgres_changes arrive.
+    /// Web Community room channel, idle until `room_messages` postgres_changes arrive.
     func watchRoomMessages(roomID: RoomID, accessToken: String?) -> AsyncStream<MessageRealtimeSignal> {
         watchRoomLive(roomID: roomID, accessToken: accessToken, presenceTrack: nil).messages
     }
 
-    /// Web `subscribeCommunityRoomLiveChannel` — messages, reactions, optional presence track.
+    /// Web `subscribeCommunityRoomLiveChannel`, messages, reactions, optional presence track.
     func watchRoomLive(
         roomID: RoomID,
         accessToken: String?,
@@ -267,7 +267,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Web DM thread — idle until `messages` postgres_changes arrive.
+    /// Web DM thread, idle until `messages` postgres_changes arrive.
     func watchConversationMessages(
         conversationID: ConversationID,
         accessToken: String?,
@@ -283,7 +283,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Inbox read cursors — `conversation_member_preferences` (publication candidate; watch retained).
+    /// Inbox read cursors, `conversation_member_preferences` (publication candidate; watch retained).
     func watchConversationReadCursors(
         userID: String,
         accessToken: String?,
@@ -299,7 +299,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Inbox — idle until `room_messages` arrive for member rooms.
+    /// Inbox, idle until `room_messages` arrive for member rooms.
     func watchMemberRoomMessages(
         roomIDs: [String],
         accessToken: String?,
@@ -315,7 +315,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Inbox — idle until `messages` arrive for loaded DM conversations.
+    /// Inbox, idle until `messages` arrive for loaded DM conversations.
     func watchInboxConversationMessages(
         conversationIDs: [String],
         accessToken: String?,
@@ -331,7 +331,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Inbox room read cursors — `room_members` (publication candidate; watch retained).
+    /// Inbox room read cursors, `room_members` (publication candidate; watch retained).
     func watchRoomReadCursors(
         userID: String,
         accessToken: String?,
@@ -347,7 +347,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// One profile table (`profile_posts` or `trades`) — idle until postgres_changes.
+    /// One profile table (`profile_posts` or `trades`), idle until postgres_changes.
     func watchProfileTable(
         table: String,
         profileID: String,
@@ -365,7 +365,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
-    /// Activity — idle until `notifications` postgres_changes for the viewer.
+    /// Activity, idle until `notifications` postgres_changes for the viewer.
     func watchNotifications(
         userID: String,
         accessToken: String?,
@@ -377,7 +377,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         return live.watchNotifications(userID: userID, accessToken: accessToken, debugOwner: debugOwner)
     }
 
-    /// Trade Room livestream — session-scoped interactive tables (hands, invites, grants, blocks, session row).
+    /// Trade Room livestream, session-scoped interactive tables (hands, invites, grants, blocks, session row).
     func watchBroadcastInteractiveSession(
         roomID: RoomID,
         sessionID: String,

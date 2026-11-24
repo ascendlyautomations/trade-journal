@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// Lifecycle / load tracing for Trade Rooms home regressions — not per-render.
+/// Lifecycle / load tracing for Trade Rooms home regressions, not per-render.
 enum TradeRoomsHomeLifecycleProbe {
     nonisolated static func viewModelInit(id: String) {
         print("[TradeRoomsHome] vm.init id=\(id)")

@@ -9,7 +9,7 @@ final class SessionRoomMemberTagsStore {
 
     private var tagsByRoom: [RoomID: [RoomMemberTag]] = [:]
     private var assignmentsByRoom: [RoomID: [RoomMemberTagAssignment]] = [:]
-    /// Bumped whenever tag definitions or assignments change — drives SwiftUI refresh.
+    /// Bumped whenever tag definitions or assignments change, drives SwiftUI refresh.
     private(set) var revision: UInt64 = 0
 
     func tags(for roomID: RoomID) -> [RoomMemberTag] {
@@ -77,12 +77,12 @@ final class SessionRoomMemberTagsStore {
 }
 
 extension SessionRoomMemberTagsStore {
-    /// Loads tags + assignments only — never seeds preset tags (manager-only).
+    /// Loads tags + assignments only, never seeds preset tags (manager-only).
     func hydrate(roomID: RoomID, repository: any RoomManagementRepository) async throws {
         try await hydrateTags(roomID: roomID, repository: repository)
     }
 
-    /// Tags + assignments only — does not seed preset tags.
+    /// Tags + assignments only, does not seed preset tags.
     func hydrateTags(roomID: RoomID, repository: any RoomManagementRepository) async throws {
         async let tags = repository.memberTags(roomID: roomID)
         async let assignments = repository.memberTagAssignments(roomID: roomID)

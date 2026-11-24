@@ -3,7 +3,7 @@ import Foundation
 nonisolated protocol ProfileRepository: Sendable {
     func currentUser() async throws -> User
     func profile(id: ProfileID) async throws -> Profile
-    /// Bounded batch — PostgREST `id=in.(…)`. Prefer ``SessionProfileStore`` at call sites.
+    /// Bounded batch, PostgREST `id=in.(…)`. Prefer ``SessionProfileStore`` at call sites.
     func profiles(ids: [ProfileID]) async throws -> [Profile]
     func profile(username: String) async throws -> Profile
     func ensureProfileExists(for profileID: ProfileID) async throws -> Profile
@@ -11,24 +11,24 @@ nonisolated protocol ProfileRepository: Sendable {
     func isUsernameTaken(_ username: String, excluding profileID: ProfileID) async throws -> Bool
     func completeProfileOnboarding(_ submission: ProfileOnboardingSubmission) async throws -> Profile
     func updateProfile(_ profile: Profile) async throws -> Profile
-    /// Owner Settings profile tab — includes `username_change_count`.
+    /// Owner Settings profile tab, includes `username_change_count`.
     func ownerProfileForSettings(id: ProfileID) async throws -> Profile
     func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile
     func stats(for profileID: ProfileID) async throws -> ProfileStats
     /// Drop in-memory REST stats so the next fetch reflects journal mutations.
     func invalidateCachedStats(for profileID: ProfileID)
-    /// Web Profile wall — `profile_posts` (not feed `posts`).
+    /// Web Profile wall, `profile_posts` (not feed `posts`).
     func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post>
     /// Single wall post for detail destinations (`profile_posts`).
     func wallPost(id: PostID) async throws -> Post
-    /// Web Profile “Create Post” — inserts into `profile_posts` (not feed `posts`).
+    /// Web Profile “Create Post”, inserts into `profile_posts` (not feed `posts`).
     func createWallPost(
         authorID: ProfileID,
         content: String,
         imageURL: String?,
         imageCrop: ContentImagePresentation?
     ) async throws -> Post
-    /// Web `buildRoomSharePostInsert` — same wall post plus the room snapshot columns.
+    /// Web `buildRoomSharePostInsert`, same wall post plus the room snapshot columns.
     func createWallPost(
         authorID: ProfileID,
         content: String,

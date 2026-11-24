@@ -67,7 +67,7 @@ enum ProfilePinnedMutation {
     }
 }
 
-/// Presentation-layer ordering — profile pins first within the active tab, no duplicates.
+/// Presentation-layer ordering, profile pins first within the active tab, no duplicates.
 enum ProfilePinnedOrdering {
     static func pins(
         for contentType: ProfilePinnedContentType,

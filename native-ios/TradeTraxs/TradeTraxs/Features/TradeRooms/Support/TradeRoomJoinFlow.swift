@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `attemptTradeRoomJoin` parity — ban check, approval requests, approved → `room_members` insert.
+/// Web `attemptTradeRoomJoin` parity, ban check, approval requests, approved → `room_members` insert.
 @MainActor
 enum TradeRoomJoinFlow {
     enum Result: Sendable, Equatable {

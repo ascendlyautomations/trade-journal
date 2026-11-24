@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// Deterministic, versioned import fingerprints — no sensitive screenshot content.
+/// Deterministic, versioned import fingerprints, no sensitive screenshot content.
 nonisolated enum ImportFingerprint {
     static let version = "v1"
 

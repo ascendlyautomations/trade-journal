@@ -12,7 +12,7 @@ nonisolated struct UnmatchedPayoutAchievement: Sendable {
     var linkedEntryID: String?
 }
 
-/// Unified payout history row — manual ledger + funded prop-firm cycles.
+/// Unified payout history row, manual ledger + funded prop-firm cycles.
 nonisolated struct PayoutHistoryItem: Identifiable, Hashable, Sendable {
     enum Source: Hashable, Sendable {
         case liveLedger
@@ -198,7 +198,7 @@ nonisolated enum PayoutHistorySupport {
         return summary(for: items).total
     }
 
-    /// Recorded-only total — used in tests and parity checks.
+    /// Recorded-only total, used in tests and parity checks.
     static func withdrawalsPageRecordedTotal(
         accounts: [TradingAccount],
         entriesByAccount: [TradingAccountID: [AccountPayoutEntry]],
@@ -252,7 +252,7 @@ nonisolated enum PayoutHistorySupport {
         return summary(for: scoped).total
     }
 
-    /// Ledger + funded cycles only — excludes unmatched payout achievements (Withdrawals page may add those separately).
+    /// Ledger + funded cycles only, excludes unmatched payout achievements (Withdrawals page may add those separately).
     static func recordedWithdrawalsTotal(
         accounts: [TradingAccount],
         entriesByAccount: [TradingAccountID: [AccountPayoutEntry]],

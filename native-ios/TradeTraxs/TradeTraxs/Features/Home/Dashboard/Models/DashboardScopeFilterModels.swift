@@ -1,25 +1,25 @@
 import Foundation
 
-/// Client-side dashboard scope — account picker stays separate; these apply to KPIs, charts, insights, psych.
+/// Client-side dashboard scope, account picker stays separate; these apply to KPIs, charts, insights, psych.
 nonisolated struct DashboardClientScopeFilter: Equatable, Sendable {
     var accountFilter: DashboardAccountFilter
     var dateRange: DashboardDateRange
     var customInterval: DateInterval?
     var accountMode: ProfileStatisticsMetrics.Mode
     var showPublicOnly: Bool
-    /// Linked trading accounts — Profile Stats uses these before trade denormalization.
+    /// Linked trading accounts, Profile Stats uses these before trade denormalization.
     var linkedAccountModes: [TradingAccountID: TradingAccountMode] = [:]
 
     static let defaultAccountMode: ProfileStatisticsMetrics.Mode = .all
 
     var usesCustomTimeRange: Bool { customInterval != nil }
 
-    /// Custom date ranges are not in V3 presets — always recompute from trade rows.
+    /// Custom date ranges are not in V3 presets, always recompute from trade rows.
     var requiresLocalMetricsRecompute: Bool {
         usesCustomTimeRange || dateRange == .oneYear
     }
 
-    /// Web dashboard filters (account type, public) — client trade rows like `useDashboardAnalytics`.
+    /// Web dashboard filters (account type, public), client trade rows like `useDashboardAnalytics`.
     var requiresClientTradeScopeOverlay: Bool {
         showPublicOnly || accountMode != Self.defaultAccountMode
     }
@@ -86,7 +86,7 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
     }
 }
 
-/// Dashboard visibility filter — mirrors web `showPublicOnly`.
+/// Dashboard visibility filter, mirrors web `showPublicOnly`.
 nonisolated enum DashboardTradeVisibilityFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
     case allTrades
     case publicOnly
@@ -101,7 +101,7 @@ nonisolated enum DashboardTradeVisibilityFilter: String, CaseIterable, Identifia
     }
 }
 
-/// Editable filter sheet state — applied on confirm.
+/// Editable filter sheet state, applied on confirm.
 nonisolated struct DashboardScopeFilterDraft: Equatable, Sendable {
     var timePeriod: DashboardTimePeriodPicker = .thirtyDays
     var customStart: Date?
@@ -139,7 +139,7 @@ nonisolated enum DashboardScopeFilterSupport {
         return DateInterval(start: dayStart, end: dayEnd)
     }
 
-    /// Profile → Stats mode chip — same as ``ProfileStatisticsMetrics/resolveAccountMode`` + ``matchesMode``.
+    /// Profile → Stats mode chip, same as ``ProfileStatisticsMetrics/resolveAccountMode`` + ``matchesMode``.
     static func matchesProfileStatisticsAccountModeFilter(
         trade: Trade,
         linkedAccountModes: [TradingAccountID: TradingAccountMode],
@@ -160,7 +160,7 @@ nonisolated enum DashboardScopeFilterSupport {
         return ProfileStatisticsMetrics.matchesMode(input, selected)
     }
 
-    /// Web dashboard gear — `String(trade.mode ?? trade.account_type ?? "")`.
+    /// Web dashboard gear, `String(trade.mode ?? trade.account_type ?? "")`.
     static func webDashboardAccountTypeToken(wireMode: String?, wireAccountType: String?) -> String {
         let mode = wireMode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         if !mode.isEmpty { return mode }
@@ -173,14 +173,14 @@ nonisolated enum DashboardScopeFilterSupport {
             wireAccountType: trade.wireAccountType
         )
         if !wire.isEmpty { return wire }
-        // Disk cache rows mapped before `wireMode` existed — still denormalized on `accountMode`.
+        // Disk cache rows mapped before `wireMode` existed, still denormalized on `accountMode`.
         if let accountMode = trade.accountMode {
             return ProfileStatisticsMetrics.accountTypeString(for: accountMode)
         }
         return ""
     }
 
-    /// Web `resolveDashboardTradeDate` — entry time is the analytics timestamp.
+    /// Web `resolveDashboardTradeDate`, entry time is the analytics timestamp.
     static func dashboardTradeFilterDate(for trade: Trade) -> Date {
         trade.entryAt
     }
@@ -237,7 +237,7 @@ nonisolated enum DashboardScopeFilterSupport {
         )
     }
 
-    /// Profile Stats tab — `profileTradeMatchesStatisticsMode` / `analyticsModeEffective`.
+    /// Profile Stats tab, `profileTradeMatchesStatisticsMode` / `analyticsModeEffective`.
     static func profileStatisticsEffectiveMode(for trade: Trade) -> TradingAccountMode? {
         let candidates = [
             trade.wireAccountType,
@@ -291,12 +291,12 @@ nonisolated enum DashboardScopeFilterSupport {
         )
     }
 
-    /// Profile Stats public universe — `is_public = true` only (not public note alone).
+    /// Profile Stats public universe, `is_public = true` only (not public note alone).
     static func isProfileStatisticsPublicTrade(_ trade: Trade) -> Bool {
         trade.visibility == .public
     }
 
-    /// Web dashboard `tradeIsPublic` — DB flag or non-empty public note.
+    /// Web dashboard `tradeIsPublic`, DB flag or non-empty public note.
     static func isWebDashboardPublicTrade(_ trade: Trade) -> Bool {
         if trade.visibility == .public { return true }
         let note = trade.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

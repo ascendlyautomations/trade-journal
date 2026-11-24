@@ -51,7 +51,7 @@ final class SettingsSubscriptionViewModel {
     }
 
     var planTitle: String {
-        guard let status else { return "—" }
+        guard let status else { return "–" }
         if !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
             return status.hasTraxProAccess ? MonetizationPlanCopy.proPlanName : "TradeTraxs"
         }

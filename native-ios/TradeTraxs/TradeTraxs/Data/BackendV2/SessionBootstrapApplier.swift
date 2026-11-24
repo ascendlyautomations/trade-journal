@@ -41,14 +41,14 @@ nonisolated enum SessionBootstrapApplier {
         )
         let applied = try mapApplied(bootstrap, expectedViewerID: expectedViewerID)
         detailCache?.seed(applied.profile)
-        // Session RPC does not include overview stats — fetch via REST in SessionBootstrapLoader.
+        // Session RPC does not include overview stats, fetch via REST in SessionBootstrapLoader.
 
         let following = Set(bootstrap.data.following_ids.map { ProfileID($0) })
         detailCache?.seedViewerFollowingIDs(following)
         await SessionFollowingStore.shared.seed(viewerID: expectedViewerID, ids: Set(bootstrap.data.following_ids))
 
         // Session RPC `accounts_summary` is picker metadata only (id/name/mode/is_active).
-        // Never seed it into SessionAccountsStore — Manage Accounts needs full ACCOUNTS_SELECT rows.
+        // Never seed it into SessionAccountsStore, Manage Accounts needs full ACCOUNTS_SELECT rows.
 
         SessionBootstrapStore.shared.seed(bootstrap, source: "rpc")
 

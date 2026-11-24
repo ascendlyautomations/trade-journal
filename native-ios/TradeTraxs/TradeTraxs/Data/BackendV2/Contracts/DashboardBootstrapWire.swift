@@ -1,6 +1,6 @@
 import Foundation
 
-/// Wire trade row — mirrors `rpc_v1_dashboard_bootstrap` `trade_window` SQL projection.
+/// Wire trade row, mirrors `rpc_v1_dashboard_bootstrap` `trade_window` SQL projection.
 nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
     var id: String
     var date: String?
@@ -177,7 +177,7 @@ nonisolated extension Trade {
     }
 }
 
-/// Wire account row — mirrors `accounts` columns returned by the Dashboard RPC.
+/// Wire account row, mirrors `accounts` columns returned by the Dashboard RPC.
 nonisolated extension DashboardAccountWireV1 {
     mutating func mergeFields(from account: TradingAccount) {
         id = account.id.rawValue

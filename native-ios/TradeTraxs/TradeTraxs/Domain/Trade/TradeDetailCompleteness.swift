@@ -18,7 +18,7 @@ nonisolated enum TradeDetailCompleteness {
         }
     }
 
-    /// Detail fetch uses `ownerJournalSelect` — includes psychology + import columns when present on wire.
+    /// Detail fetch uses `ownerJournalSelect`, includes psychology + import columns when present on wire.
     static func detailSelectIncludesJournalFields(_ select: String) -> Bool {
         select.contains("psychology_notes")
             && select.contains("exit_emotion")

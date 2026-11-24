@@ -70,7 +70,7 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
 
     func unreadCount() async throws -> Int {
         guard let userID = await session.currentUserID else { return 0 }
-        // PostgREST Prefer: count=exact — no notification row payloads transferred.
+        // PostgREST Prefer: count=exact, no notification row payloads transferred.
         return try await supabase.database.count(
             from: "notifications",
             query: [
@@ -156,7 +156,7 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
             throw AppError.domain(.permission(.notAuthenticated))
         }
         struct Body: Encodable { var read: Bool }
-        // Bulk update — must not use single-row `Accept: application/vnd.pgrst.object+json`.
+        // Bulk update, must not use single-row `Accept: application/vnd.pgrst.object+json`.
         try await supabase.database.update(
             Body(read: true),
             table: "notifications",

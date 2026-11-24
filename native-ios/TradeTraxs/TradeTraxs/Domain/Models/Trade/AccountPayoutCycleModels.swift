@@ -22,7 +22,7 @@ nonisolated enum PayoutDrawdownBehavior: String, Codable, Sendable, Hashable, Ca
     }
 }
 
-/// Closed or open payout cycle row — mirrors web `AccountPayoutCycle`.
+/// Closed or open payout cycle row, mirrors web `AccountPayoutCycle`.
 nonisolated struct AccountPayoutCycle: Hashable, Codable, Sendable, Identifiable {
     var id: String
     var accountID: TradingAccountID
@@ -38,7 +38,7 @@ nonisolated struct AccountPayoutCycle: Hashable, Codable, Sendable, Identifiable
     var cycleNumber: Int?
 }
 
-/// Input for `record_account_payout` — mirrors web `RecordAccountPayoutInput`.
+/// Input for `record_account_payout`, mirrors web `RecordAccountPayoutInput`.
 nonisolated struct RecordAccountPayoutInput: Hashable, Sendable {
     var balanceAfterPayout: Decimal
     var payoutAmount: Decimal
@@ -58,7 +58,7 @@ nonisolated struct AccountPayoutPreferences: Hashable, Sendable {
     var rememberPayoutDrawdownBehavior: Bool
 }
 
-/// Setup context for Record Payout UI — mirrors web `fetchPropFirmPayoutSetupContext`.
+/// Setup context for Record Payout UI, mirrors web `fetchPropFirmPayoutSetupContext`.
 nonisolated struct PropFirmPayoutSetupContext: Sendable {
     var account: TradingAccount
     var activeCycle: AccountPayoutCycle?

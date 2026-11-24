@@ -352,7 +352,7 @@ nonisolated enum TradeMapper: DTOMapper {
         )
     }
 
-    /// Web edit save — preserve `created_at`; write denormalized account columns like insert.
+    /// Web edit save, preserve `created_at`; write denormalized account columns like insert.
     static func updateBody(from draft: TradeDraft, createdAt: Date, previous: Trade? = nil) -> TradeDTO.UpdateBody {
         let tradeDate = TradingSessionLabel.easternTradeDateString(from: draft.entryAt)
         let session = draft.sessionLabel
@@ -449,7 +449,7 @@ nonisolated enum TradeMapper: DTOMapper {
         }
     }
 
-    /// Execution context — `trade_mode` first; never treat account status (`eval`, `funded`) as execution mode.
+    /// Execution context, `trade_mode` first; never treat account status (`eval`, `funded`) as execution mode.
     static func mapExecutionMode(tradeMode: String?, mode: String?, accountType: String?) -> TradeMode {
         if let raw = normalizedWireValue(tradeMode) {
             return mapMode(raw)
@@ -475,7 +475,7 @@ nonisolated enum TradeMapper: DTOMapper {
         return .live
     }
 
-    /// Account status on the trade row — mirrors web `account_type ?? mode` badge semantics.
+    /// Account status on the trade row, mirrors web `account_type ?? mode` badge semantics.
     static func mapDenormalizedAccountMode(accountType: String?, mode: String?) -> TradingAccountMode? {
         TradingAccountMode.parseWireValue(accountType) ?? TradingAccountMode.parseWireValue(mode)
     }
@@ -901,7 +901,7 @@ nonisolated enum TradingAccountMapper {
         )
     }
 
-    /// Web account mode strings — case-insensitive (`Funded` / `Evaluation` / `Live`).
+    /// Web account mode strings, case-insensitive (`Funded` / `Evaluation` / `Live`).
     private static func mapAccountMode(_ raw: String?) -> TradingAccountMode {
         TradingAccountMode.parseWireValue(raw) ?? .live
     }

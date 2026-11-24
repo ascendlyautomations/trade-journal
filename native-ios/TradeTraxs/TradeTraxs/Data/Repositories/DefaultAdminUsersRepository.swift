@@ -324,7 +324,7 @@ private nonisolated enum AdminJSONValue: Decodable, Sendable {
         case .int(let i): return String(i)
         case .double(let d): return String(d)
         case .bool(let b): return b ? "true" : "false"
-        case .null: return "—"
+        case .null: return "–"
         }
     }
 }
@@ -358,7 +358,7 @@ private nonisolated extension AdminUserSummary {
 private nonisolated extension AdminUserDeletionPreview {
     static func format(_ preview: [String: AdminJSONValue]) -> [(label: String, value: String)] {
         preview.keys.sorted().map { key in
-            (key, preview[key]?.display ?? "—")
+            (key, preview[key]?.display ?? "–")
         }
     }
 }

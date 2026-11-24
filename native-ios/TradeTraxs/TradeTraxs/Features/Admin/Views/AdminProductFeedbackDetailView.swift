@@ -50,7 +50,7 @@ struct AdminProductFeedbackDetailView: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 Text("Message")
                     .experienceStyle(.caption, color: colors.tertiaryText)
-                Text(viewModel.snapshot.row.message.isEmpty ? "—" : viewModel.snapshot.row.message)
+                Text(viewModel.snapshot.row.message.isEmpty ? "–" : viewModel.snapshot.row.message)
                     .experienceStyle(.body, color: colors.primaryText)
             }
             if let created = viewModel.snapshot.row.createdAt {

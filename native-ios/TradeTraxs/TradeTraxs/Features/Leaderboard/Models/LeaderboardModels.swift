@@ -15,7 +15,7 @@ enum LeaderboardAudience: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-/// Time window selector — maps onto existing ``LeaderboardWindow`` for repository calls.
+/// Time window selector, maps onto existing ``LeaderboardWindow`` for repository calls.
 enum LeaderboardTimeframe: String, CaseIterable, Hashable, Sendable {
     case today
     case week
@@ -65,7 +65,7 @@ enum LeaderboardTimeframe: String, CaseIterable, Hashable, Sendable {
 }
 
 /// Ranking / display metric. Sorting uses fields already available from the leaderboard
-/// backend + hydrated social counts — no new ranking algorithms.
+/// backend + hydrated social counts, no new ranking algorithms.
 enum LeaderboardCategory: String, CaseIterable, Hashable, Sendable {
     case pnl
     case winRate
@@ -98,7 +98,7 @@ enum LeaderboardTrend: Hashable, Sendable {
     case flat
 }
 
-/// Hydrated row for rendering — built by ``LeaderboardBootstrap``, never fetched by child views.
+/// Hydrated row for rendering, built by ``LeaderboardBootstrap``, never fetched by child views.
 struct LeaderboardRow: Hashable, Identifiable, Sendable {
     var id: ProfileID { profileID }
     var rank: Int
@@ -129,7 +129,7 @@ struct LeaderboardRow: Hashable, Identifiable, Sendable {
         case .winRate:
             return winRate ?? Decimal(-999_999)
         case .profitFactor:
-            // Unavailable PF ("—") always sorts below calculable values.
+            // Unavailable PF ("–") always sorts below calculable values.
             return profitFactor ?? Decimal(-999_999)
         case .expectancy:
             return expectancy ?? Decimal(-999_999)

@@ -18,7 +18,7 @@ nonisolated enum ProfileIdentitySanitizer {
         return trimmed
     }
 
-    /// Web `getTraderDisplay` parity — never surface a UUID as a visible handle.
+    /// Web `getTraderDisplay` parity, never surface a UUID as a visible handle.
     static func leaderboardDisplayName(name: String?, username: String?) -> String {
         if let name = sanitizedPublicField(name) { return name }
         if let username = sanitizedPublicField(username) { return username }

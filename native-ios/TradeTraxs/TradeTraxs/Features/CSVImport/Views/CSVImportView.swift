@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Create → Import CSV — file pick → parse → map (if needed) → preview → import.
+/// Create → Import CSV, file pick → parse → map (if needed) → preview → import.
 struct CSVImportView: View {
     @State private var viewModel: CSVImportViewModel
     @State private var showsFileImporter = false

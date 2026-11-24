@@ -6,7 +6,7 @@ nonisolated struct ExploreTraderSuggestion: Hashable, Codable, Sendable, Identif
     var profile: Profile
     var followerCount: Int
     var score: Int
-    /// Identity line from real profile fields (type / style / market) — never invented reasons.
+    /// Identity line from real profile fields (type / style / market), never invented reasons.
     var identityLine: String?
 }
 
@@ -23,11 +23,11 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
     var ownerUsername: String?
     var ownerDisplayName: String?
     var ownerAvatarURL: String?
-    /// Active members the viewer follows — used for Suggested ranking badge.
+    /// Active members the viewer follows, used for Suggested ranking badge.
     var followedMemberCount: Int?
-    /// Authoritative backend classification — never inferred from room name in UI.
+    /// Authoritative backend classification, never inferred from room name in UI.
     var roomKind: TradeRoomKind
-    /// Primary discovery category (`rooms.category`) — same enum as create/edit.
+    /// Primary discovery category (`rooms.category`), same enum as create/edit.
     var category: TradeRoomCategory?
     /// Discovery/search labels from backend (`rooms.discovery_tags`).
     var discoveryTags: [String]
@@ -37,11 +37,11 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
     var isOwner: Bool?
     /// Authoritative active membership (`room_members.left_at IS NULL`).
     var isMember: Bool?
-    /// `rooms.join_policy` — open vs approval (request to join).
+    /// `rooms.join_policy`, open vs approval (request to join).
     var joinPolicy: TradeRoomJoinPolicy
     /// Viewer row in `room_join_requests` when present.
     var viewerJoinRequestState: TradeRoomJoinRequestState?
-    /// Viewer favorite — `room_members.is_favorited`.
+    /// Viewer favorite, `room_members.is_favorited`.
     var isFavorited: Bool?
 
     init(
@@ -115,7 +115,7 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
         return trimmed.prefix(3).joined(separator: " · ")
     }
 
-    /// Web `resolveRoomAvatarUrl` parity — room image first, storage path or HTTPS preserved.
+    /// Web `resolveRoomAvatarUrl` parity, room image first, storage path or HTTPS preserved.
     var imageReference: MediaReference? {
         guard let raw = imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty
@@ -187,7 +187,7 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
     }
 }
 
-/// Single-call Trade Rooms home bootstrap — Your Rooms + Suggested + Popular.
+/// Single-call Trade Rooms home bootstrap, Your Rooms + Suggested + Popular.
 nonisolated struct TradeRoomsHomeBootstrap: Hashable, Sendable {
     var viewerID: ProfileID?
     var scope: TradeRoomDiscoveryScope
@@ -204,14 +204,14 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
     case official
     case community
     case yourRooms = "your_rooms"
-    /// Home tab — Popular discovery only (uses `all` RPC scope).
+    /// Home tab, Popular discovery only (uses `all` RPC scope).
     case popular
     /// Joined rooms the viewer has favorited (`room_members.is_favorited`).
     case favorites
 
     var id: String { rawValue }
 
-    /// Trade Rooms home scope chips — fixed order; selection is always by enum case, not index.
+    /// Trade Rooms home scope chips, fixed order; selection is always by enum case, not index.
     static let homeToggleOrder: [TradeRoomDiscoveryScope] = [
         .all, .popular, .yourRooms, .favorites,
     ]
@@ -266,12 +266,12 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
         false
     }
 
-    /// All tab — one member-count-ordered list (`popular` rows from home bootstrap RPC).
+    /// All tab, one member-count-ordered list (`popular` rows from home bootstrap RPC).
     var showsAllScopeUnifiedDiscoveryList: Bool {
         self == .all
     }
 
-    /// Popular tab — single member-ordered list (Popular uses RPC `popular` rows).
+    /// Popular tab, single member-ordered list (Popular uses RPC `popular` rows).
     var showsUnifiedDiscoveryList: Bool {
         self == .official || self == .popular
     }
@@ -295,7 +295,7 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
         self == .favorites
     }
 
-    /// All / Popular — show category dropdown and apply category filtering.
+    /// All / Popular, show category dropdown and apply category filtering.
     var showsDiscoveryCategoryFilter: Bool {
         self == .all || self == .popular
     }
@@ -313,7 +313,7 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
     }
 }
 
-/// Trade Rooms home discovery modes — all backed by `rpc_v1_trade_rooms_home_bootstrap` / discovery RPC.
+/// Trade Rooms home discovery modes, all backed by `rpc_v1_trade_rooms_home_bootstrap` / discovery RPC.
 nonisolated enum TradeRoomDiscoveryMode: String, CaseIterable, Hashable, Sendable, Identifiable {
     case yourRooms = "your_rooms"
     case suggested
@@ -360,7 +360,7 @@ nonisolated struct ExploreLiveTraderNow: Hashable, Sendable, Identifiable {
     var streamTitle: String?
 }
 
-/// BFF envelope for `GET /api/explore/live-traders` — decoded with `SupabaseTransport` default keys.
+/// BFF envelope for `GET /api/explore/live-traders`, decoded with `SupabaseTransport` default keys.
 nonisolated struct ExploreLiveTradersNowEnvelope: Decodable, Sendable {
     var items: [ExploreLiveTraderNowAPIRow]?
 }

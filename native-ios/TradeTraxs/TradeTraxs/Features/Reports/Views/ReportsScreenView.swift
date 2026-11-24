@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Reports catalog — Performance Reports + Psychology Reports.
+/// Reports catalog, Performance Reports + Psychology Reports.
 struct ReportsScreenView: View {
     @State private var viewModel: ReportsScreenViewModel
     @State private var isPerformanceExpanded = true
@@ -108,6 +108,7 @@ struct ReportsScreenView: View {
                 .experienceSheetChrome()
         }
         .accessibilityIdentifier("reports.home")
+        .onOwnerAccountMutation { viewModel.handleAccountMutation() }
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
             entitlementGateRevision += 1
         }
@@ -249,50 +250,12 @@ struct ReportsScreenView: View {
     }
 
     private var tradingReportsUpgradeBlock: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("TraxsPro reports")
-                .experienceStyle(.headline, color: colors.primaryText)
-            Text("Performance and psychology report reviews are included with TraxsPro.")
-                .experienceStyle(.footnote, color: colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            VStack(spacing: ExperienceSpacing.sm) {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    TraxsProPreviewCoordinator.shared.presentReportsPreview(entryPoint: .reportsGate)
-                } label: {
-                    Text(MonetizationPlanCopy.previewWithSampleDataButtonTitle)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("reports.preview.traxpro")
-
-                if canPresentPaywall {
-                    Button {
-                        ExperienceHaptics.play(.selection)
-                        ProUpgradeCoordinator.shared.present(reason: .feature(.tradingReports))
-                    } label: {
-                        Text(MonetizationPlanCopy.paywallUnlockTitle)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("reports.upgrade.traxpro")
-                }
-            }
-        }
-        .padding(ExperienceSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
-        .accessibilityIdentifier("reports.traxpro.gate")
-    }
-
-    private var canPresentPaywall: Bool {
-        ProMonetizationPolicy.canPresentProPaywall(
-            demoModeActive: ExploreModeSupport.isActive,
-            enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
-            paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
+        TraxProFeaturePreviewCard(
+            title: MonetizationPlanCopy.reportsFeatureGateTitle,
+            message: MonetizationPlanCopy.reportsFeatureGateMessage,
+            feature: .tradingReports,
+            previewEntryPoint: .reportsGate,
+            accessibilityIdentifier: "reports.traxpro.gate"
         )
     }
 

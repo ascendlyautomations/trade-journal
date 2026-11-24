@@ -34,26 +34,13 @@ struct TradingRulesPremiumAnalyticsLockedSection: View {
                 }
             }
 
-            if ProMonetizationPolicy.canPresentProPaywall(
-                demoModeActive: ExploreModeSupport.isActive,
-                enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
-                paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
-            ) {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    ProUpgradeCoordinator.shared.present(
-                        reason: .feature(.premiumAnalytics),
-                        previewFeature: .tradingRules
-                    )
-                } label: {
-                    Text(MonetizationPlanCopy.exploreTraxsProButtonTitle)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .accessibilityIdentifier("tradingRulesAnalytics.exploreTraxsPro")
-            }
+            MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
+                feature: .premiumAnalytics,
+                previewFeature: .tradingRules,
+                previewEntryPoint: .tradingRulesGate,
+                previewAccessibilityIdentifier: "tradingRulesAnalytics.preview",
+                unlockAccessibilityIdentifier: "tradingRulesAnalytics.exploreTraxsPro"
+            )
         }
         .padding(ExperienceSpacing.md)
         .experienceTradingRulesCard(prominence: .standard)

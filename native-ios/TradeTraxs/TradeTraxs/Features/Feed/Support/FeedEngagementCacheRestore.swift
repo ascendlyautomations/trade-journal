@@ -42,7 +42,7 @@ enum FeedEngagementCacheRestore {
             } else if entry.item.engagementStateCached == false {
                 summary.skippedIncomplete += 1
             } else {
-                // Legacy persisted timelines — trust embedded FeedItem counts.
+                // Legacy persisted timelines, trust embedded FeedItem counts.
                 store.seed(snapshot(for: entry), for: target)
                 summary.restoredLegacyImplicit += 1
             }

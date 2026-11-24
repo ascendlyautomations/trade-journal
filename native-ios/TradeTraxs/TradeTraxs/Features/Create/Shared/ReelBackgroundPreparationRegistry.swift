@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single background `MediaVideoPreparation` task per Clip selection — shared by composer and upload job.
+/// Single background `MediaVideoPreparation` task per Clip selection, shared by composer and upload job.
 actor ReelBackgroundPreparationRegistry {
     static let shared = ReelBackgroundPreparationRegistry()
 
@@ -130,7 +130,7 @@ actor ReelBackgroundPreparationRegistry {
     }
 
     #if DEBUG
-    /// Tests only — simulates a failed background preparation without running the encoder.
+    /// Tests only, simulates a failed background preparation without running the encoder.
     func testingSeedCachedFailure(
         preparationTaskID: String,
         selectionID: String,

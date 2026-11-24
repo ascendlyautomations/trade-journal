@@ -26,7 +26,7 @@ nonisolated enum TradingRuleTemplateID: String, CaseIterable, Identifiable, Send
         case .propFirm:
             return "Daily/weekly loss limits, profit stop, and per-trade risk caps."
         case .custom:
-            return "Keep your current draft — no suggested values."
+            return "Keep your current draft, no suggested values."
         }
     }
 }

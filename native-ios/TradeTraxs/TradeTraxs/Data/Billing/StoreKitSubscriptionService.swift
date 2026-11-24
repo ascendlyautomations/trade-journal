@@ -3,7 +3,7 @@ import OSLog
 import StoreKit
 import UIKit
 
-/// StoreKit 2 TraxsPro subscription foundation — purchase, restore, and server sync.
+/// StoreKit 2 TraxsPro subscription foundation, purchase, restore, and server sync.
 protocol StoreKitEntitlementSyncing: Sendable {
     func syncVerifiedTransactionsToServer() async throws
     func startTransactionListenerIfNeeded() async
@@ -121,7 +121,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
                     } catch {
                         // Leave unfinished so Transaction.updates / restore / foreground sync can retry.
                         AppLog.application.error(
-                            "StoreKit purchase sync failed — transaction left open for retry: \(error.localizedDescription, privacy: .public)"
+                            "StoreKit purchase sync failed, transaction left open for retry: \(error.localizedDescription, privacy: .public)"
                         )
                         return .failed("Could not sync your purchase. We'll retry automatically.")
                     }
@@ -356,7 +356,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         #endif
     }
 
-    /// Temporary DEBUG probe — raw StoreKit `Product` pricing for v2 subscription verification.
+    /// Temporary DEBUG probe, raw StoreKit `Product` pricing for v2 subscription verification.
     private func logStoreKitProductPricingDetails(_ products: [Product]) {
         #if DEBUG
         for product in products {
@@ -373,7 +373,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         #endif
     }
 
-    /// Temporary DEBUG probe — pricing on the purchase-path `Product.products` fetch.
+    /// Temporary DEBUG probe, pricing on the purchase-path `Product.products` fetch.
     private func logStoreKitPurchaseProductPricingDetails(_ product: Product) {
         #if DEBUG
         print(

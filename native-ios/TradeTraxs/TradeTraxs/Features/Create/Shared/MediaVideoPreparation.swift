@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 import UniformTypeIdentifiers
 
-/// Web `lib/reelVideo.ts` limits — inspect, delivery-optimize, thumbnail, upload-ready output.
+/// Web `lib/reelVideo.ts` limits, inspect, delivery-optimize, thumbnail, upload-ready output.
 enum MediaVideoPreparation {
     struct Limits: Sendable {
         var maxDurationSeconds: Int
@@ -44,7 +44,7 @@ enum MediaVideoPreparation {
     /// Final optimized upload must remain below this ceiling.
     nonisolated static let maxFileBytes = Limits.reel.maxFinalUploadBytes
     nonisolated static let maxFinalUploadBytes = maxFileBytes
-    /// Generous pre-compression source ceiling — large camera originals may compress below final limit.
+    /// Generous pre-compression source ceiling, large camera originals may compress below final limit.
     nonisolated static let maxSourceFileBytes = Limits.reel.maxSourceFileBytes
     nonisolated static let maxCaptionLength = 2200
     nonisolated static let durationLimitMessage = Limits.reel.durationLimitMessage

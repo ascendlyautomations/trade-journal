@@ -33,7 +33,7 @@ nonisolated enum ImageCropWireInsert {
         }
     }
 
-    /// Inserts a profile wall post and returns its id (`RETURNING id` only — matches trades).
+    /// Inserts a profile wall post and returns its id (`RETURNING id` only, matches trades).
     static func insertWallPostReturningID(
         supabase: SupabaseInfrastructure,
         body: ProfileWallPostInsertBody
@@ -63,7 +63,7 @@ nonisolated enum ImageCropWireInsert {
                 throw error
             }
             PostPublishProbe.logNote(
-                "profile_posts.image_crop column missing — retrying without image_crop. \(migrationHint)"
+                "profile_posts.image_crop column missing, retrying without image_crop. \(migrationHint)"
             )
             var fallback = body
             fallback.includeImageCropKey = false
@@ -187,7 +187,7 @@ nonisolated enum ImageCropWireInsert {
                 throw error
             }
             PostPublishProbe.logNote(
-                "achievements.image_crop column missing — retrying without image_crop. \(migrationHint)"
+                "achievements.image_crop column missing, retrying without image_crop. \(migrationHint)"
             )
             var fallback = body
             fallback.includeImageCropKey = false
@@ -218,7 +218,7 @@ nonisolated enum ImageCropWireInsert {
                 throw error
             }
             PostPublishProbe.logNote(
-                "posts.image_crop column missing — retrying without image_crop. \(migrationHint)"
+                "posts.image_crop column missing, retrying without image_crop. \(migrationHint)"
             )
             var fallback = body
             fallback.includeImageCropKey = false
@@ -240,7 +240,7 @@ nonisolated enum ImageCropWireInsert {
             ?? { throw AppError.unknown(message: "Insert returned empty representation") }()
     }
 
-    /// One PostgREST request — all rows succeed or none are inserted.
+    /// One PostgREST request, all rows succeed or none are inserted.
     static func insertTradeRows(
         supabase: SupabaseInfrastructure,
         bodies: [TradeDTO.InsertBody]
@@ -256,7 +256,7 @@ nonisolated enum ImageCropWireInsert {
                 throw error
             }
             PostPublishProbe.logNote(
-                "trades.image_crop column missing — retrying without image_crop. \(migrationHint)"
+                "trades.image_crop column missing, retrying without image_crop. \(migrationHint)"
             )
             let fallback = bodies.map { body -> TradeDTO.InsertBody in
                 var copy = body

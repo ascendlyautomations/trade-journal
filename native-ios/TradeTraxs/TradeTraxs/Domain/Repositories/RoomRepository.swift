@@ -4,7 +4,7 @@ nonisolated protocol RoomRepository: Sendable {
     func room(id: RoomID) async throws -> TradeRoom
     /// Rooms owned by a profile (Profile “Trade Room” CTA).
     func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom>
-    /// Owned room lookup — web pre-create `rooms` where `owner_user_id = user.id` limit 1.
+    /// Owned room lookup, web pre-create `rooms` where `owner_user_id = user.id` limit 1.
     func ownedRoom(for profileID: ProfileID) async throws -> TradeRoom?
     /// Creates a Trade Room with default channels and owner membership (web `createUserRoom`).
     func createRoom(
@@ -12,19 +12,19 @@ nonisolated protocol RoomRepository: Sendable {
         ownerProfileID: ProfileID,
         ownerUsername: String
     ) async throws -> TradeRoom
-    /// Member rooms — web Community `loadMemberRooms` (`room_members` + embed).
+    /// Member rooms, web Community `loadMemberRooms` (`room_members` + embed).
     func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom>
-    /// Active member counts for many rooms — one `room_members` SELECT (web `loadMemberStats` parity).
+    /// Active member counts for many rooms, one `room_members` SELECT (web `loadMemberStats` parity).
     func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int]
-    /// Active room memberships with profiles — `room_members` where `left_at IS NULL`.
+    /// Active room memberships with profiles, `room_members` where `left_at IS NULL`.
     func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember]
     /// Web `get_room_unread_counts`.
     func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int]
-    /// Latest `room_messages.created_at` per room — inbox card activity timestamps.
+    /// Latest `room_messages.created_at` per room, inbox card activity timestamps.
     func lastMessageActivity(for roomIDs: [RoomID]) async throws -> [RoomID: Date]
-    /// Web `mark_room_read` — advances `room_members.last_read_at` / `last_read_message_id`.
+    /// Web `mark_room_read`, advances `room_members.last_read_at` / `last_read_message_id`.
     func markRead(roomID: RoomID) async throws
-    /// Web `loadSections` — `room_sections` ordered by `position`.
+    /// Web `loadSections`, `room_sections` ordered by `position`.
     func channels(roomID: RoomID) async throws -> [RoomChannel]
     func membership(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership?
     func join(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership
@@ -37,10 +37,10 @@ nonisolated protocol RoomRepository: Sendable {
         channel: RoomChannel?,
         page: PageRequest
     ) async throws -> CursorPage<RoomMessage>
-    /// Single room message row — used to hydrate push notification targets absent from the first page.
+    /// Single room message row, used to hydrate push notification targets absent from the first page.
     func roomMessage(roomID: RoomID, messageID: RoomMessageID) async throws -> RoomMessage?
     func send(_ message: RoomMessage) async throws -> RoomMessage
-    /// Author delete — `room_messages` row removed (RLS: message author).
+    /// Author delete, `room_messages` row removed (RLS: message author).
     func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws
     func insertMessageReaction(
         roomID: RoomID,
@@ -55,15 +55,15 @@ nonisolated protocol RoomRepository: Sendable {
         targetProfileID: ProfileID?,
         action: RoomModerationAction
     ) async throws
-    /// `rpc_v1_request_trade_room_join` — approval-policy rooms only.
+    /// `rpc_v1_request_trade_room_join`, approval-policy rooms only.
     func requestJoin(roomID: RoomID) async throws -> TradeRoomJoinRequestState
-    /// `rpc_v1_viewer_trade_room_join_request` — current viewer request row.
+    /// `rpc_v1_viewer_trade_room_join_request`, current viewer request row.
     func viewerJoinRequest(roomID: RoomID) async throws -> TradeRoomJoinRequestState?
     /// Sets `room_members.is_favorited` for the active membership row.
     func setRoomFavorited(roomID: RoomID, profileID: ProfileID, favorited: Bool) async throws
     /// Active memberships the viewer has favorited.
     func favoritedRoomIDs(for profileID: ProfileID) async throws -> Set<RoomID>
-    /// `room_bans` — web `isUserBannedFromRoom`.
+    /// `room_bans`, web `isUserBannedFromRoom`.
     func isViewerBanned(from roomID: RoomID, profileID: ProfileID) async throws -> Bool
     /// `room_members.notification_enabled` for the active membership row.
     func updateMembershipNotificationEnabled(
@@ -71,7 +71,7 @@ nonisolated protocol RoomRepository: Sendable {
         profileID: ProfileID,
         enabled: Bool
     ) async throws
-    /// `room_member_channel_preferences` — missing row means enabled.
+    /// `room_member_channel_preferences`, missing row means enabled.
     func channelNotificationPreferences(
         roomID: RoomID,
         profileID: ProfileID,

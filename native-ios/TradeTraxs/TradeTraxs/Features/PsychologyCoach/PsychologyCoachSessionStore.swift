@@ -1,6 +1,6 @@
 import Foundation
 
-/// Session-scoped psychology coach state — deterministic facts always; AI summaries cached by hash.
+/// Session-scoped psychology coach state, deterministic facts always; AI summaries cached by hash.
 @MainActor
 final class PsychologyCoachSessionStore {
     static let shared = PsychologyCoachSessionStore()

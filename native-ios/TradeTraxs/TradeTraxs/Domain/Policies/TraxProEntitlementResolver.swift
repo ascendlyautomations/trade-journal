@@ -1,6 +1,6 @@
 import Foundation
 
-/// Unified TraxPro entitlement — mirrors web ``lib/traxProEntitlement.ts`` / ``isProActive``.
+/// Unified TraxPro entitlement, mirrors web ``lib/traxProEntitlement.ts`` / ``isProActive``.
 nonisolated enum TraxProEntitlementSource: String, Hashable, Codable, Sendable {
     case none
     case stripe

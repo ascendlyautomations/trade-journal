@@ -246,7 +246,7 @@ nonisolated enum TradeSummaryMapper {
         )
     }
 
-    /// Local filter/search parity — includes owner journal fields without full detail hydration.
+    /// Local filter/search parity, includes owner journal fields without full detail hydration.
     static func listMatchTrade(from item: TradeOwnerJournalSummary) -> Trade {
         var trade = previewTrade(from: item.summary)
         trade.accountID = item.accountID

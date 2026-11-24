@@ -1,6 +1,6 @@
 import Foundation
 
-/// Copy-trade grouping + public summaries — mirrors web `copyTradePresentation.ts`.
+/// Copy-trade grouping + public summaries, mirrors web `copyTradePresentation.ts`.
 nonisolated enum CopyTradePresentation {
     struct ModeCounts: Equatable, Sendable {
         var live = 0
@@ -239,7 +239,7 @@ nonisolated enum CopyTradePresentation {
         return "\(user)|\(source)|\(participatingSorted)|\(tick)|\(entry)|\(created)"
     }
 
-    /// Owner Trades list line — `Name • Mode • •••1234`.
+    /// Owner Trades list line, `Name • Mode • •••1234`.
     static func ownerJournalAccountLine(
         accountID: TradingAccountID,
         member: TradeOwnerJournalSummary?,
@@ -272,7 +272,7 @@ nonisolated enum CopyTradePresentation {
         return parts.joined(separator: TradingAccountDisplay.separator)
     }
 
-    /// Mode count segment only — `1 Live • 2 Funded` (Live → Funded → Eval → Sim → Backtest).
+    /// Mode count segment only, `1 Live • 2 Funded` (Live → Funded → Eval → Sim → Backtest).
     static func modeCountSegment(from counts: ModeCounts) -> String? {
         var parts: [String] = []
         if counts.live > 0 { parts.append("\(counts.live) Live") }
@@ -284,7 +284,7 @@ nonisolated enum CopyTradePresentation {
         return parts.joined(separator: " • ")
     }
 
-    /// Public social line — `Copy Traded across 3 accounts • 1 Eval • 2 Funded`.
+    /// Public social line, `Copy Traded across 3 accounts • 1 Eval • 2 Funded`.
     static func publicAcrossAccountsSummary(
         participatingAccountCount: Int,
         counts: ModeCounts
@@ -450,13 +450,13 @@ nonisolated enum CopyTradePresentation {
         )
     }
 
-    /// Legacy feed string — prefer ``publicAcrossAccountsSummary(for:accountModesByID:)``.
+    /// Legacy feed string, prefer ``publicAcrossAccountsSummary(for:accountModesByID:)``.
     static func publicModeSummary(counts: ModeCounts) -> String? {
         guard let modes = modeCountSegment(from: counts) else { return nil }
         return "Copy Traded on \(modes)"
     }
 
-    /// Mode-count tail of a canonical public copy summary — `2 Funded • 1 Eval`.
+    /// Mode-count tail of a canonical public copy summary, `2 Funded • 1 Eval`.
     /// Returns nil when the summary has no participating modes.
     static func modeCountSegment(fromPublicSummary summary: String?) -> String? {
         guard let summary else { return nil }

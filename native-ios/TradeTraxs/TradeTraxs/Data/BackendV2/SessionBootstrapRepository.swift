@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// REST session bootstrap — legacy fallback when V2 RPC is unavailable.
+/// REST session bootstrap, legacy fallback when V2 RPC is unavailable.
 nonisolated struct SessionRestBootstrapRepository: SessionBootstrapProviding {
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
@@ -16,7 +16,7 @@ nonisolated struct SessionRestBootstrapRepository: SessionBootstrapProviding {
     }
 }
 
-/// RPC session bootstrap — calls `rpc_v1_session_bootstrap`.
+/// RPC session bootstrap, calls `rpc_v1_session_bootstrap`.
 nonisolated struct SessionRpcBootstrapRepository: SessionBootstrapProviding {
     private let client: BackendV2RPCClient
 
@@ -68,7 +68,7 @@ final class SessionBootstrapStore {
 
     /// Local avatar that must win over a session payload still carrying the previous URL.
     private var adoptedAvatar: AdoptedAvatar?
-    /// Last owner Settings profile mutation — wins over stale bootstrap/REST until server matches.
+    /// Last owner Settings profile mutation, wins over stale bootstrap/REST until server matches.
     private var adoptedOwnerProfile: AdoptedOwnerProfile?
 
     func seed(_ bootstrap: SessionBootstrapV1, source: String) {
@@ -188,7 +188,7 @@ final class SessionBootstrapStore {
     /// Keeps a locally chosen avatar when `bootstrap` still has a URL that choice replaced.
     ///
     /// A server payload that already contains the adopted URL clears the lock. Replaying
-    /// our own disk write must not — an in-flight session RPC can still carry the old URL.
+    /// our own disk write must not, an in-flight session RPC can still carry the old URL.
     @discardableResult
     func reconcileAdoptedAvatar(
         _ bootstrap: inout SessionBootstrapV1,
@@ -313,7 +313,7 @@ enum SessionBootstrapLoader {
     @MainActor
     weak static var refreshCommitObserver: (any SessionBootstrapRefreshObserving)?
 
-    /// Flag ON — cache → single RPC → controlled legacy fallback.
+    /// Flag ON, cache → single RPC → controlled legacy fallback.
     @MainActor
     static func load(
         viewerID: ProfileID,
@@ -597,7 +597,7 @@ enum SessionBootstrapLoader {
         return result
     }
 
-    /// Cache / in-memory only — never blocks warm-start on REST header aggregation.
+    /// Cache / in-memory only, never blocks warm-start on REST header aggregation.
     @MainActor
     private static func resolveHeaderStatsFromCacheOnly(
         profileID: ProfileID,

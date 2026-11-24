@@ -26,7 +26,7 @@ nonisolated struct TradovateConnectionSummary: Codable, Sendable, Hashable, Iden
     var apiEnvironment: String?
     var brokerLoginUsername: String?
 
-    /// Matches BFF ``ACTIVE_STATUSES`` — list accounts even when OAuth token needs refresh.
+    /// Matches BFF ``ACTIVE_STATUSES``, list accounts even when OAuth token needs refresh.
     var isActiveForBrokerUI: Bool {
         switch status {
         case .connected, .reconnectRequired, .error:
@@ -264,7 +264,7 @@ nonisolated struct BrokerIntegrationAccount: Codable, Sendable, Hashable, Identi
 
     var isLinked: Bool { status == .linked || tradetraxsAccountId != nil }
 
-    /// Authoritative mapping for manual import — matches Broker Integrations BFF rows.
+    /// Authoritative mapping for manual import, matches Broker Integrations BFF rows.
     var hasTradetraxsMapping: Bool {
         guard let raw = tradetraxsAccountId?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return false
@@ -279,7 +279,7 @@ nonisolated struct BrokerIntegrationAccount: Codable, Sendable, Hashable, Identi
     }
 }
 
-/// Loose JSON metadata from broker discovery — never persisted locally as secrets.
+/// Loose JSON metadata from broker discovery, never persisted locally as secrets.
 nonisolated enum JSONBrokerValue: Codable, Sendable, Hashable {
     case string(String)
     case number(Double)

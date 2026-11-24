@@ -64,7 +64,7 @@ nonisolated enum DemoGraph {
             Post(
                 id: postID,
                 authorProfileID: owner,
-                body: "\(trade.symbol.ticker) \(trade.side == .long ? "long" : "short") — logged on the \(trade.sessionLabel ?? "session") plan.",
+                body: "\(trade.symbol.ticker) \(trade.side == .long ? "long" : "short"), logged on the \(trade.sessionLabel ?? "session") plan.",
                 media: [MediaReference(id: chartURL, kind: .image, altText: "Session chart")],
                 visibility: .public,
                 linkedTradeID: trade.id,

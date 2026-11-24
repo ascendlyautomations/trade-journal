@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Canonical messaging domain owner — one bootstrap, one ``MessagingState``, one realtime loop.
+/// Canonical messaging domain owner, one bootstrap, one ``MessagingState``, one realtime loop.
 ///
 /// Messages home and Trade Rooms home are presentation façades over this domain.
 /// ``MessagesInboxStore`` remains the mutable presentation cache for badges / previews /
@@ -219,7 +219,7 @@ final class MessagingDomain {
         }
     }
 
-    /// Phase 10F — bounded inbox catch-up after Realtime reconnect (existing loader, no thread fan-out).
+    /// Phase 10F, bounded inbox catch-up after Realtime reconnect (existing loader, no thread fan-out).
     func repairInboxAfterReconnect(expectedViewerGeneration: UInt64) async {
         guard let session else { return }
         guard let userID = await session.currentUserID else { return }
@@ -665,7 +665,7 @@ final class MessagingDomain {
         guard let realtimeHub, let session, let viewerID = state.viewerID else { return }
         guard !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) else { return }
 
-        // Registry bookkeeping — Messages home channel is the canonical inbox topic.
+        // Registry bookkeeping, Messages home channel is the canonical inbox topic.
         try? await realtimeHub.subscriptions.subscribe(
             RealtimeChannelID(kind: .conversation, topic: "inbox")
         )
@@ -897,7 +897,7 @@ final class MessagingDomain {
         }
     }
 
-    /// Patch inbox activity from canonical `public.messages` — never denormalized conversation rows.
+    /// Patch inbox activity from canonical `public.messages`, never denormalized conversation rows.
     private func applyInboxMessagesRealtimeSignal(
         signal: MessageRealtimeSignal,
         conversationID: ConversationID,

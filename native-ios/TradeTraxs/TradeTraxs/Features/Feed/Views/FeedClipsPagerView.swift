@@ -2,7 +2,7 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// Full-screen vertical Clips feed — one reel per viewport with paging snap (Reels/TikTok style).
+/// Full-screen vertical Clips feed, one reel per viewport with paging snap (Reels/TikTok style).
 struct FeedClipsPagerView: View {
     let entries: [FeedTimelineEntry]
     let author: (ProfileID) -> Profile?
@@ -184,7 +184,7 @@ struct FeedClipsPagerView: View {
         playbackCoordinator.prepareNeighborClip(reel, atIndex: neighborIndex)
     }
 
-    /// Current clip ± one neighbor — prefetch engagement counts (no postgres_changes).
+    /// Current clip ± one neighbor, prefetch engagement counts (no postgres_changes).
     private func syncClipEngagementRealtimeRetention(activeIndex: Int) {
         let indices = [activeIndex - 1, activeIndex, activeIndex + 1]
             .filter { clipEntries.indices.contains($0) }
@@ -319,7 +319,7 @@ private struct FeedClipsPageView: View {
         .allowsHitTesting(false)
     }
 
-    /// Bottom overlay — action rail keeps the legacy anchor; metadata lifts to clear the tab bar.
+    /// Bottom overlay, action rail keeps the legacy anchor; metadata lifts to clear the tab bar.
     private func clipOverlayBottom(reel: Reel) -> some View {
         HStack(alignment: .bottom, spacing: FeedClipsOverlayLayout.metadataActionGap) {
             clipMetadata(reel: reel)

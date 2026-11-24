@@ -43,7 +43,7 @@ struct PsychologySummarySection: View {
             }
         }
         .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
         .overlay {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                 .stroke(colors.border, lineWidth: 1)

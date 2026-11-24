@@ -44,7 +44,7 @@ private struct CalendarYearSummaryBar: View {
                     divider
                     metric(
                         label: "Win Rate",
-                        value: overview.tradeWinRate.map(NumberDisplay.winRate) ?? "—",
+                        value: overview.tradeWinRate.map(NumberDisplay.winRate) ?? "–",
                         tone: nil
                     )
                     divider
@@ -60,7 +60,7 @@ private struct CalendarYearSummaryBar: View {
     }
 
     private var bestMonthValue: String {
-        overview.bestMonthAbbreviation ?? "—"
+        overview.bestMonthAbbreviation ?? "–"
     }
 
     private var divider: some View {

@@ -16,9 +16,9 @@ final class TradeDetailViewModel {
     private(set) var images: [TradeImage] = []
     private(set) var notes: [TradeNote] = []
     private(set) var accountName: String?
-    /// Owner-only — never used for public Trade Detail titles.
+    /// Owner-only, never used for public Trade Detail titles.
     private(set) var accountNumber: String?
-    /// Account status — Funded / Eval / Live (web account `mode`).
+    /// Account status, Funded / Eval / Live (web account `mode`).
     private(set) var accountMode: TradingAccountMode?
     /// Account size from `accounts.account_size`.
     private(set) var accountSize: Decimal?
@@ -163,7 +163,7 @@ final class TradeDetailViewModel {
     var authorUsername: String { DetailAuthorPresentation.username(for: author) }
     var authorInitials: String { DetailAuthorPresentation.initials(for: author) }
 
-    /// Header identity — journal+owner: `Name • Number`; public copy action: `Copy Traded`.
+    /// Header identity, journal+owner: `Name • Number`; public copy action: `Copy Traded`.
     var accountIdentityLine: String? {
         if trade?.mode == .copyTraded, accountDisplayAudience == .public {
             return "Copy Traded"
@@ -184,7 +184,7 @@ final class TradeDetailViewModel {
         cache.copyTradePublicModeSummary(for: tradeID)
     }
 
-    /// Share caption (`public_description`) — never private journal notes.
+    /// Share caption (`public_description`), never private journal notes.
     var displayPublicCaption: String? {
         guard experience == .social else { return nil }
         let trimmed = trade?.publicCaption?
@@ -192,7 +192,7 @@ final class TradeDetailViewModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Owner journal subtitle — `Name • AccountNumber • Funded` (full number, not masked).
+    /// Owner journal subtitle, `Name • AccountNumber • Funded` (full number, not masked).
     var accountSummaryLine: String? {
         guard experience == .journal, isOwner else { return accountIdentityLine }
         var parts: [String] = []
@@ -521,7 +521,7 @@ final class TradeDetailViewModel {
             return
         }
 
-        // Authoritative detail row already includes notes + image_url — avoid redundant full-row GETs.
+        // Authoritative detail row already includes notes + image_url, avoid redundant full-row GETs.
         let hasAuthoritativeDetail = cache.authoritativeDetail(id: trade.id) != nil
         let needsImages = images.isEmpty && !hasAuthoritativeDetail
         let needsNotes = notes.isEmpty && !hasAuthoritativeDetail
@@ -668,7 +668,7 @@ final class TradeDetailViewModel {
             return
         }
 
-        // Session accounts already resolved for this profile — never refetch.
+        // Session accounts already resolved for this profile, never refetch.
         if cache.hasAccounts(for: trade.ownerProfileID) {
             if accountNumber == nil {
                 accountNumber = resolveOwnerAccountNumber(accountID: accountID, ownerProfileID: trade.ownerProfileID)

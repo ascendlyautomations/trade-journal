@@ -53,11 +53,11 @@ nonisolated enum AuthFlowTracer {
         if let started {
             durationMs = String(format: "%.1f", (now - started) * 1_000)
         } else {
-            durationMs = "—"
+            durationMs = "–"
         }
         let generationLabel = generation.map { "generation=\($0)" } ?? ""
         logger.debug(
-            "[\(correlation ?? "—", privacy: .public)] \(event, privacy: .public) phase=\(phase.rawValue, privacy: .public) \(generationLabel, privacy: .public) main=\(onMainActor, privacy: .public) dtMs=\(durationMs, privacy: .public)"
+            "[\(correlation ?? "–", privacy: .public)] \(event, privacy: .public) phase=\(phase.rawValue, privacy: .public) \(generationLabel, privacy: .public) main=\(onMainActor, privacy: .public) dtMs=\(durationMs, privacy: .public)"
         )
     }
 

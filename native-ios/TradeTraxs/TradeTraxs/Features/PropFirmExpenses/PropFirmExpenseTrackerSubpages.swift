@@ -63,14 +63,7 @@ struct PropFirmPerformanceCard: View {
         }
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            highlighted ? colors.profit.opacity(0.12) : colors.fillSecondary.opacity(0.35),
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                .stroke(highlighted ? colors.profit.opacity(0.55) : colors.border.opacity(0.22), lineWidth: 1)
-        )
+        .modifier(PropFirmPerformanceCardSurface(highlighted: highlighted))
     }
 }
 
@@ -116,11 +109,7 @@ struct PropFirmIncomeHistoryListView: View {
                             }
                         }
                     }
-                    .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                            .stroke(colors.border.opacity(0.22), lineWidth: ExperienceBorder.hairline)
-                    )
+                    .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.bottom, ExperienceSpacing.xxxl)
                 }
@@ -176,11 +165,7 @@ struct PropFirmExpenseHistoryListView: View {
                             }
                         }
                     }
-                    .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                            .stroke(colors.border.opacity(0.22), lineWidth: ExperienceBorder.hairline)
-                    )
+                    .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.bottom, ExperienceSpacing.xxxl)
                 }
@@ -196,6 +181,32 @@ struct PropFirmExpenseHistoryListView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct PropFirmPerformanceCardSurface: ViewModifier {
+    var highlighted: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if highlighted {
+            content
+                .background(colors.profit.opacity(0.12), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                        .stroke(colors.profit.opacity(0.55), lineWidth: ExperienceBorder.hairline)
+                }
+        } else if colorScheme == .light {
+            content.experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
+        } else {
+            content
+                .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                        .stroke(colors.border.opacity(0.22), lineWidth: 1)
+                }
         }
     }
 }

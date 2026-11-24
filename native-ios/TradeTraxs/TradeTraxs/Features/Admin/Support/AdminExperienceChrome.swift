@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Admin utility flow — back control only in the navigation bar; page titles live in content.
+/// Admin utility flow, back control only in the navigation bar; page titles live in content.
 enum AdminRoute: Hashable, Codable {
     case charts
     case users
@@ -46,7 +46,7 @@ extension View {
         modifier(AdminExperienceRootBackgroundModifier())
     }
 
-    /// Admin list rows — cool pressed highlight (no warm UITableView selection).
+    /// Admin list rows, cool pressed highlight (no warm UITableView selection).
     func adminListRowInteraction() -> some View {
         buttonStyle(AdminPlainRowButtonStyle())
             .experienceDashboardListRow()

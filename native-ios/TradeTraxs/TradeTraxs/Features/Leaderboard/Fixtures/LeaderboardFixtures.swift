@@ -10,26 +10,26 @@ nonisolated enum LeaderboardFixtures {
 
         var rows: [LeaderboardTradeRow] = []
 
-        // Alex — strong all-time, also active this week
+        // Alex, strong all-time, also active this week
         rows.append(contentsOf: [
             row("dev.lb.alex", 12_000, 2.4, iso(now.addingTimeInterval(-86_400 * 2))),
             row("dev.lb.alex", 8_000, 2.1, iso(now.addingTimeInterval(-86_400 * 40))),
             row("dev.lb.alex", 28_220, 2.6, iso(now.addingTimeInterval(-86_400 * 200))),
         ])
 
-        // Mia — dominates today only
+        // Mia, dominates today only
         rows.append(contentsOf: [
             row("dev.lb.mia", 20_000, 1.9, iso(now.addingTimeInterval(-3_600))),
             row("dev.lb.mia", 16_110, 1.8, iso(now.addingTimeInterval(-86_400 * 120))),
         ])
 
-        // Sam — month window strength
+        // Sam, month window strength
         rows.append(contentsOf: [
             row("dev.lb.sam", 15_000, 2.0, iso(now.addingTimeInterval(-86_400 * 10))),
             row("dev.lb.sam", 14_840, 2.2, iso(now.addingTimeInterval(-86_400 * 80))),
         ])
 
-        // Jordan — older YTD / all-time
+        // Jordan, older YTD / all-time
         rows.append(row("dev.lb.jordan", 22_450, 1.6, iso(now.addingTimeInterval(-86_400 * 60))))
         rows.append(row("dev.lb.riley", 18_920, 2.8, iso(now.addingTimeInterval(-86_400 * 5))))
         rows.append(row("dev.lb.casey", 14_300, 1.4, iso(now.addingTimeInterval(-86_400 * 15))))

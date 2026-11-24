@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Avatar + display name — opens TradeTraxs profile after collapsing livestream chrome (viewer sheet / OBS manage).
+/// Avatar + display name, opens TradeTraxs profile after collapsing livestream chrome (viewer sheet / OBS manage).
 struct RoomBroadcastProfileIdentityControl: View {
     let userId: String
     let displayName: String

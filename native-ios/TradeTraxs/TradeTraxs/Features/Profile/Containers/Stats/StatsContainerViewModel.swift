@@ -32,7 +32,7 @@ final class StatsContainerViewModel {
     private let achievements: any AchievementRepository
     private let detailCache: DetailPresentationCache
 
-    /// Server-side mode payloads — primary stats source when profile V2 is enabled.
+    /// Server-side mode payloads, primary stats source when profile V2 is enabled.
     private var modeResults: [ProfileStatisticsMetrics.Mode: ProfileStatisticsMetrics.Result] = [:]
     /// Legacy fallback only when statistics RPC is unavailable.
     private var tradeInputs: [ProfileStatisticsMetrics.TradeInput] = []
@@ -97,7 +97,7 @@ final class StatsContainerViewModel {
         canViewContent = true
         accountModes = snapshot.accountModes
 
-        // Statistics are never screen-bootstrap payload — do not defer the tab load on header phase.
+        // Statistics are never screen-bootstrap payload, do not defer the tab load on header phase.
         awaitingScreenBootstrap = false
 
         if hasLoadedAnalytics {
@@ -190,7 +190,7 @@ final class StatsContainerViewModel {
     }
 
     func loadMoreIfNeeded() async {
-        // Stats are a single aggregate — no pagination.
+        // Stats are a single aggregate, no pagination.
     }
 
     // MARK: - Load

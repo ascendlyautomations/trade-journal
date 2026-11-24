@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Permanent Feed tab root — Instagram-style vertical Home Feed.
+/// Permanent Feed tab root, Instagram-style vertical Home Feed.
 ///
 /// Data lifecycle is owned exclusively by ``FeedScreenViewModel``.
 /// Child views (stories, cards, filters, empty/error) are render-only.
@@ -371,7 +371,7 @@ struct FeedHomeView: View {
             .accessibilityHidden(true)
     }
 
-    /// Full filter header chrome (chips + padding + background) — transformed as one overlay unit.
+    /// Full filter header chrome (chips + padding + background), transformed as one overlay unit.
     private var contentFilterBar: some View {
         feedContentFilterTourAnchor
             .padding(.horizontal, ExperienceSpacing.md)
@@ -387,7 +387,7 @@ struct FeedHomeView: View {
             }
     }
 
-    /// Tour anchor on the chip strip only — not the reserved auto-hide slot or padded chrome frame.
+    /// Tour anchor on the chip strip only, not the reserved auto-hide slot or padded chrome frame.
     private var feedContentFilterTourAnchor: some View {
         FeedContentToggle(
             filter: viewModel.contentFilter,
@@ -489,7 +489,7 @@ struct FeedHomeView: View {
         }
     }
 
-    /// Prefetch runs only near the list tail — upward scroll remounts must not restart utility prefetch work.
+    /// Prefetch runs only near the list tail, upward scroll remounts must not restart utility prefetch work.
     private func shouldPrefetchFeedImagesWhenRowAppears(entryID: String) -> Bool {
         guard let index = viewModel.visibleEntries.firstIndex(where: { $0.id == entryID }) else {
             return false
@@ -644,7 +644,7 @@ struct FeedHomeView: View {
     }
 }
 
-/// Pull-to-refresh only for non-Clips feed modes — nested Clips pager owns its own scroll surface.
+/// Pull-to-refresh only for non-Clips feed modes, nested Clips pager owns its own scroll surface.
 private struct FeedHomeRefreshModifier: ViewModifier {
     let isEnabled: Bool
     let action: () async -> Void
@@ -660,7 +660,7 @@ private struct FeedHomeRefreshModifier: ViewModifier {
     }
 }
 
-/// Stable identity for feed scroll surfaces — only changes when the user resets filter/scope scroll.
+/// Stable identity for feed scroll surfaces, only changes when the user resets filter/scope scroll.
 private enum FeedListScrollSurfaceIdentity {
     static let feedTimeline = "feed.scroll.timeline"
     static let feedClipsPager = "feed.scroll.clips"
@@ -697,7 +697,7 @@ private struct FeedClipsViewportLayoutModifier<CategoryBar: View>: ViewModifier 
     }
 }
 
-/// Timeline filter header — overlay below nav; feed layout never changes when visibility toggles.
+/// Timeline filter header, overlay below nav; feed layout never changes when visibility toggles.
 private struct FeedTimelineFilterBarOverlayModifier<CategoryBar: View>: ViewModifier {
     @Bindable var coordinator: FeedFilterBarScrollCoordinator
     let pinsFilterBarForTour: Bool

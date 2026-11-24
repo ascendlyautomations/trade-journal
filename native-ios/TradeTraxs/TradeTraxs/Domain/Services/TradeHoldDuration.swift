@@ -1,6 +1,6 @@
 import Foundation
 
-/// Hold duration from entry/exit — mirrors web `formatHoldDurationFromTimes` / `formatHoldDurationSeconds`.
+/// Hold duration from entry/exit, mirrors web `formatHoldDurationFromTimes` / `formatHoldDurationSeconds`.
 nonisolated enum TradeHoldDuration {
     static func compute(entryAt: Date, exitAt: Date?) -> (seconds: Int, text: String)? {
         guard let exitAt, exitAt >= entryAt else { return nil }

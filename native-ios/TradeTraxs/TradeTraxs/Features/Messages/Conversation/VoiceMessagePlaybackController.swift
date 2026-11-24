@@ -201,7 +201,7 @@ private actor VoiceMessageAudioCache {
             if VoicePlaybackCacheFormat.shouldIgnoreLegacyM4ACache(remoteURL: remoteURL, legacyURL: legacyM4A),
                FileManager.default.fileExists(atPath: legacyM4A.path)
             {
-                // Skip mismatched legacy WAV-bytes-at-.m4a entry — download to `.wav` below.
+                // Skip mismatched legacy WAV-bytes-at-.m4a entry, download to `.wav` below.
             }
         } else {
             for ext in ["m4a", "wav", "aac", "mp4", "caf"] {

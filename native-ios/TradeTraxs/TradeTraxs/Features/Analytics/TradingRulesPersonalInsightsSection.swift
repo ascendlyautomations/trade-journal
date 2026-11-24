@@ -73,7 +73,7 @@ struct TradingRulesPersonalInsightsSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(ExperienceSpacing.sm)
-        .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(cornerRadius: ExperienceRadius.md))
+        .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
     }
 
     private func toneColor(_ tone: DashboardInsightTone) -> Color {
@@ -117,7 +117,7 @@ private struct TradingRulesPersonalInsightsSheet: View {
                             .experienceStyle(.caption, color: colors.secondaryText)
                     }
                     .padding(.vertical, ExperienceSpacing.xxs)
-                    .listRowBackground(colors.elevatedSurface)
+                    .experienceDashboardListRow()
                 }
             }
             .experiencePlainListStyle()

@@ -1,6 +1,6 @@
-import OpenAI from "openai"
-import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
+import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { getOpenAiClient, openAiApiKey } from "@/lib/server/openAiRouteSupport"
 import {
   PSYCHOLOGY_COACH_SYSTEM_PROMPT,
   buildPsychologyCoachUserPrompt,
@@ -12,38 +12,31 @@ import {
   rateLimitExceededResponse,
 } from "@/lib/server/durableUserRateLimit"
 import { requireAIFeatureEntitlement } from "@/lib/server/requireAIFeatureEntitlement"
-import type { Database, Json } from "@/lib/database.types"
+import type { Json } from "@/lib/database.types"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export const runtime = "nodejs"
+export const maxDuration = 60
 
 export async function POST(req: Request) {
-  const token = req.headers.get("authorization")?.replace("Bearer ", "")
-
-  const supabase = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    }
-  )
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { user } = await getRouteUserAuth(req)
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!openAiApiKey()) {
+    return NextResponse.json(
+      { error: "AI service unavailable" },
+      { status: 503 }
+    )
+  }
+
+  const openai = getOpenAiClient()
+  if (!openai) {
+    return NextResponse.json(
+      { error: "AI service unavailable" },
+      { status: 503 }
+    )
   }
 
   const rate = await consumeDurableUserRateLimit(user.id, "ai_psychology_coach")
@@ -101,7 +94,7 @@ export async function POST(req: Request) {
 
     const factsHash = typeof facts.factsHash === "string" ? facts.factsHash : null
     if (factsHash && mode === "summary") {
-      await supabaseAdmin.from("psychology_coach_snapshots").upsert(
+      await supabaseServiceRole.from("psychology_coach_snapshots").upsert(
         {
           user_id: user.id,
           facts_hash: factsHash,

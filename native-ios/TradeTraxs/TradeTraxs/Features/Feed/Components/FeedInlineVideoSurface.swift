@@ -21,7 +21,7 @@ final class FeedPlayerLayerView: UIView {
     }
 }
 
-/// Lightweight inline feed video surface — fills SwiftUI-assigned bounds; UIKit does not recompute height.
+/// Lightweight inline feed video surface, fills SwiftUI-assigned bounds; UIKit does not recompute height.
 struct FeedInlineVideoSurface: UIViewRepresentable {
     var clipID: String = ""
     let player: AVPlayer?

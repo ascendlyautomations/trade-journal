@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Detail-screen comments host — lazy loads on appear; content-type injected.
+/// Detail-screen comments host, lazy loads on appear; content-type injected.
 struct CommentsSectionView: View {
     @State private var viewModel: CommentsViewModel
     @State private var currentUserID: ProfileID?

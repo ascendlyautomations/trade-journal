@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped engagement cache — shared by Profile lists and Detail screens.
+/// Session-scoped engagement cache, shared by Profile lists and Detail screens.
 @Observable
 @MainActor
 final class EngagementStore {
@@ -10,7 +10,7 @@ final class EngagementStore {
     private let repository: any InteractionRepository
     private var presentationWriteThrough: (any SocialPresentationWriteThroughClient)?
     private var loadedTargets: Set<InteractionTarget> = []
-    /// Targets currently requested or in-flight — prevents duplicate network work.
+    /// Targets currently requested or in-flight, prevents duplicate network work.
     private var requestedTargets: Set<InteractionTarget> = []
     private var pendingTargets: Set<InteractionTarget> = []
     private var inFlightLikes: Set<InteractionTarget> = []
@@ -38,7 +38,7 @@ final class EngagementStore {
         applyIncomingSnapshot(snapshot, for: target)
     }
 
-    /// Prefetch counts for visible cards — batches IDs and never cancels in-flight work.
+    /// Prefetch counts for visible cards, batches IDs and never cancels in-flight work.
     func prefetch(_ targets: [InteractionTarget]) {
         let fresh = targets.filter {
             !loadedTargets.contains($0) && !requestedTargets.contains($0)
@@ -72,7 +72,7 @@ final class EngagementStore {
             isRollback: false
         )
 
-        // Fixture / offline-dev content — keep optimistic state without network.
+        // Fixture / offline-dev content, keep optimistic state without network.
         if target.id.hasPrefix("dev-") {
             loadedTargets.insert(target)
             requestedTargets.insert(target)
@@ -102,7 +102,7 @@ final class EngagementStore {
         }
     }
 
-    /// Double-tap Like — sets liked, never unlikes. No-op when already liked / in-flight.
+    /// Double-tap Like, sets liked, never unlikes. No-op when already liked / in-flight.
     /// Haptics are owned by the gesture layer so feedback still plays when already liked.
     func ensureLiked(on target: InteractionTarget) async {
         guard !inFlightLikes.contains(target) else { return }
@@ -188,7 +188,7 @@ final class EngagementStore {
         }
     }
 
-    /// Incremental content-like Realtime — idempotent patch + Phase 9 write-through.
+    /// Incremental content-like Realtime, idempotent patch + Phase 9 write-through.
     func applyContentLikeRealtime(
         on target: InteractionTarget,
         signal: ContentLikeRealtimeSignal,
@@ -275,7 +275,7 @@ final class EngagementStore {
                         self.applyIncomingSnapshot(snap, for: target)
                     }
                 } catch {
-                    // Soft-fail — allow a later prefetch to retry these IDs.
+                    // Soft-fail, allow a later prefetch to retry these IDs.
                     self.requestedTargets.subtract(batch)
                 }
             }

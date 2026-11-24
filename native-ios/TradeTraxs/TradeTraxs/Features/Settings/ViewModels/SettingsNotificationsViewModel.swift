@@ -44,11 +44,11 @@ final class SettingsNotificationsViewModel {
         preferencesStore.saveError
     }
 
-    /// iOS system permission — never confuse with in-app preference toggles.
+    /// iOS system permission, never confuse with in-app preference toggles.
     private(set) var systemAuthorization: SystemNotificationAuthorizationStatus = .notDetermined
     private(set) var hasResolvedSystemAuthorization = false
 
-    /// Mirrors device-local reminder prefs — drives toggle UI (`@Observable` does not observe UserDefaults).
+    /// Mirrors device-local reminder prefs, drives toggle UI (`@Observable` does not observe UserDefaults).
     private(set) var dailyCheckInReminderOn = DailyCheckInReminderPreferences.isEnabled
     private(set) var tradeImportReminderOn = TradeImportReminderPreferences.isEnabled
 
@@ -60,7 +60,7 @@ final class SettingsNotificationsViewModel {
         systemAuthorization.settingsLabel
     }
 
-    /// True once `UNUserNotificationCenter` status is known — avoids grayed-out ON toggles before refresh.
+    /// True once `UNUserNotificationCenter` status is known, avoids grayed-out ON toggles before refresh.
     var showsOpenSystemSettings: Bool {
         hasResolvedSystemAuthorization && systemAuthorization == .denied
     }

@@ -11,7 +11,7 @@ final class MainTabBarLayoutMetrics {
     private(set) var tabBarTopInsetFromBottom: CGFloat = 83
     /// UITabBar frame height (includes home-indicator padding in the bar background).
     private(set) var tabBarFrameHeight: CGFloat = 49
-    /// Interactive tab strip only — use for session chrome clearance (not full bar frame).
+    /// Interactive tab strip only, use for session chrome clearance (not full bar frame).
     private(set) var tabBarStripHeight: CGFloat = 49
 
     func refresh() {
@@ -46,7 +46,7 @@ final class MainTabBarLayoutMetrics {
         }
     }
 
-    /// Strip height for spacing above the tab bar — never count home-indicator area twice.
+    /// Strip height for spacing above the tab bar, never count home-indicator area twice.
     private static func tabBarStripHeight(
         topInsetFromWindowBottom: CGFloat,
         frameHeight: CGFloat,

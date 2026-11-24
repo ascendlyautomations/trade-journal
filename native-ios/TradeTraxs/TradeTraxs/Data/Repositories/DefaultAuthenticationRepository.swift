@@ -1,6 +1,6 @@
 import Foundation
 
-/// Data-facing auth repository — delegates to ``AuthenticationManager``.
+/// Data-facing auth repository, delegates to ``AuthenticationManager``.
 struct DefaultAuthenticationRepository: AuthenticationRepository, @unchecked Sendable {
     private let manager: AuthenticationManager
 

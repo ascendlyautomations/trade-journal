@@ -54,7 +54,7 @@ nonisolated enum CSVHeaderAliases {
         }
     }
 
-    /// Web `getCsvRrCellFromRow` — RR only when a recognized RR column has content.
+    /// Web `getCsvRrCellFromRow`, RR only when a recognized RR column has content.
     static func rrCell(in row: [String: String]) -> String? {
         for (rawKey, val) in row {
             guard resolveField(for: rawKey) == .rr else { continue }

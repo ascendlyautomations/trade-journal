@@ -12,6 +12,25 @@ import { isProActive } from "./subscription.ts"
 export const TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS =
   "is_pro,creator_access,subscription_status,trial_end,early_access_enrolled_at,early_access_started_at,early_access_status,early_access_ends_at,early_access_campaign_id,early_access_enrollment_source,billing_interval,current_period_end,cancel_at_period_end"
 
+/** Placeholder when entitlement passes but the profiles row is missing optional columns. */
+export function minimalEntitlementProfile(): TraxProEntitlementProfile {
+  return {
+    is_pro: false,
+    creator_access: false,
+    subscription_status: null,
+    trial_end: null,
+    early_access_enrolled_at: null,
+    early_access_started_at: null,
+    early_access_status: null,
+    early_access_ends_at: null,
+    early_access_campaign_id: null,
+    early_access_enrollment_source: null,
+    billing_interval: null,
+    current_period_end: null,
+    cancel_at_period_end: null,
+  }
+}
+
 export type TraxProEntitlementProfile = Parameters<typeof isProActive>[0] & {
   billing_interval?: string | null
   current_period_end?: string | null

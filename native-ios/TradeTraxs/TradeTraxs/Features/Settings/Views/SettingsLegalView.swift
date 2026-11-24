@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Opens verified TradeTraxs legal URLs — does not hardcode document text.
+/// Opens verified TradeTraxs legal URLs, does not hardcode document text.
 struct SettingsLegalView: View {
     let route: SettingsRoute
 

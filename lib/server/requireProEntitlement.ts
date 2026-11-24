@@ -5,6 +5,7 @@ import type { Database } from "@/lib/database.types.ts"
 import { readProEntitlementProfile } from "@/lib/proEntitlementProfileRead.ts"
 import {
   loadTraxProEntitlementSnapshot,
+  minimalEntitlementProfile,
   TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS,
   type TraxProEntitlementProfile,
 } from "@/lib/traxProEntitlement"
@@ -17,12 +18,18 @@ export type ProEntitlementCheck =
   | { ok: true; profile: NonNullable<ProEntitlementProfile> }
   | { ok: false; response: NextResponse }
 
-function entitlementUnavailable() {
+function entitlementUnavailable(reason?: string) {
   return {
     ok: false as const,
     response: NextResponse.json(
-      { error: "Could not verify subscription" },
-      { status: 500 }
+      {
+        error: "Could not verify subscription",
+        reply:
+          "We couldn't verify your TraxsPro subscription right now. Please try again in a moment.",
+        code: "entitlement_check_failed",
+        ...(reason ? { detail: reason } : {}),
+      },
+      { status: 503 }
     ),
   }
 }
@@ -57,14 +64,8 @@ export async function requireProEntitlement(
     supabaseServiceRole,
     userId
   )
-  if (!loaded.ok || !loaded.snapshot.profile) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: "Could not verify subscription" },
-        { status: 500 }
-      ),
-    }
+  if (!loaded.ok) {
+    return entitlementUnavailable(loaded.reason)
   }
 
   if (!loaded.snapshot.traxProActive) {
@@ -76,11 +77,14 @@ export async function requireProEntitlement(
           reply:
             options?.reply ??
             "This feature requires TraxPro.",
+          code: "pro_required",
         },
         { status: 403 }
       ),
     }
   }
 
-  return { ok: true, profile: loaded.snapshot.profile }
+  const profile =
+    loaded.snapshot.profile ?? minimalEntitlementProfile()
+  return { ok: true, profile }
 }

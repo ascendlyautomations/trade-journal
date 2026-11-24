@@ -68,7 +68,7 @@ nonisolated struct AnalyticalMutationScope: Sendable, Equatable {
 
 nonisolated struct DashboardReconcileIntent: Sendable, Equatable {
     var viewerID: ProfileID
-    /// `nil` = local mutation — adopt revision from authoritative RPC response.
+    /// `nil` = local mutation, adopt revision from authoritative RPC response.
     var targetRevision: Int64?
 }
 
@@ -137,7 +137,7 @@ nonisolated struct AnalyticsCalendarRangeCoalescingKey: Hashable, Sendable {
 }
 
 nonisolated struct AnalyticsRevisionSeed: Sendable, Equatable {
-    /// Global high-water for duplicate suppression — not proof of per-domain coverage.
+    /// Global high-water for duplicate suppression, not proof of per-domain coverage.
     var highWaterRevision: Int64
     var source: String
 }

@@ -17,7 +17,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     private static let reelTradeJoinSelect =
         "id,public_description,is_public,ticker,direction,pnl,rr"
 
-    /// Feed trade cards — profiles + compact trade embed so list hydrate needs no per-row trade SELECT.
+    /// Feed trade cards, profiles + compact trade embed so list hydrate needs no per-row trade SELECT.
     private static let tradeFeedSelect =
         "id,user_id,trade_id,created_at,image_url,image_crop,profiles(username,avatar_url,name),trades(id,user_id,ticker,direction,pnl,rr,contracts,session,public_description,is_public,image_url,image_crop,created_at,entry_time,exit_time,entry_price,exit_price,account_type,mode)"
 
@@ -43,7 +43,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         self.session = session
     }
 
-    /// Web `topUpMergedFeedBuffer` first page — trades + profile_posts + reels + achievement_posts.
+    /// Web `topUpMergedFeedBuffer` first page, trades + profile_posts + reels + achievement_posts.
     func feed(
         scope: FeedScope,
         contentFilter: FeedContentFilter,
@@ -105,7 +105,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             tradeBatch, profileBatch, reelBatch, achievementBatch
         )
 
-        // Web `dedupeFeedItems` — skip trade-attached reels (they render on the trade card).
+        // Web `dedupeFeedItems`, skip trade-attached reels (they render on the trade card).
         let standaloneReels = reels.filter { item in
             guard let tradeID = item.tradeID?.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             else { return true }
@@ -252,7 +252,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                     embeds.append(trade)
                 }
             }
-            // Web `normalizeTradeFeedItem` — posts table rows are trade feed cards.
+            // Web `normalizeTradeFeedItem`, posts table rows are trade feed cards.
             return makeFeedItem(
                 id: id,
                 kind: .trade,
@@ -558,7 +558,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         }
     }
 
-    /// Web `fetchActiveStoriesForUserIds` — following + self, `image_url`, client 24h window.
+    /// Web `fetchActiveStoriesForUserIds`, following + self, `image_url`, client 24h window.
     func allActiveStories(for viewer: ProfileID) async throws -> [Story] {
         try await fetchActiveStories(viewer: viewer)
     }
@@ -597,7 +597,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         #endif
         guard !candidateIDs.isEmpty else {
             #if DEBUG
-            StoriesLoadProbe.record(stage: "supabase", detail: "skipped — no candidate user ids")
+            StoriesLoadProbe.record(stage: "supabase", detail: "skipped, no candidate user ids")
             #endif
             return []
         }
@@ -863,7 +863,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             )
         } catch {
             AppLog.networking.error(
-                "Reel embed load failed — falling back — \(String(describing: error), privacy: .public)"
+                "Reel embed load failed, falling back, \(String(describing: error), privacy: .public)"
             )
             row = try await supabase.database.selectOne(
                 ProfileReelRow.self,
@@ -962,7 +962,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             )
         } catch {
             AppLog.networking.error(
-                "Profile reels embed failed — falling back — \(String(describing: error), privacy: .public)"
+                "Profile reels embed failed, falling back, \(String(describing: error), privacy: .public)"
             )
             let fallback: [ProfileReelRow] = try await supabase.database.select(
                 ProfileReelRow.self,
@@ -982,7 +982,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 let mapped = mapReel(row)
                 if mapped == nil {
                     AppLog.networking.error(
-                        "Skipping reel \(row.id ?? "unknown", privacy: .public) — mapping failed"
+                        "Skipping reel \(row.id ?? "unknown", privacy: .public), mapping failed"
                     )
                 }
                 return mapped
@@ -1002,7 +1002,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             var visibility: String
             var kind: String?
         }
-        // thumbnail_url is NOT NULL — fall back to video URL (web publishReel).
+        // thumbnail_url is NOT NULL, fall back to video URL (web publishReel).
         let thumb = reel.thumbnail?.id ?? reel.video.id
 
         var visibility = reel.visibility == .private ? "private" : "public"
@@ -1474,7 +1474,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             var rr: FlexibleNumber?
         }
 
-        // PostgREST `in` filter — same as web hydrate.
+        // PostgREST `in` filter, same as web hydrate.
         let joined = tradeIDs.map { "\"\($0)\"" }.joined(separator: ",")
         let trades: [TradeRow] = try await supabase.database.select(
             TradeRow.self,

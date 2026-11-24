@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only staged RPC lifecycle tracing — never logs credentials or response bodies.
+/// DEBUG-only staged RPC lifecycle tracing, never logs credentials or response bodies.
 nonisolated enum BackendV2RpcStageTracer {
     private static let logger = Logger(
         subsystem: AppLog.subsystem,

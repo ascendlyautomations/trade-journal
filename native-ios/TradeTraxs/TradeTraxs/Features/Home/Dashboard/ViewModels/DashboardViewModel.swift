@@ -1,16 +1,16 @@
 import Foundation
 import Observation
 
-/// Home Dashboard — session-cached trades → presentation metrics → idle.
+/// Home Dashboard, session-cached trades → presentation metrics → idle.
 ///
 /// Load path: Initial Load → Session Cache → Repository → Realtime subscribe → Idle.
 /// Filter changes recompute locally; pull-to-refresh is the only forced refetch.
 ///
 /// Bootstrap is progressive:
 /// 1. Trades + accounts (blocking for first useful render)
-/// 2. Withdrawal ledger / prop cycles (deferred — updates Payouts chip when ready)
+/// 2. Withdrawal ledger / prop cycles (deferred, updates Payouts chip when ready)
 ///
-/// `home.dashboard` is intentionally not called — it duplicated a 500-trade fetch
+/// `home.dashboard` is intentionally not called, it duplicated a 500-trade fetch
 /// and never drove UI math.
 @MainActor
 private final class TradingRulesHydrationTicket {
@@ -70,7 +70,7 @@ final class DashboardViewModel {
     private(set) var hasLoaded = false
     /// Vertical offset saved when leaving the dashboard. Restored once when the Home tab view is created again.
     private(set) var retainedScrollOffset: CGFloat?
-    /// Incremented when the Home tab is reselected at root — resets scroll without system scroll-to-top.
+    /// Incremented when the Home tab is reselected at root, resets scroll without system scroll-to-top.
     private(set) var listScrollPresentationEpoch: UInt64 = 0
     /// Deferred bell / getting-started / check-in bootstrap. Lives on the model so a recreated Home tab does not start it again.
     private var didStartDeferredDashboardBootstrap = false
@@ -91,7 +91,7 @@ final class DashboardViewModel {
     private var initialTradeHistoryReady = false
     /// Server-reported total trades (V2 bootstrap); nil on legacy REST bootstrap.
     private var authoritativeTotalTradeCount: Int?
-    /// Funded prop-firm payout cycles keyed by account — drives Prop Firm Status card boundaries.
+    /// Funded prop-firm payout cycles keyed by account, drives Prop Firm Status card boundaries.
     private var payoutCyclesByAccount: [TradingAccountID: [AccountPayoutCycle]] = [:]
     /// False until ledger (+ prop cycles when applicable) are loaded or session cache is authoritative.
     private var withdrawalRecordsHydrationComplete = false
@@ -109,7 +109,7 @@ final class DashboardViewModel {
     private var aggregateChartSelectionToken: UInt64 = 0
     private var aggregateChartHydrateTask: Task<Void, Never>?
     private var scopeFilterTradesHydrateTask: Task<Void, Never>?
-    /// Bumped on scope-filter edits — stale owner-trade hydrates must not commit.
+    /// Bumped on scope-filter edits, stale owner-trade hydrates must not commit.
     private var scopeMetricsSelectionToken: UInt64 = 0
     /// True while scoped KPIs need owner trades that are not in memory yet (avoid painting $0).
     private(set) var isScopeFilteredMetricsLoading = false
@@ -117,7 +117,7 @@ final class DashboardViewModel {
     private var dashboardGRDBBackgroundReconcileScheduled = false
     private var equityChartOverlayRetryScheduled = false
     private var analyticsReconciliationObserver: NSObjectProtocol?
-    /// Home tab selected — offscreen Dashboard must not run chart overlay RPC work.
+    /// Home tab selected, offscreen Dashboard must not run chart overlay RPC work.
     private var isHomeTabActive = true
     private var pendingChartOverlayRefreshAfterInactive = false
     /// One remote hydrate attempt per revision + account scope; prevents drop/refetch loops.
@@ -126,8 +126,9 @@ final class DashboardViewModel {
     private var tradingRulesRecomputeSequence: UInt64 = 0
     private var tradingRulesColdPresentationBootstrapped = false
     private var prioritizedOwnerTradesForRulesTask: Task<Void, Never>?
-    /// TraxsPro Dashboard interactive preview — canonical trades only, no owner store hydration.
+    /// TraxsPro Dashboard interactive preview, canonical trades only, no owner store hydration.
     let loadsTraxsProPreviewSampleOnly: Bool
+    private var traxsProPreviewAppliedInitialScope = false
 
     private final class LiveBox {
         weak var model: DashboardViewModel?
@@ -144,7 +145,7 @@ final class DashboardViewModel {
         usesDashboardAnalyticsV3 && BackendV2FeatureFlags.isEnabled(.dashboardAnalyticsGRDB)
     }
 
-    /// Test / composition seam — `home` retained for call-site compatibility but unused.
+    /// Test / composition seam, `home` retained for call-site compatibility but unused.
     init(
         home: any HomeRepository,
         trades: any TradeRepository,
@@ -266,7 +267,7 @@ final class DashboardViewModel {
         return true
     }
 
-    /// Bound from ``DashboardHomeView`` via ``Environment/tabIsActive`` — gates chart overlay RPC work.
+    /// Bound from ``DashboardHomeView`` via ``Environment/tabIsActive``, gates chart overlay RPC work.
     func setHomeTabActive(_ active: Bool) {
         guard isHomeTabActive != active else { return }
         isHomeTabActive = active
@@ -433,7 +434,15 @@ final class DashboardViewModel {
         }
     }
 
-    /// Compact hero KPI row — glanceable outcomes (Net P&L lives on the equity hero).
+    /// Report-style KPIs for the scoped TraxsPro preview sample (production ``TradingReportGenerator`` math).
+    var traxsProPreviewScopeMetrics: TradingReportMetrics? {
+        guard loadsTraxsProPreviewSampleOnly else { return nil }
+        let trades = resolvedFilteredTradesForDashboard()
+        guard !trades.isEmpty else { return nil }
+        return TradingReportGenerator.metrics(for: trades)
+    }
+
+    /// Compact hero KPI row, glanceable outcomes (Net P&L lives on the equity hero).
     var metricChips: [DashboardMetricChip] {
         guard let summary else { return [] }
         return [
@@ -455,7 +464,7 @@ final class DashboardViewModel {
             DashboardMetricChip(
                 id: "expectancy",
                 label: "Expectancy",
-                value: summary.expectancy.map(Self.money) ?? "—",
+                value: summary.expectancy.map(Self.money) ?? "–",
                 tone: {
                     guard let e = summary.expectancy else { return .neutral }
                     return e >= 0 ? .positive : .negative
@@ -463,8 +472,8 @@ final class DashboardViewModel {
             ),
             DashboardMetricChip(
                 id: "rr",
-                label: "Avg Targeted R:R",
-                value: summary.averageRR.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—",
+                label: "Avg Target RR",
+                value: summary.averageRR.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "–",
                 tone: .neutral
             ),
         ]
@@ -492,7 +501,7 @@ final class DashboardViewModel {
         DashboardEquityHeroPresentation.showsAccountValue(forSelectedAccount: selectedAccount)
     }
 
-    /// Starting balance for the selected account — chart offset and fallback tracked value.
+    /// Starting balance for the selected account, chart offset and fallback tracked value.
     var equityHeroAccountStartingBalance: Decimal? {
         DashboardEquityHeroPresentation.accountStartingBalance(forSelectedAccount: selectedAccount)
     }
@@ -759,7 +768,7 @@ final class DashboardViewModel {
         buildLivePersonalDrawdownHeroPoints()
     }
 
-    /// Single-account hero — balance progression, daily closes on long presets, prop drawdown overlay when configured.
+    /// Single-account hero, balance progression, daily closes on long presets, prop drawdown overlay when configured.
     private func resolvedAccountEquityHeroPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
         guard equityHeroShowsAccountValue, let account = selectedAccount else { return nil }
         guard !DashboardLivePersonalDrawdownHeroSeries.usesLivePersonalDrawdownSeries(for: account) else {
@@ -811,7 +820,7 @@ final class DashboardViewModel {
         return lifetimeRealizedPnL(for: id)
     }
 
-    /// Cumulative realized P&L for one account — bootstrap metrics when available, else cached trades.
+    /// Cumulative realized P&L for one account, bootstrap metrics when available, else cached trades.
     private func lifetimeRealizedPnL(for accountID: TradingAccountID) -> Decimal {
         lifetimeRealizedPnLWithSource(for: accountID).0
     }
@@ -927,32 +936,32 @@ final class DashboardViewModel {
         navigationCoordinator.open(.home(.propFirm(id)))
     }
 
-    /// Performance section detail cards — supporting metrics below the KPI row.
+    /// Performance section detail cards, supporting metrics below the KPI row.
     var performanceCards: [DashboardMetricChip] {
         guard let summary else { return [] }
         return [
             DashboardMetricChip(
                 id: "avgWin",
                 label: "Avg Win",
-                value: summary.avgWin.map(Self.money) ?? "—",
+                value: summary.avgWin.map(Self.money) ?? "–",
                 tone: .positive
             ),
             DashboardMetricChip(
                 id: "avgLoss",
                 label: "Avg Loss",
-                value: summary.avgLoss.map(Self.money) ?? "—",
+                value: summary.avgLoss.map(Self.money) ?? "–",
                 tone: .negative
             ),
             DashboardMetricChip(
                 id: "best",
                 label: "Best Trade",
-                value: summary.bestTrade.map(Self.money) ?? "—",
+                value: summary.bestTrade.map(Self.money) ?? "–",
                 tone: .positive
             ),
             DashboardMetricChip(
                 id: "worst",
                 label: "Biggest Loss",
-                value: summary.biggestLoss.map(Self.money) ?? "—",
+                value: summary.biggestLoss.map(Self.money) ?? "–",
                 tone: .negative
             ),
             DashboardMetricChip(
@@ -966,7 +975,7 @@ final class DashboardViewModel {
         ]
     }
 
-    /// Performance → Payouts card — reads ``WithdrawalsHistoryStore`` live (same math as Withdrawals home).
+    /// Performance → Payouts card, reads ``WithdrawalsHistoryStore`` live (same math as Withdrawals home).
     func payoutsCardMetricChip(
         withdrawalsHistory: WithdrawalsHistoryStore,
         ledgerRowCount: Int,
@@ -1154,7 +1163,7 @@ final class DashboardViewModel {
         refreshDashboardReadinessProbes()
     }
 
-    /// Lazy V3 equity curve — re-request chart overlay when the dashboard becomes visible before hydration finished or after a failed/cancelled fetch.
+    /// Lazy V3 equity curve, re-request chart overlay when the dashboard becomes visible before hydration finished or after a failed/cancelled fetch.
     func ensureEquityChartOverlayIfNeeded() {
         guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil, profileID != nil else { return }
         guard isHomeTabActive else {
@@ -1175,7 +1184,10 @@ final class DashboardViewModel {
 
     func refresh() async {
         if loadsTraxsProPreviewSampleOnly, let profileID {
-            applyTraxsProPreviewCanonicalSample(viewerProfileID: profileID)
+            applyTraxsProPreviewCanonicalSample(
+                viewerProfileID: profileID,
+                resetScope: false
+            )
             return
         }
         loadTask?.cancel()
@@ -1232,7 +1244,7 @@ final class DashboardViewModel {
         }
     }
 
-    /// Mutation observer — patch when possible; never full refetch for a single insert/update/delete.
+    /// Mutation observer, patch when possible; never full refetch for a single insert/update/delete.
     func handleJournalMutation() {
         guard !loadsTraxsProPreviewSampleOnly else { return }
         switch TradeJournalMutationStore.shared.latest {
@@ -1339,7 +1351,7 @@ final class DashboardViewModel {
             persistScopeFilters(profileID: profileID)
         }
         if hasCachedChartOverlayReadyForCurrentSelection() {
-            // Recompute will refresh equity from the per-account cache — avoid a false empty chart.
+            // Recompute will refresh equity from the per-account cache, avoid a false empty chart.
         } else {
             equityChartSummary = nil
             equityChartAccountFilter = nil
@@ -1483,7 +1495,7 @@ final class DashboardViewModel {
         )
     }
 
-    /// Apply scope edits from Trading Rules Analytics — persists and recomputes dashboard state.
+    /// Apply scope edits from Trading Rules Analytics, persists and recomputes dashboard state.
     func applyClientScopeFromAnalytics(_ scope: DashboardClientScopeFilter) {
         guard let profileID else { return }
         scopeMetricsSelectionToken &+= 1
@@ -1552,7 +1564,7 @@ final class DashboardViewModel {
         return isEquityChartOverlayLoading
     }
 
-    /// Filtered trades for insights/psychology — falls back to session owner cache when V3 metrics load before trade window.
+    /// Filtered trades for insights/psychology, falls back to session owner cache when V3 metrics load before trade window.
     func resolvedFilteredTradesForDashboard() -> [Trade] {
         let scope = clientScopeFilter()
         return DashboardChartMetrics.filteredTrades(
@@ -1569,7 +1581,7 @@ final class DashboardViewModel {
         )
     }
 
-    /// Trade rows for web-style dashboard filters — hydrates session cache when V3 cleared ``tradeInputs``.
+    /// Trade rows for web-style dashboard filters, hydrates session cache when V3 cleared ``tradeInputs``.
     private func tradeInputsForScopeFiltering() -> [DashboardChartMetrics.Input] {
         if loadsTraxsProPreviewSampleOnly, !tradeInputs.isEmpty {
             return tradeInputs
@@ -1609,7 +1621,7 @@ final class DashboardViewModel {
         apply(trades: cached, accounts: accounts, profileID: profileID)
     }
 
-    /// V3 bootstrap does not ship trade rows — hydrate session/disk owner trades for client insights + psych.
+    /// V3 bootstrap does not ship trade rows, hydrate session/disk owner trades for client insights + psych.
     private func promoteOwnerTradesFromSessionCache(profileID: ProfileID) {
         guard tradeInputs.isEmpty else { return }
         let result = SessionOwnerTradesStore.shared.hydrateFromDiskIfNeeded(
@@ -1622,7 +1634,7 @@ final class DashboardViewModel {
         apply(trades: cached, accounts: accounts, profileID: profileID)
     }
 
-    /// Filtered trade row count for psych gate — matches web `filteredTrades.length`.
+    /// Filtered trade row count for psych gate, matches web `filteredTrades.length`.
     private func filteredDashboardTradeCountForPsychologyGate(trades: [Trade]) -> Int {
         trades.count
     }
@@ -1904,7 +1916,10 @@ final class DashboardViewModel {
                 blocksFirstUsefulRender: true
             ) {
                 guard canCommit(profileID: profileID, generation: activeGeneration) else { return }
-                applyTraxsProPreviewCanonicalSample(viewerProfileID: profileID)
+                applyTraxsProPreviewCanonicalSample(
+                    viewerProfileID: profileID,
+                    resetScope: true
+                )
                 committed = true
             }
             guard committed, canCommit(profileID: profileID, generation: activeGeneration) else {
@@ -2089,7 +2104,7 @@ final class DashboardViewModel {
                 return
             }
 
-            // Accounts + trades in parallel — both needed for first useful render,
+            // Accounts + trades in parallel, both needed for first useful render,
             // but serializing them doubles wall-clock latency on cold load.
             async let accountsTask = bootstrapAccounts(
                 profileID: profileID,
@@ -2136,7 +2151,7 @@ final class DashboardViewModel {
 
             await startRealtime(profileID: profileID)
 
-            // Deferred: achievements only feed the Payouts chip — never block first useful render.
+            // Deferred: achievements only feed the Payouts chip, never block first useful render.
             secondaryTask?.cancel()
             secondaryTask = Task { [weak self] in
                 await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
@@ -2436,7 +2451,7 @@ final class DashboardViewModel {
         WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: profileID)
     }
 
-    /// Session caches mirror the Withdrawals screen bootstrap — no network.
+    /// Session caches mirror the Withdrawals screen bootstrap, no network.
     @discardableResult
     private func tryPrimeWithdrawalRecordsFromSessionCache(profileID: ProfileID) -> Bool {
         guard !accounts.isEmpty else { return false }
@@ -2511,7 +2526,7 @@ final class DashboardViewModel {
            WithdrawalsHistoryStore.shared.profileID == profileID,
            accountIDs.allSatisfy({ WithdrawalsHistoryStore.shared.ledgerByAccount[$0] != nil })
         {
-            // Ledger keys exist — still need prop cycles network when missing.
+            // Ledger keys exist, still need prop cycles network when missing.
         } else {
             do {
                 let rows = try await trades.payoutEntries(for: accountIDs)
@@ -2563,8 +2578,14 @@ final class DashboardViewModel {
         }
     }
 
-    private func applyTraxsProPreviewCanonicalSample(viewerProfileID: ProfileID) {
-        applyTraxsProPreviewScopeDefaults()
+    private func applyTraxsProPreviewCanonicalSample(
+        viewerProfileID: ProfileID,
+        resetScope: Bool = false
+    ) {
+        if resetScope || !traxsProPreviewAppliedInitialScope {
+            applyTraxsProPreviewScopeDefaults()
+            traxsProPreviewAppliedInitialScope = true
+        }
         analyticsV3Bootstrap = nil
         preferenceContext = DemoCanonicalDataset.previewPreferenceContext(for: viewerProfileID)
         psychologyUnlockMetricsReady = true
@@ -2730,16 +2751,16 @@ final class DashboardViewModel {
     private func patchAccountsFromSessionStore() {
         guard !loadsTraxsProPreviewSampleOnly else { return }
         guard let profileID else { return }
-        guard let cached = SessionAccountsStore.shared.cached(for: profileID)
-            ?? detailCache.accounts(for: profileID)
-        else {
+        guard let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: profileID,
+            detailCache: detailCache
+        ) else {
             Task { await reloadAccountsOnly() }
             return
         }
-        accounts = cached.sorted {
-            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
-        accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+        accounts = loaded
+        accountNames = OwnerAccountMutationSync.accountNamesMap(from: loaded)
+        OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
         reconcileDashboardAccountFilterIfNeeded()
         reconcileTradeInputsWithOwnerStore(profileID: profileID)
         recompute()
@@ -2922,14 +2943,17 @@ final class DashboardViewModel {
         refreshDashboardReadinessProbes()
     }
 
-    /// TraxsPro Dashboard preview — always derive premium KPIs from the isolated rolling sample; never V3 / owner stores.
+    /// TraxsPro Dashboard preview, always derive premium KPIs from the isolated rolling sample; never V3 / owner stores.
     private func recomputeTraxsProPreviewSample() {
         isScopeFilteredMetricsLoading = false
         refreshAuthoritativePayoutTotal()
         let scope = clientScopeFilter()
         var inputs = tradeInputsForScopeFiltering()
         if inputs.isEmpty, let profileID {
-            applyTraxsProPreviewCanonicalSample(viewerProfileID: profileID)
+            applyTraxsProPreviewCanonicalSample(
+                viewerProfileID: profileID,
+                resetScope: false
+            )
             inputs = tradeInputs
         }
         guard !inputs.isEmpty else {
@@ -2943,6 +2967,7 @@ final class DashboardViewModel {
             payoutTotal: payoutTotal
         )
         summary = assigningAccountLevelPayouts(to: result)
+        refreshEquityChartPresentation()
         recomputePsychology()
         scheduleTradingRulesComplianceRecompute()
         refreshDashboardReadinessProbes()
@@ -2963,7 +2988,7 @@ final class DashboardViewModel {
         }
     }
 
-    /// Recorded withdrawals — scoped to the active account + date filters (ledger + prop cycles).
+    /// Recorded withdrawals, scoped to the active account + date filters (ledger + prop cycles).
     private func assigningAccountLevelPayouts(
         to summary: DashboardChartMetrics.Summary
     ) -> DashboardChartMetrics.Summary {
@@ -3038,7 +3063,7 @@ final class DashboardViewModel {
         kickDashboardOwnerTradesHydration(profileID: profileID)
     }
 
-    /// Session owner-trades cache / single coalesced RPC — not a refetch per filter tap.
+    /// Session owner-trades cache / single coalesced RPC, not a refetch per filter tap.
     private func kickDashboardOwnerTradesHydration(
         profileID: ProfileID,
         forceNetwork: Bool = false,
@@ -3065,7 +3090,7 @@ final class DashboardViewModel {
         }
     }
 
-    /// Web `useDashboardAnalytics` — filter owner trades client-side (V3 presets skip account type / public).
+    /// Web `useDashboardAnalytics`, filter owner trades client-side (V3 presets skip account type / public).
     private func applyClientTradeScopeMetrics(_ scope: DashboardClientScopeFilter) {
         let inputs = tradeInputsForScopeFiltering()
         let scoped = DashboardChartMetrics.compute(
@@ -3866,7 +3891,7 @@ final class DashboardViewModel {
         return nil
     }
 
-    /// Client-built equity series when V3 chart overlay is missing or failed — preserves trade-history curve.
+    /// Client-built equity series when V3 chart overlay is missing or failed, preserves trade-history curve.
     private func localTradeHistoryEquityHeroChartPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
         guard !tradeInputs.isEmpty else { return nil }
         let chartSummary = DashboardChartMetrics.compute(
@@ -4002,7 +4027,7 @@ final class DashboardViewModel {
         initialTradeHistoryReady = historyComplete
     }
 
-    /// Extends owner trade history via the dedicated trades path — never a second full dashboard bootstrap.
+    /// Extends owner trade history via the dedicated trades path, never a second full dashboard bootstrap.
     private func refreshExtendedOwnerTradesIfNeeded(profileID: ProfileID, generation: UInt64) async {
         guard !usesDashboardAnalyticsV3 else {
 #if DEBUG
@@ -4027,7 +4052,7 @@ final class DashboardViewModel {
             )
             recompute()
         } catch {
-            // Preserve current presentation — non-fatal.
+            // Preserve current presentation, non-fatal.
         }
     }
 
@@ -4428,7 +4453,7 @@ final class DashboardViewModel {
         )
     }
 
-    /// Check-In History uses PostgREST 90d — same source when combined loader fails.
+    /// Check-In History uses PostgREST 90d, same source when combined loader fails.
     private func loadPsychologyCheckInsHistoryFallback(
         profileID: ProfileID,
         range: (start: String, end: String)

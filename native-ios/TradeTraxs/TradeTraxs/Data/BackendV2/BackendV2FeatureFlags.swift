@@ -22,13 +22,13 @@ nonisolated enum BackendV2FeatureFlag: String, CaseIterable, Sendable {
     case roomPresence
     case activity
     case calendar
-    /// Aggregate-first Calendar (trade_daily_stats) — rollback via flag OFF.
+    /// Aggregate-first Calendar (trade_daily_stats), rollback via flag OFF.
     case calendarAnalyticsV2
-    /// Calendar V2 reads prefer GRDB over JSON (Phase 5E) — Release default OFF.
+    /// Calendar V2 reads prefer GRDB over JSON (Phase 5E), Release default OFF.
     case calendarAnalyticsGRDB
-    /// Aggregate-first Dashboard analytics — rollback via flag OFF.
+    /// Aggregate-first Dashboard analytics, rollback via flag OFF.
     case dashboardAnalyticsV3
-    /// Dashboard V3 reads prefer GRDB over JSON (Phase 5F) — Release default OFF.
+    /// Dashboard V3 reads prefer GRDB over JSON (Phase 5F), Release default OFF.
     case dashboardAnalyticsGRDB
     case explore
     case leaderboard
@@ -36,22 +36,22 @@ nonisolated enum BackendV2FeatureFlag: String, CaseIterable, Sendable {
     case settings
     case propFirm
     case tradesList
-    /// Phase 8D — Journal list TradeSummary V2 RPC (Release default OFF).
+    /// Phase 8D, Journal list TradeSummary V2 RPC (Release default OFF).
     case tradeJournalSummaryV2
-    /// Phase 8E — Profile Trades tab TradeSummary V2 RPC (Release default OFF).
+    /// Phase 8E, Profile Trades tab TradeSummary V2 RPC (Release default OFF).
     case profileTradesSummaryV2
     case gettingStarted
-    /// Lightweight cache reconciliation RPC — enable only after `rpc_v1_viewer_sync_state` is deployed.
+    /// Lightweight cache reconciliation RPC, enable only after `rpc_v1_viewer_sync_state` is deployed.
     case viewerSyncState
-    /// Phase 6D — `user_analytics_state` Realtime revision signal (Release default OFF).
+    /// Phase 6D, `user_analytics_state` Realtime revision signal (Release default OFF).
     case analyticsRealtime
-    /// Phase 6E — cheap revision RPC repair on lifecycle/connectivity (Release default OFF).
+    /// Phase 6E, cheap revision RPC repair on lifecycle/connectivity (Release default OFF).
     case analyticsRevisionRepair
-    /// Phase 7D — Profile Analytics V2 shadow fetch + parity only (Release default OFF).
+    /// Phase 7D, Profile Analytics V2 shadow fetch + parity only (Release default OFF).
     case profileAnalyticsV2Shadow
-    /// Phase 7E — Profile Statistics presentation via Analytics V2 (Release default OFF).
+    /// Phase 7E, Profile Statistics presentation via Analytics V2 (Release default OFF).
     case profileAnalyticsV2
-    /// Phase 7E — Profile Statistics GRDB cache (Release default OFF).
+    /// Phase 7E, Profile Statistics GRDB cache (Release default OFF).
     case profileAnalyticsGRDB
 
     var dottedName: String { "backendV2.\(rawValue)" }
@@ -134,7 +134,7 @@ nonisolated enum BackendV2FeatureFlags {
             return (false, "default")
         }
 #if DEBUG
-        // Temporary Phase 3 device QA — not shipped in Release / productionShippedFlags.
+        // Temporary Phase 3 device QA, not shipped in Release / productionShippedFlags.
         if flag == .analyticsRealtime {
             return (true, "debugDefault")
         }

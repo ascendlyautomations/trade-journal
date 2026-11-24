@@ -3,10 +3,10 @@ import Foundation
 /// JSON disk cache for successful Backend V2 bootstrap payloads (no GRDB).
 nonisolated enum BackendV2BootstrapDiskCache {
     private static let folderName = "BackendV2BootstrapCache"
-    /// Authoritative freshness — onboarding and mutation gating.
+    /// Authoritative freshness, onboarding and mutation gating.
     private static let softStaleSeconds: TimeInterval = 10 * 60
     private static let authoritativeMaxSeconds: TimeInterval = 24 * 60 * 60
-    /// Render-only freshness — aligned with ``FeedDiskCache`` (7 days).
+    /// Render-only freshness, aligned with ``FeedDiskCache`` (7 days).
     static let displayMaxSeconds: TimeInterval = 7 * 24 * 60 * 60
 
     enum Freshness: Sendable {
@@ -265,7 +265,7 @@ nonisolated enum BackendV2BootstrapDiskCache {
         }
     }
 
-    /// Test helper — write dashboard cache with an explicit saved-at for soft-stale simulation.
+    /// Test helper, write dashboard cache with an explicit saved-at for soft-stale simulation.
     static func saveDashboardForTesting(
         _ bootstrap: DashboardBootstrapV1,
         viewerID: String,

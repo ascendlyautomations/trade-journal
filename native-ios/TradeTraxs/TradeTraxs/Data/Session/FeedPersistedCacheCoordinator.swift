@@ -3,7 +3,7 @@ import Foundation
 /// Central write-through for viewer-scoped Feed disk snapshots.
 @MainActor
 enum FeedPersistedCacheCoordinator {
-    /// Serializes feed page disk writes — production stays async; tests can flush via probe flag.
+    /// Serializes feed page disk writes, production stays async; tests can flush via probe flag.
     private static let diskWriteQueue = DispatchQueue(label: "FeedPersistedCache.disk", qos: .utility)
 
     // MARK: - Hydrate
@@ -88,7 +88,7 @@ enum FeedPersistedCacheCoordinator {
         return (loaded.blob.entries.count, loaded.ageMs)
     }
 
-    /// Disk decode off the hot path — session snapshot on MainActor; detail seeds deferred.
+    /// Disk decode off the hot path, session snapshot on MainActor; detail seeds deferred.
     static func hydratePageAsync(
         viewerID: ProfileID,
         scope: FeedScope,
@@ -268,7 +268,7 @@ enum FeedPersistedCacheCoordinator {
 
     // MARK: - Prune
 
-    /// Rewrites pruned feed pages on a background queue — never blocks tab transition.
+    /// Rewrites pruned feed pages on a background queue, never blocks tab transition.
     static func pruneBlockedAuthors(viewerID: ProfileID, blocked: Set<ProfileID>) {
         guard !blocked.isEmpty else { return }
         let viewerCopy = viewerID

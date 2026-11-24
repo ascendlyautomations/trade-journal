@@ -1,6 +1,6 @@
 import Foundation
 
-/// Future bulk Realtime debounce — production analytical Realtime is not enabled in Phase 6B.
+/// Future bulk Realtime debounce, production analytical Realtime is not enabled in Phase 6B.
 nonisolated struct AnalyticsSignalCoalescingPolicy: Sendable, Equatable {
     var debounce: Duration
     var maxDebounce: Duration

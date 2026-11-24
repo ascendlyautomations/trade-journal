@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `CsvFileFormat` — detection order: tradovate → tradezella → entered_exited → flexible.
+/// Web `CsvFileFormat`, detection order: tradovate → tradezella → entered_exited → flexible.
 nonisolated enum CSVFileFormat: String, Hashable, Codable, Sendable, CaseIterable {
     case tradovate
     case tradezella
@@ -19,7 +19,7 @@ nonisolated enum CSVFileFormat: String, Hashable, Codable, Sendable, CaseIterabl
     }
 }
 
-/// Web `LogicalField` — columns that can be mapped for flexible CSVs.
+/// Web `LogicalField`, columns that can be mapped for flexible CSVs.
 nonisolated enum CSVLogicalField: String, Hashable, Codable, Sendable, CaseIterable, Identifiable {
     case date
     case symbol
@@ -81,7 +81,7 @@ nonisolated enum CSVLogicalField: String, Hashable, Codable, Sendable, CaseItera
     }
 }
 
-/// Normalized trade ready for review / bulk insert — mirrors web `CsvTradeInsert`.
+/// Normalized trade ready for review / bulk insert, mirrors web `CsvTradeInsert`.
 nonisolated struct CSVParsedTrade: Hashable, Codable, Sendable, Identifiable {
     var id: String
     var rowNumber: Int
@@ -152,7 +152,7 @@ nonisolated struct CSVImportResult: Hashable, Codable, Sendable {
     var failureMessage: String?
 }
 
-/// Manual column mapping — CSV header → logical field (or ignore).
+/// Manual column mapping, CSV header → logical field (or ignore).
 nonisolated struct CSVColumnMapping: Hashable, Codable, Sendable, Identifiable {
     var id: String { header }
     var header: String

@@ -21,6 +21,63 @@ final class ProfileEquityCurveChartPresentationTests: XCTestCase {
         XCTAssertGreaterThan(domain.upperBound, 68_000)
     }
 
+    func testTimelineDomainUsesAsymmetricTrailingInsetForLabels() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let end = start.addingTimeInterval(86_400 * 365)
+        let render = [
+            ProfileEquityCurveChartModel.RenderPoint(
+                index: 0,
+                tradeIndex: 0,
+                equity: 50_000,
+                equityY: 50_000,
+                date: start,
+                periodEnd: start
+            ),
+            ProfileEquityCurveChartModel.RenderPoint(
+                index: 1,
+                tradeIndex: 80,
+                equity: 55_000,
+                equityY: 55_000,
+                date: end,
+                periodEnd: end
+            ),
+        ]
+
+        guard let domain = ProfileEquityCurveChartModel.timelineDomain(for: render) else {
+            XCTFail("Expected timeline domain")
+            return
+        }
+
+        let span = end.timeIntervalSince(start)
+        let insets = ProfileEquityCurveChartModel.timelineXAxisInsets(span: span)
+        XCTAssertGreaterThan(insets.trailing, insets.leading)
+        XCTAssertEqual(
+            domain.lowerBound.timeIntervalSince1970,
+            start.timeIntervalSince1970 - insets.leading,
+            accuracy: 1
+        )
+        XCTAssertEqual(
+            domain.upperBound.timeIntervalSince1970,
+            end.timeIntervalSince1970 + insets.trailing,
+            accuracy: 1
+        )
+        XCTAssertLessThanOrEqual(insets.trailing, 86_400 * 5)
+    }
+
+    func testTradeIndexDomainReservesTrailingHeadroomForLabels() {
+        let render = (0...20).map { idx in
+            ProfileEquityCurveChartModel.RenderPoint(
+                index: idx,
+                tradeIndex: idx,
+                equity: 40_000,
+                equityY: 40_000
+            )
+        }
+        let domain = ProfileEquityCurveChartModel.tradeIndexDomain(for: render)
+        XCTAssertGreaterThan(domain.upperBound, 20)
+        XCTAssertEqual(domain.lowerBound, 0)
+    }
+
     func testHeroPipelineValuesReachChartUnmodified() throws {
         let account = TradingAccount(
             id: TradingAccountID("22222222-2222-2222-2222-222222222222"),

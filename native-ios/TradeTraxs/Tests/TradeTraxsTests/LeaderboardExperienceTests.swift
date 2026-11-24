@@ -459,10 +459,10 @@ final class LeaderboardExperienceTests: XCTestCase {
         XCTAssertEqual(state.rows.first?.profileID, ProfileID("u-strong-pf"))
         XCTAssertEqual(state.rows[1].profileID, ProfileID("u-weak-pf"))
         XCTAssertEqual(state.rows.last?.profileID, ProfileID("u-no-losses"))
-        XCTAssertEqual(state.rows.last?.primaryMetricText, "—")
+        XCTAssertEqual(state.rows.last?.primaryMetricText, "–")
         XCTAssertEqual(state.podium.first?.profileID, ProfileID("u-strong-pf"))
         XCTAssertEqual(state.podium.last?.profileID, ProfileID("u-no-losses"))
-        XCTAssertEqual(state.podium.last?.primaryMetricText, "—")
+        XCTAssertEqual(state.podium.last?.primaryMetricText, "–")
     }
 
     func testUserStatsAggregationComputesDerivedMetrics() {

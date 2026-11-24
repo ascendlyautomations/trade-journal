@@ -24,7 +24,7 @@ final class ProEntitlementResponseSanitizerTests: XCTestCase {
     }
 
     func testNeutralErrorsPassThrough() {
-        let message = ProEntitlementResponseSanitizer.sanitizedOrNeutral("Slow down — try again in a moment.")
-        XCTAssertEqual(message, "Slow down — try again in a moment.")
+        let message = ProEntitlementResponseSanitizer.sanitizedOrNeutral("Slow down, try again in a moment.")
+        XCTAssertEqual(message, "Slow down, try again in a moment.")
     }
 }

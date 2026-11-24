@@ -1,6 +1,6 @@
 import Foundation
 
-/// Native Trading Reports — mirrors web `ensureTradingReportsLoaded`.
+/// Native Trading Reports, mirrors web `ensureTradingReportsLoaded`.
 ///
 /// Report bodies are generated locally with ``TradingReportGenerator`` (web
 /// `generateTradingReport.ts`). Weekly push is scheduled by Supabase pg_cron.

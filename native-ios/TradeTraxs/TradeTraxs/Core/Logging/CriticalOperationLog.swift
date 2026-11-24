@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// High-impact production failures — OSLog only (no tokens or trade payloads).
+/// High-impact production failures, OSLog only (no tokens or trade payloads).
 nonisolated enum CriticalOperationLog {
     private static let logger = Logger(subsystem: AppLog.subsystem, category: "CriticalOperation")
 

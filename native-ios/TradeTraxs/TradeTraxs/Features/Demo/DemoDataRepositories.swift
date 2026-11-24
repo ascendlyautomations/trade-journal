@@ -1,11 +1,11 @@
 import Foundation
 
 nonisolated enum DemoAuthRequired {
-    /// Same surface as ``AppError/domain(_:)`` `.permission(.notAuthenticated)` — safe from any executor.
+    /// Same surface as ``AppError/domain(_:)`` `.permission(.notAuthenticated)`, safe from any executor.
     static let error: AppError = .authentication(.sessionMissing)
 }
 
-/// In-memory trade journal for Explore Mode — reads from ``DemoCanonicalDataset``.
+/// In-memory trade journal for Explore Mode, reads from ``DemoCanonicalDataset``.
 nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendable {
     private let ownerID: ProfileID
     private let tradesOverride: [Trade]?

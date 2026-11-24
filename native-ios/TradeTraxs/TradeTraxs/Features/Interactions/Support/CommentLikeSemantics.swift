@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `lib/commentLikes.ts` — unified `comment_likes` table sources.
+/// Web `lib/commentLikes.ts`, unified `comment_likes` table sources.
 nonisolated enum CommentLikeSource: String, Sendable, CaseIterable {
     case comments
     case tradeComments = "trade_comments"
@@ -19,7 +19,7 @@ nonisolated enum CommentLikeSource: String, Sendable, CaseIterable {
     }
 }
 
-/// Web `CommentLikeMeta` — count + viewer liked state for one comment.
+/// Web `CommentLikeMeta`, count + viewer liked state for one comment.
 nonisolated struct CommentLikeSnapshot: Hashable, Sendable {
     var count: Int
     var liked: Bool
@@ -81,7 +81,7 @@ nonisolated enum CommentLikeSemantics {
         return meta
     }
 
-    /// Web `applyCommentLikeRealtimeEvent` — skip double-count while optimistic toggle is in-flight.
+    /// Web `applyCommentLikeRealtimeEvent`, skip double-count while optimistic toggle is in-flight.
     static func applyRealtimeEvent(
         _ previous: CommentLikeSnapshot,
         event: RealtimeMutationKind,

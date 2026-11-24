@@ -1,7 +1,7 @@
 import Foundation
 import UserNotifications
 
-/// Foreground presentation policy — Instagram / Discord style.
+/// Foreground presentation policy, Instagram / Discord style.
 ///
 /// - Always refresh badge + in-app Activity
 /// - High-priority types may show a banner while active

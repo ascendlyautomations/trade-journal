@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Story camera — photo or video; recorded video is capped at ``StoryMediaDuration/maxVideoDurationSeconds``.
+/// Story camera, photo or video; recorded video is capped at ``StoryMediaDuration/maxVideoDurationSeconds``.
 struct CameraStoryPicker: UIViewControllerRepresentable {
     var onPickedPhoto: (UIImage) -> Void
     var onPickedVideo: (URL) -> Void

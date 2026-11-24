@@ -5,9 +5,9 @@ nonisolated enum DashboardAnalyticsChartsAvailability: Equatable, Sendable {
     case notRequested
     case loading
     case loaded
-    /// Transient failure — one deferred overlay retry may run.
+    /// Transient failure, one deferred overlay retry may run.
     case failed
-    /// Permission / auth failure — do not retry until pull refresh or revision change.
+    /// Permission / auth failure, do not retry until pull refresh or revision change.
     case failedNonRetryable
 
     var isLoaded: Bool {

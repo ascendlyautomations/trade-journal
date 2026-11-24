@@ -1,6 +1,6 @@
 import Foundation
 
-/// Production image cache keys — shared by pipeline, audit, and Feed warm/prefetch.
+/// Production image cache keys, shared by pipeline, audit, and Feed warm/prefetch.
 nonisolated enum ImageCacheKey {
     nonisolated static func make(for request: ImageRequest) -> String {
         make(

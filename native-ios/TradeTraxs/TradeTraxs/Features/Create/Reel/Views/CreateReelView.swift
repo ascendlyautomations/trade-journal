@@ -3,7 +3,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Standalone New Clip / Reel composer — video first, then caption + optional trade link.
+/// Standalone New Clip / Reel composer, video first, then caption + optional trade link.
 struct CreateReelView: View {
     @State private var viewModel: CreateReelViewModel
     @State private var videoItem: PhotosPickerItem?
@@ -341,7 +341,7 @@ struct CreateReelView: View {
                 )
                 .accessibilityIdentifier("createReel.linkedTrade")
             } else if viewModel.linkedTradeSummary != nil {
-                // Summary without resolved trade — legacy/dev fallback.
+                // Summary without resolved trade, legacy/dev fallback.
                 HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(viewModel.linkedTradeSummary ?? "")

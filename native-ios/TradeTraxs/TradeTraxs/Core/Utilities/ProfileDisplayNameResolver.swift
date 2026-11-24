@@ -1,6 +1,6 @@
 import Foundation
 
-/// Messaging / inbox primary identity line — never surfaces auth placeholders or profile-shell usernames.
+/// Messaging / inbox primary identity line, never surfaces auth placeholders or profile-shell usernames.
 nonisolated enum ProfileDisplayNameResolver {
     static let newUserFallback = "New User"
 
@@ -26,7 +26,7 @@ nonisolated enum ProfileDisplayNameResolver {
         return newUserFallback
     }
 
-    /// Secondary `@username` line on DM rows — hidden for shell / UUID-like handles.
+    /// Secondary `@username` line on DM rows, hidden for shell / UUID-like handles.
     static func messagingUsernameSubtitle(
         username: String?,
         profileID: ProfileID?

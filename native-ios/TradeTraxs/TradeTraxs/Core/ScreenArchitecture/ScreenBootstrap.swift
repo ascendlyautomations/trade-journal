@@ -6,7 +6,7 @@ import Foundation
 /// ``ProfileBootstrap``, ``FeedBootstrap``, ``MessagingBootstrap``). Prefer
 /// concurrent `async let` for independent repository calls.
 ///
-/// Do not put UI or navigation here — only data assembly into a state snapshot / result.
+/// Do not put UI or navigation here, only data assembly into a state snapshot / result.
 protocol ScreenBootstrap {
     associatedtype Context
     associatedtype Output

@@ -26,7 +26,7 @@ enum BroadcastStreamEndPolicy {
     }
 
     /// After the broadcaster's LiveKit participant disconnects while the viewer is still connected.
-    /// For OBS, the host may disconnect while the program feed (ingress) stays live — do not end watch.
+    /// For OBS, the host may disconnect while the program feed (ingress) stays live, do not end watch.
     static func shouldEndWatchFromBroadcasterDisconnect(
         isWatching: Bool,
         isVoluntaryLeave: Bool,
@@ -42,7 +42,7 @@ enum BroadcastStreamEndPolicy {
         return disconnectedIdentity == broadcasterIdentity
     }
 
-    /// LiveKit connection dropped — wait for reconnect; do not treat as ended by itself.
+    /// LiveKit connection dropped, wait for reconnect; do not treat as ended by itself.
     static func shouldDeferStreamEndForConnectionState(_ state: ConnectionState) -> Bool {
         switch state {
         case .connecting, .reconnecting:

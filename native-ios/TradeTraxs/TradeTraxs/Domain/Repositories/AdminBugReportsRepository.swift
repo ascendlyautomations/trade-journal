@@ -100,7 +100,7 @@ enum BugReportDisplay {
     static func previewText(_ text: String, max: Int = 120) -> String {
         let trimmed = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "—" }
+        guard !trimmed.isEmpty else { return "–" }
         if trimmed.count <= max { return trimmed }
         return String(trimmed.prefix(max)) + "…"
     }

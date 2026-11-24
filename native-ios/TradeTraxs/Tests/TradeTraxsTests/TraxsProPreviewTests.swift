@@ -269,7 +269,7 @@ final class TraxsProPreviewTests: XCTestCase {
         XCTAssertNotNil(summary.hourHighlights, "trading hours should surface best/worst hours")
         XCTAssertNotEqual(
             summary.holdTime.first(where: { $0.label == "Avg Winner" })?.value,
-            "—",
+            "–",
             "hold time should separate winners"
         )
         XCTAssertGreaterThanOrEqual(summary.holdExtremes.count, 2, "hold extremes need wins and losses")
@@ -283,6 +283,17 @@ final class TraxsProPreviewTests: XCTestCase {
             viewModel.dashboardPsychologyInsightCards.isEmpty,
             "psychology insights should populate from seeded check-ins"
         )
+        XCTAssertNotNil(summary.profitFactor)
+        XCTAssertGreaterThan(summary.profitFactor ?? 0, 0)
+        XCTAssertNotNil(summary.averageMaxRrReached, "avg max R:R should compute from sample maxRrReached values")
+        let scopeMetrics = viewModel.traxsProPreviewScopeMetrics
+        XCTAssertNotNil(scopeMetrics?.bestDayLabel)
+        XCTAssertNotNil(scopeMetrics?.bestDayPnl)
+        XCTAssertNotNil(scopeMetrics?.worstDayLabel)
+        XCTAssertNotNil(scopeMetrics?.worstDayPnl)
+        XCTAssertNotNil(scopeMetrics?.bestSessionLabel)
+        XCTAssertNotNil(scopeMetrics?.worstSessionLabel)
+        XCTAssertNotNil(scopeMetrics?.profitFactor)
     }
 
     func testExpenseTrackerPreviewSessionIsIsolatedFromJournal() {

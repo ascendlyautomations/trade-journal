@@ -48,9 +48,9 @@ struct ProfileTradeCard: View {
     var onReport: (() -> Void)? = nil
     var profilePin: ProfilePinCallbacks? = nil
     var isProfilePinned: Bool = false
-    /// Grouped copy-action mode line from Profile display grouping — not recomputed from ``TradeSummary/accountMode``.
+    /// Grouped copy-action mode line from Profile display grouping, not recomputed from ``TradeSummary/accountMode``.
     var copyTradeModeSummaryLine: String? = nil
-    /// `Provider · Eval` — resolved by profile list VM from journal + account metadata.
+    /// `Provider · Eval`, resolved by profile list VM from journal + account metadata.
     var postedAccountCaption: String? = nil
     var detailCache: DetailPresentationCache? = nil
     var profileViewerID: ProfileID? = nil
@@ -343,7 +343,7 @@ struct ProfileTradeCard: View {
     }
 }
 
-/// Profile copy card — render grouped ``copyTradePublicModeSummary`` only (never ``accountMode``).
+/// Profile copy card, render grouped ``copyTradePublicModeSummary`` only (never ``accountMode``).
 private struct ProfileCopyTradeModeSummaryText: View {
     let summary: TradeSummary
     let groupedModeSummaryLine: String?

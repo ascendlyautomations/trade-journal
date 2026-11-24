@@ -4,22 +4,52 @@ import UIKit
 struct SharedContentShareSheet: View {
     let target: SharedContentShareTarget
     let data: DataEnvironment
+    var tradeOwnerShareAccess: TradeOwnerShareAccess?
+    var onTradeVisibilityUpdated: ((Trade) -> Void)?
     var onClose: () -> Void
 
     @State private var viewModel: SharedContentShareViewModel
     @State private var recipientScope: SharedContentShareViewModel.RecipientScope?
     @State private var showsExternalShare = false
+    @State private var resolvedOwnerVisibility: ContentVisibility?
+    @State private var makePublicConfirm: MakePublicShareConfirm?
+    @State private var isMakingPublic = false
+    @State private var makePublicErrorMessage: String?
 
     @Environment(\.themeColors) private var colors
+
+    private enum MakePublicShareConfirm: Identifiable {
+        case copyLink
+        case externalShare
+
+        var id: String {
+            switch self {
+            case .copyLink: return "copy"
+            case .externalShare: return "external"
+            }
+        }
+
+        var confirmTitle: String {
+            switch self {
+            case .copyLink: return "Make Public & Copy Link"
+            case .externalShare: return "Make Public & Share"
+            }
+        }
+    }
 
     init(
         target: SharedContentShareTarget,
         data: DataEnvironment,
+        tradeOwnerShareAccess: TradeOwnerShareAccess? = nil,
+        onTradeVisibilityUpdated: ((Trade) -> Void)? = nil,
         onClose: @escaping () -> Void
     ) {
         self.target = target
         self.data = data
+        self.tradeOwnerShareAccess = tradeOwnerShareAccess
+        self.onTradeVisibilityUpdated = onTradeVisibilityUpdated
         self.onClose = onClose
+        _resolvedOwnerVisibility = State(initialValue: tradeOwnerShareAccess?.visibility)
         _viewModel = State(
             initialValue: SharedContentShareViewModel(
                 target: target,
@@ -29,6 +59,12 @@ struct SharedContentShareSheet: View {
                 detailCache: data.detailCache
             )
         )
+    }
+
+    private var requiresPublicLinkAccess: Bool {
+        guard let access = tradeOwnerShareAccess else { return false }
+        let visibility = resolvedOwnerVisibility ?? access.visibility
+        return visibility == .private
     }
 
     var body: some View {
@@ -53,19 +89,21 @@ struct SharedContentShareSheet: View {
                 Section("Share Externally") {
                     if target.contentLink.url != nil {
                         Button {
-                            DetailOverflowActions.copyLink(target.contentLink)
+                            requestCopyLink()
                         } label: {
                             Label("Copy Link", systemImage: "link")
                         }
+                        .disabled(isMakingPublic)
                         .accessibilityIdentifier("sharedContentShare.copyLink")
                     }
 
                     if target.contentLink.url != nil {
                         Button {
-                            showsExternalShare = true
+                            requestExternalShare()
                         } label: {
                             Label("Share Externally", systemImage: "square.and.arrow.up")
                         }
+                        .disabled(isMakingPublic)
                         .accessibilityIdentifier("sharedContentShare.external")
                     }
                 }
@@ -106,6 +144,91 @@ struct SharedContentShareSheet: View {
                 onClose()
             }
         }
+        .confirmationDialog(
+            "Share this private trade?",
+            isPresented: Binding(
+                get: { makePublicConfirm != nil },
+                set: { if !$0 { makePublicConfirm = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let confirm = makePublicConfirm {
+                Button(confirm.confirmTitle) {
+                    let pending = confirm
+                    makePublicConfirm = nil
+                    Task { await performMakePublicThen(confirm: pending) }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                makePublicConfirm = nil
+            }
+        } message: {
+            Text(
+                "This trade is private. People you share the link with can't open it on TradeTraxs unless sharing access is enabled."
+            )
+        }
+        .alert(
+            "Couldn't update trade",
+            isPresented: Binding(
+                get: { makePublicErrorMessage != nil },
+                set: { if !$0 { makePublicErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { makePublicErrorMessage = nil }
+        } message: {
+            Text(makePublicErrorMessage ?? "")
+        }
+    }
+
+    private func requestCopyLink() {
+        if requiresPublicLinkAccess {
+            makePublicConfirm = .copyLink
+        } else {
+            DetailOverflowActions.copyLink(target.contentLink)
+        }
+    }
+
+    private func requestExternalShare() {
+        if requiresPublicLinkAccess {
+            makePublicConfirm = .externalShare
+        } else {
+            showsExternalShare = true
+        }
+    }
+
+    @MainActor
+    private func performMakePublicThen(confirm: MakePublicShareConfirm) async {
+        guard let access = tradeOwnerShareAccess else { return }
+        guard let trade = await resolvedTrade(for: access.tradeID) else {
+            makePublicErrorMessage = "We couldn't load this trade. Try again."
+            return
+        }
+        isMakingPublic = true
+        defer { isMakingPublic = false }
+        do {
+            let updated = try await JournalTradeShareSupport.makePublicForSharing(
+                trade: trade,
+                trades: data.trades,
+                session: data.session
+            )
+            resolvedOwnerVisibility = .public
+            onTradeVisibilityUpdated?(updated)
+            switch confirm {
+            case .copyLink:
+                DetailOverflowActions.copyLink(target.contentLink)
+            case .externalShare:
+                showsExternalShare = true
+            }
+        } catch {
+            makePublicErrorMessage = ProfileSectionSupport.message(for: error)
+        }
+    }
+
+    private func resolvedTrade(for tradeID: TradeID) async -> Trade? {
+        if let trade = data.detailCache.trade(id: tradeID) {
+            return trade
+        }
+        return try? await data.trades.trade(id: tradeID)
     }
 }
 

@@ -55,10 +55,10 @@ enum ProfileSection: String, CaseIterable, Identifiable, Sendable {
         "Show \(title.lowercased()) on your profile"
     }
 
-    /// Section strip order — matches ``ProfileSectionPicker`` left-to-right.
+    /// Section strip order, matches ``ProfileSectionPicker`` left-to-right.
     static let sectionStripOrder: [ProfileSection] = allCases
 
-    /// Neighbor in ``sectionStripOrder`` — positive offset is swipe-left (toward Achievements).
+    /// Neighbor in ``sectionStripOrder``, positive offset is swipe-left (toward Achievements).
     func adjacentSection(offset: Int) -> ProfileSection? {
         guard offset != 0,
               let index = Self.sectionStripOrder.firstIndex(of: self)

@@ -69,6 +69,7 @@ struct PropFirmExpensesHomeRouteView: View {
                     title: "Prop Firm Expense Tracker",
                     message: "Track evaluations, funded payouts, tools, and tax-ready exports. Preview with sample data or unlock TraxsPro.",
                     feature: .propFirm,
+                    previewEntryPoint: .expenseTrackerGate,
                     accessibilityIdentifier: "propFirmExpenses.traxpro.gate"
                 )
                 .padding(.horizontal, ExperienceSpacing.md)
@@ -81,14 +82,11 @@ struct PropFirmExpensesHomeRouteView: View {
     }
 
     private func presentUpgradeGateIfNeeded() {
-        guard restrictsExpenseTracker else { return }
-        guard !didPresentUpgradeGate else { return }
-        guard ProMonetizationPolicy.canPresentProPaywall(
-            demoModeActive: ExploreModeSupport.isActive,
-            enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
-            paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
-        ) else { return }
-        didPresentUpgradeGate = true
-        ProUpgradeCoordinator.shared.present(reason: .feature(.propFirm))
+        guard !showsEntitlementVerification else { return }
+        ProUpgradeAutoPresent.presentFeatureGateIfNeeded(
+            isRestricted: restrictsExpenseTracker,
+            didPresent: &didPresentUpgradeGate,
+            feature: .propFirm
+        )
     }
 }

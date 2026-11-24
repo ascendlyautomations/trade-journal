@@ -14,7 +14,7 @@ nonisolated enum TradingCalendarDay {
 
     /// `YYYY-MM-DD` trading day for a trade, or `nil` when the trade cannot be bucketed.
     static func key(for trade: Trade) -> String? {
-        // Web calendar: entry_time || exit_time — never created_at alone.
+        // Web calendar: entry_time || exit_time, never created_at alone.
         // Domain `entryAt` is non-optional (mapper requires it); still prefer entry then exit.
         guard let date = resolveInstant(entryAt: trade.entryAt, exitAt: trade.exitAt) else {
             return nil
@@ -22,7 +22,7 @@ nonisolated enum TradingCalendarDay {
         return key(for: date)
     }
 
-    /// Prefer entry, then exit — mirrors web `trade.entry_time || trade.exit_time`.
+    /// Prefer entry, then exit, mirrors web `trade.entry_time || trade.exit_time`.
     static func resolveInstant(entryAt: Date?, exitAt: Date?) -> Date? {
         entryAt ?? exitAt
     }

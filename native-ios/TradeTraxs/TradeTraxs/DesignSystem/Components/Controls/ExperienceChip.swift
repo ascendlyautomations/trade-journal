@@ -43,8 +43,14 @@ struct ExperienceChip: View {
                 .minimumScaleFactor(compact ? 0.9 : 1)
                 .padding(.horizontal, compact ? ExperienceSpacing.xs : ExperienceSpacing.sm)
                 .padding(.vertical, compact ? ExperienceSpacing.xxs : ExperienceSpacing.xs)
-                .background(isSelected ? colors.accent : colors.fillSecondary)
-                .clipShape(Capsule())
+                .background {
+                    if isSelected {
+                        Capsule().fill(colors.accent)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .modifier(ExperienceChipUnselectedChrome(isSelected: isSelected))
         }
         .buttonStyle(.experiencePlain)
         .disabled(action == nil)
@@ -53,6 +59,22 @@ struct ExperienceChip: View {
             identifier: "chip.\(title)",
             traits: isSelected ? [.isButton, .isSelected] : .isButton
         )
+    }
+}
+
+private struct ExperienceChipUnselectedChrome: ViewModifier {
+    var isSelected: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if isSelected {
+            content
+        } else if colorScheme == .light {
+            content.experienceFilterCapsule()
+        } else {
+            content.background(colors.fillSecondary, in: Capsule())
+        }
     }
 }
 

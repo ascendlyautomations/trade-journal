@@ -1,6 +1,6 @@
 import Foundation
 
-/// Per-trading-day guardrail dismissals — avoids spamming the same notice.
+/// Per-trading-day guardrail dismissals, avoids spamming the same notice.
 @MainActor
 final class PsychologyGuardrailDismissStore {
     static let shared = PsychologyGuardrailDismissStore()

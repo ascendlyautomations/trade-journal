@@ -9,7 +9,7 @@ import UserNotifications
 final class AppDelegate: NSObject, UIApplicationDelegate {
     /// Set immediately after composition so termination can be forwarded.
     var lifecycle: AppLifecycleHandler?
-    /// Centralized APNs — features never register themselves.
+    /// Centralized APNs, features never register themselves.
     var pushNotifications: PushNotificationCenter?
 
     override init() {

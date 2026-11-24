@@ -41,7 +41,7 @@ enum ExploreFollowingSupport {
         }
     }
 
-    /// Suggested-trader lists — people you do not follow first, then followed (deduped).
+    /// Suggested-trader lists, people you do not follow first, then followed (deduped).
     static func mergeDiscoverableFirst(
         discoverable: [ExploreTraderSuggestion],
         following: [ExploreTraderSuggestion]

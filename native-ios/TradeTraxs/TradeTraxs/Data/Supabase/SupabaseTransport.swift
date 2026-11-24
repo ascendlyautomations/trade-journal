@@ -2,7 +2,7 @@ import Foundation
 
 /// Shared HTTP surface for Auth / REST / RPC / Storage / Edge Functions.
 ///
-/// Uses the existing Networking foundation — Features never call this type.
+/// Uses the existing Networking foundation, Features never call this type.
 nonisolated struct SupabaseTransport: Sendable {
     let client: NetworkClientBox
     let requestBuilder: RequestBuilder

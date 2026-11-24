@@ -9,7 +9,7 @@ enum ComplianceDisclaimerCopy {
         "\(financialEducation) AI-generated insights may be inaccurate."
 
     static let psychologyCoach =
-        "Coach responses are AI-generated, may contain mistakes, and are for educational and informational purposes only — not financial or investment advice."
+        "Coach responses are AI-generated, may contain mistakes, and are for educational and informational purposes only, not financial or investment advice."
 
     static let leaderboard =
         "\(financialEducation) Rankings reflect in-app activity only."
@@ -20,7 +20,7 @@ enum ComplianceDisclaimerCopy {
         "AI extraction may be inaccurate. Review all fields before importing."
 
     static let psychologyReportAI =
-        "This AI summary may be inaccurate and is for educational purposes only — not financial or investment advice."
+        "This AI summary may be inaccurate and is for educational purposes only, not financial or investment advice."
 
     static let termsURL = LegalDocuments.terms
 }

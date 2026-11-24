@@ -43,7 +43,7 @@ nonisolated enum AuthLifecycleTrace {
 }
 #endif
 
-/// Monotonic auth lifecycle generation — readable from networking without MainActor.
+/// Monotonic auth lifecycle generation, readable from networking without MainActor.
 nonisolated enum AuthLifecycleGeneration {
     private static let lock = NSLock()
     private static var value: UInt64 = 0

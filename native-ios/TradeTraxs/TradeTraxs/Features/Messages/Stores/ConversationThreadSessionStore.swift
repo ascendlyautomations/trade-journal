@@ -22,7 +22,7 @@ final class ConversationThreadSessionStore {
         var nextCursor: String?
         var hasMoreMessages: Bool
         var loadedAt: Date
-        /// Monotonic per-conversation generation — bumped on every local patch.
+        /// Monotonic per-conversation generation, bumped on every local patch.
         var contentGeneration: UInt64
         var scrollRestoration: ChannelScrollRestoration = .pinToBottomOnOpen
 

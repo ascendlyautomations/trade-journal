@@ -234,7 +234,7 @@ struct AdminUserDetailView: View {
 
     private var formattedUsername: String {
         let u = viewModel.user.username.trimmingCharacters(in: .whitespacesAndNewlines)
-        if u.isEmpty { return "—" }
+        if u.isEmpty { return "–" }
         return u.hasPrefix("@") ? u : "@\(u)"
     }
 

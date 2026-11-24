@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Create hub — Trade / Post / Clip / Achievement / Story / Payout.
+/// Create hub, Trade / Post / Clip / Achievement / Story / Payout.
 struct ComposeChooserView: View {
     let onAddTrade: () -> Void
     let onCreatePost: () -> Void

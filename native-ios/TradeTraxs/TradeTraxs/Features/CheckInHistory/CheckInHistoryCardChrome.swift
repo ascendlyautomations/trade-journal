@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared Check-In History surfaces — stronger card structure in light mode; dark unchanged.
+/// Shared Check-In History surfaces, stronger card structure in light mode; dark unchanged.
 enum CheckInHistoryCardChrome {
     static let sectionCornerRadius = ExperienceRadius.md
 
@@ -12,9 +12,9 @@ enum CheckInHistoryCardChrome {
     }
 
     enum SurfaceStyle {
-        /// History list rows — border in dark and light (legacy dark appearance).
+        /// History list rows, border in dark and light (legacy dark appearance).
         case listRow
-        /// Day detail sections — hairline border in light only.
+        /// Day detail sections, hairline border in light only.
         case detailSection
     }
 
@@ -30,9 +30,11 @@ enum CheckInHistoryCardChrome {
     static func sectionBorderOpacity(colorScheme: ColorScheme, style: SurfaceStyle) -> Double {
         switch style {
         case .listRow:
-            return colorScheme == .light ? ExperienceOpacity.subtle : 1
+            return colorScheme == .light
+                ? ExperienceDashboardSurface.LightChrome.borderOpacity
+                : 1
         case .detailSection:
-            return ExperienceOpacity.subtle
+            return ExperienceDashboardSurface.LightChrome.borderOpacity
         }
     }
 

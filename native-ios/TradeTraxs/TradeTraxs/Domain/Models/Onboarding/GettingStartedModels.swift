@@ -1,12 +1,12 @@
 import Foundation
 
-/// Shared checklist signals — mirrors `GettingStartedChecklistSignals` on web.
+/// Shared checklist signals, mirrors `GettingStartedChecklistSignals` on web.
 nonisolated struct GettingStartedSignals: Sendable, Equatable {
     var onboardingCompleted: Bool
     var hasSeenGettingStartedIntro: Bool
     var hasSeenOnboardingCompletePopup: Bool
     var tradeCount: Int
-    /// Authoritative social post (`profile_posts`) — not trades, reels, or feed trade rows.
+    /// Authoritative social post (`profile_posts`), not trades, reels, or feed trade rows.
     var hasCreatedProfilePost: Bool
     var profilePostCount: Int
     var followCount: Int

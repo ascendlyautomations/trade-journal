@@ -1,6 +1,6 @@
 import Foundation
 
-/// Deterministic coaching copy — always available without AI.
+/// Deterministic coaching copy, always available without AI.
 nonisolated enum PsychologyCoachDeterministicCoach {
     static func buildSummary(from facts: PsychologyCoachFacts) -> PsychologyCoachSummary {
         guard facts.hasMinimumData else {
@@ -127,7 +127,7 @@ nonisolated enum PsychologyCoachDeterministicCoach {
         return recs
     }
 
-    /// Fallback when AI is unavailable — explains a single insight in plain language.
+    /// Fallback when AI is unavailable, explains a single insight in plain language.
     static func explainInsight(_ insight: PsychologyCoachFactInsight) -> String {
         "\(insight.headline). \(insight.detail) This is based on \(insight.sampleSize) trades (\(insight.reliability) signal). Associated patterns are not proof of causation."
     }

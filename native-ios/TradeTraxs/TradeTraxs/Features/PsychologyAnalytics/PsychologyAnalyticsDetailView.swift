@@ -223,11 +223,7 @@ struct PsychologyAnalyticsDetailView: View {
                 }
                 .padding(ExperienceSpacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                        .stroke(colors.border, lineWidth: 1)
-                }
+                .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
                 .padding(.horizontal, ExperienceSpacing.md)
             }
         }
@@ -240,7 +236,7 @@ struct PsychologyAnalyticsDetailView: View {
                 .experienceStyle(.headline, color: colors.primaryText)
             Text(
                 GeneratedProseNormalizer.normalize(
-                    "Patterns from matched check-in days and trade psychology tags, association only, not causation."
+                    "Patterns from matched check-in days and trade psychology tags. Association only, not causation."
                 )
             )
             .experienceStyle(.caption, color: colors.tertiaryText)
@@ -256,11 +252,7 @@ struct PsychologyAnalyticsDetailView: View {
                     }
                     .padding(ExperienceSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                            .stroke(colors.border, lineWidth: 1)
-                    }
+                    .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
                 }
             }
         }
@@ -289,11 +281,7 @@ struct PsychologyAnalyticsDetailView: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        }
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
         .padding(.horizontal, ExperienceSpacing.md)
         .accessibilityIdentifier("psychologyAnalytics.insightGaps")
     }
@@ -318,11 +306,7 @@ struct PsychologyAnalyticsDetailView: View {
                 }
                 .padding(ExperienceSpacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                        .stroke(colors.border, lineWidth: 1)
-                }
+                .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
             }
             .buttonStyle(.experiencePlain)
             .padding(.horizontal, ExperienceSpacing.md)
@@ -348,11 +332,7 @@ struct PsychologyAnalyticsDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, ExperienceSpacing.sm)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        }
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
     }
 
     private func sectionView(_ section: PsychologyAnalyticsSection) -> some View {

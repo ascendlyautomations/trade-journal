@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `lib/tradingReports/tradingReportPeriods.ts` — calendar week (Mon–Sun) and month windows.
+/// Web `lib/tradingReports/tradingReportPeriods.ts`, calendar week (Mon–Sun) and month windows.
 nonisolated enum TradingReportPeriods {
     struct Bounds: Hashable, Sendable {
         var key: TradingReportPeriodKey
@@ -135,7 +135,7 @@ nonisolated enum TradingReportPeriods {
         return "\(startLabel) – \(endLabel)"
     }
 
-    /// Calendar year window — Jan 1 through Dec 31, or through today for the current year.
+    /// Calendar year window, Jan 1 through Dec 31, or through today for the current year.
     static func yearBounds(
         year: Int,
         now: Date = Date(),
@@ -165,7 +165,7 @@ nonisolated enum TradingReportPeriods {
         return Bounds(key: .monthlyThis, kind: .monthly, start: startDay, end: end)
     }
 
-    /// Single calendar month — full month for past years; current month ends today.
+    /// Single calendar month, full month for past years; current month ends today.
     static func customBounds(interval: DateInterval) -> Bounds {
         let calendar = eastern
         let normalized = DashboardScopeFilterSupport.normalizedCustomInterval(
@@ -181,7 +181,7 @@ nonisolated enum TradingReportPeriods {
         )
     }
 
-    /// Bounds for the Quick Select month — ends today when the month is in progress.
+    /// Bounds for the Quick Select month, ends today when the month is in progress.
     static func selectedMonthBounds(
         year: Int,
         month: Int,

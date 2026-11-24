@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped today's daily check-in — one fetch, no Realtime; own saves via ``applySaved``.
+/// Session-scoped today's daily check-in, one fetch, no Realtime; own saves via ``applySaved``.
 @Observable
 @MainActor
 final class TraderDailyCheckInStore {

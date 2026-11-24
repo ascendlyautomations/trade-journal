@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Dedicated Prop Firm account detail — rules, risk, targets, payouts.
+/// Dedicated Prop Firm account detail, rules, risk, targets, payouts.
 struct PropFirmDetailView: View {
     @State private var viewModel: PropFirmDetailViewModel
 
@@ -107,7 +107,11 @@ struct PropFirmDetailView: View {
             Task { await viewModel.refresh() }
         }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
-            Task { await viewModel.refresh() }
+            if case .generic = AccountMutationStore.shared.latestKind {
+                viewModel.handleAccountMutation()
+            } else {
+                Task { await viewModel.refresh() }
+            }
         }
         .onDisappear { viewModel.onDisappear() }
         .accessibilityIdentifier("propFirm.detail")

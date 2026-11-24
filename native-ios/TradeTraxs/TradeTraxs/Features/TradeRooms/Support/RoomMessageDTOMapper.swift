@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single decode path for room message rows — REST, bootstrap RPC, and guest bootstrap must match.
+/// Single decode path for room message rows, REST, bootstrap RPC, and guest bootstrap must match.
 nonisolated enum RoomMessageDTOMapper {
     static func mapMessage(_ dto: RoomDTO.Message, fallbackRoomID: RoomID? = nil) -> RoomMessage? {
         guard let id = dto.id else { return nil }

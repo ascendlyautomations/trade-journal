@@ -5,7 +5,7 @@ nonisolated enum ProfileTabBootstrapApplier {
         var tradeSummaries: [TradeSummary]?
         /// Profile Trades tab rows with copy linkage for presentation grouping.
         var profileTradeJournalItems: [TradeOwnerJournalSummary]?
-        /// Reels tab joined trade rows — not Profile tab summaries.
+        /// Reels tab joined trade rows, not Profile tab summaries.
         var reelLinkedTrades: [Trade]?
         var posts: [Post]?
         var reels: [Reel]?

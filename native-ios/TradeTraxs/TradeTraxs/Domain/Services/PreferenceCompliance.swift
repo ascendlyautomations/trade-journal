@@ -115,7 +115,7 @@ nonisolated enum PreferenceComplianceEngine {
         return currentConfiguredRules(in: context, accountID: accountID)
     }
 
-    /// Earliest global revision timestamp — start of recorded rule history.
+    /// Earliest global revision timestamp, start of recorded rule history.
     static func firstGlobalRuleEffectiveAt(in context: PreferenceRuleContext?) -> Date? {
         guard let context else { return nil }
         return context.revisions
@@ -486,7 +486,7 @@ nonisolated enum PreferenceComplianceEngine {
             let trades = summary.overCap.trades == 1 ? "1 trade was" : "\(summary.overCap.trades) trades were"
             let days = summary.overCapDays == 1 ? "1 day" : "\(summary.overCapDays) days"
             let scope = summary.capScopeLabel.map { " (\($0))" } ?? ""
-            lines.append("\(trades) beyond your daily trade cap\(scope), across \(days).")
+            lines.append("\(trades) beyond your \(TradingRulesDisplayLabels.maxTradesPerDay) limit\(scope), across \(days).")
         }
         if summary.lossLimitActive, summary.lossLimitDays > 0 {
             let scope = summary.lossLimitScopeLabel.map { " (\($0))" } ?? ""
@@ -519,24 +519,24 @@ nonisolated enum PreferenceComplianceEngine {
             let trades = summary.overMaxContracts.trades == 1
                 ? "1 trade exceeded"
                 : "\(summary.overMaxContracts.trades) trades exceeded"
-            lines.append("\(trades) your maximum contracts-per-trade limit (trades with a recorded contract size).")
+            lines.append("\(trades) your \(TradingRulesDisplayLabels.maxContractsPerTrade) limit (trades with a recorded contract size).")
         }
         if summary.minRrActive, summary.minRrPaired > 0, summary.belowMinRr.trades > 0 {
             lines.append(
-                "\(summary.belowMinRr.trades) of \(summary.minRrPaired) trades with a planned R:R were below your minimum acceptable R:R."
+                "\(summary.belowMinRr.trades) of \(summary.minRrPaired) trades with a planned R:R were below your \(TradingRulesDisplayLabels.minAcceptableRr)."
             )
         }
         if summary.maxRiskActive {
             if summary.maxRiskPaired == 0 {
                 lines.append(
-                    "Maximum risk per trade is set, but none of your trades in this period recorded dollar risk at entry."
+                    "\(TradingRulesDisplayLabels.maxRiskPerTrade) is set, but none of your trades in this period recorded dollar risk at entry."
                 )
             } else if summary.overMaxRisk.trades > 0 {
                 let trades = summary.overMaxRisk.trades == 1
                     ? "1 trade exceeded"
                     : "\(summary.overMaxRisk.trades) trades exceeded"
                 lines.append(
-                    "\(trades) your maximum risk per trade among \(summary.maxRiskPaired) trades with recorded dollar risk."
+                    "\(trades) your \(TradingRulesDisplayLabels.maxRiskPerTrade) among \(summary.maxRiskPaired) trades with recorded dollar risk."
                 )
             }
         }

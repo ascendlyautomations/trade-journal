@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Instagram-style Stories strip — circular avatars with unread rings.
+/// Instagram-style Stories strip, circular avatars with unread rings.
 struct FeedStoriesRow: View {
     let stories: [Story]
     let viewerID: ProfileID?

@@ -2,7 +2,7 @@ import OSLog
 import UIKit
 import UserNotifications
 
-/// Smooth app-icon badge writer — single owner, no flashing.
+/// Smooth app-icon badge writer, single owner, no flashing.
 @MainActor
 final class AppIconBadgeController {
     static let shared = AppIconBadgeController()

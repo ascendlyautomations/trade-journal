@@ -101,7 +101,7 @@ nonisolated struct PostgresFlexibleBool: Codable, Sendable, Equatable {
     }
 }
 
-/// Account size is stored as `text` in Postgres — wire JSON is usually a string.
+/// Account size is stored as `text` in Postgres, wire JSON is usually a string.
 nonisolated struct PostgresAccountSizeWire: Codable, Sendable, Equatable {
     var raw: String?
 

@@ -22,7 +22,7 @@ nonisolated enum FeedInlineClipLayout {
         return capped + inlineMediaHeightBoost
     }
 
-    /// Fixed media region for inline Feed — caps tall portrait clips; video aspect-fits inside.
+    /// Fixed media region for inline Feed, caps tall portrait clips; video aspect-fits inside.
     static func containerSize(
         containerWidth: CGFloat,
         videoAspectRatio: CGFloat,

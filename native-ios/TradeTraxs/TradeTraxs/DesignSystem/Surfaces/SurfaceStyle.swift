@@ -28,7 +28,20 @@ struct ExperienceSurfaceModifier: ViewModifier {
         content
             .background { background }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay {
+                if colorScheme == .light, usesLightCardBorder {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            colors.border.opacity(ExperienceDashboardSurface.LightChrome.borderOpacity),
+                            lineWidth: ExperienceBorder.hairline
+                        )
+                }
+            }
             .experienceElevation(elevate)
+    }
+
+    private var usesLightCardBorder: Bool {
+        role == .card || role == .elevatedCard
     }
 
     @ViewBuilder

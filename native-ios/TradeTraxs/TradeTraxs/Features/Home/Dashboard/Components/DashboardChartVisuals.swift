@@ -218,6 +218,7 @@ struct DashboardWeekdayHeatmapView: View {
     var onSelect: ((String) -> Void)?
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     private var maxAbs: Double {
         max(points.map { abs($0.value) }.max() ?? 0, 1)
@@ -310,10 +311,16 @@ struct DashboardWeekdayHeatmapView: View {
     private func cellColor(_ value: Double) -> Color {
         let intensity = min(abs(value) / maxAbs, 1)
         if abs(value) < 0.01 {
-            return colors.fillSecondary.opacity(0.55)
+            return inactiveChartPlotFill
         }
         let base = value >= 0 ? colors.profit : colors.loss
         return base.opacity(0.25 + intensity * 0.65)
+    }
+
+    private var inactiveChartPlotFill: Color {
+        colorScheme == .light
+            ? colors.border.opacity(0.14)
+            : colors.fillSecondary.opacity(0.55)
     }
 
     private func moneyLabel(_ value: Double) -> String {
@@ -323,7 +330,7 @@ struct DashboardWeekdayHeatmapView: View {
 
 // MARK: - Trading hours (24h activity timeline)
 
-/// Fitness-style 24-hour activity band — same ``hourHeatmap`` P&L data as before.
+/// Fitness-style 24-hour activity band, same ``hourHeatmap`` P&L data as before.
 ///
 /// Height encodes intensity; color encodes profit vs loss. Taps still open the journal.
 struct DashboardHourTimelineView: View {
@@ -332,6 +339,7 @@ struct DashboardHourTimelineView: View {
     var onSelect: ((String) -> Void)?
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedLabel: String?
 
@@ -474,10 +482,16 @@ struct DashboardHourTimelineView: View {
 
     private func barColor(value: Double, intensity: Double, hasActivity: Bool) -> Color {
         guard hasActivity else {
-            return colors.fillSecondary.opacity(0.55)
+            return inactiveChartPlotFill
         }
         let base = value >= 0 ? colors.profit : colors.loss
         return base.opacity(0.35 + intensity * 0.55)
+    }
+
+    private var inactiveChartPlotFill: Color {
+        colorScheme == .light
+            ? colors.border.opacity(0.14)
+            : colors.fillSecondary.opacity(0.55)
     }
 
     private func toneColor(_ value: Double) -> Color {
@@ -515,7 +529,7 @@ struct DashboardHourTimelineView: View {
     }
 }
 
-/// Legacy alias — call sites may still reference the heatmap name.
+/// Legacy alias, call sites may still reference the heatmap name.
 typealias DashboardHourHeatmapView = DashboardHourTimelineView
 
 // MARK: - Long / Short donut
@@ -663,7 +677,7 @@ private struct HoldHistogramYScale {
 }
 
 private struct HoldHistogramPnLYScale {
-    /// Upper bound for bar height — max absolute average P&L in the plot.
+    /// Upper bound for bar height, max absolute average P&L in the plot.
     var axisMax: Double
     /// Magnitude ticks only ($0, $100, …); signed values stay in data and labels.
     var tickValues: [Double]
@@ -710,7 +724,7 @@ private struct HoldHistogramManualChart<Tooltip: View>: View {
     let tradeCountScale: HoldHistogramYScale
     let pnlScale: HoldHistogramPnLYScale
     let colors: SemanticColorPalette
-    /// Persistent bucket index for accessibility adjustment only — not set by touch drag.
+    /// Persistent bucket index for accessibility adjustment only, not set by touch drag.
     @Binding var selectedIndex: Int?
     @GestureState private var inspectLocationX: CGFloat?
     let tradeBarFill: (HoldHistogramChartPoint) -> Color
@@ -1147,11 +1161,6 @@ struct DashboardHoldHistogramView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
-        .padding(ExperienceSpacing.sm)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
         .onChange(of: selectedIndex) { _, newValue in
             guard newValue != nil else { return }
             ExperienceHaptics.play(.selection)
@@ -1479,11 +1488,6 @@ struct DashboardUnderwaterDrawdownView: View {
                 )
             }
         }
-        .padding(ExperienceSpacing.md)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
     }
 
     private var selectedPoint: DashboardDrawdownPoint? {

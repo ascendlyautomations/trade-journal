@@ -1,7 +1,7 @@
 import Foundation
 import LocalAuthentication
 
-/// Biometric unlock extension point — disabled until product enables it.
+/// Biometric unlock extension point, disabled until product enables it.
 nonisolated protocol BiometricAuthenticating: Sendable {
     var isAvailable: Bool { get }
     func evaluate(reason: String) async throws

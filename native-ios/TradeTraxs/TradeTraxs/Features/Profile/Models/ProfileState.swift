@@ -1,6 +1,6 @@
 import Foundation
 
-/// Snapshot of Profile bootstrap output — single source of truth for the screen.
+/// Snapshot of Profile bootstrap output, single source of truth for the screen.
 ///
 /// ``ProfileScreenViewModel`` owns mutation. Section ViewModels apply this snapshot;
 /// they do not perform the initial repository work.
@@ -20,11 +20,11 @@ struct ProfileState: Equatable {
     var isFollowing = false
     var isRequested = false
     var followsYou = false
-    /// Mirrors RPC `viewer.can_view_trades` — false for private profiles the viewer cannot access.
+    /// Mirrors RPC `viewer.can_view_trades`, false for private profiles the viewer cannot access.
     var canViewTrades = true
     var ownedTradeRoom: TradeRoom?
     var didResolveTradeRoom = false
-    /// Active stories from profile bootstrap — seeds avatar ring + Story Viewer.
+    /// Active stories from profile bootstrap, seeds avatar ring + Story Viewer.
     var activeStories: [Story] = []
 
     var trades: [TradeSummary] = []
@@ -33,7 +33,7 @@ struct ProfileState: Equatable {
     var tradeJournalPreview: [TradeOwnerJournalSummary] = []
     var tradesNextCursor: String?
     var accountNames: [TradingAccountID: String] = [:]
-    /// Owner-only display — never render on public Profile surfaces.
+    /// Owner-only display, never render on public Profile surfaces.
     var accountNumbers: [TradingAccountID: String] = [:]
     var accountModes: [TradingAccountID: TradingAccountMode] = [:]
     var accountSizes: [TradingAccountID: Decimal] = [:]

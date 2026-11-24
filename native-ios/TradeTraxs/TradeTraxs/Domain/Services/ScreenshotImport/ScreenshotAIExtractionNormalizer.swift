@@ -1,6 +1,6 @@
 import Foundation
 
-/// Maps AI extraction JSON into Phase 2 models — TradeTraxs calculates authoritative values.
+/// Maps AI extraction JSON into Phase 2 models, TradeTraxs calculates authoritative values.
 nonisolated enum ScreenshotAIExtractionNormalizer {
     static func normalize(
         _ extraction: ScreenshotAIExtractionV1

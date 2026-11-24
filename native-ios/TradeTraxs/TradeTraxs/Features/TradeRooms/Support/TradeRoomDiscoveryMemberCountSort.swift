@@ -1,6 +1,6 @@
 import Foundation
 
-/// All-scope Trade Rooms discovery ordering — authoritative RPC `member_count` only.
+/// All-scope Trade Rooms discovery ordering, authoritative RPC `member_count` only.
 nonisolated enum TradeRoomDiscoveryMemberCountSort {
     /// Member count descending; stable tie-break: name (case-insensitive), then room id.
     static func sorted(_ rooms: [ExploreRoomSuggestion]) -> [ExploreRoomSuggestion] {

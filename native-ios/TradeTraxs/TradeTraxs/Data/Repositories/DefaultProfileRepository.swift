@@ -1018,7 +1018,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         )
     }
 
-    /// Web `fetchSummaryTrades` — public trades, summary columns only.
+    /// Web `fetchSummaryTrades`, public trades, summary columns only.
     private func fetchSummaryTrades(for profileID: ProfileID) async throws -> [TradeDTO.SummaryTrade] {
         try await supabase.database.select(
             TradeDTO.SummaryTrade.self,
@@ -1032,7 +1032,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         )
     }
 
-    /// Web `fetchFollowListPage` — edge IDs then `profiles` by `in.(…)`.
+    /// Web `fetchFollowListPage`, edge IDs then `profiles` by `in.(…)`.
     private func relatedProfiles(
         table: String,
         foreignKey: String,
@@ -1102,7 +1102,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
 
     private static func mapWallPost(_ dto: FeedDTO.ProfileWallPost) -> Post? {
         guard let id = dto.id, let author = dto.user_id else {
-            AppLog.networking.error("Skipping profile_posts row — missing id/user_id")
+            AppLog.networking.error("Skipping profile_posts row, missing id/user_id")
             return nil
         }
         let created = ISO8601.date(from: dto.created_at) ?? Date()

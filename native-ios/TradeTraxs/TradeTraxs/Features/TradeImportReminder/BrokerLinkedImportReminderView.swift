@@ -150,14 +150,7 @@ struct BrokerLinkedImportReminderView: View {
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                .stroke(colors.border.opacity(0.35), lineWidth: ExperienceBorder.hairline)
-        }
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
     }
 
     private func loadTradingAccountsIfNeeded() async {

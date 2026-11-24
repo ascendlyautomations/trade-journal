@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared access picker for Create + Edit Trade Room — Public vs Request to Join.
+/// Shared access picker for Create + Edit Trade Room, Public vs Request to Join.
 struct TradeRoomAccessModeSection: View {
     @Binding var accessMode: TradeRoomAccessMode
     var preservesLegacyPrivate: Bool

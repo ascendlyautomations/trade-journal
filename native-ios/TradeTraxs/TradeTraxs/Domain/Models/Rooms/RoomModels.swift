@@ -96,7 +96,7 @@ nonisolated struct RoomMembership: Hashable, Codable, Sendable {
     var notificationsEnabled: Bool
 }
 
-/// Web `room_sections` row — a channel inside a Trade Room workspace.
+/// Web `room_sections` row, a channel inside a Trade Room workspace.
 nonisolated struct RoomChannel: Hashable, Codable, Sendable, Identifiable {
     var id: RoomChannelID
     var roomID: RoomID
@@ -156,7 +156,7 @@ nonisolated struct RoomMessage: Hashable, Codable, Sendable, Identifiable {
     var attachedTradeID: TradeID?
     var media: [MediaReference]
     var parentMessageID: RoomMessageID?
-    /// Web `room_messages.section_id` — owning channel.
+    /// Web `room_messages.section_id`, owning channel.
     var channelID: RoomChannelID?
     var isPinned: Bool
     var createdAt: Date
@@ -282,7 +282,7 @@ nonisolated enum RoomChannelValidation {
     static let nameMaxLength = 64
 }
 
-/// Authoritative create payload — `rpc_v1_create_trade_room`.
+/// Authoritative create payload, `rpc_v1_create_trade_room`.
 nonisolated struct RoomCreateRequest: Sendable {
     var configuration: TradeRoomConfiguration
 

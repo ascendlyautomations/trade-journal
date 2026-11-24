@@ -102,7 +102,7 @@ final class TraxsProPreviewCoordinator {
         } else if TraxsProPreviewSession.shared.isExpenseTrackerPreviewActive {
             TraxsProPreviewSession.shared.endExpenseTrackerPreview()
         } else if TraxsProPreviewSession.shared.isTradingRulesPreviewActive {
-            TraxsProPreviewSession.shared.endTradingRulesPreview()
+            TraxsProPreviewSession.shared.endTradingRulesPreview(detailCache: detailCache)
         }
         ProductAnalyticsCoordinator.shared.noteTraxsProPreviewExited(
             entryPoint: entryPoint,

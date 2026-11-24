@@ -24,7 +24,6 @@ struct CopyTradingAccountsView: View {
 
     var body: some View {
         @Bindable var viewModel = viewModel
-        let billing = SessionBillingEntitlementStore.shared.status
         List {
             if let error = viewModel.errorMessage {
                 Section {
@@ -87,15 +86,6 @@ struct CopyTradingAccountsView: View {
         .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .experienceNavigationTitle("Copy Trading Accounts")
         .proUpgradeSheet()
-        .task {
-            let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
-            let isPro = billing?.hasTraxProAccess == true
-            _ = ProUpgradeCoordinator.shared.presentIfNeeded(
-                isPro: isPro,
-                feature: .copyTrading,
-                profileID: profileID
-            )
-        }
         .overlay {
             if viewModel.isLoading {
                 ProgressView()
@@ -225,7 +215,7 @@ private struct CopyTradingGroupEditorView: View {
             if viewModel.editor?.groupID != nil, let group = currentGroup {
                 Section {
                     Button("Delete Group", role: .destructive) {
-                        viewModel.pendingDelete = group
+                        viewModel.requestDelete(group)
                         dismiss()
                     }
                     .addCopyTradingFormRow()

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `lib/roomRealtimePresence.ts` — Realtime Trade Room presence rows.
+/// Web `lib/roomRealtimePresence.ts`, Realtime Trade Room presence rows.
 nonisolated struct RoomPresenceWireUser: Sendable, Equatable, Hashable {
     var userID: String
     var username: String
@@ -16,7 +16,7 @@ nonisolated struct RoomPresenceTrackConfig: Sendable, Equatable {
 }
 
 nonisolated enum RoomPresenceSemantics {
-    /// Dedupe multiple device connections — newest `entered_at` wins per `user_id`.
+    /// Dedupe multiple device connections, newest `entered_at` wins per `user_id`.
     static func dedupeByUserID(
         _ state: [String: [RoomPresenceWireUser]]
     ) -> [RoomPresenceWireUser] {

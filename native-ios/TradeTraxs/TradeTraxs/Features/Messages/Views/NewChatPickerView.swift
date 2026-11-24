@@ -90,7 +90,7 @@ struct NewChatPickerView: View {
         }
     }
 
-    /// Search + optional create actions — one compact block at the top.
+    /// Search + optional create actions, one compact block at the top.
     private var newChatTopSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             ExperienceSearchField(

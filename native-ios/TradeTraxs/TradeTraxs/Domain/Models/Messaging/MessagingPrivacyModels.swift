@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web/backend `profiles.dm_privacy` — authoritative DM audience values.
+/// Web/backend `profiles.dm_privacy`, authoritative DM audience values.
 nonisolated enum DmPrivacy: String, Hashable, Codable, Sendable, CaseIterable {
     case everyone
     case following
@@ -110,7 +110,7 @@ nonisolated enum MessagingPrivacyProfileFactory {
 }
 
 extension Profile {
-    /// Primary line for Settings privacy rows — `@handle` when known.
+    /// Primary line for Settings privacy rows, `@handle` when known.
     var settingsPrivacyUsernameLine: String {
         let handle = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !handle.isEmpty else { return "Blocked account" }

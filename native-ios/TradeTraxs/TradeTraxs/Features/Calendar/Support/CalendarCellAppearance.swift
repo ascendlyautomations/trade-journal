@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Adaptive fills for calendar day / year month cells — stronger grid structure in light mode; dark unchanged.
+/// Adaptive fills for calendar day / year month cells, stronger grid structure in light mode; dark unchanged.
 enum CalendarCellAppearance {
     private static let darkNeutralFillOpacity = 0.35
     private static let darkOutcomeTintOpacity = 0.12
 
     private static let lightOutcomeTintOpacity = 0.14
 
-    /// Opacity applied to out-of-month day cells (dark only — light mutes via fill).
+    /// Opacity applied to out-of-month day cells (dark only, light mutes via fill).
     static func outsideMonthCellOpacity(colorScheme: ColorScheme) -> Double {
         colorScheme == .dark ? 0.35 : 1
     }

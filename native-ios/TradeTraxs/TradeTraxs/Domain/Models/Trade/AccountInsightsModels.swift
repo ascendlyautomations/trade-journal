@@ -48,7 +48,7 @@ enum TradingAccountDropdownFilter {
         }
     }
 
-    /// Add Trade account picker — visibility follows Settings “Display in account dropdowns”.
+    /// Add Trade account picker, visibility follows Settings “Display in account dropdowns”.
     static func visibleForManualTradePicker(
         from accounts: [TradingAccount],
         preservingSelection selectedID: TradingAccountID?,
@@ -68,7 +68,7 @@ enum TradingAccountDropdownFilter {
         }
     }
 
-    /// Account filter menus — preserves a hidden-but-selected account in the menu.
+    /// Account filter menus, preserves a hidden-but-selected account in the menu.
     static func menuAccounts(
         from accounts: [TradingAccount],
         preservingSelection selectedID: TradingAccountID?

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared Performance Report scope — mirrors Dashboard account + mode filters.
+/// Shared Performance Report scope, mirrors Dashboard account + mode filters.
 nonisolated struct TradingReportFilters: Hashable, Sendable {
     var accountFilter: DashboardAccountFilter = .all
     var accountMode: ProfileStatisticsMetrics.Mode = .all
@@ -89,7 +89,7 @@ nonisolated struct TradingYearlyMonthRow: Hashable, Sendable, Identifiable {
     var id: Int { month }
 }
 
-/// Full-year performance report payload — generated locally from owner trades.
+/// Full-year performance report payload, generated locally from owner trades.
 nonisolated struct TradingYearlyReport: Sendable, Identifiable {
     var year: Int
     var filters: TradingReportFilters

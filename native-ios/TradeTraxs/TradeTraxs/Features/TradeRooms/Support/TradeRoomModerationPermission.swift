@@ -1,6 +1,6 @@
 import Foundation
 
-/// Member-tag-based Trade Room moderation — mirrors ``can_moderate_trade_room`` on the backend.
+/// Member-tag-based Trade Room moderation, mirrors ``can_moderate_trade_room`` on the backend.
 enum TradeRoomModerationPermission {
     static let moderatorTagName = "Moderator"
     private static let elevatedTagNames: Set<String> = ["Moderator", "Admin"]
@@ -48,7 +48,7 @@ enum TradeRoomModerationPermission {
         return !hasElevatedTag(memberTags: targetMemberTags)
     }
 
-    /// Manage Tags sheet — owners/moderators may assign tags to themselves; other targets follow moderation rules.
+    /// Manage Tags sheet, owners/moderators may assign tags to themselves; other targets follow moderation rules.
     static func canManageTagsForMember(
         canManageRoom: Bool,
         canModerateRoom: Bool,

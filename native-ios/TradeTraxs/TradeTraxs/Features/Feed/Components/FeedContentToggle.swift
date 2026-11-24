@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Compact SF Symbol filter strip — All / Trades / Clips / Posts / Achievements.
+/// Compact SF Symbol filter strip, All / Trades / Clips / Posts / Achievements.
 struct FeedContentToggle: View {
     let filter: FeedContentFilter
     let onSelect: (FeedContentFilter) -> Void
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.sm) {
@@ -41,12 +42,22 @@ struct FeedContentToggle: View {
             .frame(minWidth: 48)
             .padding(.vertical, 4)
             .padding(.horizontal, 4)
-            .background(
-                selected
-                    ? colors.fillSecondary
-                    : Color.clear,
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-            )
+            .background {
+                if selected, colorScheme == .light {
+                    RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                        .fill(colors.fillPrimary)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                                .strokeBorder(
+                                    colors.border.opacity(ExperienceDashboardSurface.LightChrome.insetBorderOpacity),
+                                    lineWidth: ExperienceBorder.hairline
+                                )
+                        }
+                } else if selected {
+                    RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                        .fill(colors.fillSecondary)
+                }
+            }
         }
         .buttonStyle(.experiencePlain)
         .accessibilityLabel(value.title)

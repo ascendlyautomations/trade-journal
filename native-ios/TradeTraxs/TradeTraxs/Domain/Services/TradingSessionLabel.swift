@@ -1,6 +1,6 @@
 import Foundation
 
-/// Port of web `lib/tradingSession.ts` — ET wall-clock session labels on `trades.session`.
+/// Port of web `lib/tradingSession.ts`, ET wall-clock session labels on `trades.session`.
 nonisolated enum TradingSessionLabel {
     static let defaultStored = "NY AM"
 

@@ -1,7 +1,7 @@
 import Foundation
 import Synchronization
 
-/// Common auth provider contract — Supabase / OAuth implementations plug in later.
+/// Common auth provider contract, Supabase / OAuth implementations plug in later.
 nonisolated protocol AuthenticationProviding: Sendable {
     var kind: AuthenticationProviderKind { get }
     func signIn(email: String, password: String) async throws -> AuthenticationSession

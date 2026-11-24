@@ -5,13 +5,13 @@ nonisolated enum ClipVideoCacheFillPolicy {
     nonisolated static let minimumWatchedSeconds: Double = 2
     nonisolated static let minimumWatchedFraction: Double = 0.20
 
-    /// Phase 12C — skip redundant full-file fill when AVPlayer already transferred most of a known asset.
+    /// Phase 12C, skip redundant full-file fill when AVPlayer already transferred most of a known asset.
     nonisolated static let duplicateRiskAvPlayerFraction: Double = 0.65
 
-    /// Phase 12E.1 — do not start a separate 100% URLSession fill when AVPlayer already consumed a material fraction.
+    /// Phase 12E.1, do not start a separate 100% URLSession fill when AVPlayer already consumed a material fraction.
     nonisolated static let maximumAVPlayerFractionForFullCacheFill: Double = 0.40
 
-    /// Phase 12E — defer full-file fill when AVPlayer is below duplicate-risk threshold at first eligibility.
+    /// Phase 12E, defer full-file fill when AVPlayer is below duplicate-risk threshold at first eligibility.
     nonisolated static let deferReevaluationWatchedSeconds: Double = 4
     nonisolated static let deferFinalDecisionWatchedSeconds: Double = 6
 

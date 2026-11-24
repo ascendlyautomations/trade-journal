@@ -4,11 +4,11 @@ import Foundation
 nonisolated enum ImageDeliveryQuality: String, Sendable {
     /// Supabase object/public delivery matching web feed presets (no transforms).
     case feedDisplay
-    /// Compact profile grid thumbnails (~256px) — not full feed thumb width.
+    /// Compact profile grid thumbnails (~256px), not full feed thumb width.
     case profileGrid
-    /// Higher-width render for detail surfaces (1280px) — not original object bytes.
+    /// Higher-width render for detail surfaces (1280px), not original object bytes.
     case feedDetail
-    /// Original object bytes — deep zoom / explicit full fidelity only.
+    /// Original object bytes, deep zoom / explicit full fidelity only.
     case fullResolution
 }
 
@@ -37,13 +37,13 @@ nonisolated struct ImageRequest: Sendable {
     var maxPixelSize: Int?
     var allowsProgressiveLoading: Bool
     var deliveryQuality: ImageDeliveryQuality
-    /// DEBUG audit label — `feed` vs `detail` for pipeline comparison logs.
+    /// DEBUG audit label, `feed` vs `detail` for pipeline comparison logs.
     var auditSurface: String
     /// DEBUG row/item id (may differ from ``reference.id``).
     var auditMediaID: String
-    /// Lookahead / prefetch — deprioritized vs auth and on-screen loads.
+    /// Lookahead / prefetch, deprioritized vs auth and on-screen loads.
     var isSpeculativePrefetch: Bool
-    /// DEBUG correlated timeline — ``FeedImageTimingTrace``.
+    /// DEBUG correlated timeline, ``FeedImageTimingTrace``.
     var imageTraceCorrelationID: UUID?
 
     init(
@@ -69,16 +69,16 @@ nonisolated struct ImageRequest: Sendable {
     }
 }
 
-/// Image loading / downsampling / cache orchestration — no UIKit decoding yet.
+/// Image loading / downsampling / cache orchestration, no UIKit decoding yet.
 nonisolated protocol ImagePipeline: Sendable {
     func data(for request: ImageRequest) async throws -> Data
     func prefetch(_ requests: [ImageRequest]) async
     func invalidate(reference: MediaReference) async
     func cachedImageData(for request: ImageRequest) async -> Data?
     func bestCachedImageData(for request: ImageRequest) async -> (data: Data, quality: ImageDeliveryQuality)?
-    /// Memory-first, then disk — reports which tier satisfied the lookup.
+    /// Memory-first, then disk, reports which tier satisfied the lookup.
     func bestCachedImageDataWithTier(for request: ImageRequest) async -> ImageCachedLookupResult?
-    /// Promotes disk hits to memory — never uses the network.
+    /// Promotes disk hits to memory, never uses the network.
     func warmCachedImages(for requests: [ImageRequest]) async
 }
 

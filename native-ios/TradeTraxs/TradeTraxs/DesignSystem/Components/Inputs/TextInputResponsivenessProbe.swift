@@ -210,7 +210,7 @@ enum TextInputResponsivenessProbe {
 
     private static func keyboard(event: String) {
         let elapsed = durationMsSinceNewestMark() ?? 0
-        log(event: event, screen: "keyboard", field: "—", elapsedMs: elapsed)
+        log(event: event, screen: "keyboard", field: "–", elapsedMs: elapsed)
     }
 
     private static func log(

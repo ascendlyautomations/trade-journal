@@ -38,7 +38,7 @@ struct AppRootView: View {
             }
         }
         .applyThemeEnvironment(themeManager.themeEnvironment)
-        // Root fill only — do not also apply bar chrome here (owned by MainTabShellView)
+        // Root fill only, do not also apply bar chrome here (owned by MainTabShellView)
         // so safe-area insets are not compensated twice.
         .experienceScreenBackground()
         .experienceKeyboardDismissOnTapOutside()
@@ -154,7 +154,7 @@ struct AppRootView: View {
             }
         }
         // Session-scoped caches (profile, Messages inbox, engagement, detail seeds)
-        // are invalidated by ``AuthenticationCoordinator`` — not here.
+        // are invalidated by ``AuthenticationCoordinator``, not here.
         .onOpenURL { url in
             handleIncomingURL(url)
         }
@@ -667,7 +667,7 @@ struct AppRootView: View {
                 default:
                     NavigationInfrastructurePlaceholder(
                         title: sheetTitle(destination),
-                        subtitle: "Sheet infrastructure — \(destination.rawValue)",
+                        subtitle: "Sheet infrastructure, \(destination.rawValue)",
                         systemImage: "rectangle.bottomhalf.inset.filled"
                     )
                     .experienceNavigationTitle(sheetTitle(destination))

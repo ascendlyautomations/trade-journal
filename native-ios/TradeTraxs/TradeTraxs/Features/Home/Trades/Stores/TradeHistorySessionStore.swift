@@ -7,7 +7,7 @@ import Observation
 final class TradeHistorySessionStore {
     static let shared = TradeHistorySessionStore()
 
-    /// Bump when Journal list row shape changes — incompatible snapshots are discarded.
+    /// Bump when Journal list row shape changes, incompatible snapshots are discarded.
     static let snapshotSchemaVersion = 2
 
     struct Snapshot: Sendable {
@@ -68,7 +68,7 @@ final class TradeHistorySessionStore {
         return snap
     }
 
-    /// Local mutation — upsert into matching pages (create + edit).
+    /// Local mutation, upsert into matching pages (create + edit).
     func noteCreated(_ trade: Trade) {
         noteUpserted(trade)
     }

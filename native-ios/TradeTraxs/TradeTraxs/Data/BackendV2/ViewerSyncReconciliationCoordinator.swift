@@ -11,7 +11,7 @@ struct ViewerSyncReconcileContext {
     var needsDashboardRefresh: Bool
 }
 
-/// Single owner of soft-stale cache reconciliation — replaces parallel full bootstrap revalidation.
+/// Single owner of soft-stale cache reconciliation, replaces parallel full bootstrap revalidation.
 @MainActor
 final class ViewerSyncReconciliationCoordinator {
     static let shared = ViewerSyncReconciliationCoordinator()
@@ -134,7 +134,7 @@ final class ViewerSyncReconciliationCoordinator {
             if let localFingerprints {
                 changed = localFingerprints.changedDomains(comparedTo: serverFingerprints)
             } else {
-                // First reconcile after upgrade — establish baseline without full download.
+                // First reconcile after upgrade, establish baseline without full download.
                 changed = []
                 SyncStateProbe.logFallback("baseline_established")
             }
@@ -210,7 +210,7 @@ final class ViewerSyncReconciliationCoordinator {
                 preserveStaleCache(context, reason: "sync_rpc_unavailable")
                 return
             }
-            // Network failure with usable cache — keep displaying cached data.
+            // Network failure with usable cache, keep displaying cached data.
             SyncStateProbe.logFallback("sync_rpc_error_preserved_cache")
             preserveStaleCache(context, reason: "sync_rpc_error_preserved_cache")
         }
@@ -221,7 +221,7 @@ final class ViewerSyncReconciliationCoordinator {
             && AnalyticsReconciliationGate.isEnabled
     }
 
-    /// Viewer-sync trade/account drift — reconcile via analytics revision, not V2 dashboard bootstrap.
+    /// Viewer-sync trade/account drift, reconcile via analytics revision, not V2 dashboard bootstrap.
     private func reconcileDashboardViaAnalyticsAuthority(
         viewerID: ProfileID,
         rpc: any RPCClient
@@ -252,7 +252,7 @@ final class ViewerSyncReconciliationCoordinator {
         }
     }
 
-    /// Stale-while-revalidate: keep cached UI interactive — never force full bootstrap on sync miss.
+    /// Stale-while-revalidate: keep cached UI interactive, never force full bootstrap on sync miss.
     private func preserveStaleCache(_ context: ViewerSyncReconcileContext, reason: String) {
         let uid = context.viewerID.rawValue
         BackendV2BootstrapDiskCache.touchSession(viewerID: uid)

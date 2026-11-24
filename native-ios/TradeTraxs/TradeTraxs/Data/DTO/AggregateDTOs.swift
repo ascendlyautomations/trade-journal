@@ -5,7 +5,7 @@ import Foundation
 nonisolated enum TradeDTO {
     static let tradesPublicReadTable = "trades_public_read"
 
-    /// Mirrors web `PUBLIC_TRADE_SELECT` — non-owner social reads only.
+    /// Mirrors web `PUBLIC_TRADE_SELECT`, non-owner social reads only.
     static let publicSocialSelect =
         "id,user_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,public_description,is_public,is_pinned,image_url,image_crop,image_display_mode,entry_time,exit_time,entry_price,exit_price,duration_seconds,duration_text,account_type,mode,market_condition,timeframe,trade_mode,trade_type,first_published_at,copied_account_ids,copy_trading_group_id,source_account_id,participating_account_modes"
 
@@ -13,12 +13,12 @@ nonisolated enum TradeDTO {
     static let profileListSelect =
         "id,user_id,account_id,created_at,date,trade_date,pnl,rr,max_rr_reached,realized_rr,full_tp,early_exit,exit_rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,duration_seconds,duration_text,trade_mode"
 
-    /// Owner Trade Detail / Add Trade edit — includes psychology + journal review columns.
+    /// Owner Trade Detail / Add Trade edit, includes psychology + journal review columns.
     static let ownerJournalSelect =
         profileListSelect
         + ",confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,max_rr_reached,dollar_risk"
 
-    /// Owner Trade History — includes denormalized account_name for search.
+    /// Owner Trade History, includes denormalized account_name for search.
     static let historyListSelect =
         "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,max_rr_reached,realized_rr,full_tp,early_exit,exit_rr,points,contracts,dollar_risk,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,duration_seconds,duration_text,trade_mode,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,source_account_id,copied_account_ids,copy_trading_group_id"
 
@@ -83,7 +83,7 @@ nonisolated enum TradeDTO {
         var participating_account_modes: [TradeParticipatingAccountModeWireV1]?
     }
 
-    /// Lightweight overview row — web `fetchSummaryTrades`.
+    /// Lightweight overview row, web `fetchSummaryTrades`.
     struct SummaryTrade: Codable, Sendable {
         var id: String?
         var created_at: String?
@@ -113,14 +113,14 @@ nonisolated enum TradeDTO {
         var user_id: String?
         /// Production column on `accounts` (web `ACCOUNTS_SELECT`).
         var name: String?
-        /// Legacy / `user_accounts` registry column — not used for trade account resolution.
+        /// Legacy / `user_accounts` registry column, not used for trade account resolution.
         var account_name: String?
         var account_type: String?
         var category: String?
         var mode: String?
         /// Web `accounts.account_size`.
         var account_size: FlexibleNumber?
-        /// Legacy alias — prefer `account_size`.
+        /// Legacy alias, prefer `account_size`.
         var size: FlexibleNumber?
         var account_number: String?
         var note: String?
@@ -294,7 +294,7 @@ nonisolated enum TradeDTO {
         var session: String?
         var strategy: String?
         var notes: String?
-        /// Explicit optional — always encoded (null clears screenshot like web `removeScreenshot`).
+        /// Explicit optional, always encoded (null clears screenshot like web `removeScreenshot`).
         var image_url: String?
         var image_crop: JSONValue?
         var is_public: Bool
@@ -591,7 +591,7 @@ nonisolated enum FeedDTO {
         }
     }
 
-    /// Web trade feed row — `posts` + `profiles` + optional `trades` embed (avoids N+1 trade SELECTs).
+    /// Web trade feed row, `posts` + `profiles` + optional `trades` embed (avoids N+1 trade SELECTs).
     struct TradeFeedRow: Codable, Sendable {
         var id: String?
         var user_id: String?
@@ -621,7 +621,7 @@ nonisolated enum FeedDTO {
         }
     }
 
-    /// Web profile feed row — `profile_posts` + profiles embed.
+    /// Web profile feed row, `profile_posts` + profiles embed.
     struct ProfileFeedRow: Codable, Sendable {
         var id: String?
         var user_id: String?
@@ -636,7 +636,7 @@ nonisolated enum FeedDTO {
         var profiles: ProfilesBox?
     }
 
-    /// Web reel feed row — `reels` + profiles embed.
+    /// Web reel feed row, `reels` + profiles embed.
     struct ReelFeedRow: Codable, Sendable {
         var id: String?
         var user_id: String?
@@ -650,7 +650,7 @@ nonisolated enum FeedDTO {
         var profiles: ProfilesBox?
     }
 
-    /// Web achievement feed row — `achievement_posts` + profiles (+ nested achievement).
+    /// Web achievement feed row, `achievement_posts` + profiles (+ nested achievement).
     struct AchievementFeedRow: Codable, Sendable {
         var id: String?
         var user_id: String?
@@ -928,7 +928,7 @@ nonisolated enum RoomDTO {
         var created_at: String?
     }
 
-    /// Web `room_sections` — Trade Room channels.
+    /// Web `room_sections`, Trade Room channels.
     struct Channel: Codable, Sendable {
         var id: String?
         var room_id: String?
@@ -1156,11 +1156,11 @@ nonisolated enum AnalyticsDTO {
 }
 
 nonisolated enum AchievementDTO {
-    /// Exact web `ACHIEVEMENT_SELECT` (owner) — commas only, no whitespace variants required.
+    /// Exact web `ACHIEVEMENT_SELECT` (owner), commas only, no whitespace variants required.
     static let ownerSelect =
         "id,user_id,achievement_type,title,description,badge_key,tier,category,value_numeric,value_text,currency,account_type,account_name,account_size,account_id,mode,firm,image_url,achieved_at,created_at,updated_at,is_featured,is_public,sort_order,metadata"
 
-    /// Exact web `PUBLIC_ACHIEVEMENT_SELECT` (visitor) — omits account_name/size/id.
+    /// Exact web `PUBLIC_ACHIEVEMENT_SELECT` (visitor), omits account_name/size/id.
     static let publicSelect =
         "id,user_id,achievement_type,title,description,badge_key,tier,category,value_numeric,value_text,currency,account_type,mode,firm,image_url,achieved_at,created_at,updated_at,is_featured,is_public,sort_order,metadata"
 
@@ -1255,7 +1255,7 @@ nonisolated enum LeaderboardDTO {
         var created_at: String?
         var account_type: String?
         var mode: String?
-        /// Not present on current BFF/RPC payloads — decoded when backend adds profile embed.
+        /// Not present on current BFF/RPC payloads, decoded when backend adds profile embed.
         var username: String?
         var name: String?
         var avatar_url: String?

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Filters + normalization for Trade Detail owner comparisons — mirrors trades list scope.
+/// Filters + normalization for Trade Detail owner comparisons, mirrors trades list scope.
 nonisolated enum TradeDetailComparisonScope {
     static func normalizedTicker(_ raw: String) -> String {
         FuturesInstrumentRegistry.normalizeSymbol(raw)

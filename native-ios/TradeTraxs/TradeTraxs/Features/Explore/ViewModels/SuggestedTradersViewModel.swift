@@ -234,7 +234,7 @@ final class SuggestedTradersViewModel {
         loadMoreIfNeeded()
     }
 
-    /// Prefer cache-filled avatars — embedded row snapshots may lack `avatar_url`.
+    /// Prefer cache-filled avatars, embedded row snapshots may lack `avatar_url`.
     func resolvedProfile(for trader: ExploreTraderSuggestion) -> Profile {
         var merged = trader.profile
         if let cached = detailCache.profile(id: trader.id) {
@@ -438,7 +438,7 @@ final class SuggestedTradersViewModel {
         )
     }
 
-    /// Batch-hydrate avatars for rows already seeded from Explore preview — no discoverable refetch.
+    /// Batch-hydrate avatars for rows already seeded from Explore preview, no discoverable refetch.
     private func hydrateVisibleTraders(
         source: SuggestedTradersHydrationDiagnostics.Source,
         authoritativeProfiles: [ProfileID: Profile],

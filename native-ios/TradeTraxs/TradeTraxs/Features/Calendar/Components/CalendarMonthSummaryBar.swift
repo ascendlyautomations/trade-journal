@@ -51,7 +51,7 @@ struct CalendarMonthSummaryBar: View {
                         ),
                         CalendarSummaryMetric(
                             label: "Avg Day",
-                            value: summary.averageDailyPnL.map(CalendarFormatting.compactPnL) ?? "—",
+                            value: summary.averageDailyPnL.map(CalendarFormatting.compactPnL) ?? "–",
                             tone: summary.averageDailyPnL,
                             emphasis: false
                         )

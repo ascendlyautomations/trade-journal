@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped Vault state — mirrors ``EngagementStore`` optimistic patterns.
+/// Session-scoped Vault state, mirrors ``EngagementStore`` optimistic patterns.
 @Observable
 @MainActor
 final class VaultStore {
@@ -65,7 +65,7 @@ final class VaultStore {
                 self.folders = loaded
                 self.foldersLoaded = true
             } catch {
-                // Soft-fail — sheet can retry on next open.
+                // Soft-fail, sheet can retry on next open.
             }
         }
     }

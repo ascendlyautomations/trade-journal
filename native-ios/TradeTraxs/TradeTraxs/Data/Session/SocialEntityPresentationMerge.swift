@@ -1,6 +1,6 @@
 import Foundation
 
-/// Merge rules for cross-surface entity persistence — partial patches must not erase richer fields.
+/// Merge rules for cross-surface entity persistence, partial patches must not erase richer fields.
 nonisolated enum SocialEntityPresentationMerge {
     static func tradeSummary(replace existing: TradeSummary, with incoming: TradeSummary) -> TradeSummary {
         var merged = existing
@@ -88,7 +88,7 @@ nonisolated enum SocialEntityPresentationMerge {
         existing.mergingCachedPresentation(with: incoming)
     }
 
-    /// Presentation seed / list preview enriched with authoritative detail — incoming wins when present.
+    /// Presentation seed / list preview enriched with authoritative detail, incoming wins when present.
     static func trade(replace existing: Trade, with incoming: Trade) -> Trade {
         var merged = incoming
         merged.quantity = preferNonZeroQuantity(incoming.quantity, existing.quantity)

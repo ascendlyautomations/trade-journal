@@ -118,7 +118,7 @@ struct ProfileHeaderView: View {
         }
     }
 
-    /// Identity block + header statistics — single App Walkthrough spotlight.
+    /// Identity block + header statistics, single App Walkthrough spotlight.
     @ViewBuilder
     private func profileIdentityAndStats(_ profile: Profile, stats: ProfileStats?) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {

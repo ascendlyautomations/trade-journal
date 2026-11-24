@@ -1,6 +1,6 @@
 import Foundation
 
-/// Monotonic merge for Getting Started checklist signals — true never regresses to false.
+/// Monotonic merge for Getting Started checklist signals, true never regresses to false.
 nonisolated enum GettingStartedSignalsMonotonic {
     static func merge(prior: GettingStartedSignals, server: GettingStartedSignals) -> GettingStartedSignals {
         GettingStartedSignals(

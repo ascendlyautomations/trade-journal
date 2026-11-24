@@ -129,7 +129,7 @@ final class AuthenticationEnvironment {
         )
     }
 
-    /// Keychain-first launch graph — live Supabase backend installs after login shell when logged out.
+    /// Keychain-first launch graph, live Supabase backend installs after login shell when logged out.
     static func makeForLaunch(
         appConfiguration: AppConfiguration,
         navigation: NavigationEnvironment,

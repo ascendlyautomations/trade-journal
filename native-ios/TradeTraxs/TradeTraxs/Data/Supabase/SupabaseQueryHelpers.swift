@@ -5,7 +5,7 @@ nonisolated enum SupabaseQuery {
         page(request, orderColumn: orderColumn, ascending: false)
     }
 
-    /// Keyset page helper — `ascending` flips order + cursor comparator (`gt` vs `lt`).
+    /// Keyset page helper, `ascending` flips order + cursor comparator (`gt` vs `lt`).
     static func page(
         _ request: PageRequest,
         orderColumn: String,
@@ -92,7 +92,7 @@ nonisolated enum SupabaseQuery {
         return (cursor, nil)
     }
 
-    /// Keyset page for `(created_at desc, id desc)` — matches profile bootstrap pagination.
+    /// Keyset page for `(created_at desc, id desc)`, matches profile bootstrap pagination.
     static func createdAtIDPage(_ request: PageRequest) -> [URLQueryItem] {
         var items: [URLQueryItem] = [
             URLQueryItem(name: "order", value: "created_at.desc,id.desc"),

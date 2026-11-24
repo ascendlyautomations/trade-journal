@@ -3,7 +3,7 @@ import Foundation
 /// Presentation aggregations for the native Dashboard.
 ///
 /// Formulas mirror web `useDashboardAnalytics` / `dashboardMaxDrawdown` /
-/// `dashboardHoldTimeStats` / session buckets — no repository changes.
+/// `dashboardHoldTimeStats` / session buckets, no repository changes.
 nonisolated enum DashboardChartMetrics {
     struct Input: Sendable, Equatable {
         var trade: Trade
@@ -100,7 +100,7 @@ nonisolated enum DashboardChartMetrics {
         )
     }
 
-    /// Interval-scoped analytics — used by yearly/monthly Performance Reports.
+    /// Interval-scoped analytics, used by yearly/monthly Performance Reports.
     static func compute(
         from inputs: [Input],
         accountFilter: DashboardAccountFilter,
@@ -241,7 +241,7 @@ nonisolated enum DashboardChartMetrics {
         )
     }
 
-    /// Filtered trades for the active dashboard scope — shared with psychology analytics.
+    /// Filtered trades for the active dashboard scope, shared with psychology analytics.
     static func filteredTrades(
         from inputs: [Input],
         accountFilter: DashboardAccountFilter,
@@ -278,7 +278,7 @@ nonisolated enum DashboardChartMetrics {
         ).map(\.trade)
     }
 
-    /// Filtered trades for an explicit interval — shared with Performance Reports.
+    /// Filtered trades for an explicit interval, shared with Performance Reports.
     static func filteredTrades(
         from inputs: [Input],
         accountFilter: DashboardAccountFilter,
@@ -356,7 +356,7 @@ nonisolated enum DashboardChartMetrics {
         return applyPublicVisibilityFilter(scoped, showPublicOnly: showPublicOnly)
     }
 
-    /// Profile → Stats public universe — `is_public` only (matches ``ProfileStatisticsTradeLoader``).
+    /// Profile → Stats public universe, `is_public` only (matches ``ProfileStatisticsTradeLoader``).
     private static func applyPublicVisibilityFilter(_ inputs: [Input], showPublicOnly: Bool) -> [Input] {
         guard showPublicOnly else { return inputs }
         return inputs.filter { DashboardScopeFilterSupport.isProfileStatisticsPublicTrade($0.trade) }
@@ -550,9 +550,9 @@ nonisolated enum DashboardChartMetrics {
     }
 
     private static func formatDuration(_ seconds: TimeInterval?) -> String {
-        guard let seconds else { return "—" }
+        guard let seconds else { return "–" }
         let total = Int(seconds.rounded(.down))
-        return TradeHoldDuration.formatSeconds(total) ?? "—"
+        return TradeHoldDuration.formatSeconds(total) ?? "–"
     }
 
     // MARK: - Drawdown series (presentation from equity path)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Port of web `scoreActiveTrader` — completeness + optional activity signals, no ML.
+/// Port of web `scoreActiveTrader`, completeness + optional activity signals, no ML.
 nonisolated enum ExploreTraderRanking {
     nonisolated struct TradeSummary: Hashable, Sendable {
         var tradeCount: Int
@@ -42,7 +42,7 @@ nonisolated enum ExploreTraderRanking {
         return score
     }
 
-    /// Non-empty avatar URL/path — blank or missing counts as no profile picture.
+    /// Non-empty avatar URL/path, blank or missing counts as no profile picture.
     static func hasValidProfilePicture(_ profile: Profile) -> Bool {
         guard let avatar = profile.avatar else { return false }
         let id = avatar.id.trimmingCharacters(in: .whitespacesAndNewlines)

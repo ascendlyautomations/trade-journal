@@ -1,6 +1,6 @@
 import Foundation
 
-/// Cross-type Profile showcase pin — maps to `profile_pinned_content.content_type`.
+/// Cross-type Profile showcase pin, maps to `profile_pinned_content.content_type`.
 nonisolated enum ProfilePinnedContentType: String, Hashable, Codable, Sendable {
     case trade
     case profilePost = "profile_post"

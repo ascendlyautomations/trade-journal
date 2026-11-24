@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only auth logging — never prints credentials, emails, or full session payloads.
+/// DEBUG-only auth logging, never prints credentials, emails, or full session payloads.
 nonisolated enum SafeAuthLog {
     private static let logger = AppLog.authentication
 

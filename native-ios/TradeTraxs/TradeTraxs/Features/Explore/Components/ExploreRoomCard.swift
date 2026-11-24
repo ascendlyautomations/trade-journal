@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact Trade Room card for the Explore horizontal rail — avatar-first like Messages.
+/// Compact Trade Room card for the Explore horizontal rail, avatar-first like Messages.
 struct ExploreRoomCard: View {
     let room: ExploreRoomSuggestion
     let imagePipeline: any ImagePipeline

@@ -32,8 +32,8 @@ struct TradingRulesTrendPeriodDetailCard: View {
                 metricColumn(
                     title: "Compliance",
                     value: point.insufficientData
-                        ? "—"
-                        : point.adherencePercent.map { String(format: "%.1f%%", $0) } ?? "—",
+                        ? "–"
+                        : point.adherencePercent.map { String(format: "%.1f%%", $0) } ?? "–",
                     tone: colors.profit
                 )
                 metricColumn(title: "Followed", value: "\(point.followed)", tone: colors.profit)

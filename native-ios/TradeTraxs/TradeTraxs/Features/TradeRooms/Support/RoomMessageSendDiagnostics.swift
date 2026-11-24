@@ -1,6 +1,6 @@
 import Foundation
 
-/// Classifies room message insert failures — membership (RLS member gate) vs channel permissions.
+/// Classifies room message insert failures, membership (RLS member gate) vs channel permissions.
 enum RoomMessageSendDiagnostics: Sendable {
     case membershipNotConfirmed
     case channelPostingRestricted

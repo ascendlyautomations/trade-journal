@@ -11,7 +11,7 @@ nonisolated enum SearchQueryNormalization {
         return trimmed
     }
 
-    /// PostgREST `ilike` patterns — strip characters that break `or=(...)` filters.
+    /// PostgREST `ilike` patterns, strip characters that break `or=(...)` filters.
     static func escapeILikePattern(_ raw: String) -> String {
         raw
             .replacingOccurrences(of: ",", with: " ")

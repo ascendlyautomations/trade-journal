@@ -3,7 +3,7 @@ import Foundation
 /// Single formatter for trading-account titles across native UI.
 ///
 /// - Owner / private surfaces: `Account Name • Account Number` (number omitted when absent)
-/// - Public surfaces: `Account Name` only — never expose account numbers
+/// - Public surfaces: `Account Name` only, never expose account numbers
 nonisolated enum TradingAccountDisplay {
     enum Audience: Sendable, Equatable {
         /// Dashboard, Add/Edit Trade, Calendar, Trades filters, Settings, own journal.
@@ -14,7 +14,7 @@ nonisolated enum TradingAccountDisplay {
 
     static let separator = " • "
 
-    /// Middle-dot separator for owner dropdown lines — distinct from masking bullets (`••••`).
+    /// Middle-dot separator for owner dropdown lines, distinct from masking bullets (`••••`).
     static let ownerDropdownSeparator = " · "
 
     /// Normalized account number for display (trimmed; empty → nil).
@@ -58,7 +58,7 @@ nonisolated enum TradingAccountDisplay {
         )
     }
 
-    /// Optional wrapper — nil when the resulting title is empty.
+    /// Optional wrapper, nil when the resulting title is empty.
     static func optionalTitle(
         name: String?,
         accountNumber: String? = nil,
@@ -78,7 +78,7 @@ nonisolated enum TradingAccountDisplay {
 
     // MARK: - Owner account dropdown (private selectors)
 
-    /// Compact mode label from authoritative `TradingAccountMode` — never inferred from name.
+    /// Compact mode label from authoritative `TradingAccountMode`, never inferred from name.
     static func ownerDropdownModeLabel(_ mode: TradingAccountMode) -> String {
         switch mode {
         case .evaluation: return "Eval"
@@ -90,7 +90,7 @@ nonisolated enum TradingAccountDisplay {
     }
 
     /// Owner-only suffix: `••••1234` for longer values; short values (≤4) shown in full.
-    /// Already-masked values (`••••1234`, `****1234`, etc.) are normalized — never masked twice.
+    /// Already-masked values (`••••1234`, `****1234`, etc.) are normalized, never masked twice.
     static func maskedAccountNumberSuffix(_ raw: String?) -> String? {
         guard let normalized = normalizedAccountNumber(raw) else { return nil }
 
@@ -127,14 +127,14 @@ nonisolated enum TradingAccountDisplay {
         String(normalized.filter(\.isNumber).suffix(4))
     }
 
-    /// Owner dropdown account name — max 13 characters, no ellipsis.
+    /// Owner dropdown account name, max 13 characters, no ellipsis.
     static func ownerDropdownDisplayName(_ name: String?) -> String {
         let trimmed = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 13 else { return trimmed }
         return String(trimmed.prefix(13))
     }
 
-    /// Owner dropdown account tail — last four digits when present, otherwise last up to four characters.
+    /// Owner dropdown account tail, last four digits when present, otherwise last up to four characters.
     static func ownerDropdownAccountNumberTail(_ raw: String?) -> String? {
         guard let normalized = normalizedAccountNumber(raw) else { return nil }
 
@@ -184,7 +184,7 @@ nonisolated enum TradingAccountDisplay {
         return parts.joined(separator: ownerDropdownSeparator)
     }
 
-    /// Prop-firm grouping label from account name — mirrors web `inferPropFirmName`.
+    /// Prop-firm grouping label from account name, mirrors web `inferPropFirmName`.
     static func inferPropFirmName(_ accountName: String?) -> String {
         let name = (accountName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return "" }

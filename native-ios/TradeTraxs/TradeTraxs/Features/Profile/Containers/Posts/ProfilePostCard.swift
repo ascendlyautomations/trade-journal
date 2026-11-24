@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Horizontal post browse card — thumbnail left, truncated caption right (Clips/Trades style).
+/// Horizontal post browse card, thumbnail left, truncated caption right (Clips/Trades style).
 struct ProfilePostCard: View {
     let post: Post
     let imagePipeline: any ImagePipeline

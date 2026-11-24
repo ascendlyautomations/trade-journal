@@ -1,6 +1,6 @@
 import Foundation
 
-/// Profile browse-card media gating — attachment presence only (not load/failure state).
+/// Profile browse-card media gating, attachment presence only (not load/failure state).
 enum ProfileCardMediaPresence {
     nonisolated static func postMedia(in post: Post) -> MediaReference? {
         post.media.first {
@@ -22,7 +22,7 @@ enum ProfileCardMediaPresence {
         return trimmed.isEmpty ? nil : thumbnail
     }
 
-    /// Vault on profile browse cards — same save-to-vault affordance as Feed and Detail.
+    /// Vault on profile browse cards, same save-to-vault affordance as Feed and Detail.
     static func engagementVaultRef(
         for target: InteractionTarget,
         profileIsOwner _: Bool = false

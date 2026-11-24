@@ -1,6 +1,6 @@
 import Foundation
 
-/// Supabase Storage delivery — object/public URLs only (no Image Transformations).
+/// Supabase Storage delivery, object/public URLs only (no Image Transformations).
 ///
 /// Parity with web `lib/optimizedStorageImage.ts` / `supabaseStorageTransformGuard.ts`.
 nonisolated enum StorageImageTransform {
@@ -26,7 +26,7 @@ nonisolated enum StorageImageTransform {
         return path.contains(objectPublic) || path.contains(renderPublic)
     }
 
-    /// Stable identity for logging — host + path without query tokens.
+    /// Stable identity for logging, host + path without query tokens.
     static func urlIdentity(for url: URL) -> String {
         var components = URLComponents()
         components.host = url.host

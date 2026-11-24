@@ -31,7 +31,7 @@ nonisolated enum TradePointsAndRealizedRr {
         )
     }
 
-    /// Manual Add/Edit save — never stores zero when data is insufficient (nil instead).
+    /// Manual Add/Edit save, never stores zero when data is insufficient (nil instead).
     static func computeRealizedRrFromDraft(_ draft: TradeDraft) -> Decimal? {
         realizedRrForManualSave(draft: draft)
     }
@@ -85,7 +85,7 @@ nonisolated enum TradePointsAndRealizedRr {
         return computeExitRrFromPricesAndPlan(draft: draft)
     }
 
-    /// Winning manual saves — realized R:R (computed or Exit R:R) must not exceed targeted R:R.
+    /// Winning manual saves, realized R:R (computed or Exit R:R) must not exceed targeted R:R.
     static func validateRealizedRrAgainstTargeted(draft: TradeDraft) -> String? {
         let pnl = draft.realizedPnL?.amount ?? 0
         guard pnl > 0 else { return nil }
@@ -96,7 +96,7 @@ nonisolated enum TradePointsAndRealizedRr {
         return realizedRrCannotExceedTargetedMessage
     }
 
-    /// Dashboard Avg Targeted R:R — mean stored targeted `rr`; excludes trades without a positive target.
+    /// Dashboard Avg Targeted R:R, mean stored targeted `rr`; excludes trades without a positive target.
     static func averageTargetedRr(trades: [Trade]) -> Decimal? {
         var sum = Decimal(0)
         var count = 0

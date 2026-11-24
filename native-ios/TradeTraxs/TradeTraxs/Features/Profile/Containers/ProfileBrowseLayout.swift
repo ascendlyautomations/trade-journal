@@ -219,7 +219,7 @@ struct ProfileTradeGridTile: View {
     }
 }
 
-/// Grid thumbnail overflow — matches list cards; light icon on photo tiles.
+/// Grid thumbnail overflow, matches list cards; light icon on photo tiles.
 private struct ProfileBrowseGridOwnerOverflow: View {
     let isOwner: Bool
     var deleteTitle: String = "Delete"

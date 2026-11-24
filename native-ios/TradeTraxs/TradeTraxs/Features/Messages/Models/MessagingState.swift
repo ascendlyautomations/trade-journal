@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared messaging domain snapshot — single source of truth for Messages + Trade Rooms homes.
+/// Shared messaging domain snapshot, single source of truth for Messages + Trade Rooms homes.
 ///
 /// ``MessagingDomain`` owns mutation. Screen ViewModels present this state; child views render only.
 /// Thread screens keep independent pagination state and patch the inbox store for badges/previews.

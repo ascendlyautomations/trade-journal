@@ -151,7 +151,7 @@ final class TradeDetailExperienceTests: XCTestCase {
     func testPriceTextUsesCurrencyGroupingAndDecimals() {
         XCTAssertEqual(TradeDisplay.priceText(Decimal(string: "20153.25")), "$20,153.25")
         XCTAssertEqual(TradeDisplay.priceText(Decimal(18_420)), "$18,420")
-        XCTAssertEqual(TradeDisplay.priceText(nil), "—")
+        XCTAssertEqual(TradeDisplay.priceText(nil), "–")
     }
 
     func testCompactDateTimeFormat() {
@@ -248,7 +248,7 @@ final class TradeDetailExperienceTests: XCTestCase {
     func testExitExecutionTimeTextShowsDashWhenMissing() {
         var trade = makeAnalyticsTrade(id: "open", ticker: "NQ", pnl: 0, rr: 1, dayOffset: 0)
         trade.exitAt = nil
-        XCTAssertEqual(TradeDisplay.exitExecutionTimeText(for: trade), "—")
+        XCTAssertEqual(TradeDisplay.exitExecutionTimeText(for: trade), "–")
     }
 
     func testSharedMessageExecutionStampShowsEntryExitDayAndDuration() {

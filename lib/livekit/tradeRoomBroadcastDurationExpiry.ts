@@ -66,9 +66,9 @@ export async function endBroadcastIfPastExpiresAt(
     return false
   }
   return endExpiredBroadcastSession(admin, {
-    roomId: active.roomId,
-    sessionId: active.id,
-    broadcasterUserId: active.broadcasterUserId,
+    id: active.id,
+    room_id: active.roomId,
+    broadcaster_user_id: active.broadcasterUserId,
   })
 }
 

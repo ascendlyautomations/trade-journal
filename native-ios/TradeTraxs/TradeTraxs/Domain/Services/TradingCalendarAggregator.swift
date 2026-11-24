@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pure aggregation — web Calendar `dailyData` / week totals / monthly stats subset.
+/// Pure aggregation, web Calendar `dailyData` / week totals / monthly stats subset.
 nonisolated enum TradingCalendarAggregator {
     /// Groups trades into futures trading days, filtering by account.
     static func daySummaries(

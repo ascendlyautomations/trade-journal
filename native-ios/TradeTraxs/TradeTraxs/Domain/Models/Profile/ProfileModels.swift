@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `TRADER_TYPE_OPTIONS` — stored/displayed as title case (`Futures`, `Options`, `Investor`, `Forex`).
+/// Web `TRADER_TYPE_OPTIONS`, stored/displayed as title case (`Futures`, `Options`, `Investor`, `Forex`).
 nonisolated enum TraderType: String, Hashable, Codable, Sendable {
     case futures = "Futures"
     case options = "Options"
@@ -47,14 +47,14 @@ nonisolated struct Profile: Hashable, Codable, Sendable, Identifiable {
     var avatar: MediaReference?
     var traderType: TraderType?
     var tradingStyle: String?
-    /// `profiles.trading_model` — additional strategy labels (ICT, SMC, etc.).
+    /// `profiles.trading_model`, additional strategy labels (ICT, SMC, etc.).
     var tradingModel: String? = nil
     var primaryMarket: String?
     var startedTradingAt: Date?
     var isPrivate: Bool
     var isCreator: Bool
     var createdAt: Date
-    /// Owner-only — from `profiles.username_change_count` (Settings username edits).
+    /// Owner-only, from `profiles.username_change_count` (Settings username edits).
     var usernameChangeCount: Int = 0
 }
 
@@ -144,7 +144,7 @@ nonisolated struct ProfileStats: Hashable, Codable, Sendable {
     var postCount: Int
     /// Legacy total (unused by Profile overview). Prefer ``publicTradeCount``.
     var tradeCount: Int
-    /// Public non-backtest trade count — mirrors web overview `Trades`.
+    /// Public non-backtest trade count, mirrors web overview `Trades`.
     var publicTradeCount: Int
     /// Public non-backtest win rate as `0...1` (web displays ×100).
     var winRate: Decimal? = nil
@@ -154,9 +154,9 @@ nonisolated struct ProfileStats: Hashable, Codable, Sendable {
     var netPnL: Decimal? = nil
     /// Mean stored RR over public non-backtest trades with finite RR (web Avg RR).
     var averageRR: Decimal? = nil
-    /// Sum of payout achievement values — web overview `overviewPayoutTotal`.
+    /// Sum of payout achievement values, web overview `overviewPayoutTotal`.
     var payoutTotal: Decimal? = nil
-    /// Not on web Profile — kept for forward compatibility; always `nil` today.
+    /// Not on web Profile, kept for forward compatibility; always `nil` today.
     var expectancy: Decimal? = nil
 }
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Visible height of the message `ScrollView` — drives bottom-alignment for short threads.
+/// Visible height of the message `ScrollView`, drives bottom-alignment for short threads.
 private struct ConversationThreadScrollViewportHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
 

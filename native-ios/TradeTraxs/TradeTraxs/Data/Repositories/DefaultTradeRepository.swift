@@ -165,7 +165,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 from: relation,
                 query: query
             )
-            // Soft-skip malformed rows — never fail the entire Profile list (web soft-empty).
+            // Soft-skip malformed rows, never fail the entire Profile list (web soft-empty).
             let items = Self.mapTradesSkippingFailures(rows)
             return CursorPage(
                 items: items,
@@ -356,7 +356,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             )
         }
 
-        // Result presets + explicit numeric P&L bounds (server-side — not string search).
+        // Result presets + explicit numeric P&L bounds (server-side, not string search).
         switch filters.result {
         case .any:
             break
@@ -463,7 +463,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             throw AppError.domain(.permission(.notAuthenticated))
         }
         guard !drafts.isEmpty else { return 0 }
-        // Web `insertCsvTradesWithAccount` / `trades.insert(rows)` — one bulk POST.
+        // Web `insertCsvTradesWithAccount` / `trades.insert(rows)`, one bulk POST.
         let rows: [TradeDTO.InsertBody] = drafts.map { draft in
             var body = TradeMapper.insertBody(from: draft, userID: userID)
             body.is_public = false
@@ -593,7 +593,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         } catch {
             PostPublishProbe.logFailed(stage: .databaseInsert, error: error)
             AppLog.networking.error(
-                "Public trade post insert failed — \(String(describing: error), privacy: .public)"
+                "Public trade post insert failed, \(String(describing: error), privacy: .public)"
             )
         }
     }
@@ -630,7 +630,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 SupabaseQuery.eq("user_id", userID.rawValue),
             ]
         )
-        // Authoritative read — same select as Trade Detail / list seeds (PATCH representation can omit columns).
+        // Authoritative read, same select as Trade Detail / list seeds (PATCH representation can omit columns).
         let trade = try await trade(id: id)
         #if DEBUG
         TradeUpdateDiagnostics.logVerifyPersisted(tradeID: id, draft: draft, persisted: trade)
@@ -662,7 +662,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 if draft.imageCrop != nil,
                    ContentImagePresentationCodec.isMissingImageCropColumnError(error) {
                     PostPublishProbe.logNote(
-                        "posts.image_crop column missing during upsert — retrying without image_crop. "
+                        "posts.image_crop column missing during upsert, retrying without image_crop. "
                             + ImageCropWireInsert.migrationHint
                     )
                     var fallback = post
@@ -677,7 +677,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 } else {
                     PostPublishProbe.logFailed(stage: .databaseInsert, error: error)
                     AppLog.networking.error(
-                        "Public trade post upsert failed — \(String(describing: error), privacy: .public)"
+                        "Public trade post upsert failed, \(String(describing: error), privacy: .public)"
                     )
                 }
             }
@@ -801,7 +801,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,drawdown_type,drawdown_floor_cap,daily_drawdown,profit_target,winning_days,winning_day_threshold,show_in_account_dropdowns,custom_public_status,payout_drawdown_behavior,user_id"
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
-        // Mirror web `loadTradingAccounts` / `ACCOUNTS_SELECT` — `trades.account_id` → `accounts.id`.
+        // Mirror web `loadTradingAccounts` / `ACCOUNTS_SELECT`, `trades.account_id` → `accounts.id`.
         // Do NOT query `user_accounts` (free-plan name registry; different UUIDs).
         // SessionAccountsStore also coalesces; repo flight is a defensive identical-key layer.
         try await RepositoryRequestFlight.shared.coalesce(
@@ -821,7 +821,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                     return try TradingAccountMapper.mapToDomain(dto)
                 } catch {
                     AppLog.networking.error(
-                        "Skipping accounts row — \(String(describing: error), privacy: .public)"
+                        "Skipping accounts row, \(String(describing: error), privacy: .public)"
                     )
                     return nil
                 }
@@ -920,7 +920,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 returning: TradeDTO.Account.self
             )
             let account = try TradingAccountMapper.mapToDomain(row)
-            // Web `syncTradesAfterAccountRename` — keep denormalized trade labels in sync.
+            // Web `syncTradesAfterAccountRename`, keep denormalized trade labels in sync.
             struct TradeLabels: Encodable {
                 var account_name: String
                 var account_size: String?
@@ -1294,7 +1294,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 TradeMappingTelemetry.recordSkippedTrade()
                 let id = dto.id ?? "unknown"
                 AppLog.networking.error(
-                    "Skipping trade \(id, privacy: .public) — \(String(describing: error), privacy: .public)"
+                    "Skipping trade \(id, privacy: .public), \(String(describing: error), privacy: .public)"
                 )
                 return nil
             }

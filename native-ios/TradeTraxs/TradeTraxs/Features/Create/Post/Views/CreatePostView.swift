@@ -2,7 +2,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Native Create Post — wall post via `profile_posts` (no trade link).
+/// Native Create Post, wall post via `profile_posts` (no trade link).
 struct CreatePostView: View {
     @State private var viewModel: CreatePostViewModel
     @State private var photoItem: PhotosPickerItem?
@@ -193,7 +193,7 @@ struct CreatePostView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Matches prior TextEditor max height (~280pt) — field grows vertically, then scrolls inside.
+    /// Matches prior TextEditor max height (~280pt), field grows vertically, then scrolls inside.
     private static let postBodyMaxVisibleLines = 14
 
     @ViewBuilder
@@ -302,7 +302,7 @@ struct CreatePostView: View {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-uitesting-create-post-filled") else { return }
         didApplyScreenshotPrefill = true
-        viewModel.bodyText = "Great session on MNQ — stuck to the plan and took the A+ setup."
+        viewModel.bodyText = "Great session on MNQ, stuck to the plan and took the A+ setup."
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 360))
         let image = renderer.image { context in
             UIColor(red: 0.06, green: 0.14, blue: 0.24, alpha: 1).setFill()

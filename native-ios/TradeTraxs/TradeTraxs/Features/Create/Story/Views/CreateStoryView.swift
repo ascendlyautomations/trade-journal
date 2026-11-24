@@ -2,7 +2,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-/// Native story composer — photo or short video → publish.
+/// Native story composer, photo or short video → publish.
 struct CreateStoryView: View {
     @State private var viewModel: CreateStoryViewModel
     @State private var mediaItem: PhotosPickerItem?

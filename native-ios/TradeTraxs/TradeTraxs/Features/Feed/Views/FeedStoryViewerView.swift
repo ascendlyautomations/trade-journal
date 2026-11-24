@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Instagram-style story viewer — multi-slide carousel, tap navigation, private DM replies.
+/// Instagram-style story viewer, multi-slide carousel, tap navigation, private DM replies.
 struct FeedStoryViewerView: View {
     @State private var viewModel: FeedStoryViewerViewModel
     private let data: DataEnvironment

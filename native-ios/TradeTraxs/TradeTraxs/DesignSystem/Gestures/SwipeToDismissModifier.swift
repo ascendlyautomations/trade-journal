@@ -3,7 +3,7 @@ import UIKit
 
 /// Drag-down interactive dismiss for immersive / modal surfaces.
 ///
-/// Do **not** apply to normal NavigationStack pushes — those keep the system
+/// Do **not** apply to normal NavigationStack pushes, those keep the system
 /// leading-edge Back gesture.
 struct SwipeToDismissModifier: ViewModifier {
     var isEnabled: Bool = true
@@ -37,7 +37,7 @@ struct SwipeToDismissModifier: ViewModifier {
         DragGesture(minimumDistance: 16, coordinateSpace: .local)
             .onChanged { value in
                 guard isEnabled else { return }
-                // Prefer downward intent — ignore mostly-horizontal drags (paging / scrub).
+                // Prefer downward intent, ignore mostly-horizontal drags (paging / scrub).
                 let horizontal = abs(value.translation.width)
                 let vertical = value.translation.height
                 guard vertical > 0, vertical > horizontal * 1.15 else {

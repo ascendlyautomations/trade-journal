@@ -9,7 +9,7 @@ final class AuthenticationLifecycle {
     private let authenticationCoordinator: AuthenticationCoordinator
     private(set) var initialRestoreCompleted = false
 
-    /// Bound by ``CompositionRoot`` — coalesced TraxsPro entitlement refresh on foreground.
+    /// Bound by ``CompositionRoot``, coalesced TraxsPro entitlement refresh on foreground.
     /// Not part of SwiftUI observation (closure isolation is incompatible with `@Observable` synthesis).
     @ObservationIgnored
     var refreshBillingEntitlementsOnForeground: (@MainActor () async -> Void)?
@@ -26,16 +26,16 @@ final class AuthenticationLifecycle {
         defer { markInitialRestoreCompleted() }
         if authenticationManager.shouldSkipAsyncRestoreAfterColdLaunch() {
             AppLog.authentication.debug(
-                "AuthenticationLifecycle — cold launch already resolved session state"
+                "AuthenticationLifecycle, cold launch already resolved session state"
             )
             await authenticationCoordinator.bootstrapSession()
             return
         }
-        AppLog.authentication.debug("AuthenticationLifecycle — initial session restore")
+        AppLog.authentication.debug("AuthenticationLifecycle, initial session restore")
         await authenticationCoordinator.bootstrapSession()
     }
 
-    /// Logged-out cold launch — login must not wait for async restore.
+    /// Logged-out cold launch, login must not wait for async restore.
     func markInitialRestoreCompletedIfLoggedOut() {
         guard authenticationManager.shouldSkipAsyncRestoreAfterColdLaunch() else { return }
         markInitialRestoreCompleted()
@@ -47,7 +47,7 @@ final class AuthenticationLifecycle {
     }
 
     func applicationDidEnterBackground() {
-        AppLog.authentication.debug("AuthenticationLifecycle — background")
+        AppLog.authentication.debug("AuthenticationLifecycle, background")
     }
 
     func applicationWillEnterForeground() async {

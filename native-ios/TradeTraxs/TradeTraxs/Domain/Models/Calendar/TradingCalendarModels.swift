@@ -60,7 +60,7 @@ nonisolated struct TradingMonthSummary: Hashable, Codable, Sendable {
     var worstDayKey: String?
     var worstDayPnL: Decimal?
     var averageDailyPnL: Decimal?
-    /// Wins / all trades in the month (breakeven counts in denominator — Dashboard parity).
+    /// Wins / all trades in the month (breakeven counts in denominator, Dashboard parity).
     var tradeWinRate: Decimal?
 }
 
@@ -91,7 +91,7 @@ nonisolated struct TradingYearMonthCard: Hashable, Sendable, Identifiable {
     var month: Int
     var abbreviation: String
     var summary: TradingMonthSummary
-    /// Civil month is after the current month in the current year — display neutral empty P&L.
+    /// Civil month is after the current month in the current year, display neutral empty P&L.
     var isFutureMonth: Bool
 
     var id: Int { month }

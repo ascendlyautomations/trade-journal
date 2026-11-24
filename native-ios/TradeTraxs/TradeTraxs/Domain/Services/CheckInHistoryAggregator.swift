@@ -1,6 +1,6 @@
 import Foundation
 
-/// Builds check-in history rows from bulk check-ins + trades — no per-day queries.
+/// Builds check-in history rows from bulk check-ins + trades, no per-day queries.
 nonisolated enum CheckInHistoryAggregator {
     static let defaultDayWindow = 90
 

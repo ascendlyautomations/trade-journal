@@ -181,7 +181,7 @@ struct PostOnboardingPlanSelectionView: View {
                 .experienceStyle(.footnote, color: colors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             let detail = viewModel.membershipSummaryFooter
-            if detail != "—" {
+            if detail != "–" {
                 Text(detail)
                     .experienceStyle(.caption, color: colors.secondaryText)
             }

@@ -36,7 +36,7 @@ final class ScreenshotImportViewModel {
     private(set) var aiErrorMessage: String?
 
     private var analyzeTask: Task<Void, Never>?
-    /// Temporary in-memory images — discarded on reset/dismiss/import.
+    /// Temporary in-memory images, discarded on reset/dismiss/import.
     private var loadedImages: [UIImage] = []
     private var lastBlocksByImage: [[OCRTextBlock]] = []
     private var lastDeterministicResult: ScreenshotImportProcessResult?
@@ -110,7 +110,7 @@ final class ScreenshotImportViewModel {
         let dupes = metadataByTradeID.values.filter { $0.duplicateClassification != .newTrade }.count
         var detail = "Found \(summary.successCount) possible trades · \(summary.failedCount) rows skipped"
         if isAIAssisted {
-            detail = "AI-assisted extraction — review before importing · \(summary.successCount) trades"
+            detail = "AI-assisted extraction, review before importing · \(summary.successCount) trades"
         } else if extractionQuality == .uncertain {
             detail += " · Some fields need review"
         }
@@ -277,7 +277,7 @@ final class ScreenshotImportViewModel {
     }
     #endif
 
-    /// Test seam — processes fixture OCR blocks without Photos/Vision.
+    /// Test seam, processes fixture OCR blocks without Photos/Vision.
     func ingestBlocksForTesting(_ blocksByImage: [[OCRTextBlock]]) {
         phase = .analyzing
         Task {
@@ -292,7 +292,7 @@ final class ScreenshotImportViewModel {
         }
     }
 
-    /// Test seam — inject AI repository responses without network.
+    /// Test seam, inject AI repository responses without network.
     func applyAIExtractionForTesting(_ extraction: ScreenshotAIExtractionV1, imagesProcessed: Int) {
         let result = ScreenshotTradeImportPipeline.processAIExtraction(
             extraction,

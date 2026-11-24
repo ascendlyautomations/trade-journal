@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `parseDurationCsvValue` — duration cell → whole seconds.
+/// Web `parseDurationCsvValue`, duration cell → whole seconds.
 nonisolated enum CSVDurationParsing {
     static func parse(_ raw: String?) -> Int? {
         guard let raw else { return nil }

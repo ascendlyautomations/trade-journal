@@ -9,7 +9,7 @@ nonisolated enum ActivityBootstrapApplier {
         var actorProfiles: [Profile]
     }
 
-    /// Decode/transform off the MainActor — no detail-cache mutation.
+    /// Decode/transform off the MainActor, no detail-cache mutation.
     nonisolated static func transform(_ bootstrap: ActivityBootstrapV1) -> Applied {
         let decodedCount = bootstrap.data.notifications.count
         let notifications = bootstrap.data.notifications.compactMap {

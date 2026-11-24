@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single-account dashboard hero equity — mirrors web `computeLiveAccountEquityChartData` with daily closes on long presets.
+/// Single-account dashboard hero equity, mirrors web `computeLiveAccountEquityChartData` with daily closes on long presets.
 nonisolated enum DashboardAccountEquityChartEngine {
     struct EquitySample: Sendable, Equatable {
         var date: Date
@@ -114,7 +114,7 @@ nonisolated enum DashboardAccountEquityChartEngine {
         return tradeLevel
     }
 
-    /// All Accounts — combined balance progression (sum of sizes + chronological P&amp;L and payouts).
+    /// All Accounts, combined balance progression (sum of sizes + chronological P&amp;L and payouts).
     static func computeAllAccountsEquitySeries(
         accounts: [TradingAccount],
         lifetimeTrades: [Trade],
@@ -226,7 +226,7 @@ nonisolated enum DashboardAccountEquityChartEngine {
         )
     }
 
-    /// Picks the floor last known at or before each equity timestamp — never a future high-water floor.
+    /// Picks the floor last known at or before each equity timestamp, never a future high-water floor.
     static func attachChronologicalDrawdownFloors(
         equitySamples: [EquitySample],
         floorDates: [(date: Date, floor: Decimal)]

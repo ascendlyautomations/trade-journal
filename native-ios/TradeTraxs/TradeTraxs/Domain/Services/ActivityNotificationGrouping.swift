@@ -1,6 +1,6 @@
 import Foundation
 
-/// Activity inbox grouping — likes/comments per target; follows & mentions stay individual.
+/// Activity inbox grouping, likes/comments per target; follows & mentions stay individual.
 enum ActivityNotificationGrouping {
     struct GroupedItem: Equatable {
         var notification: ActivityNotification

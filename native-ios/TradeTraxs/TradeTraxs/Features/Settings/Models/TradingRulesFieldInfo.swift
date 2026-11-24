@@ -1,5 +1,17 @@
 import Foundation
 
+/// Short user-facing labels for Trading Rules settings, previews, and compliance UI.
+nonisolated enum TradingRulesDisplayLabels {
+    nonisolated static let maxTradesPerDay = "Max Trades / Day"
+    nonisolated static let maxContracts = "Max Contracts"
+    nonisolated static let maxContractsPerTrade = "Max Contracts / Trade"
+    nonisolated static let minAcceptableRr = "Min Acceptable R:R"
+    nonisolated static let minPlannedRr = "Min Planned R:R"
+    nonisolated static let maxRiskPerTrade = "Max Risk / Trade"
+    nonisolated static let maxDrawdownGoal = "Max Drawdown Goal"
+    nonisolated static let maxWeeklyLoss = "Max Loss / Week"
+}
+
 /// Beginner-friendly copy for Trading Rules fields. Wording matches current analytics wiring.
 enum TradingRulesFieldInfo: String, CaseIterable, Identifiable {
     case targetRr
@@ -35,13 +47,13 @@ enum TradingRulesFieldInfo: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .targetRr: return "Target R:R"
-        case .maxTradesPerDay: return "Maximum trades per day"
+        case .maxTradesPerDay: return TradingRulesDisplayLabels.maxTradesPerDay
         case .dailyLossLimit: return "Daily loss limit"
         case .consecutiveLossPause: return "Consecutive losses before a break"
         case .breakevenTolerance: return "Breakeven tolerance"
-        case .minAcceptableRr: return "Minimum acceptable R:R"
-        case .maxRiskPerTrade: return "Maximum risk per trade"
-        case .maxContractsPerTrade: return "Maximum contracts per trade"
+        case .minAcceptableRr: return TradingRulesDisplayLabels.minAcceptableRr
+        case .maxRiskPerTrade: return TradingRulesDisplayLabels.maxRiskPerTrade
+        case .maxContractsPerTrade: return TradingRulesDisplayLabels.maxContractsPerTrade
         case .ruleTemplate: return "Rule template"
         case .tradingStyle: return "Trading style"
         case .preferredSessions: return "Preferred trading sessions"
@@ -49,8 +61,8 @@ enum TradingRulesFieldInfo: String, CaseIterable, Identifiable {
         case .allowedTradingDays: return "Allowed trading days"
         case .dailyProfitTarget: return "Daily profit target"
         case .stopAfterDailyProfitTarget: return "Stop after daily profit target"
-        case .maxDrawdownGoal: return "Maximum drawdown goal"
-        case .maxWeeklyLoss: return "Maximum weekly loss"
+        case .maxDrawdownGoal: return TradingRulesDisplayLabels.maxDrawdownGoal
+        case .maxWeeklyLoss: return TradingRulesDisplayLabels.maxWeeklyLoss
         case .waitAfterLossMinutes: return "Waiting time after a loss"
         case .plannedStart: return "Planned start"
         case .plannedEnd: return "Planned end"
@@ -58,7 +70,7 @@ enum TradingRulesFieldInfo: String, CaseIterable, Identifiable {
         case .accountPicker: return "Account"
         case .accountDailyLossLimit: return "Daily loss limit"
         case .accountDailyProfitTarget: return "Daily profit target"
-        case .accountMaxDrawdownGoal: return "Maximum drawdown goal"
+        case .accountMaxDrawdownGoal: return TradingRulesDisplayLabels.maxDrawdownGoal
         case .personalComplianceGoal: return "Personal compliance goal"
         case .applyRulesToPastTrades: return "Apply Rules to Past Trades"
         }

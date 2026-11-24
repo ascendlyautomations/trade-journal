@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Web `sessionStorage.pendingRoomShareDraft` — staged when Share Room chooses Create Feed Post.
+/// Web `sessionStorage.pendingRoomShareDraft`, staged when Share Room chooses Create Feed Post.
 @Observable
 @MainActor
 final class PendingRoomShareStore {

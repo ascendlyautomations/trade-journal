@@ -10,7 +10,7 @@ final class ExploreSessionStore {
     private(set) var suggestedTraders: [ExploreTraderSuggestion] = []
     /// Server-ranked avatar-qualified pool for Explore home rail (offset-0 bootstrap).
     private(set) var homeSuggestedTraders: [ExploreTraderSuggestion] = []
-    /// Public rooms from `rpc_v1_trade_room_discovery` (suggested mode) — not membership rows.
+    /// Public rooms from `rpc_v1_trade_room_discovery` (suggested mode), not membership rows.
     private(set) var suggestedRooms: [ExploreRoomSuggestion] = []
     private(set) var popularRooms: [ExploreRoomSuggestion] = []
     private(set) var viewerFollowingIDs: Set<ProfileID> = []
@@ -18,7 +18,7 @@ final class ExploreSessionStore {
     private(set) var tradersNextCursor: String?
     private(set) var tradersFailedMessage: String?
     private(set) var roomsFailedMessage: String?
-    /// Profiles batch/API confirmed to have no avatar — distinct from "not yet fetched".
+    /// Profiles batch/API confirmed to have no avatar, distinct from "not yet fetched".
     private(set) var avatarConfirmedAbsentIDs: Set<ProfileID> = []
 
     private init() {}
@@ -68,7 +68,7 @@ final class ExploreSessionStore {
         hasBootstrapped = true
     }
 
-    /// Updates the viewer follow graph only — list rows stay intact for Suggested Traders.
+    /// Updates the viewer follow graph only, list rows stay intact for Suggested Traders.
     func updateFollowing(_ following: Set<ProfileID>) {
         viewerFollowingIDs = following
     }
@@ -125,7 +125,7 @@ final class ExploreSessionStore {
         applyFollowEdge(id, isFollowing: isFollowing, adjustFollowerCount: false)
     }
 
-    /// Shared Follow mutation patch — edge + optional follower-count on cards.
+    /// Shared Follow mutation patch, edge + optional follower-count on cards.
     func applyFollowEdge(
         _ id: ProfileID,
         isFollowing: Bool,

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Trade Room message moderation — aligned with web ``lib/roomModeration.ts``.
+/// Trade Room message moderation, aligned with web ``lib/roomModeration.ts``.
 enum RoomMessageModerationPolicy {
     static func isRoomOwner(
         roomOwnerProfileID: ProfileID?,
@@ -90,7 +90,7 @@ enum RoomMessageModerationPolicy {
         )
     }
 
-    /// Manage member from message long-press — another member's sent, non-system message.
+    /// Manage member from message long-press, another member's sent, non-system message.
     static func canManageMessageMember(
         viewerID: ProfileID?,
         senderProfileID: ProfileID,

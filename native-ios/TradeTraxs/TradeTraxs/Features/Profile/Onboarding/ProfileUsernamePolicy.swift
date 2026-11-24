@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web-parity username rules — mirrors `lib/profileUsername.ts`.
+/// Web-parity username rules, mirrors `lib/profileUsername.ts`.
 nonisolated enum ProfileUsernamePolicy {
     static let formatHint = "Only lowercase letters, numbers, and underscores allowed"
 
@@ -51,7 +51,7 @@ nonisolated enum ProfileUsernamePolicy {
             && normalized == normalize(currentUsername)
     }
 
-    /// Native profile-shell fallback — not a user-chosen username.
+    /// Native profile-shell fallback, not a user-chosen username.
     static func isGeneratedShellUsername(_ username: String?, profileID: ProfileID) -> Bool {
         guard let username else { return false }
         let normalized = normalize(username)
@@ -67,14 +67,14 @@ nonisolated enum ProfileUsernamePolicy {
         return "user_\(prefix)".lowercased()
     }
 
-    /// Username shown in onboarding — blank when only the auto shell exists.
+    /// Username shown in onboarding, blank when only the auto shell exists.
     static func onboardingPrefillUsername(current: String?, profileID: ProfileID) -> String {
         guard let current, !current.isEmpty else { return "" }
         if isGeneratedShellUsername(current, profileID: profileID) { return "" }
         return sanitizeForTyping(current)
     }
 
-    /// Web `profileUsernamesEqual` — normalized comparison for Settings saves.
+    /// Web `profileUsernamesEqual`, normalized comparison for Settings saves.
     static func profileUsernamesEqual(_ a: String, _ b: String) -> Bool {
         normalize(a) == normalize(b)
     }

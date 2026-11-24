@@ -11,7 +11,7 @@ nonisolated enum ProfilePayoutTotals {
         }
     }
 
-    /// Web `isPayoutAchievementType` — prop firm, live trading, and legacy `payout`
+    /// Web `isPayoutAchievementType`, prop firm, live trading, and legacy `payout`
     /// (mapped to ``AchievementKind/liveTradingPayout`` on read).
     static func isPayout(_ kind: AchievementKind) -> Bool {
         switch kind {
@@ -22,7 +22,7 @@ nonisolated enum ProfilePayoutTotals {
         }
     }
 
-    /// Full payout label for profile cards and detail — prefers numeric value with cents.
+    /// Full payout label for profile cards and detail, prefers numeric value with cents.
     static func payoutDisplayText(for achievement: Achievement) -> String? {
         if let value = achievement.value {
             return NumberDisplay.money(value.amount)

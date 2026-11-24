@@ -9,7 +9,7 @@ enum SocialPresentationWriteThroughSource: String, Sendable {
     case engagementRealtime
 }
 
-/// Bounded presentation write-through — patches already-cached Feed/Profile snapshots only.
+/// Bounded presentation write-through, patches already-cached Feed/Profile snapshots only.
 @MainActor
 protocol SocialPresentationWriteThroughClient: AnyObject {
     func propagateEngagement(

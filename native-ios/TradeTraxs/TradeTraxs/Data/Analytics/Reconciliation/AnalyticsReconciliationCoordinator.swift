@@ -149,7 +149,7 @@ actor AnalyticsReconciliationCoordinator {
         )
     }
 
-    /// Dashboard / GRDB already holds this revision — skip redundant reconcile work.
+    /// Dashboard / GRDB already holds this revision, skip redundant reconcile work.
     func noteAuthoritativeDashboardRevision(_ revision: Int64, viewerID: ProfileID) async {
         guard self.viewerID == viewerID else { return }
         adoptServerRevision(revision)

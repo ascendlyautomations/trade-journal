@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// User-facing onboarding errors — avoids masking PostgREST JSON as generic copy.
+/// User-facing onboarding errors, avoids masking PostgREST JSON as generic copy.
 nonisolated enum ProfileOnboardingErrorMapping {
     static let usernameConflictMessage = "That username is already taken. Try another one."
 
@@ -38,7 +38,7 @@ nonisolated enum ProfileOnboardingErrorMapping {
         return nil
     }
 
-    /// Connectivity-only failures — not invalid credentials or onboarding validation errors.
+    /// Connectivity-only failures, not invalid credentials or onboarding validation errors.
     static func isTransientConnectivityFailure(_ error: Error) -> Bool {
         if let network = resolveNetworkError(error) {
             switch network {

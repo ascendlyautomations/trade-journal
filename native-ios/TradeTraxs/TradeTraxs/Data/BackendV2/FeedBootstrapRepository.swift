@@ -1,6 +1,6 @@
 import Foundation
 
-/// Feed V2 bootstrap — `rpc_v1_feed_bootstrap`.
+/// Feed V2 bootstrap, `rpc_v1_feed_bootstrap`.
 nonisolated struct FeedRpcBootstrapRepository: FeedBootstrapProviding {
     private let client: BackendV2RPCClient
 
@@ -65,7 +65,7 @@ enum FeedBootstrapLoader {
     enum LoaderError: Error, Sendable {
         case flagOff
         case rpcUnavailable
-        /// Filter reload cache-only pass — no session snapshot for this filter yet.
+        /// Filter reload cache-only pass, no session snapshot for this filter yet.
         case cacheMissSkipped
     }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Snapshot of Feed bootstrap / screen state — single source of truth for the Feed tab.
+/// Snapshot of Feed bootstrap / screen state, single source of truth for the Feed tab.
 ///
 /// ``FeedScreenViewModel`` owns mutation. Child views render this state and may request
 /// pagination / refresh through the screen owner only.
@@ -14,7 +14,7 @@ struct FeedState: Equatable {
 
     var phase: Phase = .idle
     var entries: [FeedTimelineEntry] = []
-    /// Precomputed visible rows — avoids O(n) filtering during SwiftUI body evaluation.
+    /// Precomputed visible rows, avoids O(n) filtering during SwiftUI body evaluation.
     var cachedVisibleEntries: [FeedTimelineEntry] = []
     var cachedVisibleEntryIDs: [String] = []
     var stories: [Story] = []
@@ -28,7 +28,7 @@ struct FeedState: Equatable {
     var isLoadingMore = false
     var didBootstrap = false
     var lastUpdated: Date?
-    /// True while a scope/filter reload is in flight — suppress false empty states.
+    /// True while a scope/filter reload is in flight, suppress false empty states.
     var isQueryReloadInProgress = false
     /// Filter cache keys confirmed empty by an authoritative first-page load this session.
     var knownEmptyFilterKeys: Set<String> = []

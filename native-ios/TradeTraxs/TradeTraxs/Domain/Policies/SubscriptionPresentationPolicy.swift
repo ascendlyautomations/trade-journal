@@ -1,6 +1,6 @@
 import Foundation
 
-/// User-facing subscription copy derived from unified entitlement — no external checkout URLs.
+/// User-facing subscription copy derived from unified entitlement, no external checkout URLs.
 nonisolated enum SubscriptionPresentationPolicy {
     static func activeSummary(for status: BillingStatus) -> String {
         switch status.entitlementSource {
@@ -95,7 +95,7 @@ nonisolated enum SubscriptionPresentationPolicy {
         return status?.entitlementSource == .apple && status?.hasTraxProAccess == true
     }
 
-    /// Billing interval label for the current plan card (product ID / server interval — not price).
+    /// Billing interval label for the current plan card (product ID / server interval, not price).
     static func planBillingIntervalLabel(for status: BillingStatus) -> String? {
         if let interval = status.billingInterval {
             return billingIntervalDisplay(interval)

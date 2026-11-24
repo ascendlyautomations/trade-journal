@@ -19,6 +19,12 @@ final class ManageAccountsViewModel {
     var viewerProfileID: ProfileID? { viewerID }
     private(set) var isLoadingPayouts = false
     private(set) var payoutError: String?
+    private(set) var isSavingAccountDisplay = false
+
+    /// Last persisted `show_in_account_dropdowns` per account (Manage Accounts batch save).
+    private var savedShowInAccountDropdowns: [TradingAccountID: Bool] = [:]
+    /// Draft visibility toggles; committed via ``saveAccountDisplayPreferences()``.
+    private var draftShowInAccountDropdowns: [TradingAccountID: Bool] = [:]
 
     var propFirmFilter: ManageAccountsFiltering.PropFirmFilter = .all
     var modeFilter: ManageAccountsFiltering.ModeFilter = .all
@@ -57,6 +63,10 @@ final class ManageAccountsViewModel {
 
     var showsFilteredEmptyState: Bool {
         !accounts.isEmpty && filteredAccounts.isEmpty && hasActiveFilters
+    }
+
+    var hasUnsavedAccountDisplayChanges: Bool {
+        accountDisplayDraftDeltaIDs().isEmpty == false
     }
 
     func setPropFirmFilter(_ filter: ManageAccountsFiltering.PropFirmFilter) {
@@ -144,6 +154,11 @@ final class ManageAccountsViewModel {
                 requiresFullOwnerSnapshot: requiresFullOwnerSnapshot
             )
             accounts = Self.sorted(loaded)
+            if hasUnsavedAccountDisplayChanges {
+                reconcileAccountDisplayDraft(with: accounts)
+            } else {
+                syncAccountDisplayDraftFromAccounts()
+            }
             errorMessage = nil
         } catch {
             errorMessage = UserFacingError.message(for: error)
@@ -203,6 +218,7 @@ final class ManageAccountsViewModel {
             }
             let created = try await trades.createAccount(ownerID: viewerID, draft: draft)
             accounts = Self.sorted(accounts + [created])
+            noteAccountDisplayDraft(for: created)
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
             AccountMutationStore.shared.noteAccountCreated(created, allAccounts: accounts)
             ExperienceHaptics.play(.success)
@@ -252,28 +268,70 @@ final class ManageAccountsViewModel {
         }
     }
 
-    func setShowInAccountDropdowns(id: TradingAccountID, show: Bool) async {
-        guard let account = accounts.first(where: { $0.id == id }),
-              account.showInAccountDropdowns != show
-        else { return }
+    func setDraftShowInAccountDropdowns(id: TradingAccountID, show: Bool) {
+        guard accounts.contains(where: { $0.id == id }) else { return }
+        let persisted = savedShowInAccountDropdowns[id]
+            ?? accounts.first(where: { $0.id == id })?.showInAccountDropdowns
+            ?? true
+        if show == persisted {
+            draftShowInAccountDropdowns.removeValue(forKey: id)
+        } else {
+            draftShowInAccountDropdowns[id] = show
+        }
+        ExperienceHaptics.play(.selection)
+    }
 
-        _ = await mutate {
+    func discardAccountDisplayDraft() {
+        draftShowInAccountDropdowns.removeAll()
+    }
+
+    func saveAccountDisplayPreferences() async -> Bool {
+        let changedIDs = accountDisplayDraftDeltaIDs()
+        guard !changedIDs.isEmpty else { return true }
+        guard !isSavingAccountDisplay else { return false }
+
+        isSavingAccountDisplay = true
+        formError = nil
+        defer { isSavingAccountDisplay = false }
+
+        do {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
-            let updated = try await trades.updateAccountInsightsSettings(
-                id: id,
-                ownerID: viewerID,
-                showInAccountDropdowns: show,
-                customPublicStatus: account.customPublicStatus
-            )
-            accounts = Self.sorted(accounts.map { $0.id == id ? updated : $0 })
-            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
-            AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
-            ExperienceHaptics.play(.selection)
+            var updatedAccounts = accounts
+            for id in changedIDs {
+                guard let account = accounts.first(where: { $0.id == id }) else { continue }
+                let show = draftShowInAccountDropdowns[id] ?? account.showInAccountDropdowns
+                let updated = try await trades.updateAccountInsightsSettings(
+                    id: id,
+                    ownerID: viewerID,
+                    showInAccountDropdowns: show,
+                    customPublicStatus: account.customPublicStatus
+                )
+                updatedAccounts = updatedAccounts.map { $0.id == id ? updated : $0 }
+            }
+            accounts = Self.sorted(updatedAccounts)
+            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache, kind: .rest)
+            AccountMutationStore.shared.noteAccountsChanged(allAccounts: accounts, viewerID: viewerID)
+            syncAccountDisplayDraftFromAccounts()
+            ExperienceHaptics.play(.success)
+            return true
+        } catch {
+            if ProLimitPresentation.presentUpgradeIfProLimit(error) {
+                return false
+            }
+            if let app = error as? AppError, case .unknown(let message) = app {
+                formError = message
+            } else {
+                formError = UserFacingError.message(for: error)
+            }
+            return false
         }
     }
 
     func showInAccountDropdowns(for accountID: TradingAccountID) -> Bool {
-        accounts.first(where: { $0.id == accountID })?.showInAccountDropdowns ?? true
+        if let draft = draftShowInAccountDropdowns[accountID] {
+            return draft
+        }
+        return accounts.first(where: { $0.id == accountID })?.showInAccountDropdowns ?? true
     }
 
     func payoutEntries(for accountID: TradingAccountID) -> [AccountPayoutEntry] {
@@ -355,7 +413,11 @@ final class ManageAccountsViewModel {
                 customPublicStatus: trimmedStatus.isEmpty ? nil : trimmedStatus
             )
             accounts = Self.sorted(accounts.map { $0.id == accountID ? updated : $0 })
-            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
+            noteAccountDisplayDraft(for: updated)
+            if draftShowInAccountDropdowns[accountID] == updated.showInAccountDropdowns {
+                draftShowInAccountDropdowns.removeValue(forKey: accountID)
+            }
+            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache, kind: .rest)
             AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
             ExperienceHaptics.play(.success)
         }
@@ -383,7 +445,7 @@ final class ManageAccountsViewModel {
     }
 
     /// Updates the existing ledger row. Amount changes flow through the same sum used for
-    /// tracked balance — this does not insert a second withdrawal.
+    /// tracked balance, this does not insert a second withdrawal.
     func updatePayout(
         entryID: AccountPayoutEntryID,
         accountID: TradingAccountID,
@@ -540,6 +602,37 @@ final class ManageAccountsViewModel {
     }
 
     // MARK: - Private
+
+    private func accountDisplayDraftDeltaIDs() -> [TradingAccountID] {
+        accounts.compactMap { account in
+            let saved = savedShowInAccountDropdowns[account.id] ?? account.showInAccountDropdowns
+            let draft = draftShowInAccountDropdowns[account.id] ?? saved
+            return saved == draft ? nil : account.id
+        }
+    }
+
+    private func syncAccountDisplayDraftFromAccounts() {
+        savedShowInAccountDropdowns = Dictionary(
+            uniqueKeysWithValues: accounts.map { ($0.id, $0.showInAccountDropdowns) }
+        )
+        draftShowInAccountDropdowns.removeAll()
+    }
+
+    private func noteAccountDisplayDraft(for account: TradingAccount) {
+        savedShowInAccountDropdowns[account.id] = account.showInAccountDropdowns
+        if draftShowInAccountDropdowns[account.id] == account.showInAccountDropdowns {
+            draftShowInAccountDropdowns.removeValue(forKey: account.id)
+        }
+    }
+
+    private func reconcileAccountDisplayDraft(with loaded: [TradingAccount]) {
+        for account in loaded where draftShowInAccountDropdowns[account.id] == nil {
+            savedShowInAccountDropdowns[account.id] = account.showInAccountDropdowns
+        }
+        let loadedIDs = Set(loaded.map(\.id))
+        draftShowInAccountDropdowns = draftShowInAccountDropdowns.filter { loadedIDs.contains($0.key) }
+        savedShowInAccountDropdowns = savedShowInAccountDropdowns.filter { loadedIDs.contains($0.key) }
+    }
 
     private func mutate(_ work: () async throws -> Void) async -> Bool {
         guard !isSaving else { return false }

@@ -4,7 +4,7 @@ import Foundation
 enum DailyCheckInReminderPreferences {
     private static let enabledKey = "tt.ios.dailyCheckInReminder.enabled"
 
-    /// Defaults to `true` when unset — opt-out per device.
+    /// Defaults to `true` when unset, opt-out per device.
     static var isEnabled: Bool {
         get {
             if UserDefaults.standard.object(forKey: enabledKey) == nil {

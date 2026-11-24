@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared optimistic reaction toggle — Trade Rooms + DMs.
+/// Shared optimistic reaction toggle, Trade Rooms + DMs.
 @MainActor
 enum MessageReactionToggleCoordinator {
     static func toggle(

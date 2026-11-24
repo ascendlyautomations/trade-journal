@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped trade entity cache — batch-fetch missing TradeIDs (Feed hydration).
+/// Session-scoped trade entity cache, batch-fetch missing TradeIDs (Feed hydration).
 @Observable
 @MainActor
 final class SessionTradeEntityStore {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single owner trade deletion path — Trade Detail, journal cards, profile cards.
+/// Single owner trade deletion path, Trade Detail, journal cards, profile cards.
 @MainActor
 enum OwnerTradeDeletionService {
     static func deleteOwnedTrade(

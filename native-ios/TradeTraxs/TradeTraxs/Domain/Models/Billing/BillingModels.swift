@@ -35,7 +35,7 @@ nonisolated struct BillingStatus: Hashable, Codable, Sendable {
     var profileID: ProfileID
     var plan: SubscriptionPlan
     var lifecycle: SubscriptionLifecycle
-    /// Legacy Stripe-only flag — prefer ``hasTraxProAccess`` / ``entitlementSource``.
+    /// Legacy Stripe-only flag, prefer ``hasTraxProAccess`` / ``entitlementSource``.
     var isProEntitled: Bool
     var dailyTradeLimit: Int?
     var dailyPostLimit: Int?

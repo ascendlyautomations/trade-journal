@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Nested reply thread under a top-level comment — mirrors web `CommentReplyThread`.
+/// Nested reply thread under a top-level comment, mirrors web `CommentReplyThread`.
 struct CommentReplyThreadView: View {
     @Bindable var viewModel: CommentsViewModel
     let rootComment: InteractionComment

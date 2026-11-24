@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Create → Withdrawal — Live manual ledger or Funded prop-firm record flow.
+/// Create → Withdrawal, Live manual ledger or Funded prop-firm record flow.
 struct WithdrawalFlowView: View {
     let data: DataEnvironment
     let navigationCoordinator: NavigationCoordinator

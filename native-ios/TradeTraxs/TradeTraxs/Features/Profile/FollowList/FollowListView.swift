@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Production Followers / Following list — Instagram-style, TradeTraxs Experience chrome.
+/// Production Followers / Following list, Instagram-style, TradeTraxs Experience chrome.
 struct FollowListView: View {
     @State private var viewModel: FollowListViewModel
     private let imagePipeline: any ImagePipeline

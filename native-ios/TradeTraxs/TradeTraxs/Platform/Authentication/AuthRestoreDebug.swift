@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only cold-launch restore timing — never logs tokens or credentials.
+/// DEBUG-only cold-launch restore timing, never logs tokens or credentials.
 nonisolated enum AuthRestoreDebug {
     private static let logger = Logger(
         subsystem: AppLog.subsystem,

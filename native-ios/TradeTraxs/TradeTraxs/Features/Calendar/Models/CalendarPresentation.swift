@@ -24,7 +24,7 @@ nonisolated enum CalendarPresentation {
     }
 }
 
-/// Dynamic Y domain for Calendar year monthly P&L bars — tight padding with readable ticks.
+/// Dynamic Y domain for Calendar year monthly P&L bars, tight padding with readable ticks.
 nonisolated enum CalendarMonthlyPnLYAxisScale {
     struct Result: Equatable, Sendable {
         var lowerBound: Double
@@ -216,7 +216,7 @@ nonisolated enum CalendarMonthlyPnLYAxisScale {
         return (value / step).rounded() * step
     }
 
-    /// Guards against non-finite bounds or empty ticks before `chartYScale(domain:)` — Swift Charts traps on invalid domains.
+    /// Guards against non-finite bounds or empty ticks before `chartYScale(domain:)`, Swift Charts traps on invalid domains.
     private static func sanitizeAxisResult(
         lowerBound: Double,
         upperBound: Double,

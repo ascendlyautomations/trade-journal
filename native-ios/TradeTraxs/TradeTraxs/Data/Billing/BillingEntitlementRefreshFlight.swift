@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single-flight foreground entitlement refresh — avoids duplicate billing RPCs.
+/// Single-flight foreground entitlement refresh, avoids duplicate billing RPCs.
 actor BillingEntitlementRefreshFlight {
     static let shared = BillingEntitlementRefreshFlight()
 

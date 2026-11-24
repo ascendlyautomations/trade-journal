@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// DEBUG-only cold-start and post-hydration shadow reads (utility priority — never blocks UI).
+/// DEBUG-only cold-start and post-hydration shadow reads (utility priority, never blocks UI).
 enum AnalyticsShadowReadCoordinator {
     private static var coldStartProbeRanForViewer: Set<String> = []
     private static let lock = NSLock()

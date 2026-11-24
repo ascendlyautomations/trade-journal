@@ -1,6 +1,6 @@
 import Foundation
 
-/// Posting rules for internal share → Trade Room — mirrors ``RoomConversationViewModel/canPostInSelectedChannel``.
+/// Posting rules for internal share → Trade Room, mirrors ``RoomConversationViewModel/canPostInSelectedChannel``.
 enum SharedContentShareRoomChannelSupport {
     static func isRoomOwner(room: TradeRoom, viewerID: ProfileID) -> Bool {
         room.ownerProfileID == viewerID

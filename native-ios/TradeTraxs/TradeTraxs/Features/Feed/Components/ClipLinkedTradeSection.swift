@@ -9,7 +9,7 @@ struct ClipLinkedTradeSection: View {
 
     let trade: Trade
     var style: Style = .clipsOverlay
-    /// Clip caption shown above this section — suppress duplicate trade description when identical.
+    /// Clip caption shown above this section, suppress duplicate trade description when identical.
     var displayedClipCaption: String? = nil
     let onOpen: () -> Void
 

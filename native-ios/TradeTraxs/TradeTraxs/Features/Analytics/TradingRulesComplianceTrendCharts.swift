@@ -146,7 +146,7 @@ struct TradingRulesComplianceTrendCharts: View {
                                 Text(
                                     point.insufficientData
                                         ? "Insufficient data"
-                                        : point.adherencePercent.map { String(format: "%.1f%%", $0) } ?? "—"
+                                        : point.adherencePercent.map { String(format: "%.1f%%", $0) } ?? "–"
                                 )
                                 .experienceStyle(.caption2, color: colors.primaryText)
                                 .monospacedDigit()

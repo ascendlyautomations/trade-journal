@@ -46,18 +46,18 @@ nonisolated enum SocialEntityRealtimeMutation: Sendable {
     case delete
 }
 
-/// Canonical internal entity Realtime signal — parsed from postgres_changes payloads.
+/// Canonical internal entity Realtime signal, parsed from postgres_changes payloads.
 nonisolated struct SocialEntityRealtimeEvent: Sendable, Hashable {
     var table: SocialEntityRealtimeTable
     var mutation: SocialEntityRealtimeMutation
     var entityID: String
     var authorID: String?
-    /// Like row id — duplicate delivery dedupe.
+    /// Like row id, duplicate delivery dedupe.
     var eventRowID: String?
     var payload: SocialEntityRealtimePayload
 }
 
-/// Narrow summary seed from Realtime row — not authoritative detail.
+/// Narrow summary seed from Realtime row, not authoritative detail.
 nonisolated struct SocialEntityRealtimePayload: Sendable, Hashable {
     var caption: String?
     var mediaURL: String?

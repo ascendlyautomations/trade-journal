@@ -4,18 +4,6 @@ import SwiftUI
 struct TradingRulesPremiumLockedSection: View {
     @Environment(\.themeColors) private var colors
 
-    private var showsInteractivePreview: Bool {
-        TraxsProPreviewCoordinator.shared.canPresentPreview
-    }
-
-    private var canPresentPaywall: Bool {
-        ProMonetizationPolicy.canPresentProPaywall(
-            demoModeActive: ExploreModeSupport.isActive,
-            enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
-            paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
-        )
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             header
@@ -67,45 +55,20 @@ struct TradingRulesPremiumLockedSection: View {
                     }
                 }
             }
-            .background(colors.fillSecondary.opacity(0.18), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+            .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
         }
         }
     }
 
     @ViewBuilder
     private var actionButtons: some View {
-        VStack(spacing: ExperienceSpacing.sm) {
-            if showsInteractivePreview {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    TraxsProPreviewCoordinator.shared.presentTradingRulesPreview(entryPoint: .tradingRulesGate)
-                } label: {
-                    Text(MonetizationPlanCopy.previewTraxsProRulesButtonTitle)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .accessibilityIdentifier("settings.tradingRules.preview")
-            }
-
-            if canPresentPaywall {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    ProUpgradeCoordinator.shared.present(
-                        reason: .feature(.premiumAnalytics),
-                        previewFeature: .tradingRules
-                    )
-                } label: {
-                    Text(MonetizationPlanCopy.exploreTraxsProButtonTitle)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .accessibilityIdentifier("settings.tradingRules.exploreTraxsPro")
-            }
-        }
+        MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
+            feature: .premiumAnalytics,
+            previewFeature: .tradingRules,
+            previewEntryPoint: .tradingRulesGate,
+            previewAccessibilityIdentifier: "settings.tradingRules.preview",
+            unlockAccessibilityIdentifier: "settings.tradingRules.exploreTraxsPro"
+        )
         .padding(.top, ExperienceSpacing.xxs)
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Production content-like tables — mirrors ``DefaultInteractionRepository`` routing.
+/// Production content-like tables, mirrors ``DefaultInteractionRepository`` routing.
 nonisolated enum ContentLikeTable: String, Sendable, CaseIterable {
     case reelLikes = "reel_likes"
     case tradeLikes = "trade_likes"
@@ -64,7 +64,7 @@ nonisolated enum ContentLikeSemantics {
         return "\(table.rawValue)-\(idsKey.prefix(48))"
     }
 
-    /// Web parity — same echo / idempotent rules as ``CommentLikeSemantics.applyRealtimeEvent``.
+    /// Web parity, same echo / idempotent rules as ``CommentLikeSemantics.applyRealtimeEvent``.
     static func applyRealtimeEvent(
         _ previous: EngagementSnapshot,
         event: RealtimeMutationKind,
@@ -104,6 +104,6 @@ nonisolated struct ContentLikeRealtimeSignal: Sendable {
     var contentID: String
     var userID: String
     var kind: ContentLikeSemantics.RealtimeMutationKind
-    /// Like row `id` — duplicate Realtime delivery dedupe.
+    /// Like row `id`, duplicate Realtime delivery dedupe.
     var rowID: String?
 }

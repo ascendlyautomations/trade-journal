@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// Temporary leaderboard hydration counters — never log user IDs or avatar URLs.
+/// Temporary leaderboard hydration counters, never log user IDs or avatar URLs.
 nonisolated enum LeaderboardHydrationDiagnostics {
     static func log(
         filter: String,

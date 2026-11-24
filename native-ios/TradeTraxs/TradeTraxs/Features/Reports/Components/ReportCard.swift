@@ -54,11 +54,7 @@ struct ReportCard: View {
             trailingLabel(showAsButton: showTrailingAsButton, action: trailingAction)
         }
         .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        }
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .accessibilityElement(children: .combine)
     }
 

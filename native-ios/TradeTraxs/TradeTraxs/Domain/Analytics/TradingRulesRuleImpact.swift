@@ -1,6 +1,6 @@
 import Foundation
 
-/// Financial impact aggregates — derived from compliance checks + scoped trades (not a second engine).
+/// Financial impact aggregates, derived from compliance checks + scoped trades (not a second engine).
 nonisolated enum TradingRulesRuleImpact {
     /// Cap retained trade samples per impact side (UI previews resolve details by trade ID).
     static let maxTradeSamplesPerSide = 24
@@ -22,7 +22,7 @@ nonisolated enum TradingRulesRuleImpact {
         var winRateDeltaPoints: Double
     }
 
-  /// Net P&L for impact metrics — `realizedPnL` when present (dashboard parity). Fees are not on `Trade` yet.
+  /// Net P&L for impact metrics, `realizedPnL` when present (dashboard parity). Fees are not on `Trade` yet.
     static func netPnl(for trade: Trade) -> Double? {
         guard let realized = trade.realizedPnL else { return nil }
         return NSDecimalNumber(decimal: realized.amount).doubleValue
@@ -154,7 +154,7 @@ nonisolated enum TradingRulesRuleImpact {
                 avgPnlDelta = round((af - av) * 100) / 100
                 winRateDeltaPoints = round((wf - wv) * 1000) / 10
                 summary =
-                    "When \(rule.label.lowercased()) was followed, win rate \(Int(wf * 100))% with avg realized P&L \(formatMoney(af)) (\(followed.priced) priced). When violated, win rate \(Int(wv * 100))% with avg realized P&L \(formatMoney(av)) (\(violated.priced) priced). Correlation only — not proof of causation."
+                    "When \(rule.label.lowercased()) was followed, win rate \(Int(wf * 100))% with avg realized P&L \(formatMoney(af)) (\(followed.priced) priced). When violated, win rate \(Int(wv * 100))% with avg realized P&L \(formatMoney(av)) (\(violated.priced) priced). Correlation only, not proof of causation."
             }
 
             rows.append(

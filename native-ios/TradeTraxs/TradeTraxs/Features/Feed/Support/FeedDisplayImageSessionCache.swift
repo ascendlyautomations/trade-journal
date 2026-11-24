@@ -1,6 +1,6 @@
 import UIKit
 
-/// Process-lifetime decoded images for Feed rows — survives ``LazyVStack`` teardown when scrolling back upward.
+/// Process-lifetime decoded images for Feed rows, survives ``LazyVStack`` teardown when scrolling back upward.
 @MainActor
 enum FeedDisplayImageSessionCache {
     private static var images: [String: UIImage] = [:]

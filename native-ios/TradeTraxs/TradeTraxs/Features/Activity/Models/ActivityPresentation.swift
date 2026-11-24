@@ -7,7 +7,7 @@ enum ActivityLoadPhase: Equatable {
     case failed(String)
 }
 
-/// Chronological inbox sections — newest sections first; each notification belongs to exactly one bucket.
+/// Chronological inbox sections, newest sections first; each notification belongs to exactly one bucket.
 enum ActivityTimeSection: String, CaseIterable, Identifiable, Hashable {
     case today = "Today"
     case yesterday = "Yesterday"
@@ -19,7 +19,7 @@ enum ActivityTimeSection: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    /// Display order — newest window first.
+    /// Display order, newest window first.
     static let displayOrder: [ActivityTimeSection] = [
         .today, .yesterday, .thisWeek, .lastWeek, .thisMonth, .lastMonth, .older,
     ]

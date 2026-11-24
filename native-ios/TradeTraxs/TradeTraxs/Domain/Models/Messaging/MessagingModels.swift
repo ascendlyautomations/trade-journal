@@ -15,7 +15,7 @@ nonisolated enum MessageKind: String, Hashable, Codable, Sendable {
     case system
 }
 
-/// Domain conversation — mirrors web inbox row fields (`DmConversationRow` + unread/mute).
+/// Domain conversation, mirrors web inbox row fields (`DmConversationRow` + unread/mute).
 nonisolated struct Conversation: Hashable, Codable, Sendable, Identifiable {
     var id: ConversationID
     var participantProfileIDs: [ProfileID]
@@ -39,7 +39,7 @@ nonisolated struct MessageAttachment: Hashable, Codable, Sendable, Identifiable 
     var id: String
     var media: MediaReference
     var tradeID: TradeID?
-    /// Voice message duration in seconds — persisted server-side as `audio_duration_ms`.
+    /// Voice message duration in seconds, persisted server-side as `audio_duration_ms`.
     var durationSeconds: Double? = nil
 }
 

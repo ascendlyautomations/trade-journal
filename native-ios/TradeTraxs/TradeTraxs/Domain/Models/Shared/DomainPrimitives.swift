@@ -1,6 +1,6 @@
 import Foundation
 
-/// Currency amount using decimal precision — never Double for money.
+/// Currency amount using decimal precision, never Double for money.
 nonisolated struct Money: Hashable, Codable, Sendable, Comparable {
     var amount: Decimal
     var currencyCode: String
@@ -20,7 +20,7 @@ nonisolated struct DateIntervalValue: Hashable, Codable, Sendable {
     var end: Date
 }
 
-/// Keyset / cursor page — unbounded list downloads are forbidden by architecture.
+/// Keyset / cursor page, unbounded list downloads are forbidden by architecture.
 nonisolated struct CursorPage<Element: Sendable>: Sendable {
     var items: [Element]
     var nextCursor: String?
@@ -50,7 +50,7 @@ nonisolated enum MediaKind: String, Hashable, Codable, Sendable {
     case file
 }
 
-/// Opaque media reference — not a URLSession concern; Data maps storage keys later.
+/// Opaque media reference, not a URLSession concern; Data maps storage keys later.
 nonisolated struct MediaReference: Hashable, Codable, Sendable {
     var id: String
     var kind: MediaKind

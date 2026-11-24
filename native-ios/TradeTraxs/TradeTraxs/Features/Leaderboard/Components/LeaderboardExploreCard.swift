@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact Explore entry into Leaderboards — navigation row, not a hero card.
+/// Compact Explore entry into Leaderboards, navigation row, not a hero card.
 struct LeaderboardExploreCard: View {
     let onOpen: () -> Void
 

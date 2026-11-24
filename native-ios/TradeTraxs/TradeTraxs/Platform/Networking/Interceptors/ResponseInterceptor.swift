@@ -25,7 +25,7 @@ nonisolated struct PassthroughResponseInterceptor: ResponseInterceptor {
     }
 }
 
-/// Logs response status via AppLog — never logs bodies/tokens.
+/// Logs response status via AppLog, never logs bodies/tokens.
 nonisolated struct LoggingResponseInterceptor: ResponseInterceptor {
     func intercept(_ response: HTTPResponse, for request: HTTPRequest) async throws -> HTTPResponse {
         AppLog.networking.info(

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Category chips for Suggested Traders — maps to `profiles.trader_type`.
+/// Category chips for Suggested Traders, maps to `profiles.trader_type`.
 nonisolated enum SuggestedTraderCategoryTab: String, CaseIterable, Identifiable, Hashable, Sendable {
     case all
     case futures
@@ -68,7 +68,7 @@ nonisolated struct ExploreDiscoverableProfileFilter: Sendable, Hashable {
         return true
     }
 
-    /// Only `trading_style` and `trading_model` — never bio or trade history.
+    /// Only `trading_style` and `trading_model`, never bio or trade history.
     static func profileMatchesStrategyQuery(_ profile: Profile, query: String) -> Bool {
         let needle = query.lowercased()
         let fields = [profile.tradingStyle, profile.tradingModel]

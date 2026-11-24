@@ -82,7 +82,7 @@ nonisolated final class SupabaseOAuthBrowser: NSObject, ASWebAuthenticationPrese
                             )
                         } else {
                             AppLog.authentication.error(
-                                "OAuth: ASWebAuthenticationSession failed — \(error.localizedDescription, privacy: .public)"
+                                "OAuth: ASWebAuthenticationSession failed, \(error.localizedDescription, privacy: .public)"
                             )
                             _ = bridge.finishOnce(
                                 with: .failure(AuthenticationError.providerUnavailable(.google)),
@@ -143,7 +143,7 @@ nonisolated final class SupabaseOAuthBrowser: NSObject, ASWebAuthenticationPrese
 
         if let errorDescription = values["error_description"] ?? values["error"] {
             AppLog.authentication.error(
-                "OAuth: provider error — \(errorDescription, privacy: .public)"
+                "OAuth: provider error, \(errorDescription, privacy: .public)"
             )
             throw AuthenticationError.providerUnavailable(provider)
         }

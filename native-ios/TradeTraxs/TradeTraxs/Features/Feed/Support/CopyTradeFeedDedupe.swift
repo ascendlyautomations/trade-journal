@@ -1,6 +1,6 @@
 import Foundation
 
-/// Wire linkage for one feed trade post — mirrors web `CopyTradeWireRow`.
+/// Wire linkage for one feed trade post, mirrors web `CopyTradeWireRow`.
 nonisolated struct CopyTradeFeedLinkage: Equatable, Sendable {
     var postID: String
     var userID: String
@@ -14,7 +14,7 @@ nonisolated struct CopyTradeFeedLinkage: Equatable, Sendable {
     var participatingAccountModesByID: [TradingAccountID: TradingAccountMode] = [:]
 }
 
-/// Read-time feed dedupe for copy-trade posts — presentation only.
+/// Read-time feed dedupe for copy-trade posts, presentation only.
 nonisolated enum CopyTradeFeedDedupe {
     struct Plan: Sendable, Equatable {
         var visiblePostIDs: Set<String>

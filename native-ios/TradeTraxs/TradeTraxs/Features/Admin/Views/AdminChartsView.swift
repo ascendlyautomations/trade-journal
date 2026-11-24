@@ -225,17 +225,17 @@ struct AdminChartsView: View {
     }
 
     private func metricLabel(_ value: Int?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.integer(value)
     }
 
     private func ratioLabel(_ value: Double?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.decimal(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
     private func percentLabel(_ value: Double?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.decimal(value, minimumFractionDigits: 1, maximumFractionDigits: 1) + "%"
     }
 
@@ -252,7 +252,7 @@ struct AdminChartsView: View {
                 .experienceStyle(.headline, color: colors.primaryText)
             ForEach(product.topFeatures, id: \.feature) { row in
                 HStack {
-                    Text(row.feature.isEmpty ? "—" : row.feature)
+                    Text(row.feature.isEmpty ? "–" : row.feature)
                         .experienceStyle(.subheadline, color: colors.primaryText)
                     Spacer()
                     Text("Uses \(NumberDisplay.integer(row.useCount))")

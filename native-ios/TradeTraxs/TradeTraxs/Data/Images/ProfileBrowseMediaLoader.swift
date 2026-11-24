@@ -1,6 +1,6 @@
 import UIKit
 
-/// Shared Profile list/grid media fetch — memory cache first, then pipeline tiers, then network.
+/// Shared Profile list/grid media fetch, memory cache first, then pipeline tiers, then network.
 nonisolated enum ProfileBrowseMediaLoader {
     static func gridPixelBudget(displayScale: CGFloat) -> Int {
         max(256, Int(180 * displayScale))

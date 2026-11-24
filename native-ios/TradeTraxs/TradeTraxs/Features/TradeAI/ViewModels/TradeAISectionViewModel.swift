@@ -53,7 +53,7 @@ final class TradeAISectionViewModel {
                 messages = history.sorted { $0.createdAt < $1.createdAt }
             }
         } catch {
-            // Soft-fail history — analysis still works offline from empty state.
+            // Soft-fail history, analysis still works offline from empty state.
             guard !Task.isCancelled else { return }
         }
     }
@@ -67,7 +67,7 @@ final class TradeAISectionViewModel {
         )
     }
 
-    /// Primary Analyze action — custom question when filled, otherwise selected preset.
+    /// Primary Analyze action, custom question when filled, otherwise selected preset.
     func analyzeTapped() async {
         let custom = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         if !custom.isEmpty {
@@ -198,9 +198,9 @@ final class TradeAISectionViewModel {
         let focus: String
         switch promptKey {
         case "mistakes":
-            focus = "Exit timing drifted from the plan — that was the costly mistake."
+            focus = "Exit timing drifted from the plan, that was the costly mistake."
         case "execution":
-            focus = "Execution 6/10 — entry was fine; management and exit were soft."
+            focus = "Execution 6/10, entry was fine; management and exit were soft."
         case "risk":
             focus = "Risk was acceptable on paper, but size didn't match the weak RR."
         case "emotional":
@@ -220,7 +220,7 @@ final class TradeAISectionViewModel {
 
         ## Key Improvements
         - Define exit rules before entry and write them in the journal.
-        - Size only after RR is clear — not the other way around.
+        - Size only after RR is clear, not the other way around.
         - Review one similar winner before the next session.
 
         ## Next Trade Focus

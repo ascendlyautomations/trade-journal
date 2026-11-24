@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// Deterministic psychology report builder — reuses Phase 4 analytics engine.
+/// Deterministic psychology report builder, reuses Phase 4 analytics engine.
 nonisolated enum PsychologyReportGenerator {
     static func generateAll(
         trades: [Trade],
@@ -457,7 +457,7 @@ nonisolated enum PsychologyReportGenerator {
         metrics.append(
             PsychologyReportMetricRow(
                 label: "Profit Factor",
-                value: baseline.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
+                value: baseline.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "–"
             )
         )
         return PsychologyReportSection(

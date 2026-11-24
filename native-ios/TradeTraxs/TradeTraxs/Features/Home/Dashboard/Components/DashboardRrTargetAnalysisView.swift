@@ -34,12 +34,12 @@ private enum RrTargetDashboardCopy {
                     ? "Early read · "
                     : ""
                 return finish(
-                    "\(prefix)Extension averages ~\(maxLabel) vs ~\(targetLabel) targets, consider planning ~\(trailLabel), partials, or a trail near where price typically peaks."
+                    "\(prefix)Extension averages ~\(maxLabel) vs ~\(targetLabel) targets. Consider planning ~\(trailLabel), partials, or a trail near where price typically peaks."
                 )
             }
             if ratio >= 1.0 {
                 return finish(
-                    "Extension often meets or beats targets, check whether exits capture that run or targets could be modestly higher."
+                    "Extension often meets or beats targets. Check whether exits capture that run or targets could be modestly higher."
                 )
             }
         }
@@ -93,7 +93,7 @@ private enum RrTargetDashboardCopy {
     }
 
     private static func formatR(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.ratio(value, fractionDigits: 1)
     }
 
@@ -107,6 +107,7 @@ struct DashboardRrTargetAnalysisView: View {
     let analysis: DashboardRrTargetAnalysis
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Group {
@@ -127,7 +128,7 @@ struct DashboardRrTargetAnalysisView: View {
             HStack(spacing: ExperienceSpacing.md) {
                 ZStack {
                     Circle()
-                        .fill(colors.fillSecondary)
+                        .fill(neutralChartChrome)
                         .frame(width: 44, height: 44)
                     Image(systemName: "scope")
                         .font(.system(size: 18, weight: .semibold))
@@ -266,7 +267,7 @@ struct DashboardRrTargetAnalysisView: View {
         return VStack(spacing: 4) {
             ZStack {
                 Circle()
-                    .stroke(colors.fillSecondary, lineWidth: 6)
+                    .stroke(neutralChartChrome, lineWidth: 6)
                 Circle()
                     .trim(from: 0, to: ringFill)
                     .stroke(colors.accent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
@@ -287,14 +288,13 @@ struct DashboardRrTargetAnalysisView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(colors.accent)
                 .padding(.top, 2)
-            Text(text)
-                .experienceStyle(.caption, color: colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
+            DashboardExpandableInsightText(
+                text: text,
+                accessibilityIdentifier: "dashboard.rrTargeting.recommendation"
+            )
         }
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
-        .accessibilityIdentifier("dashboard.rrTargeting.recommendation")
     }
 
     private func sampleChip(_ label: String, met: Bool) -> some View {
@@ -307,7 +307,13 @@ struct DashboardRrTargetAnalysisView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(colors.fillSecondary.opacity(0.55), in: Capsule())
+        .background(neutralChartChrome.opacity(colorScheme == .light ? 1 : 0.55), in: Capsule())
+    }
+
+    private var neutralChartChrome: Color {
+        colorScheme == .light
+            ? colors.border.opacity(0.14)
+            : colors.fillSecondary
     }
 
     private func decimalDouble(_ value: Decimal?) -> Double {

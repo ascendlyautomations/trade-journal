@@ -95,7 +95,7 @@ final class CSVImportViewModel {
     }
 
     func openManageAccounts() {
-        // Profile Settings stack — preserve import cover until user returns via Create.
+        // Profile Settings stack, preserve import cover until user returns via Create.
         NavigationCoordinatorProxy.openManageAccounts?()
     }
 
@@ -284,7 +284,7 @@ final class CSVImportViewModel {
     }
 
     #if DEBUG
-    /// Screenshot / UI-preview hook — seeds a parsed summary into preview phase.
+    /// Screenshot / UI-preview hook, seeds a parsed summary into preview phase.
     func applySummaryForScreenshot(_ summary: CSVParseSummary) {
         self.summary = summary
         if accounts.isEmpty {
@@ -297,7 +297,7 @@ final class CSVImportViewModel {
         phase = .preview
     }
 
-    /// Screenshot / UI-preview hook — seeds column mappings into mapping phase.
+    /// Screenshot / UI-preview hook, seeds column mappings into mapping phase.
     func applyMappingsForScreenshot(_ mappings: [CSVColumnMapping]) {
         columnMappings = mappings
         phase = .mapping

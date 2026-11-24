@@ -34,10 +34,9 @@ struct DashboardPreviewContainerView: View {
             )
             .environment(\.tabIsActive, true)
             .safeAreaInset(edge: .top, spacing: 0) {
-                TraxsProPreviewSampleDataBanner(
+                TraxsProSampleDataHeader(
                     unlockFeature: .premiumAnalytics,
                     subtitle: MonetizationPlanCopy.dashboardPreviewSampleDataSubtitle,
-                    style: .compact,
                     onExit: exitPreview,
                     onUnlock: {
                         ExperienceHaptics.play(.selection)

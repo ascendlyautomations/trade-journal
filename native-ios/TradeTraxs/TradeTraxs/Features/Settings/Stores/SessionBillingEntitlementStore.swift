@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Last-known TraxsPro entitlement for the signed-in user — refreshed on foreground + Settings.
+/// Last-known TraxsPro entitlement for the signed-in user, refreshed on foreground + Settings.
 @Observable
 @MainActor
 final class SessionBillingEntitlementStore {

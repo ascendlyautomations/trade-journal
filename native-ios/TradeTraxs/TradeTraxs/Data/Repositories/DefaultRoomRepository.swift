@@ -5,20 +5,20 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     private let cache: CacheStack
 
     /// Exact web Community `loadMemberRooms` embed (`app/community/page.tsx`).
-    /// Do not request `member_count` — that column does not exist on `rooms`.
+    /// Do not request `member_count`, that column does not exist on `rooms`.
     private static let memberRoomSelect = """
     room_id,room:rooms!room_members_room_id_fkey(\
     id,name,description,slug,image_url,owner_user_id,show_on_profile,is_private,category,discovery_tags,join_policy,rules,\
     members_can_message,members_can_share_trades,members_can_share_media,room_kind,created_at)
     """
 
-    /// Web `lib/roomMessageSelect.ts` — explicit embed hint avoids PGRST201.
+    /// Web `lib/roomMessageSelect.ts`, explicit embed hint avoids PGRST201.
     private static let messageSelect = """
     id,room_id,user_id,seen_by,pinned,section_id,parent_message_id,type,trade_id,content,image_url,audio_url,audio_duration_ms,created_at,\
     room_message_reactions!room_message_reactions_message_room_fkey(id,message_id,user_id,reaction)
     """
 
-    /// Compact insert-return shape — web `ROOM_MESSAGE_SELECT_COMPACT` without embeds (stable decode).
+    /// Compact insert-return shape, web `ROOM_MESSAGE_SELECT_COMPACT` without embeds (stable decode).
     private static let messageInsertReturningSelect = """
     id,room_id,user_id,section_id,parent_message_id,type,trade_id,content,image_url,audio_url,audio_duration_ms,created_at,pinned
     """
@@ -29,7 +29,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     }
 
     func room(id: RoomID) async throws -> TradeRoom {
-        // Push / community deep links may pass slug in the `room` query — resolve id, slug, then invite RPC.
+        // Push / community deep links may pass slug in the `room` query, resolve id, slug, then invite RPC.
         let dto: RoomDTO.Room
         if let byID = try? await supabase.database.selectOne(
             RoomDTO.Room.self,
@@ -328,7 +328,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         var left_at: String?
     }
 
-    /// Web `reactivateRoomMembership` — PATCH must include JSON `null` for `left_at`.
+    /// Web `reactivateRoomMembership`, PATCH must include JSON `null` for `left_at`.
     private func reactivateSoftLeftMembership(roomID: RoomID, profileID: ProfileID) async throws {
         let query = [
             SupabaseQuery.eq("room_id", roomID.rawValue),

@@ -136,7 +136,7 @@ final class PostsContainerViewModel {
     }
 
     /// Web or another device published or edited this post. Keep every other post.
-    /// Does not mark an unloaded tab as loaded — one row must not replace the page fetch.
+    /// Does not mark an unloaded tab as loaded, one row must not replace the page fetch.
     func noteRemoteUpsert(_ post: Post) {
         guard post.authorProfileID == profileOwnerID else { return }
         mergeIncomingPosts([post])
@@ -160,7 +160,7 @@ final class PostsContainerViewModel {
         }
     }
 
-    /// Owner delete — drop from grid immediately.
+    /// Owner delete, drop from grid immediately.
     func noteDeleteSucceeded(id: PostID) {
         items.removeAll { $0.id == id }
         detailCache.removePost(id: id)
@@ -169,7 +169,7 @@ final class PostsContainerViewModel {
         OwnerProfileOptimisticStore.shared.syncOwnerPostsState(items)
     }
 
-    /// Owner publish — upsert immediately, then refresh page 1 using the same path as manual reload.
+    /// Owner publish, upsert immediately, then refresh page 1 using the same path as manual reload.
     func notePublishSucceeded(_ post: Post, preservingExisting existingItems: [Post] = []) {
         guard post.authorProfileID == profileOwnerID else { return }
         let visibleBefore = items.count

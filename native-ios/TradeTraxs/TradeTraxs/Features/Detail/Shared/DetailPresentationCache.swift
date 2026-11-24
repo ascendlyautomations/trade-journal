@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// In-memory seeds for detail destinations — avoids re-fetching list entities already held.
+/// In-memory seeds for detail destinations, avoids re-fetching list entities already held.
 ///
 /// List containers write on load / open; detail ViewModels read first, then lazy-load
 /// supplementary fields (notes, images, video URL) only when needed.
@@ -25,13 +25,13 @@ final class DetailPresentationCache {
     private var ownedTradeRooms: [ProfileID: TradeRoom] = [:]
     private var ownedTradeRoomResolved: Set<ProfileID> = []
     private var accountNames: [TradingAccountID: String] = [:]
-    /// Public projection — cleared when seeding visitor-safe metadata.
+    /// Public projection, cleared when seeding visitor-safe metadata.
     private var accountNumbers: [TradingAccountID: String] = [:]
-    /// Owner-only numbers from full `accounts` rows — never cleared by public profile seeding.
+    /// Owner-only numbers from full `accounts` rows, never cleared by public profile seeding.
     private var ownerAccountNumbers: [TradingAccountID: String] = [:]
     private var accountModes: [TradingAccountID: TradingAccountMode] = [:]
     private var accountSizes: [TradingAccountID: Decimal] = [:]
-    /// Full `accounts` rows keyed by profile — session reuse for Stats / Detail.
+    /// Full `accounts` rows keyed by profile, session reuse for Stats / Detail.
     private var accountsByProfile: [ProfileID: [TradingAccount]] = [:]
     /// Public trades list last seeded for a profile (Profile Trades / Stats share).
     private var publicTradesByProfile: [ProfileID: [Trade]] = [:]
@@ -39,12 +39,12 @@ final class DetailPresentationCache {
     /// Session Followers / Following lists (web `followListCache` parity).
     private var followersByProfile: [ProfileID: [Profile]] = [:]
     private var followingByProfile: [ProfileID: [Profile]] = [:]
-    /// Profiles the authenticated viewer currently follows — drives Follow / Following buttons.
+    /// Profiles the authenticated viewer currently follows, drives Follow / Following buttons.
     /// Only set when a **complete** following list is known (Follow list screen).
     private var viewerFollowingIDSet: Set<ProfileID>?
-    /// Per-profile follow edges from pairwise `followState` / toggle — never treated as a full list.
+    /// Per-profile follow edges from pairwise `followState` / toggle, never treated as a full list.
     private var viewerFollowEdgeByProfile: [ProfileID: Bool] = [:]
-    /// Pending follow request (private profiles) — never implies following.
+    /// Pending follow request (private profiles), never implies following.
     private var viewerFollowRequestByProfile: [ProfileID: Bool] = [:]
 
     func seed(_ profile: Profile) {
@@ -89,7 +89,7 @@ final class DetailPresentationCache {
         ownedTradeRooms[profileID]
     }
 
-    /// List/card/bootstrap snapshot — not authoritative for detail or edit.
+    /// List/card/bootstrap snapshot, not authoritative for detail or edit.
     func seed(_ trade: Trade) {
         seedListPreview(trade)
     }
@@ -112,7 +112,7 @@ final class DetailPresentationCache {
         seedPresentationSeed(DetailPresentationSeed(summary: summary))
     }
 
-    /// Journal list summaries — presentation seeds only (not authoritative detail).
+    /// Journal list summaries, presentation seeds only (not authoritative detail).
     func seed(journalSummaries items: [TradeOwnerJournalSummary]) {
         for item in items {
             seedPresentationSeed(TradeSummaryMapper.presentationSeed(from: item))
@@ -128,14 +128,14 @@ final class DetailPresentationCache {
         }
     }
 
-    /// Before pushing social detail — copy a DM/room card preview into presentation seeds when missing.
+    /// Before pushing social detail, copy a DM/room card preview into presentation seeds when missing.
     func ensurePresentationSeed(forPreview trade: Trade) {
         guard authoritativeDetail(id: trade.id) == nil else { return }
         guard presentationSeed(id: trade.id) == nil else { return }
         seedListPreview(trade)
     }
 
-    /// Complete detail from network or successful mutation — safe for edit/detail completeness.
+    /// Complete detail from network or successful mutation, safe for edit/detail completeness.
     @discardableResult
     func seedAuthoritativeDetail(_ detail: TradeDetail, authority: TradeDetailAuthority) -> TradeDetail {
         let presentationTrade = presentationSeeds[detail.id]?.previewTrade
@@ -162,7 +162,7 @@ final class DetailPresentationCache {
         return mergedDetail
     }
 
-    /// Canonical public copy-trade line — matches Profile card / feed (`CopyTradePresentation`).
+    /// Canonical public copy-trade line, matches Profile card / feed (`CopyTradePresentation`).
     func copyTradePublicModeSummary(for id: TradeID) -> String? {
         if let line = Self.trimmedCopyTradePublicModeSummary(
             presentationSeeds[id]?.summary.copyTradePublicModeSummary
@@ -189,7 +189,7 @@ final class DetailPresentationCache {
         presentationSeeds[id]
     }
 
-    /// Feed / Calendar / Profile list card transport — never authoritative detail.
+    /// Feed / Calendar / Profile list card transport, never authoritative detail.
     func tradeSummary(id: TradeID) -> TradeSummary? {
         if let seed = presentationSeeds[id] {
             return seed.summary
@@ -242,14 +242,14 @@ final class DetailPresentationCache {
         }
     }
 
-    /// After a successful attach/link API call — keeps ``reel(linkedTo:)`` warm for profile + feed cards.
+    /// After a successful attach/link API call, keeps ``reel(linkedTo:)`` warm for profile + feed cards.
     func applyReelTradeLink(reel: Reel, tradeID: TradeID) {
         var linked = reel
         linked.linkedTradeID = tradeID
         seed(linked)
     }
 
-    /// Clears clip→trade locally after unlink — also drops trade→clip index when this reel owned the link.
+    /// Clears clip→trade locally after unlink, also drops trade→clip index when this reel owned the link.
     func clearReelTradeLink(reel: Reel) {
         var unlinked = reel
         unlinked.linkedTradeID = nil
@@ -311,7 +311,7 @@ final class DetailPresentationCache {
         }
     }
 
-    /// Seeds public-safe account labels for profile/shared surfaces — never account numbers.
+    /// Seeds public-safe account labels for profile/shared surfaces, never account numbers.
     func seedPublicAccountMetadata(
         names: [TradingAccountID: String],
         modes: [TradingAccountID: TradingAccountMode],
@@ -337,7 +337,7 @@ final class DetailPresentationCache {
         purgeAccountNumbers(for: Array(names.keys))
     }
 
-    /// Owner-only full account rows — never use for visitor profiles or public caches.
+    /// Owner-only full account rows, never use for visitor profiles or public caches.
     func seedOwnerAccounts(_ accounts: [TradingAccount], for profileID: ProfileID) {
         accountsByProfile[profileID] = accounts
         seed(accounts: accounts)
@@ -391,7 +391,7 @@ final class DetailPresentationCache {
         seed(accounts: accounts)
     }
 
-    /// Public profile path — sanitized labels only; strips any prior owner numbers.
+    /// Public profile path, sanitized labels only; strips any prior owner numbers.
     func seedPublicProfileAccounts(_ accounts: [TradingAccount], for profileID: ProfileID) {
         accountsByProfile[profileID] = accounts.map { account in
             var copy = account
@@ -498,7 +498,7 @@ final class DetailPresentationCache {
         }
     }
 
-    /// Card/list preview transport — not authoritative detail (prefer ``tradeSummary(id:)``).
+    /// Card/list preview transport, not authoritative detail (prefer ``tradeSummary(id:)``).
     func previewTrade(id: TradeID) -> Trade? {
         if let seed = presentationSeeds[id] {
             return seed.previewTrade
@@ -556,7 +556,7 @@ final class DetailPresentationCache {
 
     // MARK: - Feed engagement overrides (detail opened from Home feed)
     //
-    // Phase 9B: Detail UI reads ``EngagementStore`` for like/comment presentation — DPC stores
+    // Phase 9B: Detail UI reads ``EngagementStore`` for like/comment presentation, DPC stores
     // feed-vs-trade target routing only, not duplicate engagement counts.
 
     private var feedEngagementTargetByTradeID: [TradeID: InteractionTarget] = [:]
@@ -701,7 +701,7 @@ final class DetailPresentationCache {
     }
 }
 
-/// Tap-time trade preview staged before navigation — consumed synchronously in ``TradeDetailViewModel`` init.
+/// Tap-time trade preview staged before navigation, consumed synchronously in ``TradeDetailViewModel`` init.
 @MainActor
 enum SocialTradeOpenHandoff {
     private static var previews: [String: Trade] = [:]

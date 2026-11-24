@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped notification preference state — shared across Settings notification routes.
+/// Session-scoped notification preference state, shared across Settings notification routes.
 @MainActor
 @Observable
 final class NotificationPreferencesSessionStore {
@@ -197,7 +197,7 @@ final class NotificationPreferencesSessionStore {
         }
         preferences = current
         if !outbox.isEmpty {
-            // Caller will not auto-retry — user can toggle again; optional re-drain:
+            // Caller will not auto-retry, user can toggle again; optional re-drain:
         }
     }
 }

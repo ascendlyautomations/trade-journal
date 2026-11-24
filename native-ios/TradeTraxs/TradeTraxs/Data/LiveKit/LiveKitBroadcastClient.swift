@@ -26,7 +26,7 @@ nonisolated struct LiveKitBroadcastStatusResponse: Decodable, Sendable {
     var expiresAt: String?
     var voiceMode: String?
     var videoSource: String?
-    /// "browser" or "obs" — Phase 2 uses primaryMediaPublisherIdentity when obs.
+    /// "browser" or "obs", Phase 2 uses primaryMediaPublisherIdentity when obs.
     var broadcastSource: String?
     var primaryMediaPublisherIdentity: String?
     var livekitIngressId: String?
@@ -207,7 +207,7 @@ nonisolated struct LiveKitBroadcastClient: Sendable {
         )
     }
 
-    /// Owner/moderator: start a broadcast session (OBS uses host token — mic only, program via ingress).
+    /// Owner/moderator: start a broadcast session (OBS uses host token, mic only, program via ingress).
     func startBroadcast(
         roomID: RoomID,
         voiceMode: String = "broadcast_only",

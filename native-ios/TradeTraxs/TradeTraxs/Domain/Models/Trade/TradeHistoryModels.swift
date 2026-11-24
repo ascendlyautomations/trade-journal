@@ -1,6 +1,6 @@
 import Foundation
 
-/// Owner journal filters — web `/trades` semantics + native numeric P&L / RR bounds.
+/// Owner journal filters, web `/trades` semantics + native numeric P&L / RR bounds.
 ///
 /// Server-applied where possible (account, visibility, date, direction, P&L range,
 /// symbol/notes/setup/session/account search, sort). Account mode and RR also filter
@@ -28,7 +28,7 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         hasActiveFilterConstraints || sort != .newest
     }
 
-    /// Filter chips / empty-state — excludes sort (sort lives in the filter sheet only).
+    /// Filter chips / empty-state, excludes sort (sort lives in the filter sheet only).
     var hasActiveFilterConstraints: Bool {
         if case .all = account {} else { return true }
         if dateRange != .allTime { return true }
@@ -110,7 +110,7 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         self = TradeHistoryFilters()
     }
 
-    /// Entry-time window for journal filters — same timestamp as dashboard and profile stats.
+    /// Entry-time window for journal filters, same timestamp as dashboard and profile stats.
     func createdAtBounds(now: Date = Date(), calendar: Calendar = .current) -> (start: Date?, end: Date?) {
         switch dateRange {
         case .allTime:
@@ -211,7 +211,7 @@ nonisolated enum TradeHistoryDirectionFilter: String, CaseIterable, Identifiable
     }
 }
 
-/// Authoritative account mode filter — maps to ``TradingAccountMode`` / denormalized trade mode.
+/// Authoritative account mode filter, maps to ``TradingAccountMode`` / denormalized trade mode.
 nonisolated enum TradeHistoryAccountModeFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
     case all
     case live
@@ -239,7 +239,7 @@ nonisolated enum TradeHistoryAccountModeFilter: String, CaseIterable, Identifiab
     }
 }
 
-/// Trading session filter — matches authoritative `trades.session` labels.
+/// Trading session filter, matches authoritative `trades.session` labels.
 nonisolated enum TradeHistorySessionFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
     case all
     case nyAM = "ny am"
@@ -280,7 +280,7 @@ nonisolated enum TradeHistorySessionFilter: String, CaseIterable, Identifiable, 
     }
 }
 
-/// Visibility filter — `trades.is_public` (web journal Public toggle).
+/// Visibility filter, `trades.is_public` (web journal Public toggle).
 nonisolated enum TradeHistoryVisibilityFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
     case any
     case `public`
@@ -338,7 +338,7 @@ nonisolated struct TradeHistoryMatchContext: Hashable, Sendable {
     }
 }
 
-/// Bounded history request — never unbounded full-history download.
+/// Bounded history request, never unbounded full-history download.
 nonisolated struct TradeHistoryQuery: Hashable, Sendable {
     var filters: TradeHistoryFilters
     /// Free-text search over ticker / notes / setup / session / account name.

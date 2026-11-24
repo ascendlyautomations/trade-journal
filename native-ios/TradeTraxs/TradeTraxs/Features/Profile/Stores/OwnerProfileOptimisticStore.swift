@@ -55,7 +55,7 @@ final class OwnerProfileOptimisticStore {
         ownerScreen?.syncAchievementsFromSection(achievements)
     }
 
-    /// Settings / onboarding avatar commit — owner Profile header without bootstrap refresh.
+    /// Settings / onboarding avatar commit, owner Profile header without bootstrap refresh.
     func noteOwnerProfileHeaderUpdated(profile: Profile, localAvatar: UIImage?) {
         ownerScreen?.applyOwnerProfileHeaderUpdate(profile: profile, localAvatar: localAvatar)
     }

@@ -29,7 +29,7 @@ final class ClipsContainerViewModel {
     private let initialLoadFailureGrace = ProfileSectionFailureGrace()
     private var syncGeneration: UInt64 = 0
     private var trackedPublishedReelID: ReelID?
-    /// Non-owner Profile — sync clips into persisted profile snapshot (owner uses ``OwnerProfileOptimisticStore``).
+    /// Non-owner Profile, sync clips into persisted profile snapshot (owner uses ``OwnerProfileOptimisticStore``).
     var clipsSectionPersistenceHandler: (([Reel]) -> Void)?
 
     var hasAuthoritativePayload: Bool { hasLoaded }
@@ -145,7 +145,7 @@ final class ClipsContainerViewModel {
         prefetchEngagement(for: items.map(\.id))
     }
 
-    /// Owner delete — drop from grid immediately (detail overflow + context menus).
+    /// Owner delete, drop from grid immediately (detail overflow + context menus).
     func noteDeleteSucceeded(id: ReelID) {
         items.removeAll { $0.id == id }
         detailCache.removeReel(id: id)
@@ -157,7 +157,7 @@ final class ClipsContainerViewModel {
         notifyClipsSectionPersistence(items)
     }
 
-    /// Owner link/unlink — merge cache-authoritative reel into visible clips (no refetch).
+    /// Owner link/unlink, merge cache-authoritative reel into visible clips (no refetch).
     func applyReelLinkMutation(_ reel: Reel) {
         guard reel.authorProfileID == profileOwnerID else { return }
         guard let index = items.firstIndex(where: { $0.id == reel.id }) else { return }
@@ -166,7 +166,7 @@ final class ClipsContainerViewModel {
         notifyClipsSectionPersistence(items)
     }
 
-    /// Owner publish — upsert immediately, then refresh using the same path as manual reload.
+    /// Owner publish, upsert immediately, then refresh using the same path as manual reload.
     func notePublishSucceeded(_ reel: Reel, preservingExisting existingItems: [Reel] = []) {
         guard reel.authorProfileID == profileOwnerID else { return }
         guard OwnerProfileOptimisticStore.isListedOnOwnerProfile(reel) else { return }

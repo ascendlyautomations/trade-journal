@@ -132,7 +132,7 @@ struct ContentReportSheet: View {
             Text(
                 wasDuplicate
                     ? "You already reported this content. Our team will review it."
-                    : "Thanks — the TradeTraxs team will review your report."
+                    : "Thanks, the TradeTraxs team will review your report."
             )
             .experienceStyle(.body, color: colors.secondaryText)
             .multilineTextAlignment(.center)

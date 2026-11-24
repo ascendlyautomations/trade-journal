@@ -54,7 +54,7 @@ final class AccountMutationStore {
         revision += 1
     }
 
-    /// Live ledger or funded prop payout recorded — Withdrawals history and Dashboard cycles refresh.
+    /// Live ledger or funded prop payout recorded, Withdrawals history and Dashboard cycles refresh.
     func notePayoutRecorded(accountID: TradingAccountID) {
         latestKind = .payoutRecorded(accountID)
         latestAccountID = accountID

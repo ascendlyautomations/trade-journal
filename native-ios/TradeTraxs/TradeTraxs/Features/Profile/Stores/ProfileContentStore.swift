@@ -5,7 +5,7 @@ import UIKit
 
 /// Unified Profile header/session content for the current user or any other profile.
 ///
-/// Same load path as the owner Profile — repositories + image pipeline + ``DetailPresentationCache``.
+/// Same load path as the owner Profile, repositories + image pipeline + ``DetailPresentationCache``.
 /// Ownership only changes the action row.
 @Observable
 @MainActor
@@ -78,7 +78,7 @@ final class ProfileContentStore {
 
     var hasTradeRoom: Bool { ownedTradeRoom != nil }
 
-    /// After create — flip Profile CTA without a full reload.
+    /// After create, flip Profile CTA without a full reload.
     func applyOwnedTradeRoom(_ room: TradeRoom) {
         ownedTradeRoom = room
         didResolveTradeRoom = true
@@ -96,12 +96,12 @@ final class ProfileContentStore {
         applyOwnedTradeRoom(room)
     }
 
-    /// Newest active story for avatar ring — from bootstrap, not a follow-up fetch.
+    /// Newest active story for avatar ring, from bootstrap, not a follow-up fetch.
     var activeStory: Story? {
         StoryBootstrapMapping.newestActive(activeStories)
     }
 
-    /// Web `canShowVisitorRoomCta` — owned room + `show_on_profile` + viewable profile content.
+    /// Web `canShowVisitorRoomCta`, owned room + `show_on_profile` + viewable profile content.
     /// Profile does not check membership; visitors always get “View Trade Room” when shown.
     var canShowVisitorTradeRoomCTA: Bool {
         guard !isOwner, let profile, let room = ownedTradeRoom else { return false }
@@ -112,7 +112,7 @@ final class ProfileContentStore {
         return !room.id.rawValue.isEmpty
     }
 
-    /// When true, ``ProfileScreenViewModel`` owns network — ``loadIfNeeded`` is a no-op.
+    /// When true, ``ProfileScreenViewModel`` owns network, ``loadIfNeeded`` is a no-op.
     private(set) var isScreenOwned = false
 
     /// Header skeleton until bootstrap confirms failure or profile payload arrives.
@@ -137,7 +137,7 @@ final class ProfileContentStore {
         applyActiveStories(from: state.activeStories, isOwner: state.isOwner)
         pinnedContent = state.pinnedContent
         errorMessage = state.errorMessage
-        // Follow must work as soon as Stage 1 publishes — capture viewer for toggle.
+        // Follow must work as soon as Stage 1 publishes, capture viewer for toggle.
         Task { [weak self] in
             guard let self else { return }
             if self.viewerID == nil {
@@ -160,7 +160,7 @@ final class ProfileContentStore {
         }
     }
 
-    /// Owner Settings / session store published a new header avatar — no profile reload.
+    /// Owner Settings / session store published a new header avatar, no profile reload.
     func adoptOwnerProfileHeader(from profile: Profile, localAvatar: UIImage?) {
         guard isOwner else { return }
         if let resolvedProfileID, resolvedProfileID != profile.id { return }
@@ -192,7 +192,7 @@ final class ProfileContentStore {
     }
 
     func loadIfNeeded(force: Bool = false) {
-        // Screen-owned Profile uses ``ProfileBootstrap`` — keep this path for unit tests
+        // Screen-owned Profile uses ``ProfileBootstrap``, keep this path for unit tests
         // and any non-screen callers.
         if isScreenOwned, !force { return }
         if loadTask != nil, !force { return }
@@ -217,7 +217,7 @@ final class ProfileContentStore {
 
     func toggleFollow() async {
         guard !isOwner, let profileID = resolvedProfileID, !followInFlight else { return }
-        // Resolve viewer lazily — Stage-1 bootstrap historically never set viewerID.
+        // Resolve viewer lazily, Stage-1 bootstrap historically never set viewerID.
         if viewerID == nil {
             let userID = await session.currentUserID
             viewerID = userID.map { ProfileID($0.rawValue) }
@@ -326,7 +326,7 @@ final class ProfileContentStore {
         }
     }
 
-    /// External FollowMutationCoordinator patch — keeps header button + counts live.
+    /// External FollowMutationCoordinator patch, keeps header button + counts live.
     func applyExternalFollowState(isFollowing: Bool, stats: ProfileStats?) {
         if !isOwner {
             self.isFollowing = isFollowing
@@ -386,7 +386,7 @@ final class ProfileContentStore {
             return
         }
 
-        // Empty RPC payload — keep optimistic owner story until server confirms deletion.
+        // Empty RPC payload, keep optimistic owner story until server confirms deletion.
         if isOwner {
             let retained = ActiveStorySemantics.filterActive(activeStories)
             if !retained.isEmpty { return }
@@ -506,7 +506,7 @@ final class ProfileContentStore {
             return
         }
         if let cached = detailCache.viewerFollowingIDs() {
-            // Complete following list only (seeded from Follow list) — safe to consult.
+            // Complete following list only (seeded from Follow list), safe to consult.
             isFollowing = cached.contains(profileID)
             return
         }
@@ -531,7 +531,7 @@ final class ProfileContentStore {
         if !force, detailCache.hasResolvedOwnedTradeRoom(for: profileID) {
             let cached = detailCache.ownedTradeRoom(for: profileID)
             ownedTradeRoom = cached
-            // A cached miss may be from the old `owner_id` filter — refetch once so
+            // A cached miss may be from the old `owner_id` filter, refetch once so
             // web-parity `owner_user_id` can resolve an owned room without a hard refresh.
             if cached != nil {
                 didResolveTradeRoom = true

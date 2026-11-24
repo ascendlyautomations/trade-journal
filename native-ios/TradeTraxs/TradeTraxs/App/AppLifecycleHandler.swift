@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import SwiftUI
 
-/// Clean lifecycle entry points. No business logic — log + push refresh hooks.
+/// Clean lifecycle entry points. No business logic, log + push refresh hooks.
 final class AppLifecycleHandler {
     /// Bound by ``TradeTraxsApp`` after composition.
     var pushNotifications: PushNotificationCenter?
@@ -66,6 +66,6 @@ final class AppLifecycleHandler {
 
     func applicationWillTerminate() {
         AppLog.application.info("Lifecycle: termination")
-        // Future: best-effort cleanup only — do not rely on this for durability.
+        // Future: best-effort cleanup only, do not rely on this for durability.
     }
 }

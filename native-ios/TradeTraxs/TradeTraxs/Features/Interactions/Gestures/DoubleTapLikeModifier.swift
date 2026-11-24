@@ -131,7 +131,7 @@ extension View {
         )
     }
 
-    /// Convenience — calls ``EngagementStore/ensureLiked(on:)`` (like-only, not toggle).
+    /// Convenience, calls ``EngagementStore/ensureLiked(on:)`` (like-only, not toggle).
     func experienceDoubleTapLike(
         target: InteractionTarget,
         store: EngagementStore,

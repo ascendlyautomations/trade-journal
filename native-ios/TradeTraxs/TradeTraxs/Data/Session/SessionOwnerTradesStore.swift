@@ -3,10 +3,10 @@ import Observation
 
 /// Session-scoped owner trade list used by Dashboard, Trade History, and legacy Calendar month fallback.
 ///
-/// **Analytical / list window only** — not authoritative ``TradeDetail``. Detail/edit uses
+/// **Analytical / list window only**, not authoritative ``TradeDetail``. Detail/edit uses
 /// ``TradeDetailRepository``. Journal list uses ``TradeOwnerJournalSummary`` (Phase 8C).
 ///
-/// Single in-memory + disk source — bounded to dashboard trade window (≤500).
+/// Single in-memory + disk source, bounded to dashboard trade window (≤500).
 @Observable
 @MainActor
 final class SessionOwnerTradesStore {
@@ -23,7 +23,7 @@ final class SessionOwnerTradesStore {
     private var metadataByOwner: [ProfileID: OwnerTradeCacheCompleteness.Metadata] = [:]
     private var inFlight: [ProfileID: Task<[Trade], Error>] = [:]
 
-    /// Analytics window — Realtime / local mutations keep this coherent longer.
+    /// Analytics window, Realtime / local mutations keep this coherent longer.
     private let freshTTL: TimeInterval = 10 * 60
     /// Matches `rpc_v1_trades_owner_rows` dashboard page. A shorter page is the full journal.
     nonisolated static let analyticsPageLimit = 500

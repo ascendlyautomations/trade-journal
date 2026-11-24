@@ -297,7 +297,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         await waitFor { viewModel.errorMessage != nil }
 
         XCTAssertNil(viewModel.status)
-        XCTAssertEqual(viewModel.planTitle, "—")
+        XCTAssertEqual(viewModel.planTitle, "–")
         XCTAssertEqual(viewModel.errorMessage, "Please try again.")
         XCTAssertEqual(metrics.loadCount, 0)
         XCTAssertFalse(viewModel.showsApplePurchaseSection)
@@ -332,7 +332,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         await waitFor { viewModel.errorMessage != nil }
 
         XCTAssertNil(viewModel.status)
-        XCTAssertEqual(viewModel.planTitle, "—")
+        XCTAssertEqual(viewModel.planTitle, "–")
         XCTAssertEqual(metrics.loadCount, 0)
 
         viewModel.applyForegroundEntitlementRefresh(status)

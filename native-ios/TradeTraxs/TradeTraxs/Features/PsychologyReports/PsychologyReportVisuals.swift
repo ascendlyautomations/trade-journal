@@ -89,10 +89,7 @@ struct PsychologyReportCoverageCard: View {
             .experienceStyle(.footnote, color: colors.tertiaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(ExperienceSpacing.md)
-            .background(
-                colors.fillSecondary.opacity(0.45),
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-            )
+            .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.sm))
     }
 
     private var dataCoverageLine: String {
@@ -124,17 +121,8 @@ struct PsychologyReportPerformanceMetricsCard: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .accessibilityIdentifier("psychologyReport.performanceMetrics")
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-            .fill(colors.fillSecondary.opacity(0.5))
-            .overlay {
-                RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                    .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
-            }
     }
 
     private var metricsGrid: some View {
@@ -151,7 +139,7 @@ struct PsychologyReportPerformanceMetricsCard: View {
                     report.performance.totalPnL == 0 && report.performance.tradeCount == 0
                         ? nil
                         : report.performance.totalPnL
-                ) ?? "—",
+                ) ?? "–",
                 tone: pnlTone(report.performance.totalPnL)
             )
             metricCell(
@@ -160,12 +148,12 @@ struct PsychologyReportPerformanceMetricsCard: View {
             )
             metricCell(
                 "Avg Trade",
-                TraderPsychologyAnalyticsEngine.optionalMoney(report.performance.averagePnL) ?? "—",
+                TraderPsychologyAnalyticsEngine.optionalMoney(report.performance.averagePnL) ?? "–",
                 tone: report.performance.averagePnL.map { pnlTone($0) }
             )
             metricCell(
                 "Profit Factor",
-                report.performance.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
+                report.performance.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "–"
             )
         }
     }
@@ -225,7 +213,7 @@ struct PsychologyReportPrimaryInsightCard: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .overlay {
             RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
                 .stroke(colors.border, lineWidth: 1)
@@ -333,16 +321,7 @@ struct PsychologyReportChartsSection: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-            .fill(colors.fillSecondary.opacity(0.5))
-            .overlay {
-                RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                    .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
-            }
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
     }
 }
 
@@ -605,19 +584,12 @@ struct PsychologyReportMonthlyComparisonsView: View {
                 }
                 .padding(ExperienceSpacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+                .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
             }
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(colors.fillSecondary.opacity(0.5))
-                .overlay {
-                    RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                        .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
-                }
-        )
+        .modifier(ReportDetailSectionSurface())
     }
 
     private func trendSymbol(_ headline: String) -> String {

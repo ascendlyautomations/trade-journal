@@ -17,12 +17,12 @@ enum TradingRulesRuleImpactFormat {
     }
 
     static func optionalFactor(_ value: Double?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return String(format: "%.2f", value)
     }
 
     static func optionalRr(_ value: Double?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return String(format: "%.2fR", value)
     }
 }
@@ -41,7 +41,7 @@ struct TradingRulesRuleImpactHighlightStrip: View {
                 Text("Largest avg P&L differences")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(colors.primaryText)
-                Text("Correlation only — not proof that following or violating caused the outcome. Requires 5+ priced trades per side.")
+                Text("Correlation only, not proof that following or violating caused the outcome. Requires 5+ priced trades per side.")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
                 ForEach(Array(highlights.prefix(previewCount))) { item in
                     Button {
@@ -161,7 +161,7 @@ struct TradingRulesRuleImpactCard: View {
             Text(title)
                 .experienceStyle(.caption2, color: colors.tertiaryText)
             if side.priced == 0 {
-                Text("—")
+                Text("–")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(colors.secondaryText)
             } else {
@@ -200,8 +200,8 @@ struct TradingRulesRuleImpactCard: View {
             }
             metricPair(label: "Expectancy") {
                 followedViolatedText(
-                    followed: row.followed.expectancy.map { TradingRulesRuleImpactFormat.signedMoney($0) } ?? "—",
-                    violated: row.violated.expectancy.map { TradingRulesRuleImpactFormat.signedMoney($0) } ?? "—",
+                    followed: row.followed.expectancy.map { TradingRulesRuleImpactFormat.signedMoney($0) } ?? "–",
+                    violated: row.violated.expectancy.map { TradingRulesRuleImpactFormat.signedMoney($0) } ?? "–",
                     followsPerformanceColor: true
                 )
             }
@@ -248,9 +248,9 @@ struct TradingRulesRuleImpactCard: View {
     }
 
     private func performanceColorFromText(_ text: String) -> Color {
-        if text.hasPrefix("+") || (text.contains("$") && !text.hasPrefix("-") && text != "—") {
+        if text.hasPrefix("+") || (text.contains("$") && !text.hasPrefix("-") && text != "–") {
             if text.hasPrefix("-") { return colors.loss }
-            if text == "—" { return colors.secondaryText }
+            if text == "–" { return colors.secondaryText }
             return colors.profit
         }
         if text.hasPrefix("-") { return colors.loss }
@@ -270,7 +270,7 @@ struct TradingRulesRuleImpactDetailSection: View {
             Text("Financial impact")
                 .font(.headline)
                 .foregroundStyle(colors.primaryText)
-            Text("Trade-level outcomes only. Correlation — not causation.")
+            Text("Trade-level outcomes only. Correlation, not causation.")
                 .experienceStyle(.caption2, color: colors.tertiaryText)
 
             TradingRulesRuleImpactCard(row: row, onOpenRule: nil)

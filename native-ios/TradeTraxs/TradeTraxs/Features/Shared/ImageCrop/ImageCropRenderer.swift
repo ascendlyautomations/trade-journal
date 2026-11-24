@@ -2,10 +2,10 @@ import UIKit
 
 /// Exports the exact visible crop from the editor into a new upright UIImage at source-pixel resolution.
 enum ImageCropRenderer {
-    /// Default cap — mild downscale only when the crop exceeds this on its longest edge.
+    /// Default cap, mild downscale only when the crop exceeds this on its longest edge.
     static let defaultMaxOutputDimension: CGFloat = 2_560
 
-    /// Exports feed/trade/achievement crops — pixels in the returned image are authoritative for upload.
+    /// Exports feed/trade/achievement crops, pixels in the returned image are authoritative for upload.
     static func exportFeedCrop(
         sourceImage: UIImage,
         aspectOption: ImageCropAspectOption,
@@ -56,7 +56,7 @@ enum ImageCropRenderer {
         )
     }
 
-    /// Exports using canonical geometry — preview and export must share this object.
+    /// Exports using canonical geometry, preview and export must share this object.
     static func exportFeedCrop(
         sourceImage: UIImage,
         aspectOption: ImageCropAspectOption,
@@ -119,7 +119,7 @@ enum ImageCropRenderer {
         return output
     }
 
-    /// Avatar / room — fixed output size with optional circle mask (unchanged contract).
+    /// Avatar / room, fixed output size with optional circle mask (unchanged contract).
     static func render(
         sourceImage: UIImage,
         preset: ImageCropEditorPreset,

@@ -38,8 +38,7 @@ struct TradingScorecardCategorySection: View {
             }
         }
         .padding(ExperienceSpacing.md)
-        .background(colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        .experienceGroupedPanel(cornerRadius: ExperienceRadius.lg)
         .padding(.horizontal, ExperienceSpacing.md)
         .accessibilityIdentifier("scorecard.detail.\(category.id.rawValue)")
     }
@@ -143,10 +142,7 @@ struct TradingScorecardCategorySection: View {
                     }
                     .padding(ExperienceSpacing.sm)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-                        cornerRadius: ExperienceRadius.sm,
-                        style: .continuous
-                    ))
+                    .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
                 }
             }
         }

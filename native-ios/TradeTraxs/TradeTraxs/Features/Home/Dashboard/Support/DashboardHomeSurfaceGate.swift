@@ -1,6 +1,6 @@
 import Foundation
 
-/// Home tab visibility — defers dashboard authoritative network work while another tab is active.
+/// Home tab visibility, defers dashboard authoritative network work while another tab is active.
 @MainActor
 enum DashboardHomeSurfaceGate {
     static var isHomeTabActive = true

@@ -84,7 +84,7 @@ struct TradingDayDetailView: View {
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        .experienceGroupedPanel(cornerRadius: ExperienceRadius.lg)
     }
 
     @ViewBuilder
@@ -98,7 +98,7 @@ struct TradingDayDetailView: View {
             } else if !viewModel.isLoading {
                 Text("No trades")
             } else {
-                Text("—")
+                Text("–")
             }
         }
         .font(ExperienceTypography.font(.footnote))
@@ -119,7 +119,7 @@ struct TradingDayDetailView: View {
                     metricCard("Win Rate", NumberDisplay.winRate(summary.winRate))
                     metricCard(
                         "Avg R:R",
-                        viewModel.averageTargetedRr.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
+                        viewModel.averageTargetedRr.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "–"
                     )
                 }
             }
@@ -135,7 +135,7 @@ struct TradingDayDetailView: View {
         }
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
     }
 
     private var tradesSection: some View {
@@ -398,7 +398,7 @@ final class CalendarDayDetailLoader {
         }
     }
 
-    /// Mean targeted R:R for trades on this day (Dashboard parity — positive targets only).
+    /// Mean targeted R:R for trades on this day (Dashboard parity, positive targets only).
     var averageTargetedRr: Decimal? {
         var sum = Decimal(0)
         var count = 0

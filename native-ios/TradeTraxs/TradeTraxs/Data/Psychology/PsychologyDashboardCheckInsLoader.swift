@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `fetchPsychologyDashboardCheckIns` — 90-day PostgREST range + psychology RPC (no account scope on dashboard).
+/// Web `fetchPsychologyDashboardCheckIns`, 90-day PostgREST range + psychology RPC (no account scope on dashboard).
 nonisolated enum PsychologyDashboardCheckInsLoader {
     static func load(
         profileID: ProfileID,

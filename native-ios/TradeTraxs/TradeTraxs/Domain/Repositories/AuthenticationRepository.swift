@@ -1,6 +1,6 @@
 import Foundation
 
-/// Auth capability contract — no Keychain / Supabase types here.
+/// Auth capability contract, no Keychain / Supabase types here.
 nonisolated protocol AuthenticationRepository: Sendable {
     func currentSessionUserID() async throws -> UserID?
     func signIn(email: String, password: String) async throws -> User

@@ -8,6 +8,8 @@ struct PropFirmSpendingBreakdownCard: View {
     @State private var mode: PropFirmSpendingBreakdownMode = .type
     @Environment(\.themeColors) private var colors
 
+    private let donutDiameter: CGFloat = 108
+
     private var rows: [PropFirmExpenseBreakdown] {
         PropFirmSpendingBreakdownSupport.rows(mode: mode, expenses: expenses)
     }
@@ -38,7 +40,7 @@ struct PropFirmSpendingBreakdownCard: View {
                 donutAndLegend
             }
         }
-        .propFirmAnalyticsCard(colors: colors)
+        .propFirmAnalyticsCard()
     }
 
     private var emptyMessage: String {
@@ -51,69 +53,93 @@ struct PropFirmSpendingBreakdownCard: View {
     }
 
     private var donutAndLegend: some View {
+        ViewThatFits(in: .horizontal) {
+            horizontalBreakdown
+            verticalBreakdown
+        }
+    }
+
+    private var horizontalBreakdown: some View {
+        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+            donutView
+            legendColumn
+        }
+    }
+
+    private var verticalBreakdown: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            HStack(alignment: .center, spacing: ExperienceSpacing.md) {
-                ZStack {
-                    Chart(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        SectorMark(
-                            angle: .value("Amount", NSDecimalNumber(decimal: row.total).doubleValue),
-                            innerRadius: .ratio(0.62),
-                            angularInset: 1.5
-                        )
-                        .foregroundStyle(PropFirmSpendingBreakdownSupport.sliceColor(index: index, colors: colors))
-                        .cornerRadius(2)
-                    }
-                    .frame(width: 116, height: 116)
-                    .accessibilityHidden(true)
+            donutView
+                .frame(maxWidth: .infinity)
+            legendColumn
+        }
+    }
 
-                    VStack(spacing: 2) {
-                        Text(PropFirmExpenseMoney.format(total))
-                            .font(.system(.subheadline, design: .rounded).weight(.bold).monospacedDigit())
-                            .foregroundStyle(colors.primaryText)
-                            .minimumScaleFactor(0.7)
-                            .lineLimit(1)
-                        Text("Total")
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                    }
-                }
-
-                Spacer(minLength: 0)
+    private var donutView: some View {
+        ZStack {
+            Chart(rows, id: \.id) { row in
+                SectorMark(
+                    angle: .value("Amount", NSDecimalNumber(decimal: row.total).doubleValue),
+                    innerRadius: .ratio(0.62),
+                    angularInset: 1.5
+                )
+                .foregroundStyle(PropFirmSpendingBreakdownSupport.sliceColor(for: row.label))
+                .cornerRadius(2)
             }
+            .frame(width: donutDiameter, height: donutDiameter)
+            .accessibilityHidden(true)
 
-            VStack(spacing: ExperienceSpacing.xs) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    let share = total > 0 ? (row.total / total) : 0
-                    let percent = NSDecimalNumber(decimal: share * 100).doubleValue
-                    HStack(spacing: ExperienceSpacing.sm) {
-                        Circle()
-                            .fill(PropFirmSpendingBreakdownSupport.sliceColor(index: index, colors: colors))
-                            .frame(width: 8, height: 8)
-                        Text(row.label)
-                            .experienceStyle(.subheadline, color: colors.primaryText)
-                            .lineLimit(1)
-                        Spacer(minLength: ExperienceSpacing.xs)
-                        Text(PropFirmExpenseMoney.format(row.total))
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundStyle(colors.primaryText)
-                        Text(String(format: "%.0f%%", percent))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(colors.secondaryText)
-                            .frame(width: 36, alignment: .trailing)
-                    }
-                }
+            VStack(spacing: 2) {
+                Text(PropFirmExpenseMoney.compactBreakdownTotal(total))
+                    .font(.system(.subheadline, design: .rounded).weight(.bold).monospacedDigit())
+                    .foregroundStyle(colors.primaryText)
+                    .minimumScaleFactor(0.65)
+                    .lineLimit(1)
+                Text("Total")
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+            }
+            .padding(.horizontal, 4)
+        }
+        .frame(width: donutDiameter, height: donutDiameter)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Spending total \(PropFirmExpenseMoney.compactBreakdownTotal(total))")
+    }
+
+    private var legendColumn: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            ForEach(rows) { row in
+                legendRow(for: row)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func legendRow(for row: PropFirmExpenseBreakdown) -> some View {
+        let share = total > 0 ? (row.total / total) : 0
+        let percent = NSDecimalNumber(decimal: share * 100).doubleValue
+
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(PropFirmSpendingBreakdownSupport.sliceColor(for: row.label))
+                .frame(width: 8, height: 8)
+            Text(row.label)
+                .experienceStyle(.caption, color: colors.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            Text(String(format: "%.0f%%", percent))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(colors.secondaryText)
+                .layoutPriority(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(row.label), \(Int(percent.rounded())) percent")
     }
 }
 
 private extension View {
-    func propFirmAnalyticsCard(colors: SemanticColorPalette) -> some View {
+    func propFirmAnalyticsCard() -> some View {
         padding(ExperienceSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                    .stroke(colors.border.opacity(0.28), lineWidth: ExperienceBorder.hairline)
-            )
+            .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
     }
 }

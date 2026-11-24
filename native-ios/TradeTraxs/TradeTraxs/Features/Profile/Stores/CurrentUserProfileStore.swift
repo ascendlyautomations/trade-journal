@@ -7,7 +7,7 @@ import UIKit
 /// App-session cache for the authenticated user's profile header + tab avatar.
 ///
 /// Single load path shared by Profile screen and bottom navigation.
-/// Cleared on logout. Features never talk to Supabase — only repositories / image pipeline.
+/// Cleared on logout. Features never talk to Supabase, only repositories / image pipeline.
 @Observable
 @MainActor
 final class CurrentUserProfileStore {
@@ -22,7 +22,7 @@ final class CurrentUserProfileStore {
     private(set) var profile: Profile?
     private(set) var stats: ProfileStats?
     private(set) var avatarImage: Image?
-    /// Source bitmap for header + tab bar (no extra network — same pipeline load).
+    /// Source bitmap for header + tab bar (no extra network, same pipeline load).
     private(set) var avatarUIImage: UIImage?
     /// Pre-clipped circular tab icon (`alwaysOriginal`) for native `Tab` labels.
     private(set) var tabBarAvatarUIImage: UIImage?
@@ -40,7 +40,7 @@ final class CurrentUserProfileStore {
     private var loadedProfileID: ProfileID?
     private var loadedAvatarKey: String?
     private var confirmedOwnerProfile: Profile?
-    /// Bumped after a confirmed owner Settings save — Profile tab observes this to refresh without re-bootstrap.
+    /// Bumped after a confirmed owner Settings save, Profile tab observes this to refresh without re-bootstrap.
     private(set) var ownerProfileMutationRevision: UInt64 = 0
     private let loadGenerationCounter = LoadGenerationCounter()
 
@@ -102,7 +102,7 @@ final class CurrentUserProfileStore {
         ownerProfileMutationRevision &+= 1
         let previousAvatarRef = self.profile?.avatar
 
-        // Publish the fresh save before reconcile — otherwise a prior confirmed snapshot
+        // Publish the fresh save before reconcile, otherwise a prior confirmed snapshot
         // can overwrite the new Settings mutation inside ``resolveOwnerProfileFromNetwork(_:)``.
         var resolved = applyingPreferredAvatar(profile)
         SessionBootstrapStore.shared.applyOwnerProfileMutation(resolved)
@@ -126,7 +126,7 @@ final class CurrentUserProfileStore {
         propagateOwnerProfileHeaderUpdate(localAvatar: localAvatar ?? avatarUIImage)
     }
 
-    /// Owner Profile screen bootstrap — merge session + confirmed Settings mutations.
+    /// Owner Profile screen bootstrap, merge session + confirmed Settings mutations.
     func resolveOwnerProfileFromNetwork(_ network: Profile) -> Profile {
         var resolved = applyingPreferredAvatar(network)
         resolved = SessionBootstrapStore.shared.mergingAdoptedOwnerProfile(into: resolved)
@@ -146,7 +146,7 @@ final class CurrentUserProfileStore {
         propagateOwnerProfileHeaderUpdate(localAvatar: image)
     }
 
-    /// Network/bootstrap avatar sync for tab bar — does not record a Settings mutation.
+    /// Network/bootstrap avatar sync for tab bar, does not record a Settings mutation.
     func adoptDisplayedAvatar(from profile: Profile) {
         if let existing = self.profile, existing.id != profile.id {
             return
@@ -222,7 +222,7 @@ final class CurrentUserProfileStore {
         detailCache?.seed(stats: stats)
     }
 
-    /// Journal mutation reconciliation — Trades / Win % / Profit Factor (canonical overview metrics).
+    /// Journal mutation reconciliation, Trades / Win % / Profit Factor (canonical overview metrics).
     func applyOwnerJournalHeaderMetrics(_ incoming: ProfileStats) {
         guard profile?.id == incoming.profileID else { return }
         stats = incoming
@@ -478,13 +478,13 @@ enum ProfileDisplay {
         NumberDisplay.compactCount(value)
     }
 
-    /// Social line for the identity block — followers / following only.
+    /// Social line for the identity block, followers / following only.
     static func socialSummary(followers: Int, following: Int) -> String {
         "\(compactCount(followers)) Followers • \(compactCount(following)) Following"
     }
 
-    /// Web `formatProfileMetadataLine` — style · trader type · market · experience.
-    /// Empty fields are omitted (no `—` / `N/A` placeholders).
+    /// Web `formatProfileMetadataLine`, style · trader type · market · experience.
+    /// Empty fields are omitted (no `–` / `N/A` placeholders).
     static func metadataLine(for profile: Profile, now: Date = Date()) -> String? {
         var parts: [String] = []
 
@@ -511,7 +511,7 @@ enum ProfileDisplay {
         return parts.joined(separator: " · ")
     }
 
-    /// Suggested Traders card — `Futures · 2y 2m` (type + compact started-trading duration).
+    /// Suggested Traders card, `Futures · 2y 2m` (type + compact started-trading duration).
     static func suggestedTraderExperienceLine(for profile: Profile, now: Date = Date()) -> String? {
         let typeLabel = profile.traderType?.rawValue
         let duration = tradingExperience(from: profile.startedTradingAt, now: now)
@@ -531,7 +531,7 @@ enum ProfileDisplay {
         }
     }
 
-    /// Web `getExperience` — `"3y 2m"` from `started_trading`.
+    /// Web `getExperience`, `"3y 2m"` from `started_trading`.
     static func tradingExperience(from start: Date?, now: Date = Date()) -> String? {
         guard let start else { return nil }
         let calendar = Calendar.current
@@ -601,7 +601,7 @@ enum ProfileDisplay {
     }
 }
 
-/// Thread-safe bootstrap generation — readable from transport timeout closures.
+/// Thread-safe bootstrap generation, readable from transport timeout closures.
 private final class LoadGenerationCounter: @unchecked Sendable {
     private let value = Mutex(UInt64(0))
 

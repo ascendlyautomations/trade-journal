@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Horizontally scrollable trader-type filter — matches Trade Rooms category chip styling.
+/// Horizontally scrollable trader-type filter, matches Trade Rooms category chip styling.
 struct SuggestedTraderCategoryFilterBar: View {
     let selected: SuggestedTraderCategoryTab
     let onSelect: (SuggestedTraderCategoryTab) -> Void

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Achievement post caption — title, description, and compact context (no table).
+/// Achievement post caption, title, description, and compact context (no table).
 struct AchievementDetailMetadataSection: View {
     let achievement: Achievement
 

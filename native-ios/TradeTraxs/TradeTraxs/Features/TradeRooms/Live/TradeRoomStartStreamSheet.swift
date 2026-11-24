@@ -5,7 +5,7 @@ struct TradeRoomStartStreamSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
-    /// Single option — kept as a picker per product spec.
+    /// Single option, kept as a picker per product spec.
     @State private var method: String = "obs"
     @State private var streamTitle: String = ""
 
@@ -24,7 +24,7 @@ struct TradeRoomStartStreamSheet: View {
                 }
 
                 Section("Stream title") {
-                    TextField("e.g. Trading NY Session — NQ Futures", text: $streamTitle)
+                    TextField("e.g. Trading NY Session, NQ Futures", text: $streamTitle)
                         .textInputAutocapitalization(.sentences)
                     Text("\(streamTitle.trimmingCharacters(in: .whitespacesAndNewlines).count)/\(TradeRoomBroadcastStreamTitle.maxLength)")
                         .font(.caption2)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Production prefill for Add Achievement — e.g. after Record Payout.
+/// Production prefill for Add Achievement, e.g. after Record Payout.
 nonisolated struct CreateAchievementPrefill: Hashable, Sendable {
     var kind: AchievementKind
     var titleText: String

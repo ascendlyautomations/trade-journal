@@ -1,6 +1,6 @@
 import Foundation
 
-/// Normal TradeTraxs calendar day — mirrors SQL `analytics_calendar_day` (ET civil, no 18:00 rollover).
+/// Normal TradeTraxs calendar day, mirrors SQL `analytics_calendar_day` (ET civil, no 18:00 rollover).
 ///
 /// Used for Calendar V2 month boundaries and display keys. Legacy ``TradingCalendarDay`` remains for rollback.
 nonisolated enum AnalyticsCalendarDay {

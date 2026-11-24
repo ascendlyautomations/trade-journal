@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Local TradeTraxs reminder toggles (check-in + trade import) — separate from server push categories.
+/// Local TradeTraxs reminder toggles (check-in + trade import), separate from server push categories.
 struct SettingsTradetraxsRemindersView: View {
     @State private var viewModel: SettingsNotificationsViewModel
 

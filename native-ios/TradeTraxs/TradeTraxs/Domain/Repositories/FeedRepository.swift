@@ -1,12 +1,12 @@
 import Foundation
 
-/// Profile clips load — reels plus trades embedded in the PostgREST join.
+/// Profile clips load, reels plus trades embedded in the PostgREST join.
 nonisolated struct ProfileReelsResult: Sendable {
     var reels: [Reel]
     var embeddedTrades: [Trade]
 }
 
-/// Single reel fetch — reel body plus optional embedded linked trade.
+/// Single reel fetch, reel body plus optional embedded linked trade.
 nonisolated struct ReelLoadResult: Sendable {
     var reel: Reel
     var embeddedTrade: Trade?
@@ -16,7 +16,7 @@ nonisolated struct ReelLoadResult: Sendable {
 nonisolated struct FeedPageResult: Sendable {
     var items: [FeedItem]
     var nextCursor: String?
-    /// Trade bodies from `posts → trades(...)` — seed `SessionTradeEntityStore` / detail cache.
+    /// Trade bodies from `posts → trades(...)`, seed `SessionTradeEntityStore` / detail cache.
     var embeddedTrades: [Trade]
 
     var page: CursorPage<FeedItem> {
@@ -54,12 +54,12 @@ nonisolated protocol FeedRepository: Sendable {
     func deleteStory(id: StoryID) async throws
     func reel(id: ReelID) async throws -> ReelLoadResult
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel>
-    /// Web `fetchUserProfileReels` — Profile Clips tab (trade-linked visibility filter).
+    /// Web `fetchUserProfileReels`, Profile Clips tab (trade-linked visibility filter).
     func profileReels(for profileID: ProfileID) async throws -> ProfileReelsResult
     func createReel(_ reel: Reel) async throws -> Reel
     /// Deletes a reel the viewer owns.
     func deleteReel(id: ReelID) async throws
-    /// Own clips with `trade_id IS NULL` — candidates for linking to a new trade.
+    /// Own clips with `trade_id IS NULL`, candidates for linking to a new trade.
     /// Pass `includingReelID` to keep the trade's current clip visible while editing.
     func unattachedReels(
         for profileID: ProfileID,
@@ -68,11 +68,11 @@ nonisolated protocol FeedRepository: Sendable {
     ) async throws -> [Reel]
     /// Trade ids that already have an owner reel (`reels.trade_id`).
     func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID>
-    /// Web `fetchReelsByTradeIds` — lightweight `REEL_ROW_SELECT` for trade-card clip thumbnails.
+    /// Web `fetchReelsByTradeIds`, lightweight `REEL_ROW_SELECT` for trade-card clip thumbnails.
     func reels(linkedToTradeIDs tradeIDs: [TradeID], ownerID: ProfileID) async throws -> [Reel]
     /// Sets `reels.trade_id` (caption unchanged). App enforces one reel per trade.
     func attachReel(id: ReelID, to tradeID: TradeID) async throws
-    /// Targeted link — PATCH `reels` (`trade_id`, mirror trade visibility; caption preserved).
+    /// Targeted link, PATCH `reels` (`trade_id`, mirror trade visibility; caption preserved).
     func linkReelToTrade(
         reelID: ReelID,
         tradeID: TradeID,

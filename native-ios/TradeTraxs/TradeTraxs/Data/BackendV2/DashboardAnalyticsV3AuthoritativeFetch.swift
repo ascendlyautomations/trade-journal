@@ -35,7 +35,7 @@ nonisolated enum DashboardAnalyticsV3AuthoritativeFetch {
         return bootstrap
     }
 
-    /// Lightweight revision probe — avoids full dashboard bootstrap when local GRDB/VM is current.
+    /// Lightweight revision probe, avoids full dashboard bootstrap when local GRDB/VM is current.
     static func fetchRemoteRevision(
         viewerID: ProfileID,
         rpc: any RPCClient

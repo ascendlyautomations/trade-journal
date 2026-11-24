@@ -2,7 +2,7 @@
 import Foundation
 import UIKit
 
-/// Presents Tradovate OAuth via BFF-issued authorize URL — no broker tokens on device.
+/// Presents Tradovate OAuth via BFF-issued authorize URL, no broker tokens on device.
 @MainActor
 enum TradovateBrokerOAuthSession {
     static func connect(authorizeURL: URL) async -> TradovateBrokerOAuthOutcome {

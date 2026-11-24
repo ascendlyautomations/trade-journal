@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Dashboard scope filters — time period, account type, visibility (account picker stays in the header).
+/// Dashboard scope filters, time period, account type, visibility (account picker stays in the header).
 struct DashboardScopeFilterSheet: View {
     @Bindable var viewModel: DashboardViewModel
     @Environment(\.themeColors) private var colors
@@ -94,12 +94,12 @@ struct DashboardScopeFilterSheet: View {
         }
         .frame(minHeight: ExperienceSpacing.minTouchTarget, alignment: .center)
         .padding(.horizontal, ExperienceSpacing.sm)
-        .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .experienceFilterMenuRow(cornerRadius: 10)
     }
 
 }
 
-/// Shared time period picker row — Dashboard filter sheet and Trading Rules Analytics.
+/// Shared time period picker row, Dashboard filter sheet and Trading Rules Analytics.
 struct DashboardScopeTimePeriodFields: View {
     @Binding var draft: DashboardScopeFilterDraft
 
@@ -152,7 +152,7 @@ struct DashboardScopeTimePeriodFields: View {
         }
         .frame(minHeight: ExperienceSpacing.minTouchTarget, alignment: .center)
         .padding(.horizontal, ExperienceSpacing.sm)
-        .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .experienceFilterMenuRow(cornerRadius: 10)
     }
 
     private var customStartBinding: Binding<Date> {

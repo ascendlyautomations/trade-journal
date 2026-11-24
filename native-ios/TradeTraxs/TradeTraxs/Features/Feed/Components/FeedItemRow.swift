@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Instagram-style continuous feed row — media-first when media exists, text-first otherwise.
+/// Instagram-style continuous feed row, media-first when media exists, text-first otherwise.
 struct FeedItemRow: View {
     let entry: FeedTimelineEntry
     let author: Profile?
@@ -38,7 +38,7 @@ struct FeedItemRow: View {
         FeedLinkedContentResolver.linkedReel(for: entry, cache: detailCache)
     }
 
-    /// Linked clip pill on row media — skip the footer embed when already on-image.
+    /// Linked clip pill on row media, skip the footer embed when already on-image.
     private var showsLinkedClipOnTradeImage: Bool {
         guard linkedReel != nil, entry.hasDisplayMedia else { return false }
         switch entry {
@@ -134,7 +134,7 @@ struct FeedItemRow: View {
         return false
     }
 
-    /// Media-first rows — engagement attached directly under media, caption below.
+    /// Media-first rows, engagement attached directly under media, caption below.
     private var standardMediaLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
             feedImageMedia
@@ -166,7 +166,7 @@ struct FeedItemRow: View {
         }
     }
 
-    // MARK: - Layout B (text-only — body opens; like-row buttons stay independent)
+    // MARK: - Layout B (text-only, body opens; like-row buttons stay independent)
 
     private var textLayout: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -206,7 +206,7 @@ struct FeedItemRow: View {
         .padding(.bottom, ExperienceSpacing.md)
     }
 
-    // MARK: - Media (full bleed — only when hasDisplayMedia)
+    // MARK: - Media (full bleed, only when hasDisplayMedia)
 
     @ViewBuilder
     private var feedImageMedia: some View {
@@ -404,7 +404,7 @@ struct FeedItemRow: View {
         tradeMetrics(summary)
     }
 
-    /// Trade metrics and copy-trade metadata — always below the engagement row.
+    /// Trade metrics and copy-trade metadata, always below the engagement row.
     @ViewBuilder
     private func tradePostDetails(_ summary: TradeSummary, opensOnTap: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -524,7 +524,7 @@ private extension View {
     }
 }
 
-/// Lightweight feed context-menu preview — cached entry data only.
+/// Lightweight feed context-menu preview, cached entry data only.
 private struct FeedItemRowPreview: View {
     let entry: FeedTimelineEntry
     let author: Profile?

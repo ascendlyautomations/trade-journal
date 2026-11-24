@@ -39,7 +39,7 @@ enum NavigationRestorationPolicy {
         var deferredAuthenticatedPaths: NavigationState?
     }
 
-    /// Cold start: load tab preference only — paths restore after auth succeeds.
+    /// Cold start: load tab preference only, paths restore after auth succeeds.
     static func bootstrapState(
         restorer: any NavigationStateRestoring,
         preferRestoredSession: Bool = true

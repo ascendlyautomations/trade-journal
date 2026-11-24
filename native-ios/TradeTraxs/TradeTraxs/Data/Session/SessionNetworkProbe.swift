@@ -34,7 +34,7 @@ nonisolated enum SessionNetworkProbe {
         if event == .realtimeUpdate {
             SupabaseSessionUsage.recordRealtimeEvent()
         }
-        let suffix = detail.isEmpty ? "" : " — \(detail)"
+        let suffix = detail.isEmpty ? "" : ", \(detail)"
         AppLog.networking.info(
             "[SessionNetworkProbe] \(event.rawValue, privacy: .public) \(resource, privacy: .public)\(suffix, privacy: .public)"
         )

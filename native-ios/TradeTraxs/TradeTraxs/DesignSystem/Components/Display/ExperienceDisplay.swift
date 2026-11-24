@@ -52,6 +52,7 @@ struct ExperienceCard<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         content()
@@ -63,8 +64,15 @@ struct ExperienceCard<Content: View>: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                    .stroke(colors.border.opacity(ExperienceOpacity.subtle), lineWidth: ExperienceBorder.hairline)
+                    .stroke(borderColor, lineWidth: ExperienceBorder.hairline)
             }
+    }
+
+    private var borderColor: Color {
+        if colorScheme == .light {
+            return colors.border.opacity(ExperienceDashboardSurface.LightChrome.borderOpacity)
+        }
+        return colors.border.opacity(ExperienceOpacity.subtle)
     }
 }
 

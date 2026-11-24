@@ -12,7 +12,7 @@ protocol DeepLinkParsing: Sendable {
 /// - `tradetraxs://...` / `com.tradetraxs.TradeTraxs://...`
 /// - legacy `com.tradetraxs.ios://...` (retired Capacitor identity)
 ///
-/// Features never parse URLs themselves — they only consume destinations.
+/// Features never parse URLs themselves, they only consume destinations.
 struct DeepLinkParser: DeepLinkParsing {
     func parse(url: URL) -> AppDestination? {
         let scheme = (url.scheme ?? "").lowercased()
@@ -82,7 +82,7 @@ struct DeepLinkParser: DeepLinkParsing {
         case "calendar":
             return .home(.calendar)
         case "analyst", "ai":
-            // Trade AI is per-trade on detail screens — no standalone analyst route.
+            // Trade AI is per-trade on detail screens, no standalone analyst route.
             return .tab(.home)
         case "feed":
             return parseFeed(Array(parts.dropFirst()), query: query)
@@ -94,7 +94,7 @@ struct DeepLinkParser: DeepLinkParsing {
             return parseRooms(Array(parts.dropFirst()), query: query)
         case "room":
             if let id = parts[safe: 1] {
-                // Web `/room/{id}` redirects to `/community?room={id}` — open Messages tab.
+                // Web `/room/{id}` redirects to `/community?room={id}`, open Messages tab.
                 return .messages(.room(RoomID(id)))
             }
             return .tab(.messages)

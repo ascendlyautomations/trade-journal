@@ -1,11 +1,11 @@
 import Foundation
 
-/// Web `lib/commentThreads.ts` + `lib/commentReplyUx.ts` — single-level reply threads.
+/// Web `lib/commentThreads.ts` + `lib/commentReplyUx.ts`, single-level reply threads.
 enum CommentThreadSupport {
     static let manyTopLevelCommentsThreshold = 5
     static let replyPreviewMaxLength = 80
 
-    /// Stored as `parent_comment_id` — always the thread root (top-level comment).
+    /// Stored as `parent_comment_id`, always the thread root (top-level comment).
     struct ReplyTarget: Equatable, Sendable {
         var parentCommentID: CommentID
         var authorName: String
@@ -23,7 +23,7 @@ enum CommentThreadSupport {
         Dictionary(uniqueKeysWithValues: comments.map { ($0.id, $0) })
     }
 
-    /// Walk `parent_comment_id` chain to the thread root — matches web `getCommentThreadRootId`.
+    /// Walk `parent_comment_id` chain to the thread root, matches web `getCommentThreadRootId`.
     static func threadRootID(
         for commentID: CommentID,
         commentsByID: [CommentID: InteractionComment]

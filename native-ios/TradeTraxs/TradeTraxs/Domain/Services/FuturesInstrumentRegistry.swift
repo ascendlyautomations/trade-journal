@@ -1,6 +1,6 @@
 import Foundation
 
-/// Authoritative local futures instrument metadata — no network calls.
+/// Authoritative local futures instrument metadata, no network calls.
 nonisolated enum FuturesInstrumentRegistry {
     nonisolated struct Spec: Hashable, Sendable {
         var canonicalSymbol: String

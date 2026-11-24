@@ -8,7 +8,7 @@ nonisolated protocol MemoryCaching: Sendable {
     func removeAll()
 }
 
-/// Durable disk cache — SwiftData / file store later.
+/// Durable disk cache, SwiftData / file store later.
 nonisolated protocol DiskCaching: Sendable {
     func data(forKey key: String) async throws -> Data?
     func set(_ data: Data, forKey key: String) async throws

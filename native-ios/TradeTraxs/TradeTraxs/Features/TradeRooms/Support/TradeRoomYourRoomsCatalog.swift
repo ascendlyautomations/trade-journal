@@ -1,6 +1,6 @@
 import Foundation
 
-/// Your Rooms list for in-room switcher — same sources as Trade Rooms home bootstrap.
+/// Your Rooms list for in-room switcher, same sources as Trade Rooms home bootstrap.
 @MainActor
 enum TradeRoomYourRoomsCatalog {
     static func rooms(viewerID: ProfileID?) -> [ExploreRoomSuggestion] {

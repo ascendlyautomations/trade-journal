@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Typed opaque identifiers
 // Canonical identity types for the Domain layer. Navigation and Features
-// reuse these (same module) — never invent parallel ID types per layer.
+// reuse these (same module), never invent parallel ID types per layer.
 
 nonisolated struct UserID: Hashable, Codable, Sendable, RawRepresentable {
     let rawValue: String
@@ -124,7 +124,7 @@ nonisolated struct RoomMessageID: Hashable, Codable, Sendable, RawRepresentable 
     init(_ rawValue: String) { self.rawValue = rawValue }
 }
 
-/// Web `room_sections.id` — a Trade Room channel (subroom).
+/// Web `room_sections.id`, a Trade Room channel (subroom).
 nonisolated struct RoomChannelID: Hashable, Codable, Sendable, RawRepresentable {
     let rawValue: String
     init(rawValue: String) { self.rawValue = rawValue }

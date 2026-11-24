@@ -183,7 +183,7 @@ struct TradeRoomObsBroadcastManagementSheet: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             streamTitleEditor
 
-            Text("Private setup — stream is not visible to the room until you tap Go live to room.")
+            Text("Private setup, stream is not visible to the room until you tap Go live to room.")
                 .font(.system(.subheadline, design: .rounded))
                 .foregroundStyle(colors.textSecondary)
 
@@ -277,7 +277,7 @@ struct TradeRoomObsBroadcastManagementSheet: View {
                     .disabled(!controller.streamKeyRevealed)
                 }
             } else {
-                Text("Credentials missing — use Regenerate stream key after revoking.")
+                Text("Credentials missing, use Regenerate stream key after revoking.")
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(colors.textSecondary)
             }
@@ -306,7 +306,7 @@ struct TradeRoomObsBroadcastManagementSheet: View {
             Text("Stream title")
                 .font(.system(.caption, design: .rounded).weight(.semibold))
                 .foregroundStyle(colors.textSecondary)
-            TextField("e.g. Trading NY Session — NQ Futures", text: $streamTitleDraft)
+            TextField("e.g. Trading NY Session, NQ Futures", text: $streamTitleDraft)
                 .textInputAutocapitalization(.sentences)
                 .onAppear {
                     streamTitleDraft = controller.streamTitle ?? streamTitleDraft

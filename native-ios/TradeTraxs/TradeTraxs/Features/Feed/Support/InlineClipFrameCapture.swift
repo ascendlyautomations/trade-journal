@@ -2,7 +2,7 @@ import AVFoundation
 import UIKit
 
 enum InlineClipFrameCapture {
-    /// Captures an oriented frame near ``time`` — always off-main, low priority, never blocks scroll.
+    /// Captures an oriented frame near ``time``, always off-main, low priority, never blocks scroll.
     static func captureFrame(asset: AVAsset, time: CMTime, maxPixelSize: CGFloat = 720) async -> UIImage? {
         await Task.detached(priority: .utility) {
             let generator = AVAssetImageGenerator(asset: asset)

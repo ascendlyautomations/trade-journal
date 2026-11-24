@@ -74,6 +74,16 @@ final class PropFirmDetailViewModel {
         navigationCoordinator?.open(.settingsStack([.home, .tradingAccounts]))
     }
 
+    func handleAccountMutation() {
+        guard let ownerProfileID else { return }
+        guard let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: ownerProfileID,
+            detailCache: detailCache
+        ) else { return }
+        propFirmAccounts = loaded.filter(\.isPropFirmAccount)
+        OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: ownerProfileID, detailCache: detailCache)
+    }
+
     func openPayoutsPage() {
         navigationCoordinator?.pushHome(.propFirmPayouts(accountID))
     }
@@ -141,6 +151,10 @@ final class PropFirmDetailViewModel {
                     isLoading = false
                     return
                 } catch {
+                    if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                        isLoading = false
+                        return
+                    }
                     // Fall through to legacy REST path.
                 }
             }

@@ -134,7 +134,7 @@ nonisolated enum AnalyticsLocalSchema {
         ON dashboard_chart_bundle (viewer_id, account_scope_key, ingested_revision);
         """
 
-    /// Profile Statistics V2 — keyed by viewer + subject + contract + visibility (not owner sync state).
+    /// Profile Statistics V2, keyed by viewer + subject + contract + visibility (not owner sync state).
     static let createProfileAnalyticsSnapshot = """
         CREATE TABLE IF NOT EXISTS profile_analytics_snapshot (
             viewer_id TEXT NOT NULL,

@@ -25,7 +25,7 @@ enum AppIconBadgeSync {
 
     static func refresh(animated: Bool = true, force: Bool = false) {
         guard client != nil else {
-            AppLog.notifications.error("AppIconBadgeSync.refresh skipped — client not configured")
+            AppLog.notifications.error("AppIconBadgeSync.refresh skipped, client not configured")
             return
         }
 
@@ -37,7 +37,7 @@ enum AppIconBadgeSync {
             AppIconBadgeController.shared.setBadge(lastMirroredBadge, animated: animated)
             #if DEBUG
             AppLog.notifications.debug(
-                "AppIconBadgeSync.refresh skipped — reused cached mirror value=\(lastMirroredBadge, privacy: .public)"
+                "AppIconBadgeSync.refresh skipped, reused cached mirror value=\(lastMirroredBadge, privacy: .public)"
             )
             #endif
             return

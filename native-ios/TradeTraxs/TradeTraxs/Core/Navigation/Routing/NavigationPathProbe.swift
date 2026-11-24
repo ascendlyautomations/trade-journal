@@ -3,7 +3,7 @@ import SwiftUI
 
 /// DEBUG-only probe exposing live tab paths for UI/integration tests and simulator validation.
 ///
-/// Privacy-safe route summaries — no conversation/profile/trade IDs.
+/// Privacy-safe route summaries, no conversation/profile/trade IDs.
 struct NavigationPathProbe: View {
     let store: NavigationStore
 

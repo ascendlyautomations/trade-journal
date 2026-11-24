@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Owns selection, persistence, and resolution of the active theme.
 ///
-/// Not `@MainActor`-isolated — matches ``NavigationEnvironment`` so storing this
+/// Not `@MainActor`-isolated, matches ``NavigationEnvironment`` so storing this
 /// in ``AppEnvironment`` does not poison SwiftUI `EnvironmentKey` / key-path types.
 @Observable
 final class ThemeManager {

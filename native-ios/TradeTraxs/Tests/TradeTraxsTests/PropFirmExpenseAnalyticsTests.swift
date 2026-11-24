@@ -11,6 +11,12 @@ final class PropFirmExpenseAnalyticsTests: XCTestCase {
         XCTAssertEqual(PropFirmExpenseMoney.format(Decimal(string: "-2.50") ?? 0), "-$2.50")
     }
 
+    func testCompactBreakdownTotalFormatsThousandsWithoutCents() {
+        XCTAssertEqual(PropFirmExpenseMoney.compactBreakdownTotal(500), "$500")
+        XCTAssertEqual(PropFirmExpenseMoney.compactBreakdownTotal(4142), "$4.1K")
+        XCTAssertEqual(PropFirmExpenseMoney.compactBreakdownTotal(125_400), "$125.4K")
+    }
+
     func testRecurringExpensesIncludeEveryDateSinceTheStart() {
         XCTAssertEqual(
             ExpenseRecurrenceSchedule.dates(from: "2026-10-01", recurrence: .weekly, through: "2026-10-15"),

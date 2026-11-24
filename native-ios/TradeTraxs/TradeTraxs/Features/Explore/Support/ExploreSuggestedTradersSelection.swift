@@ -1,8 +1,8 @@
 import Foundation
 
-/// Suggested-trader eligibility and presentation — home preview vs full directory.
+/// Suggested-trader eligibility and presentation, home preview vs full directory.
 enum ExploreSuggestedTradersSelection {
-    /// Horizontal Explore rail — five discoverable traders with avatars.
+    /// Horizontal Explore rail, five discoverable traders with avatars.
     static let homePreviewCount = 5
 
     /// Discoverable traders (excludes viewer and followed). Avatars do not affect eligibility.
@@ -18,7 +18,7 @@ enum ExploreSuggestedTradersSelection {
         }
     }
 
-    /// Full directory ordering — avatar holders first, stable order within each group.
+    /// Full directory ordering, avatar holders first, stable order within each group.
     static func discoverableAvatarFirst(
         _ traders: [ExploreTraderSuggestion],
         viewerID: ProfileID?,
@@ -29,7 +29,7 @@ enum ExploreSuggestedTradersSelection {
         return ExploreTraderRanking.preservingOrderPreferringProfilePictures(base, profile: profile)
     }
 
-    /// Home-rail candidates — discoverable and must have a profile picture.
+    /// Home-rail candidates, discoverable and must have a profile picture.
     static func eligible(
         _ traders: [ExploreTraderSuggestion],
         viewerID: ProfileID?,

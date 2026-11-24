@@ -2,7 +2,7 @@ import Foundation
 
 /// Viewer-scoped on-disk snapshots for Profile first paint + recent section payloads.
 ///
-/// Structured metadata only — no media blobs. Server + RLS remain authoritative.
+/// Structured metadata only, no media blobs. Server + RLS remain authoritative.
 nonisolated enum ProfileDiskCache {
     static let folderName = "ProfileDiskCache"
     static let schemaVersion = 2
@@ -164,7 +164,7 @@ nonisolated enum ProfileDiskCache {
             let data = try JSONEncoder().encode(value)
             try data.write(to: url, options: [.atomic])
         } catch {
-            // Soft-fail — disk cache must never break networking.
+            // Soft-fail, disk cache must never break networking.
         }
     }
 

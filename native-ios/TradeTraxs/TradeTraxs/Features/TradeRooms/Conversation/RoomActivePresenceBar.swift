@@ -6,7 +6,7 @@ struct RoomActivePresenceMember: Identifiable, Equatable {
     var profile: Profile
 }
 
-/// Web Community header — stacked avatars + active trader count.
+/// Web Community header, stacked avatars + active trader count.
 struct RoomActivePresenceBar: View {
     let members: [RoomActivePresenceMember]
     let imagePipeline: any ImagePipeline

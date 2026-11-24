@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 import UIKit
 
-/// Owner-only OBS broadcast control — BFF + LiveKit preview subscribe only (no iOS camera/mic capture).
+/// Owner-only OBS broadcast control, BFF + LiveKit preview subscribe only (no iOS camera/mic capture).
 @Observable
 @MainActor
 final class TradeRoomObsBroadcastController {
@@ -32,7 +32,7 @@ final class TradeRoomObsBroadcastController {
     private(set) var broadcastSessionId: String?
     private(set) var broadcasterUserId: String?
     private(set) var rtmpURL: String?
-    /// In memory only — never persisted.
+    /// In memory only, never persisted.
     private(set) var streamKey: String?
     var streamKeyRevealed = false
 
@@ -42,7 +42,7 @@ final class TradeRoomObsBroadcastController {
 
     private(set) var publicDiscoverableLive = false
     private(set) var visibility: String?
-    /// Server reports an OBS prep session owned by another user — do not call `startBroadcast`.
+    /// Server reports an OBS prep session owned by another user, do not call `startBroadcast`.
     private(set) var foreignHostPreparing = false
     private var serverIngressId: String?
 
@@ -103,7 +103,7 @@ final class TradeRoomObsBroadcastController {
         }
     }
 
-    /// Sheet closed without ending the broadcast — keep session phase for Manage Stream reopen.
+    /// Sheet closed without ending the broadcast, keep session phase for Manage Stream reopen.
     func acknowledgeManagementSheetDismissed() {
         obsPollTask?.cancel()
         obsPollTask = nil
@@ -784,7 +784,7 @@ private extension String {
 }
 
 enum TradeRoomObsGoLivePolicy {
-    /// Mirrors web `tradeRoomObsGoLiveToRoomEnabled` — preparing host, not busy, encoder connected.
+    /// Mirrors web `tradeRoomObsGoLiveToRoomEnabled`, preparing host, not busy, encoder connected.
     static func canGoLiveToRoom(
         isPreparingObs: Bool,
         isBusy: Bool,

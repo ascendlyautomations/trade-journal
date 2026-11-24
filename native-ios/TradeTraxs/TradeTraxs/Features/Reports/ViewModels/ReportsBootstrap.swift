@@ -1,6 +1,6 @@
 import Foundation
 
-/// Coordinated Reports catalog first-paint — loads web-parity trading reports.
+/// Coordinated Reports catalog first-paint, loads web-parity trading reports.
 @MainActor
 enum ReportsBootstrap: ScreenBootstrap {
     struct Context {
@@ -55,7 +55,7 @@ enum ReportsBootstrap: ScreenBootstrap {
     }
 }
 
-/// Detail bootstrap — loads one period report from the shared repository/cache.
+/// Detail bootstrap, loads one period report from the shared repository/cache.
 @MainActor
 enum ReportDetailBootstrap: ScreenBootstrap {
     struct Context {

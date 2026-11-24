@@ -5,7 +5,7 @@ import Observation
 ///
 /// Network mutations stay in ``ProfileRepository``. Every successful (or optimistic)
 /// edge change patches DetailPresentationCache, SessionFollowingStore, disk,
-/// Explore, Leaderboard, owner stats, and the active Profile header — then bumps
+/// Explore, Leaderboard, owner stats, and the active Profile header, then bumps
 /// ``revision`` so Feed / lists can react without timers or forced full reloads.
 @Observable
 @MainActor
@@ -102,7 +102,7 @@ final class FollowMutationCoordinator {
         revision += 1
     }
 
-    /// Pending request presentation — does not insert into the complete following set.
+    /// Pending request presentation, does not insert into the complete following set.
     func applyFollowRequestPresentation(
         viewer: ProfileID,
         target: ProfileID,
@@ -182,13 +182,13 @@ final class FollowMutationCoordinator {
         revision += 1
     }
 
-    /// Incoming follow request approved — requester now follows the authenticated owner.
+    /// Incoming follow request approved, requester now follows the authenticated owner.
     func noteIncomingFollowAccepted(requester: ProfileID) {
         guard let owner = currentUserProfile?.profile?.id else { return }
         applyIncomingFollowAccepted(owner: owner, requester: requester)
     }
 
-    /// Incoming follow request approved — requester now follows owner.
+    /// Incoming follow request approved, requester now follows owner.
     func applyIncomingFollowAccepted(owner: ProfileID, requester: ProfileID) {
         if var stats = detailCache?.stats(for: owner) {
             stats.followerCount = max(0, stats.followerCount + 1)
@@ -206,7 +206,7 @@ final class FollowMutationCoordinator {
         revision += 1
     }
 
-    /// Shared read for any screen — prefer complete following set, then pairwise edge.
+    /// Shared read for any screen, prefer complete following set, then pairwise edge.
     func isFollowing(viewer: ProfileID, target: ProfileID) -> Bool {
         resolvedIsFollowing(viewer: viewer, target: target)
     }
@@ -222,7 +222,7 @@ final class FollowMutationCoordinator {
 
     /// Seeds the complete viewer following set from bootstrap RPCs (Feed / Session).
     ///
-    /// Idempotent — does not bump ``revision`` when the following set is unchanged.
+    /// Idempotent, does not bump ``revision`` when the following set is unchanged.
     /// Feed listens to ``revision`` for user follow/unfollow refreshes; bumping on every
     /// bootstrap seed caused a sequential reload loop (bootstrap → seed → refresh → …).
     func seedViewerFollowingRelationships(ids: Set<ProfileID>, viewer: ProfileID) {

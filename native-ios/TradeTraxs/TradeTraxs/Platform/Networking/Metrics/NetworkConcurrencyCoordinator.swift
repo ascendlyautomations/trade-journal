@@ -3,7 +3,7 @@ import OSLog
 
 /// Visible vs background scheduling for Supabase HTTP work.
 nonisolated enum NetworkSchedulingPriority: Sendable {
-    /// GoTrue token refresh / session validation — never waits on background or media budgets.
+    /// GoTrue token refresh / session validation, never waits on background or media budgets.
     case criticalAuth
     case visible
     case background
@@ -13,9 +13,9 @@ nonisolated enum NetworkSchedulingPriority: Sendable {
 actor NetworkConcurrencyCoordinator {
     static let shared = NetworkConcurrencyCoordinator()
 
-    /// Conservative startup budget — background callers wait beyond this count.
+    /// Conservative startup budget, background callers wait beyond this count.
     static let maxBackgroundConcurrent = 4
-    /// Storage / render image fetches — separate from JSON RPC budget.
+    /// Storage / render image fetches, separate from JSON RPC budget.
     static let maxBackgroundMediaConcurrent = 3
     /// Cap concurrent visible REST/RPC so avatar storms cannot starve bootstraps.
     static let maxVisibleConcurrent = 8
@@ -30,13 +30,13 @@ actor NetworkConcurrencyCoordinator {
     }
 
     private var backgroundWaiters: [BackgroundWaiter] = []
-    /// Blocks authenticated REST/RPC acquires after logout — not GoTrue bootstrap/token exchange.
+    /// Blocks authenticated REST/RPC acquires after logout, not GoTrue bootstrap/token exchange.
     private var authenticatedSessionNetworkingBlocked = false
     private var sessionEndGeneration: UInt64 = 0
 
     private init() {}
 
-    /// Hard session boundary — resume every waiter and reject new authenticated acquires until login succeeds.
+    /// Hard session boundary, resume every waiter and reject new authenticated acquires until login succeeds.
     /// A reset for an older generation cannot cancel the session that replaced it.
     func resetForAuthenticatedSessionEnd(authGeneration: UInt64) -> (waitersReleased: Int, inFlightCleared: Int) {
         guard authGeneration >= sessionEndGeneration else {
@@ -89,7 +89,7 @@ actor NetworkConcurrencyCoordinator {
     }
     var waitingBackgroundCount: Int { backgroundWaiters.count }
 
-    /// Acquires a slot, runs `operation`, then releases — covers full network lifetime per attempt.
+    /// Acquires a slot, runs `operation`, then releases, covers full network lifetime per attempt.
     func runWithSlot<T: Sendable>(
         priority: NetworkSchedulingPriority,
         path: String,
@@ -349,7 +349,7 @@ actor NetworkConcurrencyCoordinator {
             return .visible
         }
 
-        // User-initiated live voice / broadcast control — must not sit in the background
+        // User-initiated live voice / broadcast control, must not sit in the background
         // lane where SwiftUI task cancellation can drop in-flight setup.
         if path.hasPrefix("/api/livekit/") {
             return .visible
@@ -358,7 +358,7 @@ actor NetworkConcurrencyCoordinator {
         return .background
     }
 
-    /// Connection list + account discovery while Broker Integrations is on screen — not background prefetch.
+    /// Connection list + account discovery while Broker Integrations is on screen, not background prefetch.
     private static func isBrokerIntegrationsVisibleBFFPath(_ path: String) -> Bool {
         if path == "/api/integrations/tradovate/connections" { return true }
         if path == "/api/integrations/rithmic/connections" { return true }
@@ -371,7 +371,7 @@ actor NetworkConcurrencyCoordinator {
         return false
     }
 
-    /// User-facing screen bootstraps and blocking detail loads — not capped by background budget.
+    /// User-facing screen bootstraps and blocking detail loads, not capped by background budget.
     private static let visibleBlockingRPCs: Set<String> = [
         BackendV2Versioning.RPCName.session.rawValue,
         BackendV2Versioning.RPCName.dashboard.rawValue,
@@ -400,7 +400,7 @@ actor NetworkConcurrencyCoordinator {
         BackendV2Versioning.RPCName.tradesListV2.rawValue,
     ]
 
-    /// GET by primary key / id batch — trade detail, feed hydration, achievement fetch, etc.
+    /// GET by primary key / id batch, trade detail, feed hydration, achievement fetch, etc.
     private static let visibleEntityTables: Set<String> = [
         "trades",
         "achievements",

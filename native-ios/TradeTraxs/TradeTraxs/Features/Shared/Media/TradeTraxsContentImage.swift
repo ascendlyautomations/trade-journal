@@ -15,7 +15,7 @@ struct TradeTraxsContentImage: View {
     var surface: Surface = .feed
     var displayMode: AdaptiveMediaDisplayMode? = nil
     var presentationOverride: ContentImagePresentation? = nil
-    /// Fixed width/height for profile thumbnails — when set, uses that box instead of full card width.
+    /// Fixed width/height for profile thumbnails, when set, uses that box instead of full card width.
     var fixedSize: CGSize? = nil
     var backgroundColor: Color? = nil
 

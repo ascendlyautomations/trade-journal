@@ -1,6 +1,6 @@
 import Foundation
 
-/// Story-reply DM payload — mirrors web `lib/storyReplyMessage.ts`.
+/// Story-reply DM payload, mirrors web `lib/storyReplyMessage.ts`.
 nonisolated enum StoryReplyMessageSupport {
     static let messageType = "story_reply"
 

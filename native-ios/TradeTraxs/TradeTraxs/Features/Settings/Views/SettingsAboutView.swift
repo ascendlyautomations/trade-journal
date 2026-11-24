@@ -5,7 +5,7 @@ struct SettingsAboutView: View {
     @Environment(\.themeColors) private var colors
 
     private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
     }
 
     var body: some View {

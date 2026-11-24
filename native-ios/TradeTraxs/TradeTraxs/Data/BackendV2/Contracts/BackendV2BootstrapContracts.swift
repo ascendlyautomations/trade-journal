@@ -118,7 +118,7 @@ nonisolated struct SessionProfileV1: Codable, Sendable, Equatable {
     var max_drawdown_limit: Double?
     var is_private: Bool?
     var has_email_password: Bool?
-    /// `profiles.created_at`. Absent on older cached payloads — do not invent "now".
+    /// `profiles.created_at`. Absent on older cached payloads, do not invent "now".
     var created_at: String? = nil
 }
 
@@ -262,7 +262,7 @@ nonisolated struct ProfileBootstrapV1: Codable, Sendable, Equatable {
         var profit_factor: PostgresFlexibleDouble?
         /// Mean `rr` across eligible public trades; null when no RR values exist.
         var average_rr: PostgresFlexibleDouble?
-        /// Sum of viewer-visible payout achievement values — web `sumPayoutAchievementTotals`.
+        /// Sum of viewer-visible payout achievement values, web `sumPayoutAchievementTotals`.
         var payout_total: PostgresFlexibleDouble?
     }
 
@@ -299,7 +299,7 @@ nonisolated struct ProfileBootstrapV1: Codable, Sendable, Equatable {
         var section_counts: [String: JSONValue]?
         var public_stats: PublicStatsWire?
         var owned_room: OwnedRoomWire?
-        /// Active stories for this profile (24h window, stories RLS) — same shape as Feed bootstrap.
+        /// Active stories for this profile (24h window, stories RLS), same shape as Feed bootstrap.
         var active_stories: [FeedStoryPreviewV1]?
         /// Authoritative `accounts.mode` for accounts with public trades (`account_id` → mode).
         var public_account_modes: [String: String]?
@@ -318,7 +318,7 @@ nonisolated struct MessagesBootstrapV1: Codable, Sendable, Equatable {
     var meta: BootstrapMetaV1
     var data: DataPayload
 
-    /// Messaging inbox only — Rooms are a separate domain.
+    /// Messaging inbox only, Rooms are a separate domain.
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
         var conversations: [MessagingConversationV1]
         var peers: [String: AuthorCardV1]
@@ -429,7 +429,7 @@ nonisolated struct RoomsBootstrapV1: Codable, Sendable {
         var sections: [RoomSectionWire]
         var active_section_id: String?
         var channel_preferences: [String: Bool]?
-        /// Active memberships (`left_at IS NULL`) — available to all active members.
+        /// Active memberships (`left_at IS NULL`), available to all active members.
         var active_member_count: Int?
         var member_stats: MemberStatsWire?
         var unread_count: Int
@@ -689,7 +689,7 @@ nonisolated struct ProfileStatisticsBootstrapV1: Codable, Sendable, Equatable {
 
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
         var profile_id: String?
-        /// Keys: all, eval, funded, live, sim, backtest — each value is a mode result object.
+        /// Keys: all, eval, funded, live, sim, backtest, each value is a mode result object.
         var modes: [String: JSONValue]
     }
 

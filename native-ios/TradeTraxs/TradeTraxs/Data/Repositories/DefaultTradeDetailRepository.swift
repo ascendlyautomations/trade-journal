@@ -1,6 +1,6 @@
 import Foundation
 
-/// Authoritative TradeDetail — PostgREST `ownerJournalSelect` (production detail source).
+/// Authoritative TradeDetail, PostgREST `ownerJournalSelect` (production detail source).
 nonisolated struct DefaultTradeDetailRepository: TradeDetailRepository {
     private let trades: any TradeRepository
     private let session: any SessionProviding

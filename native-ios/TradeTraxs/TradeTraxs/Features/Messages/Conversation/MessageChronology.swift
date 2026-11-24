@@ -1,6 +1,6 @@
 import Foundation
 
-/// Canonical message chronology — single comparator for thread, cache, realtime, and inbox derivation.
+/// Canonical message chronology, single comparator for thread, cache, realtime, and inbox derivation.
 nonisolated enum MessageChronology {
     /// Ascending thread order: oldest → newest.
     static func compareAscending(_ lhs: Message, _ rhs: Message) -> Bool {

@@ -224,10 +224,7 @@ struct ScorecardMetricTile: View {
         }
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.sm,
-            style: .continuous
-        ))
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
     }
 }
 
@@ -328,7 +325,20 @@ struct ScorecardGateChipsRow: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(colors.fillSecondary.opacity(0.65), in: Capsule())
+        .modifier(ScorecardGateChipChrome())
+    }
+}
+
+private struct ScorecardGateChipChrome: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if colorScheme == .light {
+            content.experienceFilterCapsule()
+        } else {
+            content.background(colors.fillSecondary.opacity(0.65), in: Capsule())
+        }
     }
 }
 
@@ -430,13 +440,13 @@ enum ScorecardVisualSupport {
         switch category.id {
         case .consistency:
             let pool = postLossScorePoolCount(category)
-            return "— · \(pool)/\(ScorecardPlanAdherence.minPostLossPlanTagged) tags"
+            return "– · \(pool)/\(ScorecardPlanAdherence.minPostLossPlanTagged) tags"
         case .discipline:
             let tagged = planTaggedTradeCount(category)
             if tagged < ScorecardDiscipline.minPlanTaggedForScore {
-                return "— · \(tagged)/\(ScorecardDiscipline.minPlanTaggedForScore) tags"
+                return "– · \(tagged)/\(ScorecardDiscipline.minPlanTaggedForScore) tags"
             }
-            return "—"
+            return "–"
         case .risk, .psychology:
             return ScorecardDisplayStrings.categoryPhase1RowLabel(category: category)
         }

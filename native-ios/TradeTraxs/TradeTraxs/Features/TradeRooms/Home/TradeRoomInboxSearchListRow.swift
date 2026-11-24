@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Joined-room hit during Trade Rooms search — same structure as ``ExploreTraderListRow``.
+/// Joined-room hit during Trade Rooms search, same structure as ``ExploreTraderListRow``.
 struct TradeRoomInboxSearchListRow: View {
     let item: TradeRoomInboxItem
     let imagePipeline: any ImagePipeline

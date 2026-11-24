@@ -1,6 +1,6 @@
 import Foundation
 
-/// Descriptive metadata for pickers / Settings — never visual tokens.
+/// Descriptive metadata for pickers / Settings, never visual tokens.
 struct ThemeMetadata: Hashable, Sendable, Identifiable {
     var id: ThemeIdentifier { identifier }
     var identifier: ThemeIdentifier

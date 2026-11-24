@@ -7,7 +7,7 @@ nonisolated enum PropFirmPayoutPolicy {
         account.isPropFirmAccount && account.mode == .funded
     }
 
-    /// Legacy private ledger (`account_payout_entries`) — not for funded prop cycles.
+    /// Legacy private ledger (`account_payout_entries`), not for funded prop cycles.
     static func supportsManualPayoutLedger(for account: TradingAccount) -> Bool {
         guard !supportsRecordPayout(for: account) else { return false }
         switch account.mode {
@@ -18,12 +18,12 @@ nonisolated enum PropFirmPayoutPolicy {
         }
     }
 
-    /// Create → Withdrawal — live accounts using the manual payout ledger.
+    /// Create → Withdrawal, live accounts using the manual payout ledger.
     static func supportsLiveWithdrawal(for account: TradingAccount) -> Bool {
         account.mode == .live && supportsManualPayoutLedger(for: account)
     }
 
-    /// Create → Withdrawal — Live (manual ledger) or Funded prop-firm (cycle record flow).
+    /// Create → Withdrawal, Live (manual ledger) or Funded prop-firm (cycle record flow).
     static func supportsWithdrawal(for account: TradingAccount) -> Bool {
         supportsRecordPayout(for: account) || supportsManualPayoutLedger(for: account)
     }

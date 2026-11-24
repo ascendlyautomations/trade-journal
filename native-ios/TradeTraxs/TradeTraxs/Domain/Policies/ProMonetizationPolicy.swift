@@ -45,7 +45,7 @@ enum ProMonetizationPolicy {
     // distribution charts (win-loss, sessions, weekdays, long/short, symbols). Trade journal
     // Target R:R fields are unchanged.
 
-    /// Premium dashboard chart blocks — upgrade preview for verified Free; verification UI for unknown.
+    /// Premium dashboard chart blocks, upgrade preview for verified Free; verification UI for unknown.
     @MainActor
     static func premiumFeaturePresentation(
         demoModeActive: Bool,
@@ -70,7 +70,7 @@ enum ProMonetizationPolicy {
         }
     }
 
-    /// Premium dashboard chart blocks — locked preview for verified Free (use ``premiumFeaturePresentation`` in UI).
+    /// Premium dashboard chart blocks, locked preview for verified Free (use ``premiumFeaturePresentation`` in UI).
     @MainActor
     static func shouldHidePremiumDashboardCharts(
         demoModeActive: Bool,
@@ -79,13 +79,15 @@ enum ProMonetizationPolicy {
         premiumFeaturePresentation(demoModeActive: demoModeActive, profileID: profileID) == .lockedPreview
     }
 
-    /// Trading Rules compliance analytics — verified Free users when enforcement is on.
+    /// Trading Rules compliance analytics, verified Free users when enforcement is on.
     @MainActor
     static func shouldRestrictTradingRulesComplianceAnalytics(
         demoModeActive: Bool,
         profileID: ProfileID?
     ) -> Bool {
-        if TraxsProPreviewSession.shared.isDashboardPreviewActive {
+        if TraxsProPreviewSession.shared.isDashboardPreviewActive
+            || TraxsProPreviewSession.shared.isTradingRulesPreviewActive
+        {
             return false
         }
         return TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
@@ -124,7 +126,7 @@ enum ProMonetizationPolicy {
         return TradingRulesPlanTier.complianceRuleFilter(isFreeTier: isFree)
     }
 
-    /// Prop Firm Expense Tracker — verified Free when enforcement is on.
+    /// Prop Firm Expense Tracker, verified Free when enforcement is on.
     @MainActor
     static func shouldRestrictPropFirmExpenseTracker(
         demoModeActive: Bool,
@@ -158,7 +160,7 @@ enum ProMonetizationPolicy {
         )
     }
 
-    /// Trading Reports catalog — same confirmed-Free semantics as premium dashboard charts (Phase 1).
+    /// Trading Reports catalog, same confirmed-Free semantics as premium dashboard charts (Phase 1).
     @MainActor
     static func shouldRestrictTradingReportsCatalog(
         demoModeActive: Bool,
@@ -173,7 +175,7 @@ enum ProMonetizationPolicy {
         )
     }
 
-    /// Advanced Psychology Analytics, Coach, and Trade AI — verified Free users when enforcement is on.
+    /// Advanced Psychology Analytics, Coach, and Trade AI, verified Free users when enforcement is on.
     @MainActor
     static func shouldRestrictPremiumPsychologyAndAI(
         demoModeActive: Bool,
@@ -200,7 +202,7 @@ enum ProMonetizationPolicy {
         )
     }
 
-    /// Backtest Lab — verified Free users when enforcement is on.
+    /// Backtest Lab, verified Free users when enforcement is on.
     @MainActor
     static func shouldRestrictBacktestLab(
         demoModeActive: Bool,

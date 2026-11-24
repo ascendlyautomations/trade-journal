@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared content-detail identity header — Trade / Post / Clip / Achievement.
+/// Shared content-detail identity header, Trade / Post / Clip / Achievement.
 struct DetailIdentityHeader: View {
     let initials: String
     let avatar: Image?

@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Full-screen post-registration bootstrap — shown after auth succeeds, before onboarding/shell.
+/// Full-screen post-registration bootstrap, shown after auth succeeds, before onboarding/shell.
 @Observable
 @MainActor
 final class PostSignupTransitionStore {

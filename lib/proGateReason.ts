@@ -94,10 +94,20 @@ export function proLimitKindFromLegacyCode(code: string): ProLimitKind | null {
   return null
 }
 
+const TRAXPRO_FEATURE_EXCEPTIONS: Record<string, ProFeatureKind> = {
+  TRAXPRO_COPY_TRADING_REQUIRED: "copy_trading",
+  TRAXPRO_PREMIUM_ANALYTICS_REQUIRED: "premium_analytics",
+  TRAXPRO_PROP_FIRM_REQUIRED: "prop_firm",
+  TRAXPRO_TRADING_REPORTS_REQUIRED: "trading_reports",
+  TRAXPRO_BACKTEST_LAB_REQUIRED: "backtest_lab",
+  TRAXPRO_FEATURE_REQUIRED: "generic",
+}
+
 export function proGateReasonFromLegacyError(code: string): ProGateReason | null {
   const head = code.trim().split(":")[0]?.trim().toUpperCase() ?? ""
-  if (head === "TRAXPRO_COPY_TRADING_REQUIRED") {
-    return { type: "feature", feature: "copy_trading" }
+  const feature = TRAXPRO_FEATURE_EXCEPTIONS[head]
+  if (feature) {
+    return { type: "feature", feature }
   }
   const limit = proLimitKindFromLegacyCode(code)
   if (limit) return { type: "limit", limit }

@@ -110,7 +110,7 @@ struct StoryUploadSpec: Sendable {
     var localVideoFileURL: URL?
     var contentType: String
     var originalFileName: String?
-    /// Deterministic object key — filled by ``GlobalUploadCoordinator`` at enqueue.
+    /// Deterministic object key, filled by ``GlobalUploadCoordinator`` at enqueue.
     var storagePath: String = ""
     /// Video story text. Photo stories leave this empty because text is burned into the image.
     var textOverlays: [StoryTextOverlayRecord] = []
@@ -156,7 +156,7 @@ struct TradeSaveUploadCheckpoint: Sendable, Equatable {
     var uploadedScreenshotStoragePath: String?
     var savedTradeID: TradeID?
     var clipAttached: Bool
-    /// Existing reel selected at enqueue — PATCH `reels.trade_id` succeeded.
+    /// Existing reel selected at enqueue, PATCH `reels.trade_id` succeeded.
     var reelLinked: Bool
     var publicFeedPostCompleted: Bool
     var reelVideoPublicURL: String?

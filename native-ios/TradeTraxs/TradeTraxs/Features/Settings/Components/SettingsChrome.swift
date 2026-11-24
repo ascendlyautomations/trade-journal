@@ -1,5 +1,23 @@
 import SwiftUI
 
+/// Shared list layout for Settings grouped screens (`experienceInsetGroupedListStyle`).
+enum SettingsListLayout {
+    /// Edge-to-edge row inside an inset-grouped section, pairs with custom card chrome and `.listRowBackground(.clear)`.
+    static var groupedCardRowInsets: EdgeInsets {
+        EdgeInsets(
+            top: ExperienceSpacing.xs,
+            leading: 0,
+            bottom: ExperienceSpacing.xs,
+            trailing: 0
+        )
+    }
+
+    /// Action / footer rows aligned with the same section width as full-width grouped cards.
+    static var groupedActionRowInsets: EdgeInsets {
+        groupedCardRowInsets
+    }
+}
+
 /// Native Settings disclosure row.
 struct SettingsNavigationRow: View {
     let title: String
@@ -90,7 +108,7 @@ struct SettingsInfoRow: View {
     }
 }
 
-/// Persistent label above an editable field — label stays visible after text is entered.
+/// Persistent label above an editable field, label stays visible after text is entered.
 struct SettingsLabeledField<Content: View>: View {
     let title: String
     var helper: String? = nil

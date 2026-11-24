@@ -127,7 +127,7 @@ final class NavigationCoordinator {
         }
     }
 
-    /// Explore Mode main tabs — remains ``SessionPhase/unauthenticated`` (no authenticated services).
+    /// Explore Mode main tabs, remains ``SessionPhase/unauthenticated`` (no authenticated services).
     /// Stack pushes still run while ``AppLaunchController/isDemoExperienceActive`` is true.
     func markExploreExperience() {
         dismissPresentation()
@@ -208,7 +208,7 @@ final class NavigationCoordinator {
         }
     }
 
-    /// Tab reselect scroll-to-top — UIKit `scrollsToTop` is off on tab roots; scroll programmatically instead.
+    /// Tab reselect scroll-to-top, UIKit `scrollsToTop` is off on tab roots; scroll programmatically instead.
     private func scrollRootListToTopWhenTabReselected(_ tab: TabIdentifier) {
         switch tab {
         case .home:
@@ -222,7 +222,7 @@ final class NavigationCoordinator {
         }
     }
 
-    /// Create tab is an action — presents chooser and keeps content tab selected.
+    /// Create tab is an action, presents chooser and keeps content tab selected.
     func invokeCreateAction(source: CreateActionSource = .unknown) {
         if DemoProtectedNavigation.interceptComposeIfNeeded(.chooser) { return }
         CreateActionInvokeDiagnostics.recordInvoke(source: source)
@@ -406,7 +406,7 @@ final class NavigationCoordinator {
         pushProfile(.admin(route))
     }
 
-    /// Open Settings home from Profile — idempotent; avoids duplicate `settings(.home)` frames.
+    /// Open Settings home from Profile, idempotent; avoids duplicate `settings(.home)` frames.
     func pushProfileSettingsHome(source: String) {
         ensureAuthenticatedOrStash(.profile(.settings(.home)))
         guard allowsContentNavigation else { return }
@@ -912,7 +912,7 @@ final class NavigationCoordinator {
         emit(.popped(tab: tab))
     }
 
-    /// Owner deleted a journal trade — always land on Home → Trades (not the prior screen).
+    /// Owner deleted a journal trade, always land on Home → Trades (not the prior screen).
     func completeTradeDeletionNavigation() {
         presentOwnerTradesJournalRoot(source: "completeTradeDeletionNavigation")
     }
@@ -1094,7 +1094,7 @@ final class NavigationCoordinator {
         }
     }
 
-    /// Cold deep link / external settings URL — intentional Profile tab + constructed stack.
+    /// Cold deep link / external settings URL, intentional Profile tab + constructed stack.
     private func openSettingsDeepLink(_ routes: [SettingsRoute]) {
         ensureAuthenticatedOrStash(.settingsStack(routes))
         guard allowsContentNavigation else { return }

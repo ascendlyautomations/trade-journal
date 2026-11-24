@@ -1,12 +1,12 @@
 import Foundation
 
-/// Logged-out Explore Mode — local demo journal and bundled community fixtures.
+/// Logged-out Explore Mode, local demo journal and bundled community fixtures.
 ///
 /// **Journal:** Dashboard, trades, calendar, and analytics for ``profileID`` use ``DemoCanonicalDataset`` only.
 /// **Community:** Feed, Explore, and Trade Rooms use bundled fixtures for this identity.
 /// Live guest RPCs stay available for non-demo callers; Demo Mode does not require them.
 ///
-/// ``profileID`` is a local fixture identifier only — not a Supabase user.
+/// ``profileID`` is a local fixture identifier only, not a Supabase user.
 nonisolated enum DemoExperienceSupport {
     static let profileID = ProfileID("demo.explore.trader")
 
@@ -27,7 +27,7 @@ nonisolated enum DemoExperienceSupport {
         usesLocalBundledData(id)
     }
 
-    /// Explore Mode Messages tab — local demo DMs only (no ``rpc_v2_messaging_bootstrap``).
+    /// Explore Mode Messages tab, local demo DMs only (no ``rpc_v2_messaging_bootstrap``).
     static func usesExploreDemoInbox(_ id: ProfileID) -> Bool {
         exploreLiveCommunityReadsActive && id == profileID
     }

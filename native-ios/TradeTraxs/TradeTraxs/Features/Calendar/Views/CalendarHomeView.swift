@@ -136,7 +136,7 @@ struct CalendarHomeView: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
-                    .background(colors.fillSecondary, in: Circle())
+                    .experienceFilterIconCircle()
                     .experienceTouchTarget()
             }
             .buttonStyle(.experiencePlain)
@@ -145,7 +145,7 @@ struct CalendarHomeView: View {
             Spacer()
 
             VStack(spacing: 2) {
-                Text(viewModel.month?.title ?? "—")
+                Text(viewModel.month?.title ?? "–")
                     .experienceStyle(.headline, color: colors.primaryText)
                 Button("Today") {
                     viewModel.goToCurrentMonth()
@@ -163,7 +163,7 @@ struct CalendarHomeView: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
-                    .background(colors.fillSecondary, in: Circle())
+                    .experienceFilterIconCircle()
                     .experienceTouchTarget()
             }
             .buttonStyle(.experiencePlain)
@@ -182,7 +182,7 @@ struct CalendarHomeView: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
-                    .background(colors.fillSecondary, in: Circle())
+                    .experienceFilterIconCircle()
                     .experienceTouchTarget()
             }
             .buttonStyle(.experiencePlain)
@@ -209,7 +209,7 @@ struct CalendarHomeView: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
-                    .background(colors.fillSecondary, in: Circle())
+                    .experienceFilterIconCircle()
                     .experienceTouchTarget()
             }
             .buttonStyle(.experiencePlain)

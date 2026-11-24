@@ -24,7 +24,7 @@ nonisolated enum ImageCropAspectOption: String, CaseIterable, Identifiable, Hash
         .square, .portrait, .landscape
     ]
 
-    /// Compact segmented-control label (always short — no truncation on iPhone).
+    /// Compact segmented-control label (always short, no truncation on iPhone).
     var segmentTitle: String { title }
 
     /// `nil` uses the source image's natural aspect ratio (subject to Feed 4:5 cap).

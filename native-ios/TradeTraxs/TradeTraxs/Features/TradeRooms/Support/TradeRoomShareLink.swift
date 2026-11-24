@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import UIKit
 
-/// Canonical Trade Room invite URLs — matches ``lib/tradeRoomShareUrl.ts`` and Universal Links.
+/// Canonical Trade Room invite URLs, matches ``lib/tradeRoomShareUrl.ts`` and Universal Links.
 enum TradeRoomShareLink {
     static let productionHost = "https://www.tradetraxs.com"
 

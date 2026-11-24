@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import Security
 
-/// Native iOS OAuth URLs — must match ``lib/nativeIosOAuthUrls.ts`` and Supabase allow-list.
+/// Native iOS OAuth URLs, must match ``lib/nativeIosOAuthUrls.ts`` and Supabase allow-list.
 nonisolated enum NativeOAuthConfiguration {
     static let callbackScheme = "tradetraxs"
     static let callbackDeepLink = "tradetraxs://auth/callback"

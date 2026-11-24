@@ -122,7 +122,7 @@ final class CreateAchievementViewModel {
         phase == .ready && isFormCompleteForSubmit
     }
 
-    /// Mirrors ``validate()`` without mutating ``formError`` — drives submit button state.
+    /// Mirrors ``validate()`` without mutating ``formError``, drives submit button state.
     var isFormCompleteForSubmit: Bool {
         let title = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return false }

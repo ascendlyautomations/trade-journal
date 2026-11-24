@@ -1,9 +1,9 @@
 import Foundation
 
 /// Joins per-trade psychology with owner-only daily check-ins for future analytics.
-/// Does not produce user-facing insights — data foundation only.
+/// Does not produce user-facing insights, data foundation only.
 nonisolated enum TraderPsychologyAnalyticsFoundation {
-    /// Eastern trade-date key — same as `trades.trade_date` and `check_in_date`.
+    /// Eastern trade-date key, same as `trades.trade_date` and `check_in_date`.
     static func tradeDateKey(for trade: Trade) -> String {
         TradingSessionLabel.easternTradeDateString(from: trade.entryAt)
     }
@@ -70,7 +70,7 @@ nonisolated enum TraderPsychologyAnalyticsFoundation {
         }
     }
 
-    /// Automatically derived streak context — never user-entered.
+    /// Automatically derived streak context, never user-entered.
     struct TradeBehaviorSnapshot: Hashable, Sendable {
         var consecutiveWins: Int
         var consecutiveLosses: Int

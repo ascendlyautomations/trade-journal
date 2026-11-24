@@ -14,7 +14,7 @@ nonisolated enum ProfileClipFixtures {
                 authorProfileID: profileID,
                 video: MediaReference(id: sampleVideoURL, kind: .video, altText: nil),
                 thumbnail: nil,
-                caption: "Open drive clip — NQ continuation",
+                caption: "Open drive clip, NQ continuation",
                 visibility: .public,
                 linkedTradeID: TradeID("dev-trade-1"),
                 durationSeconds: 15,
@@ -49,7 +49,7 @@ nonisolated enum ProfileClipFixtures {
         samples(owner: ProfileID("dev.fixture")).first { $0.id == id }
     }
 
-    /// Sample linked trades for development clips — seeds detail cache without network.
+    /// Sample linked trades for development clips, seeds detail cache without network.
     static func linkedTrades(for reels: [Reel]) -> [Trade] {
         let tradeIDs = Set(reels.compactMap(\.linkedTradeID))
         guard !tradeIDs.isEmpty else { return [] }

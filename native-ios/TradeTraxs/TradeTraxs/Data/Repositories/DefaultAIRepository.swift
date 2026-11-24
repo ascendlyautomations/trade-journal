@@ -1,6 +1,6 @@
 import Foundation
 
-/// Production ``AIRepository`` — BFF `/api/analyze-trade` + `trade_ai_messages` persistence.
+/// Production ``AIRepository``, BFF `/api/analyze-trade` + `trade_ai_messages` persistence.
 nonisolated struct DefaultAIRepository: AIRepository {
     private let supabase: SupabaseInfrastructure
     private let session: any SessionProviding
@@ -130,7 +130,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
                 )
             )
         case 429:
-            throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")
+            throw AppError.unknown(message: decoded?.error ?? "Slow down, try again in a moment.")
         default:
             throw AppError.unknown(
                 message: ProEntitlementResponseSanitizer.sanitizedOrNeutral(
@@ -173,7 +173,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
                 )
             )
         case 429:
-            throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")
+            throw AppError.unknown(message: decoded?.error ?? "Slow down, try again in a moment.")
         case 400:
             throw AppError.unknown(message: decoded?.error ?? "Unsupported screenshot")
         default:

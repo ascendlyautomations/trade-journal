@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Trade detail media — inline interactive pinch zoom (no separate fullscreen viewer).
+/// Trade detail media, inline interactive pinch zoom (no separate fullscreen viewer).
 struct TradeDetailMediaView: View {
     let mediaID: String
     let reference: MediaReference?

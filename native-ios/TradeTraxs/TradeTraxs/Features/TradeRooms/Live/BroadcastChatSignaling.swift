@@ -7,7 +7,7 @@ enum BroadcastChatSendResult: Equatable, Sendable {
 
 enum TradeRoomBroadcastChatConstants {
     static let topic = "tt_broadcast_chat"
-    /// Raise-hand signals for livestream viewers — separate from General Voice (`tt_general_voice_hand`).
+    /// Raise-hand signals for livestream viewers, separate from General Voice (`tt_general_voice_hand`).
     static let handTopic = "tt_broadcast_hand"
     static let maxLength = 500
     static let maxMessages = 200

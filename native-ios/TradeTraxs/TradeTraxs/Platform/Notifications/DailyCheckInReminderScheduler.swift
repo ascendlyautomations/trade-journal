@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import UserNotifications
 
-/// Local daily check-in reminders — Mon–Fri 9:15 AM Eastern only.
+/// Local daily check-in reminders, Mon–Fri 9:15 AM Eastern only.
 enum DailyCheckInReminderScheduler {
     static let identifierPrefix = "daily-check-in:"
 

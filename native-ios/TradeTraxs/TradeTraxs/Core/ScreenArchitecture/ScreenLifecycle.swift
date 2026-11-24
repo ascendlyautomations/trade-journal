@@ -6,7 +6,7 @@ import Foundation
 /// (directly or via thin wrappers over existing `loadIfNeeded` / `stopRealtime` names).
 ///
 /// Prefer composition: a screen view model holds repositories + state and *calls*
-/// a ``ScreenBootstrap`` type — do not inherit a base view-model class.
+/// a ``ScreenBootstrap`` type, do not inherit a base view-model class.
 @MainActor
 protocol ScreenLifecycle: AnyObject {
     associatedtype State: ScreenStateModeling

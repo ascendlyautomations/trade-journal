@@ -1,6 +1,6 @@
 import Foundation
 
-/// PostgREST PATCH body for self-rejoin — must emit explicit JSON `null` for `left_at`
+/// PostgREST PATCH body for self-rejoin, must emit explicit JSON `null` for `left_at`
 /// (Swift's default `Encodable` omits `nil` optionals and would not clear soft leave).
 struct TradeRoomMembershipRejoinPatchBody: Encodable, Sendable {
     nonisolated func encode(to encoder: Encoder) throws {

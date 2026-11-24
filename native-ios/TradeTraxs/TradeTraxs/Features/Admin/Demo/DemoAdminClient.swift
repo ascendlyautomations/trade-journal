@@ -403,7 +403,7 @@ nonisolated enum DemoAdminLabels {
     static let stress = ["Calm", "Slightly Stressed", "Moderate", "Stressed", "Very Stressed"]
 
     static func money(_ amount: Double?) -> String {
-        guard let amount else { return "—" }
+        guard let amount else { return "–" }
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.maximumFractionDigits = 2
@@ -444,7 +444,7 @@ nonisolated enum DemoAdminLabels {
     static func trade(_ record: DemoObject, account: String) -> String {
         let ticker = record.string("symbol.ticker").isEmpty ? "Trade" : record.string("symbol.ticker")
         let when = String(record.string("entryAt").prefix(10))
-        return [ticker, money(record.money("realizedPnL")), account, when].filter { !$0.isEmpty && $0 != "—" }.joined(separator: " · ")
+        return [ticker, money(record.money("realizedPnL")), account, when].filter { !$0.isEmpty && $0 != "–" }.joined(separator: " · ")
     }
 
     static func profiles(in draft: [String: Any]) -> [(id: String, label: String, role: String, record: DemoObject)] {

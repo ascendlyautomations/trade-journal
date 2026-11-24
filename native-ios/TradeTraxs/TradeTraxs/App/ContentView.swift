@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Legacy template entry — unused by production launch.
+/// Legacy template entry, unused by production launch.
 ///
 /// Kept only so previews/tests that still reference `ContentView` compile.
 /// Launch chrome is ``AppRootView``.

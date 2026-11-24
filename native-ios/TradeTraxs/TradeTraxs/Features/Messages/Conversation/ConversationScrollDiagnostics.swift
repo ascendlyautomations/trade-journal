@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only DM scroll lifecycle logging — IDs and counts only, no message bodies.
+/// DEBUG-only DM scroll lifecycle logging, IDs and counts only, no message bodies.
 enum ConversationScrollDiagnostics {
     private static let logger = Logger(subsystem: AppLog.subsystem, category: "ConversationScroll")
 

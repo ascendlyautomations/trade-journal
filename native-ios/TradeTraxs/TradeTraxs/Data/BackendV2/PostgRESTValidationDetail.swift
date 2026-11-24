@@ -8,7 +8,7 @@ nonisolated struct PostgRESTValidationDetail: Sendable, Equatable {
     var details: String?
     var hint: String?
 
-    /// Telemetry-safe single-line summary — no raw JSON bodies or secrets.
+    /// Telemetry-safe single-line summary, no raw JSON bodies or secrets.
     var telemetrySummary: String {
         var parts: [String] = [failureKindLabel]
         if let httpStatus { parts.append("status=\(httpStatus)") }

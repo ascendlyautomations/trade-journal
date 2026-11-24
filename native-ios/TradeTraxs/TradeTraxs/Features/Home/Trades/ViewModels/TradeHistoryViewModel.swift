@@ -33,7 +33,7 @@ final class TradeHistoryViewModel {
     var showsFilterSheet = false
     var pendingDelete: TradeOwnerJournalSummary?
     var deleteErrorMessage: String?
-    var sharePayload: SharePayload?
+    var journalSharePresentation: JournalTradeShareSupport.Presentation?
 
     /// Local-only constraints seeded from Dashboard chart taps (not server filter fields).
     private var localWeekday: Int?
@@ -41,10 +41,6 @@ final class TradeHistoryViewModel {
     private var localSessionLabel: String?
     private var localHoldRange: TradeHistoryLaunchSeed.HoldSecondsRange?
 
-    struct SharePayload: Identifiable, Equatable {
-        let id = UUID()
-        let text: String
-    }
 
     private var profileID: ProfileID?
     private var loadTask: Task<Void, Never>?
@@ -78,12 +74,12 @@ final class TradeHistoryViewModel {
         TradeHistorySummary.from(summaries: items)
     }
 
-    /// Presentation-only grouping — one card per copy action.
+    /// Presentation-only grouping, one card per copy action.
     var displayItems: [TradeHistoryDisplayItem] {
         CopyTradeJournalGrouping.group(items, accounts: accounts)
     }
 
-    /// Grid layout — screenshot trades only (independent of the list filter toggle except both require media).
+    /// Grid layout, screenshot trades only (independent of the list filter toggle except both require media).
     var gridItems: [TradeOwnerJournalSummary] {
         items.filter { ProfileCardMediaPresence.tradeMedia(in: $0.summary) != nil }
     }
@@ -115,7 +111,7 @@ final class TradeHistoryViewModel {
         return count == 1 ? "1 trade" : "\(count) trades"
     }
 
-    /// Total trades for the current query — not limited to the loaded page.
+    /// Total trades for the current query, not limited to the loaded page.
     private var resolvedResultTradeCount: Int {
         if hasActiveQuery || hasLocalBrowseConstraints {
             if let count = matchingTradeCountFromCompleteOwnerCache() {
@@ -182,7 +178,7 @@ final class TradeHistoryViewModel {
 
     var ownerAccountsProfileID: ProfileID? { profileID }
 
-    /// Owner journal / filter labels — `Name • Number`.
+    /// Owner journal / filter labels, `Name • Number`.
     func displayAccountTitle(for accountID: TradingAccountID?) -> String? {
         guard let accountID else { return nil }
         if let account = accounts.first(where: { $0.id == accountID }) {
@@ -534,10 +530,14 @@ final class TradeHistoryViewModel {
 
     func shareTrade(_ item: TradeOwnerJournalSummary) {
         ExperienceHaptics.play(.selection)
-        let summary = item.summary
-        let pnl = TradeDisplay.pnlText(summary.realizedPnL)
-        let side = summary.side == .long ? "Long" : "Short"
-        sharePayload = SharePayload(text: "\(summary.symbol.ticker) \(side) \(pnl) on TradeTraxs")
+        journalSharePresentation = JournalTradeShareSupport.presentation(for: item.summary)
+    }
+
+    func applyOwnerTradeVisibilityUpdate(_ trade: Trade) {
+        guard journalSharePresentation?.ownerAccess.tradeID == trade.id else { return }
+        journalSharePresentation = JournalTradeShareSupport.presentation(
+            for: TradeSummaryMapper.ownerJournal(fromListTrade: trade)
+        )
     }
 
     func requestDelete(_ item: TradeOwnerJournalSummary) {
@@ -645,8 +645,18 @@ final class TradeHistoryViewModel {
     }
 
     func handleAccountMutation() {
-        guard hasLoaded || profileID != nil else { return }
-        Task { await hydrateAccountsFromSession(for: profileID ?? ProfileID("")) }
+        guard let profileID else { return }
+        guard let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: profileID,
+            detailCache: detailCache
+        ) else {
+            guard hasLoaded else { return }
+            Task { await hydrateAccountsFromSession(for: profileID) }
+            return
+        }
+        applyAccountList(loaded)
+        OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
+        reconcileAccountFilterIfNeeded()
     }
 
     // MARK: - Private
@@ -720,7 +730,7 @@ final class TradeHistoryViewModel {
         self.profileID = profileID
 
         // Session store survives ViewModel recreation on push/pop (profile-scoped key).
-        // Snapshot only holds trades/filters — accounts live in SessionAccountsStore (Dashboard).
+        // Snapshot only holds trades/filters, accounts live in SessionAccountsStore (Dashboard).
         // Skip restore when local browse constraints are active (seeded from charts).
         let hasLocalBrowse = hasLocalBrowseConstraints
         if reason == "open",
@@ -1005,13 +1015,13 @@ final class TradeHistoryViewModel {
         }
     }
 
-    /// Cache-only hydrate for snapshot / early-open paths — never forces network.
+    /// Cache-only hydrate for snapshot / early-open paths, never forces network.
     /// Dashboard already primed ``SessionAccountsStore``; Trades must reuse it.
     private func hydrateAccountsFromSession(for profileID: ProfileID) async {
         if applyAccountsFromLocalSession(profileID: profileID) {
             return
         }
-        // Miss in memory/detail — SessionAccountsStore may still serve disk without a new fetch.
+        // Miss in memory/detail, SessionAccountsStore may still serve disk without a new fetch.
         await loadAccounts(for: profileID)
     }
 
@@ -1031,11 +1041,17 @@ final class TradeHistoryViewModel {
     }
 
     private func applyAccountList(_ loaded: [TradingAccount]) {
-        // Match Dashboard account menu — show the full session list (no isActive filter).
+        // Match Dashboard account menu, show the full session list (no isActive filter).
         accounts = loaded.sorted {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
-        accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+        accountNames = OwnerAccountMutationSync.accountNamesMap(from: accounts)
+    }
+
+    private func reconcileAccountFilterIfNeeded() {
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(filters.account, accounts: accounts)
+        guard sanitized != filters.account else { return }
+        filters.account = sanitized
     }
 
     private func applySnapshot(_ snap: TradeHistorySessionStore.Snapshot) {

@@ -35,7 +35,7 @@ nonisolated enum TradeRoomCategory: String, CaseIterable, Codable, Sendable, Has
         return TradeRoomCategory(rawValue: trimmed.lowercased())
     }
 
-    /// Stored value, then official slug inference — never invents `.general` for NULL/legacy rows.
+    /// Stored value, then official slug inference, never invents `.general` for NULL/legacy rows.
     static func effectiveForDiscovery(
         stored: TradeRoomCategory?,
         slug: String,
@@ -59,13 +59,13 @@ nonisolated enum TradeRoomCategory: String, CaseIterable, Codable, Sendable, Has
     }
 }
 
-/// Stored on `rooms.is_private` — only set via ``TradeRoomConfiguration/persistedIsPrivate`` for create/update payloads.
+/// Stored on `rooms.is_private`, only set via ``TradeRoomConfiguration/persistedIsPrivate`` for create/update payloads.
 nonisolated enum TradeRoomVisibility: String, Codable, Sendable, Hashable {
     case `public`
     case `private`
 }
 
-/// Owner-facing room access — replaces separate Private + Join Policy controls in create/edit UI.
+/// Owner-facing room access, replaces separate Private + Join Policy controls in create/edit UI.
 nonisolated enum TradeRoomAccessMode: String, CaseIterable, Codable, Sendable, Hashable {
     case publicOpen
     case requestToJoin
@@ -102,7 +102,7 @@ nonisolated enum TradeRoomJoinPolicy: String, Codable, Sendable, Hashable {
 nonisolated struct TradeRoomDraftChannel: Hashable, Identifiable, Sendable, Codable {
     var id: UUID
     var name: String
-    /// Per sub-room post permission — `room_sections.allow_members_chat`.
+    /// Per sub-room post permission, `room_sections.allow_members_chat`.
     var allowMembersChat: Bool
 
     init(id: UUID = UUID(), name: String, allowMembersChat: Bool = true) {
@@ -191,7 +191,7 @@ nonisolated enum TradeRoomConfigurationValidation {
     }
 }
 
-/// Single authoritative room setup payload — shared by create and owner edit flows.
+/// Single authoritative room setup payload, shared by create and owner edit flows.
 nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
     var name: String
     var description: String?
@@ -206,7 +206,7 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
     var membersCanShareTrades: Bool
     var membersCanShareMedia: Bool
     var channels: [TradeRoomDraftChannel]
-    /// Loaded from `rooms.is_private` on edit — kept when owner keeps Request to Join on a legacy private room.
+    /// Loaded from `rooms.is_private` on edit, kept when owner keeps Request to Join on a legacy private room.
     var preservesLegacyPrivate: Bool = false
 
     static func defaultDraft(username: String?) -> TradeRoomConfiguration {

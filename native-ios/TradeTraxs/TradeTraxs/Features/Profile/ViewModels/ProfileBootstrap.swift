@@ -1,9 +1,9 @@
 import Foundation
 
-/// Coordinated Profile first-paint load — Stage 1 only (header + Follow).
+/// Coordinated Profile first-paint load, Stage 1 only (header + Follow).
 ///
 /// Section payloads (trades / posts / clips / achievements / accounts) load lazily
-/// when their tab activates via section ViewModels — one request per resource.
+/// when their tab activates via section ViewModels, one request per resource.
 /// Conforms to ``ScreenBootstrap`` (canonical first-paint contract).
 @MainActor
 enum ProfileBootstrap: ScreenBootstrap {
@@ -78,12 +78,12 @@ enum ProfileBootstrap: ScreenBootstrap {
                     ).message
                     return state
                 }
-                // Legacy path — REST fallback when V2 profile flag is off.
+                // Legacy path, REST fallback when V2 profile flag is off.
             }
         }
 
         do {
-            // Stage 1 — critical path for header + Follow (no section fan-out).
+            // Stage 1, critical path for header + Follow (no section fan-out).
             async let profileTask = loadProfile(profileID, context: context)
             async let statsTask = loadStats(profileID, context: context)
             async let roomTask = loadOwnedRoom(profileID, context: context)
@@ -112,7 +112,7 @@ enum ProfileBootstrap: ScreenBootstrap {
             state.isFollowing = follow.isFollowing
             state.isRequested = follow.isRequested
             state.canViewTrades = isOwner || !loadedProfile.isPrivate || follow.isFollowing
-            // Section lists intentionally deferred — flags stay false until tab load.
+            // Section lists intentionally deferred, flags stay false until tab load.
             state.didLoadTrades = false
             state.didLoadPosts = false
             state.didLoadClips = false
@@ -179,7 +179,7 @@ enum ProfileBootstrap: ScreenBootstrap {
         context: Context
     ) async -> (isFollowing: Bool, isRequested: Bool) {
         guard !isOwner, let viewerID else { return (false, false) }
-        // Prefer per-edge cache — never treat a partial following-ID set as complete.
+        // Prefer per-edge cache, never treat a partial following-ID set as complete.
         if let edge = context.detailCache.viewerFollowEdge(for: profileID) {
             return (edge, false)
         }

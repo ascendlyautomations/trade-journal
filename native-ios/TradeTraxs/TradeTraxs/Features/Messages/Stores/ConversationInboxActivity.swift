@@ -1,9 +1,9 @@
 import Foundation
 
-/// Canonical inbox activity merge + ordering — ports web `conversationInboxSync` rules.
+/// Canonical inbox activity merge + ordering, ports web `conversationInboxSync` rules.
 ///
 /// Latest preview/timestamp/order derive from the newest canonical message regardless of sender.
-/// Unread count is owned by ``MessagesInboxStore`` / server unread RPC — never inferred here.
+/// Unread count is owned by ``MessagesInboxStore`` / server unread RPC, never inferred here.
 nonisolated enum ConversationInboxActivity {
     /// Web inbox fallback when a DM peer profile username is gone (`profile?.username || "user"`).
     /// Those rows render as `@user`.
@@ -158,7 +158,7 @@ nonisolated enum ConversationInboxActivity {
         return false
     }
 
-    /// Merge bootstrap/cache rows — never downgrade preview or activity timestamp.
+    /// Merge bootstrap/cache rows, never downgrade preview or activity timestamp.
     static func mergeConversations(existing: Conversation, incoming: Conversation) -> Conversation {
         var merged = incoming
         merged.isPinned = existing.isPinned || incoming.isPinned
@@ -196,7 +196,7 @@ nonisolated enum ConversationInboxActivity {
         return merged
     }
 
-    /// Apply a confirmed viewer send — always wins over equal/stale inbox rows.
+    /// Apply a confirmed viewer send, always wins over equal/stale inbox rows.
     static func applyingConfirmedSendActivity(
         to conversation: Conversation,
         message: Message

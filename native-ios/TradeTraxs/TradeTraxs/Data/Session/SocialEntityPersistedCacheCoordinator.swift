@@ -1,6 +1,6 @@
 import Foundation
 
-/// Canonical viewer-scoped social entity disk read/write — single merge + generation discipline.
+/// Canonical viewer-scoped social entity disk read/write, single merge + generation discipline.
 nonisolated enum SocialEntityPersistedCacheCoordinator {
     enum MergeMode: String, Sendable {
         case replace
@@ -205,7 +205,7 @@ nonisolated enum SocialEntityPersistedCacheCoordinator {
         }
     }
 
-    /// List/card trade rows — never authoritative detail.
+    /// List/card trade rows, never authoritative detail.
     static func saveTradeFromListRow(_ trade: Trade, viewerID: ProfileID, source: SaveSource) {
         saveTradeSummary(
             TradeSummaryMapper.summary(fromPartialListTrade: trade),

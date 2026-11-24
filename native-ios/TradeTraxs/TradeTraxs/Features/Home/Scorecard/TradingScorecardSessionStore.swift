@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Shared scorecard snapshot between Dashboard home and detail — no extra network.
+/// Shared scorecard snapshot between Dashboard home and detail, no extra network.
 @MainActor
 @Observable
 final class TradingScorecardSessionStore {

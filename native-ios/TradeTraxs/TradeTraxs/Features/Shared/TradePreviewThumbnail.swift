@@ -8,13 +8,13 @@ import SwiftUI
 /// - missing / failed URL → compact chart placeholder (fixed slot size)
 struct TradePreviewThumbnail: View {
     enum Size: Equatable {
-        /// Livestream chat trade attachment — 49×49
+        /// Livestream chat trade attachment, 49×49
         case livestreamChat
-        /// Picker rows — 60×60
+        /// Picker rows, 60×60
         case compact
-        /// Selected-trade preview — 88×88
+        /// Selected-trade preview, 88×88
         case preview
-        /// Message-card hero — full width, capped height
+        /// Message-card hero, full width, capped height
         case messageHero(maxHeight: CGFloat? = nil)
     }
 

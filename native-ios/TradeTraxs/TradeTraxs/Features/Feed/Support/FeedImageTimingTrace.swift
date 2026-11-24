@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// Correlated per-image DEBUG timeline — one request, one printable story.
+/// Correlated per-image DEBUG timeline, one request, one printable story.
 nonisolated enum FeedImageTimingTrace {
     struct Session: Sendable {
         var correlationID: UUID

@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 #if DEBUG
-/// Temporary physical-device audit — proves whether access-log bytes reflect real network transfer.
+/// Temporary physical-device audit, proves whether access-log bytes reflect real network transfer.
 enum VideoTransferAudit {
     static func logPlayerCreated(
         clipID: String,

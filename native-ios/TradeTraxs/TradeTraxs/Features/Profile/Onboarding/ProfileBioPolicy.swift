@@ -14,7 +14,7 @@ nonisolated enum ProfileBioPolicy {
         normalizeLineEndings(value).split(separator: "\n", omittingEmptySubsequences: false).count
     }
 
-    /// Input-level gate — reject a 4th line from Return; paste still applies ``constrained(_:)``.
+    /// Input-level gate, reject a 4th line from Return; paste still applies ``constrained(_:)``.
     static func editDecision(
         current: String,
         range: NSRange,

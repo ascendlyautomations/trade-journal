@@ -37,7 +37,7 @@ nonisolated enum ScreenshotImportConfidenceEvaluator {
             }
             return "We couldn't confidently read this trade history."
         }
-        return "Some rows need review — AI may help with unclear layouts."
+        return "Some rows need review, AI may help with unclear layouts."
     }
 
     #if DEBUG

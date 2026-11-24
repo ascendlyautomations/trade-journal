@@ -1,6 +1,6 @@
 import Foundation
 
-/// Profile Trades outcome filter — matches web `ProfileTradesTab` semantics.
+/// Profile Trades outcome filter, matches web `ProfileTradesTab` semantics.
 nonisolated enum ProfileTradesFilter: String, CaseIterable, Identifiable, Sendable {
     case all
     case wins
@@ -32,7 +32,7 @@ nonisolated enum ProfileTradesFilter: String, CaseIterable, Identifiable, Sendab
     }
 }
 
-/// Profile Trades sort — matches web `TradesSortKey` labels/order.
+/// Profile Trades sort, matches web `TradesSortKey` labels/order.
 nonisolated enum ProfileTradesSort: String, CaseIterable, Identifiable, Sendable {
     case newest
     case oldest

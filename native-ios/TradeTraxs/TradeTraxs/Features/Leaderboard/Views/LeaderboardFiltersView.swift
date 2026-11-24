@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Audience / timeframe / category controls — render-only; mutations go through the screen VM.
+/// Audience / timeframe / category controls, render-only; mutations go through the screen VM.
 struct LeaderboardFiltersView: View {
     let audience: LeaderboardAudience
     let timeframe: LeaderboardTimeframe
@@ -52,10 +52,7 @@ struct LeaderboardFiltersView: View {
                 }
                 .padding(.horizontal, ExperienceSpacing.sm)
                 .padding(.vertical, ExperienceSpacing.sm)
-                .background(
-                    colors.fillSecondary,
-                    in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                )
+                .experienceFilterChipRect()
                 .experienceControlHitTarget()
             }
             .accessibilityIdentifier("leaderboard.category")
@@ -85,11 +82,32 @@ struct LeaderboardFiltersView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 7)
                 .frame(maxWidth: .infinity)
-                .background(
-                    Capsule().fill(selected ? colors.accent : colors.fillSecondary)
-                )
+                .background {
+                    if selected {
+                        Capsule().fill(colors.accent)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .modifier(LeaderboardTimeframeChipChrome(isSelected: selected))
         }
         .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("leaderboard.timeframe.\(option.rawValue)")
+    }
+}
+
+private struct LeaderboardTimeframeChipChrome: ViewModifier {
+    var isSelected: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if isSelected {
+            content
+        } else if colorScheme == .light {
+            content.experienceFilterCapsule()
+        } else {
+            content.background(colors.fillSecondary, in: Capsule())
+        }
     }
 }

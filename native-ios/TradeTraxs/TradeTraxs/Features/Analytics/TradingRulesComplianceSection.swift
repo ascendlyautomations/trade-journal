@@ -13,9 +13,9 @@ struct TradingRulesComplianceSection: View {
     enum Presentation {
         /// Legacy collapsible blocks (settings previews).
         case compactCollapsible
-        /// Free tier — adherence summary for the current scope.
+        /// Free tier, adherence summary for the current scope.
         case freeOverview
-        /// Dedicated analytics page — score, timeline, trends, and impact always visible.
+        /// Dedicated analytics page, score, timeline, trends, and impact always visible.
         case expandedAnalyticsPage
     }
 
@@ -142,7 +142,7 @@ struct TradingRulesComplianceSection: View {
             )
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                Text(score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "—")
+                Text(score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "–")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(colors.primaryText)
@@ -363,7 +363,7 @@ struct TradingRulesComplianceSection: View {
             )
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                Text(score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "—")
+                Text(score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "–")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(colors.primaryText)
@@ -471,7 +471,7 @@ struct TradingRulesComplianceSection: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, ExperienceSpacing.sm)
         .padding(.horizontal, ExperienceSpacing.xs)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
     }
 
     // MARK: - Violation patterns (expanded page)
@@ -859,7 +859,7 @@ struct TradingRulesComplianceSection: View {
             Text("Compliance score")
                 .experienceStyle(.caption2, color: colors.accent)
                 .textCase(.uppercase)
-            Text(score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "—")
+            Text(score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "–")
                 .font(.system(.title, design: .rounded).weight(.bold).monospacedDigit())
             HStack {
                 legacyStatChip("Followed", value: score.followed, tone: colors.profit)
@@ -979,7 +979,7 @@ private struct TradingRulesViolationsTimelineSheet: View {
                             violationLabel(event)
                         }
                     }
-                    .listRowBackground(colors.elevatedSurface)
+                    .experienceDashboardListRow()
                 }
             }
             .experiencePlainListStyle()

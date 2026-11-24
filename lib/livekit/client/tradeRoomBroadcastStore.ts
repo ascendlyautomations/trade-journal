@@ -2045,19 +2045,24 @@ export async function refreshTradeRoomBroadcastStatus(
       isBroadcastPastExpiresAt(next.expiresAt)
     ) {
       broadcasterPreviewError = BROADCAST_DURATION_LIMIT_BROADCASTER_MESSAGE
+      const sessionIdToStop = currentSessionId
+      const roomIdToStop = roomId
       void stopTradeRoomBroadcast({
-        roomId,
-        sessionId: currentSessionId,
-        fetchStop: async (sessionId) => {
+        roomId: roomIdToStop,
+        sessionId: sessionIdToStop,
+        fetchStop: async () => {
           const bearerToken = await getSupabaseApiAccessToken()
-          if (!bearerToken) return
+          if (!bearerToken || !sessionIdToStop || !roomIdToStop) return
           await fetch("/api/livekit/broadcast/stop", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${bearerToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ roomId, sessionId }),
+            body: JSON.stringify({
+              roomId: roomIdToStop,
+              sessionId: sessionIdToStop,
+            }),
           })
         },
       })
@@ -2574,6 +2579,7 @@ export async function startTradeRoomBroadcast(options: {
     videoSource: TradeRoomBroadcastVideoSource
     broadcastSource?: BroadcastSource
     primaryMediaPublisherIdentity?: string | null
+    expiresAt?: string | null
   }>
   fetchStop: (sessionId: string) => Promise<void>
 }): Promise<void> {
@@ -2656,10 +2662,10 @@ export async function startTradeRoomBroadcast(options: {
         (start as { streamTitle?: string | null }).streamTitle?.trim() ||
         options.setup.streamTitle.trim(),
       startedAt: start.startedAt,
-      expiresAt:
-        typeof (start as { expiresAt?: string | null }).expiresAt === "string"
-          ? (start as { expiresAt: string }).expiresAt
-          : (start as { expiresAt?: null }).expiresAt ?? null,
+      expiresAt: (() => {
+        const raw = (start as { expiresAt?: string | null }).expiresAt
+        return typeof raw === "string" ? raw : null
+      })(),
       voiceMode: start.voiceMode,
       videoSource: start.videoSource,
       broadcastSource:

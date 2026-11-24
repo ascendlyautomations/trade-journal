@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session cache for Messages home — load once, mutate in place (swipe / new chat / leave).
+/// Session cache for Messages home, load once, mutate in place (swipe / new chat / leave).
 ///
 /// Realtime product channels are registry-only today; when conversation events arrive,
 /// call ``applyConversationUpdate(_:)`` / ``replaceConversations(_:)`` instead of forcing
@@ -14,12 +14,12 @@ final class MessagesInboxStore {
     private(set) var conversations: [Conversation] = []
     private(set) var rooms: [TradeRoom] = []
     private(set) var roomPreviews: [RoomID: String] = [:]
-    /// Latest room message activity — inbox card timestamps (never render-time fallback).
+    /// Latest room message activity, inbox card timestamps (never render-time fallback).
     private(set) var roomActivityAt: [RoomID: Date] = [:]
     private(set) var roomUnread: [RoomID: Int] = [:]
-    /// DM thread currently open — suppresses inbox unread bumps from home realtime.
+    /// DM thread currently open, suppresses inbox unread bumps from home realtime.
     private(set) var activeConversationID: ConversationID?
-    /// Room currently open in the conversation shell — suppresses inbox unread bumps.
+    /// Room currently open in the conversation shell, suppresses inbox unread bumps.
     private(set) var activeRoomID: RoomID?
     private(set) var hasLoaded = false
     /// True after the first member-rooms hydration (Messages or Trade Rooms home).
@@ -42,7 +42,7 @@ final class MessagesInboxStore {
     private var pendingDeleteConversationIDs: Set<ConversationID> = []
     private(set) var persistedViewerID: ProfileID?
 
-    /// Monotonic publish token — SwiftUI observes this for preview/order updates.
+    /// Monotonic publish token, SwiftUI observes this for preview/order updates.
     private(set) var activityRevision: UInt64 = 0
 
     var unreadOverridesForPersistence: [ConversationID: Int] { unreadOverrides }
@@ -74,7 +74,7 @@ final class MessagesInboxStore {
         conversations.filter { !hiddenConversationIDs.contains($0.id) }
     }
 
-    /// Bounded `inbox-dms` postgres_changes filter — recent rows only.
+    /// Bounded `inbox-dms` postgres_changes filter, recent rows only.
     var conversationIDsForRealtimeWatch: [String] {
         MessagingInboxPagination.conversationIDsForRealtimeWatch(
             visibleConversations,
@@ -97,7 +97,7 @@ final class MessagesInboxStore {
         isLoadingMoreInbox = loading
     }
 
-    /// First authoritative page — replaces list (refresh / cold bootstrap).
+    /// First authoritative page, replaces list (refresh / cold bootstrap).
     func replaceConversationsFromBootstrapFirstPage(_ incoming: [Conversation]) {
         resetInboxPagination()
         replaceConversations(incoming)
@@ -107,7 +107,7 @@ final class MessagesInboxStore {
         !pendingDeleteConversationIDs.isEmpty
     }
 
-    /// Sum of effective DM unread counts — used by Messages inbox UI (not app-icon badge).
+    /// Sum of effective DM unread counts, used by Messages inbox UI (not app-icon badge).
     var totalDirectMessageUnread: Int {
         visibleConversations.reduce(0) { partial, conversation in
             partial + unreadCount(for: conversation)
@@ -148,7 +148,7 @@ final class MessagesInboxStore {
     func replaceConversations(_ items: [Conversation]) {
         let unhideIDs = Set(items.map(\.id)).subtracting(pendingDeleteConversationIDs)
         hiddenConversationIDs.subtract(unhideIDs)
-        // Seed pin/mute from repository (web prefs / is_pinned) — local toggles may still override.
+        // Seed pin/mute from repository (web prefs / is_pinned), local toggles may still override.
         pinnedConversationIDs = Set(items.filter(\.isPinned).map(\.id))
         mutedConversationIDs = Set(items.filter(\.isMuted).map(\.id))
         let previousOverrides = unreadOverrides
@@ -157,7 +157,7 @@ final class MessagesInboxStore {
             var copy = item
             if let override = previousOverrides[item.id] {
                 if item.unreadCount == override {
-                    // Backend confirmed the local value — drop the override.
+                    // Backend confirmed the local value, drop the override.
                 } else {
                     // Keep optimistic / local unread (e.g. cleared to 0 before RPC finished).
                     copy.unreadCount = override
@@ -254,9 +254,9 @@ final class MessagesInboxStore {
     }
 
     enum MessagePatchPolicy: Sendable {
-        /// Standard merge — reject stale realtime/bootstrap candidates.
+        /// Standard merge, reject stale realtime/bootstrap candidates.
         case canonical
-        /// Viewer confirmed send in open thread — always wins for preview/order.
+        /// Viewer confirmed send in open thread, always wins for preview/order.
         case confirmedOutgoing
     }
 
@@ -485,7 +485,7 @@ final class MessagesInboxStore {
         persistSnapshotIfPossible()
     }
 
-    /// Hide 1:1 threads with a blocked peer — mirrors web hidden blocked DM inbox behavior.
+    /// Hide 1:1 threads with a blocked peer, mirrors web hidden blocked DM inbox behavior.
     func removeDirectConversations(with peerID: ProfileID) {
         let ids = conversations.filter { conversation in
             !conversation.isGroup && conversation.participantProfileIDs.contains(peerID)
@@ -594,7 +594,7 @@ final class MessagesInboxStore {
         guard let index = conversations.firstIndex(where: { $0.id == conversationID }) else {
             return
         }
-        // Reassign the array — in-place `conversations[i].unreadCount = 0` does not
+        // Reassign the array, in-place `conversations[i].unreadCount = 0` does not
         // reliably invalidate SwiftUI Observation subscribers on the inbox list.
         var updated = conversations
         updated[index].unreadCount = 0
@@ -694,7 +694,7 @@ final class MessagesInboxStore {
     }
 
     /// Clears inbox state when the authenticated user changes (logout / account switch).
-    /// Does not disable caching — the next `loadIfNeeded` repopulates for the new session.
+    /// Does not disable caching, the next `loadIfNeeded` repopulates for the new session.
     func invalidate() {
         conversations = []
         rooms = []
@@ -763,7 +763,7 @@ final class MessagesInboxStore {
     }
 #endif
 
-    /// Web `sortConversationsDesc` — pinned first, then activity descending with tie-breaks.
+    /// Web `sortConversationsDesc`, pinned first, then activity descending with tie-breaks.
     private static func sortConversationsDesc(
         _ items: [Conversation],
         pinned: Set<ConversationID>

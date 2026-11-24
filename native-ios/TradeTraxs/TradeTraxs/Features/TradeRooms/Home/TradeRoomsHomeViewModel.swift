@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Trade Rooms home screen owner — presentation over ``MessagingDomain``.
+/// Trade Rooms home screen owner, presentation over ``MessagingDomain``.
 ///
 /// Initial member-rooms network / room realtime ownership lives in the shared messaging domain
 /// (same bootstrap as Messages home).
@@ -22,7 +22,7 @@ final class TradeRoomsHomeViewModel {
 
     private(set) var discoveryMode: TradeRoomDiscoveryMode = .yourRooms
     private(set) var discoveryScope: TradeRoomDiscoveryScope = .all
-    /// `nil` — all categories; preserved when switching All / Starred / Joined / Popular.
+    /// `nil`, all categories; preserved when switching All / Starred / Joined / Popular.
     private(set) var discoveryCategoryFilter: TradeRoomCategory?
     /// Set when the user taps a scope chip. Later loads must not move the chip.
     private var didUserSelectDiscoveryScope = false
@@ -207,7 +207,7 @@ final class TradeRoomsHomeViewModel {
         return filteredItems.isEmpty && searchDiscoveryDisplayRooms.isEmpty
     }
 
-    /// Public discovery hits while searching — excludes joined rooms already shown as inbox cards.
+    /// Public discovery hits while searching, excludes joined rooms already shown as inbox cards.
     var searchDiscoveryDisplayRooms: [ExploreRoomSuggestion] {
         let inboxIDs = Set(filteredItems.map(\.id))
         return searchDiscoveryRooms
@@ -259,7 +259,7 @@ final class TradeRoomsHomeViewModel {
         await loadHomeBootstrap(forceNetwork: true)
     }
 
-    /// Category sent to `rpc_v1_trade_rooms_home_bootstrap` — server filters popular/suggested.
+    /// Category sent to `rpc_v1_trade_rooms_home_bootstrap`, server filters popular/suggested.
     private func activeDiscoveryCategoryForRPC() -> TradeRoomCategory? {
         guard activeDiscoveryScope.showsDiscoveryCategoryFilter else { return nil }
         return discoveryCategoryFilter
@@ -318,7 +318,7 @@ final class TradeRoomsHomeViewModel {
         filteredDiscoverable(from: popularItems, section: "popular")
     }
 
-    /// All tab — server `popular` keyset (member count desc), excluding joined and viewer-owned rooms.
+    /// All tab, server `popular` keyset (member count desc), excluding joined and viewer-owned rooms.
     var allScopeDiscoverableRooms: [ExploreRoomSuggestion] {
         filteredDiscoverable(
             from: popularItems,
@@ -338,7 +338,7 @@ final class TradeRoomsHomeViewModel {
         return popularNextCursor != nil
     }
 
-    /// Official or Popular tab — one list (Popular preserves RPC member-count order).
+    /// Official or Popular tab, one list (Popular preserves RPC member-count order).
     var unifiedDiscoverableRooms: [ExploreRoomSuggestion] {
         switch activeDiscoveryScope {
         case .popular:
@@ -374,7 +374,7 @@ final class TradeRoomsHomeViewModel {
         return filtered
     }
 
-    /// Joined tab — viewer-owned room pinned first; includes cached ownership before bootstrap catches up.
+    /// Joined tab, viewer-owned room pinned first; includes cached ownership before bootstrap catches up.
     var yourRooms: [ExploreRoomSuggestion] {
         joinedDiscoveryRoomsOrdered()
     }
@@ -423,7 +423,7 @@ final class TradeRoomsHomeViewModel {
         return discoveryPhase == .loaded && phase != .idle && phase != .loading
     }
 
-    /// Viewer-owned Trade Room — inbox owner row first, then bootstrap/cache/intent.
+    /// Viewer-owned Trade Room, inbox owner row first, then bootstrap/cache/intent.
     var viewerOwnedRoom: ExploreRoomSuggestion? {
         guard let viewerID else { return nil }
         if let item = items.first(where: { $0.room.ownerProfileID == viewerID }) {
@@ -664,9 +664,23 @@ final class TradeRoomsHomeViewModel {
         }
     }
 
-    /// Authoritative ownership from Trade Rooms RPC — never inferred client-side.
+    /// Authoritative ownership from Trade Rooms RPC, never inferred client-side.
     func isViewerOwner(of room: ExploreRoomSuggestion) -> Bool {
         room.viewerIsOwner
+    }
+
+    func isViewerOwner(roomID: RoomID) -> Bool {
+        guard let viewerID else { return false }
+        if let room = inboxStore.rooms.first(where: { $0.id == roomID }) {
+            return TradeRoomManagementPermission.isViewerOwner(room: room, viewerID: viewerID)
+        }
+        if let item = items.first(where: { $0.id == roomID }) {
+            return TradeRoomManagementPermission.isViewerOwner(room: item.room, viewerID: viewerID)
+        }
+        if let suggestion = yourRoomsItems.first(where: { $0.id == roomID }) {
+            return isViewerOwner(of: suggestion)
+        }
+        return false
     }
 
     private func patchDiscoveryRoomJoined(_ roomID: RoomID) {
@@ -714,7 +728,7 @@ final class TradeRoomsHomeViewModel {
         }
     }
 
-    /// Keeps All/Popular payloads aligned after create — filtering also hides owned rows client-side.
+    /// Keeps All/Popular payloads aligned after create, filtering also hides owned rows client-side.
     private func stripViewerOwnedRoomFromDiscoverablePayloads(roomID: RoomID) {
         suggestedItems.removeAll { $0.id == roomID }
         popularItems.removeAll { $0.id == roomID }
@@ -943,6 +957,7 @@ final class TradeRoomsHomeViewModel {
     }
 
     func requestLeaveRoom(id: RoomID) {
+        guard !isViewerOwner(roomID: id) else { return }
         ExperienceHaptics.play(.warning)
         pendingLeaveRoomID = id
         showsLeaveRoomConfirmation = true
@@ -961,6 +976,7 @@ final class TradeRoomsHomeViewModel {
     }
 
     func leaveRoom(id: RoomID) async {
+        guard !isViewerOwner(roomID: id) else { return }
         ExperienceHaptics.play(.warning)
         guard let viewerID else {
             inboxStore.removeRoom(id: id)
@@ -1098,7 +1114,7 @@ final class TradeRoomsHomeViewModel {
         return categoryFiltered
     }
 
-    /// Authoritative stored category when present; optional official slug inference — never maps NULL to `.general`.
+    /// Authoritative stored category when present; optional official slug inference, never maps NULL to `.general`.
     func effectiveDiscoveryCategory(for room: ExploreRoomSuggestion) -> TradeRoomCategory? {
         if let category = room.category { return category }
         if let item = items.first(where: { $0.id == room.id }) {
@@ -1145,7 +1161,7 @@ final class TradeRoomsHomeViewModel {
         }
     }
 
-    /// Joined list presentation — owned room always first (member-count order from RPC ignored).
+    /// Joined list presentation, owned room always first (member-count order from RPC ignored).
     private func joinedDiscoveryRoomsOrdered() -> [ExploreRoomSuggestion] {
         let pinnedOwned = viewerOwnedRoom
             ?? yourRoomsItems.first(where: isViewerOwnedDiscoveryRoom)
@@ -1348,7 +1364,7 @@ final class TradeRoomsHomeViewModel {
         }
     }
 
-    /// Keeps ``DetailPresentationCache`` aligned with inbox / bootstrap — no network.
+    /// Keeps ``DetailPresentationCache`` aligned with inbox / bootstrap, no network.
     func syncOwnedTradeRoomPresentationFromLocalStores() {
         guard let viewerID else { return }
         if let item = items.first(where: { $0.room.ownerProfileID == viewerID }) {
@@ -1450,7 +1466,7 @@ final class TradeRoomsHomeViewModel {
         }
     }
 
-    /// Web sidebar parity — inbox member rooms must appear in Your Rooms even when
+    /// Web sidebar parity, inbox member rooms must appear in Your Rooms even when
     /// bootstrap RPC omits private/non-profile rooms.
     @discardableResult
     private func reconcileYourRoomsWithMembership() -> Bool {
@@ -1540,5 +1556,5 @@ final class TradeRoomsHomeViewModel {
 /// Canonical screen name for Trade Rooms home.
 typealias TradeRoomsScreenViewModel = TradeRoomsHomeViewModel
 
-/// Room conversation thread — pagination / composer remain thread-scoped.
+/// Room conversation thread, pagination / composer remain thread-scoped.
 typealias RoomConversationScreenViewModel = RoomConversationViewModel

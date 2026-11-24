@@ -9,7 +9,7 @@ import Observation
 final class LeaderboardSessionStore {
     static let shared = LeaderboardSessionStore()
 
-    /// Full public trade set — legacy corpus path only (empty when V2 RPC rankings are active).
+    /// Full public trade set, legacy corpus path only (empty when V2 RPC rankings are active).
     private(set) var rawTrades: [LeaderboardTradeRow] = []
     private(set) var usesServerRankings = false
     /// Ranked entries for the current timeframe (derived from ``rawTrades``).
@@ -109,7 +109,7 @@ final class LeaderboardSessionStore {
         applyFollowEdge(id, isFollowing: isFollowing, adjustFollowerCount: false)
     }
 
-    /// Shared Follow mutation patch — edge + optional follower-count column.
+    /// Shared Follow mutation patch, edge + optional follower-count column.
     func applyFollowEdge(
         _ id: ProfileID,
         isFollowing: Bool,

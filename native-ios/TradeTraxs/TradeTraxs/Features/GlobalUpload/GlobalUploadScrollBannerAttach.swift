@@ -291,7 +291,7 @@ final class GlobalUploadScrollAnchorView: UIView {
         return nil
     }
 
-    /// Prefer the page-level scroll view — never a nested list/tab scroll inside section content.
+    /// Prefer the page-level scroll view, never a nested list/tab scroll inside section content.
     private func findOutermostScrollView(in root: UIView?) -> UIScrollView? {
         guard let root else { return nil }
         var scrollViews: [UIScrollView] = []

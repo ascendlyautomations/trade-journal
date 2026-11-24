@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact trade row for picker sheets — thumbnail + ticker/side, PnL, timestamp.
+/// Compact trade row for picker sheets, thumbnail + ticker/side, PnL, timestamp.
 struct TradePickerRowView: View {
     let trade: Trade
     let imagePipeline: any ImagePipeline

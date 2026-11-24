@@ -1,6 +1,6 @@
 import Foundation
 
-/// Memory/disk-only warm for Feed first page — no network.
+/// Memory/disk-only warm for Feed first page, no network.
 enum FeedImageCacheWarmer {
     /// Same keys as ``InteractiveImageView`` / ``FeedImagePrefetch`` for feedDisplay.
     static func imageRequests(for entries: [FeedTimelineEntry]) -> [ImageRequest] {

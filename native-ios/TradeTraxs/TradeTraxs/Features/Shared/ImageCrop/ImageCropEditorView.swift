@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Shared pinch/drag crop editor — WYSIWYG aspect-fill viewport; preview and export share one transform.
+/// Shared pinch/drag crop editor, WYSIWYG aspect-fill viewport; preview and export share one transform.
 struct ImageCropEditorView: View {
     let sourceImage: UIImage
     let preset: ImageCropEditorPreset
@@ -360,7 +360,7 @@ struct ImageCropEditorView: View {
     }
 }
 
-/// Create-flow preview — displays the physically cropped UIImage only.
+/// Create-flow preview, displays the physically cropped UIImage only.
 struct AdaptiveMediaPreviewImage: View {
     let image: UIImage
 

@@ -189,16 +189,22 @@ nonisolated enum TradingRulesPersonalInsights {
             return "Planned trading hours"
         }
         if lower.contains("allowed trading day") { return "Allowed trading days" }
-        if lower.contains("daily trade cap") { return "Daily trade cap" }
+        if lower.contains("max trades") || lower.contains("daily trade cap") || lower.contains("trades per day") {
+            return TradingRulesDisplayLabels.maxTradesPerDay
+        }
         if lower.contains("daily loss limit") { return "Daily loss limit" }
         if lower.contains("profit target") { return "Daily profit target" }
         if lower.contains("weekly loss") { return "Weekly loss limit" }
-        if lower.contains("maximum contracts") { return "Maximum contracts" }
-        if lower.contains("minimum acceptable r") || lower.contains("planned r:r") {
-            return "Minimum planned R:R"
+        if lower.contains("maximum contracts") || lower.contains("max contracts") {
+            return TradingRulesDisplayLabels.maxContracts
         }
-        if lower.contains("maximum risk per trade") || lower.contains("dollar risk") {
-            return "Maximum risk per trade"
+        if lower.contains("minimum acceptable r") || lower.contains("min acceptable r")
+            || lower.contains("planned r:r") || lower.contains("min planned r") {
+            return TradingRulesDisplayLabels.minPlannedRr
+        }
+        if lower.contains("maximum risk per trade") || lower.contains("max risk per trade")
+            || lower.contains("max risk / trade") || lower.contains("dollar risk") {
+            return TradingRulesDisplayLabels.maxRiskPerTrade
         }
         if lower.contains("wait") && lower.contains("loss") { return "Wait after loss" }
         if lower.contains("consecutive") && lower.contains("loss") { return "Consecutive loss pause" }

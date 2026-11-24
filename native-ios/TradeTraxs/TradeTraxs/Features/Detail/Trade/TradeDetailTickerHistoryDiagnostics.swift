@@ -1,7 +1,7 @@
 #if DEBUG
 import Foundation
 
-/// Temporary Trade Detail ticker-history investigation — DEBUG builds only.
+/// Temporary Trade Detail ticker-history investigation, DEBUG builds only.
 enum TradeDetailTickerHistoryDiagnostics {
     struct Context: Sendable {
         var trade: Trade
@@ -104,7 +104,7 @@ enum TradeDetailTickerHistoryDiagnostics {
 
     // MARK: - Trades page parity
 
-    /// Trades tab MNQ search — `localizedCaseInsensitiveContains` on raw ticker (not normalized root match).
+    /// Trades tab MNQ search, `localizedCaseInsensitiveContains` on raw ticker (not normalized root match).
     private static func tradesPageMNQMatches(
         history: [Trade],
         currentTrade: Trade,
@@ -164,8 +164,8 @@ enum TradeDetailTickerHistoryDiagnostics {
         print("[tickerHistory] grossWins=\(formatDecimal(totals.grossWins))")
         print("[tickerHistory] grossLosses=\(formatDecimal(totals.grossLosses))")
         print("[tickerHistory] NET_PNL=\(formatDecimal(totals.netPnL))")
-        print("[tickerHistory] averageTrade=\(totals.averageTrade.map(formatDecimal) ?? "—")")
-        print("[tickerHistory] profitFactor=\(totals.profitFactor.map { String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue) } ?? "—")")
+        print("[tickerHistory] averageTrade=\(totals.averageTrade.map(formatDecimal) ?? "–")")
+        print("[tickerHistory] profitFactor=\(totals.profitFactor.map { String(format: "%.2f", NSDecimalNumber(decimal: $0).doubleValue) } ?? "–")")
         print("[tickerHistory] SUM(stored pnl)=\(formatDecimal(totals.netPnL))")
     }
 
@@ -187,14 +187,14 @@ enum TradeDetailTickerHistoryDiagnostics {
         accountModes: [TradingAccountID: TradingAccountMode]
     ) -> String {
         let pnl = TradeDetailComparisonScope.netPnL(for: trade)
-        let accountID = trade.accountID?.rawValue ?? "—"
+        let accountID = trade.accountID?.rawValue ?? "–"
         let accountMode = resolvedAccountMode(trade, accountModes: accountModes)
-        let points = trade.points.map { String(describing: $0) } ?? "—"
+        let points = trade.points.map { String(describing: $0) } ?? "–"
         let qty = TradeDisplay.contractsText(trade.quantity)
         let tradeMode = trade.mode.rawValue
-        let importSource = trade.importSource?.rawValue ?? "—"
+        let importSource = trade.importSource?.rawValue ?? "–"
         let entry = TradeDisplay.dateTimeText(trade.entryAt)
-        let exit = trade.exitAt.map(TradeDisplay.dateTimeText) ?? "—"
+        let exit = trade.exitAt.map(TradeDisplay.dateTimeText) ?? "–"
         let date = TradeDisplay.dateText(trade.entryAt)
         let normalized = TradeDetailComparisonScope.normalizedTicker(trade.symbol.ticker)
 
@@ -213,7 +213,7 @@ enum TradeDetailTickerHistoryDiagnostics {
         if let mode = trade.accountMode {
             return mode.rawValue
         }
-        return "—"
+        return "–"
     }
 
     // MARK: - Duplicates / excluded rows

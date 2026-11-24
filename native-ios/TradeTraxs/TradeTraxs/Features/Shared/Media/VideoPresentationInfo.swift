@@ -14,7 +14,7 @@ enum VideoPresentationSurface: String, Sendable {
     case profileThumbnail
 }
 
-/// Authoritative oriented video dimensions — applies `preferredTransform` before classification.
+/// Authoritative oriented video dimensions, applies `preferredTransform` before classification.
 struct VideoPresentationInfo: Equatable, Sendable {
     let rawSize: CGSize
     let preferredTransform: CGAffineTransform
@@ -94,7 +94,7 @@ struct VideoPresentationInfo: Equatable, Sendable {
         }
     }
 
-    /// Inline Feed — compact capped media region; video aspect-fits inside (never cropped).
+    /// Inline Feed, compact capped media region; video aspect-fits inside (never cropped).
     func feedInlineContainerSize(
         containerWidth: CGFloat,
         screenBounds: CGRect = FeedInlineClipLayout.referencePhoneScreenBounds

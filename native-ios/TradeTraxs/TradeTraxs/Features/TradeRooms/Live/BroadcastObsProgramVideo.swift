@@ -1,7 +1,7 @@
 import Foundation
 import LiveKit
 
-/// OBS ingress program video selection — mirrors web `findObsProgramVideoPublication`.
+/// OBS ingress program video selection, mirrors web `findObsProgramVideoPublication`.
 enum BroadcastObsProgramVideo {
     static let ingressIdentityPrefix = "tt-obs-"
 

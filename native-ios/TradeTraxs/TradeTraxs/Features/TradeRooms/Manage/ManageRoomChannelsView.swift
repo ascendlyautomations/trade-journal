@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Manage Room → Channels — normal list + explicit Edit mode for permissions and channel admin.
+/// Manage Room → Channels, normal list + explicit Edit mode for permissions and channel admin.
 struct ManageRoomChannelsView: View {
     @Bindable var viewModel: ManageRoomViewModel
     @Binding var editingChannel: RoomChannel?

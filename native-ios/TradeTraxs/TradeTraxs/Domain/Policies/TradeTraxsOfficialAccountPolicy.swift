@@ -1,6 +1,6 @@
 import Foundation
 
-/// Official @tradetraxs account — badge eligibility is profile-ID based (not username).
+/// Official @tradetraxs account, badge eligibility is profile-ID based (not username).
 nonisolated enum TradeTraxsOfficialAccountPolicy {
     /// Production Supabase `profiles.id` for @tradetraxs.
     static let profileID = ProfileID("de0ad507-4cb4-4c09-a5eb-46536567e2c3")
@@ -11,7 +11,7 @@ nonisolated enum TradeTraxsOfficialAccountPolicy {
         return false
     }
 
-    /// Hexagon badge beside identity — official account or existing creator verification.
+    /// Hexagon badge beside identity, official account or existing creator verification.
     static func showsTradeTraxsIdentityBadge(profileID: ProfileID, isCreator: Bool) -> Bool {
         isCreator || isOfficialTradeTraxsAccount(profileID: profileID)
     }

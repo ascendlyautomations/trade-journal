@@ -168,7 +168,7 @@ nonisolated enum CSVTradeBuilder {
         return out
     }
 
-    /// Web `isTradeZellaShapedRow` — header keys only.
+    /// Web `isTradeZellaShapedRow`, header keys only.
     private static func isTradeZellaShaped(_ normalized: [String: String]) -> Bool {
         let keys = Set(normalized.keys)
         if keys.contains("open date") && keys.contains("close date") { return true }
@@ -836,7 +836,7 @@ private nonisolated extension DateFormatter {
         return f
     }()
 
-    /// Tradovate Performance CSV — `05/05/2026 20:11:36` (24-hour local).
+    /// Tradovate Performance CSV, `05/05/2026 20:11:36` (24-hour local).
     nonisolated static let csvTradovate24hDateTime: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")

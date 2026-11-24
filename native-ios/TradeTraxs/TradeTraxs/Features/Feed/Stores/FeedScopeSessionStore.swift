@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped Following / Global selection — one scope for every Feed content filter.
+/// Session-scoped Following / Global selection, one scope for every Feed content filter.
 @Observable
 @MainActor
 final class FeedScopeSessionStore {

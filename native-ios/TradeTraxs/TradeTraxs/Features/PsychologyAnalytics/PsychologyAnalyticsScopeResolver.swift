@@ -8,7 +8,7 @@ nonisolated enum PsychologyAnalyticsScopeResolver {
         var fingerprint: String
     }
 
-    /// Default when no persisted dashboard filters exist — matches ``DashboardScopeFilterDraft.defaults``.
+    /// Default when no persisted dashboard filters exist, matches ``DashboardScopeFilterDraft.defaults``.
     static func defaultScope(linkedAccountModes: [TradingAccountID: TradingAccountMode]) -> Resolved {
         buildResolved(
             profileID: nil,

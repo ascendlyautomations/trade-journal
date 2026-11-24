@@ -30,12 +30,7 @@ final class BacktestLabViewModel {
     var draftCustomRangeEnd: Date?
     var calendarMonth = CalendarMonthID.current()
     var pendingDelete: TradeOwnerJournalSummary?
-    var sharePayload: SharePayload?
-
-    struct SharePayload: Identifiable, Equatable {
-        let id = UUID()
-        let text: String
-    }
+    var journalSharePresentation: JournalTradeShareSupport.Presentation?
 
     private var profileID: ProfileID?
     private var loadTask: Task<Void, Never>?
@@ -202,6 +197,21 @@ final class BacktestLabViewModel {
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
     }
 
+    func handleAccountMutation() {
+        guard let profileID else { return }
+        guard let loaded = OwnerAccountMutationSync.sessionAccounts(
+            profileID: profileID,
+            detailCache: detailCache
+        ) else { return }
+        accounts = loaded
+        accountNames = OwnerAccountMutationSync.accountNamesMap(from: loaded)
+        OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(accountFilter, accounts: loaded)
+        if sanitized != accountFilter {
+            accountFilter = sanitized
+        }
+    }
+
     func shiftCalendarMonth(by delta: Int) {
         ExperienceHaptics.play(.selection)
         calendarMonth = calendarMonth.advancing(by: delta)
@@ -231,10 +241,7 @@ final class BacktestLabViewModel {
 
     func shareTrade(_ item: TradeOwnerJournalSummary) {
         ExperienceHaptics.play(.selection)
-        let summary = item.summary
-        let pnl = TradeDisplay.pnlText(summary.realizedPnL)
-        let side = summary.side == .long ? "Long" : "Short"
-        sharePayload = SharePayload(text: "\(summary.symbol.ticker) \(side) \(pnl) · Backtest Lab")
+        journalSharePresentation = JournalTradeShareSupport.presentation(for: item.summary)
     }
 
     func requestDelete(_ item: TradeOwnerJournalSummary) {

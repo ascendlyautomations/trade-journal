@@ -399,7 +399,7 @@ struct LoginView: View {
         return true
     }
 
-    /// First logged-out landing only — returning users already default to Sign In via ``AuthLandingInstallState``.
+    /// First logged-out landing only, returning users already default to Sign In via ``AuthLandingInstallState``.
     /// A duplicate-email handoff has already chosen Sign In; do not send that form back to Create Account.
     private func applyFreshInstallLandingModeIfNeeded() {
         guard viewModel.duplicateEmailNotice == nil else { return }

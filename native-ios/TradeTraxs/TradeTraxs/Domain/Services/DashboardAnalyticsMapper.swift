@@ -148,7 +148,7 @@ nonisolated enum DashboardAnalyticsMapper {
             profitFactor: DashboardAnalyticsComposer.profitFactor(ingredients),
             payouts: payoutTotal,
             expectancy: DashboardAnalyticsComposer.expectancy(ingredients),
-            // Avg Targeted R:R — V3 `sum_rr` fallback; `overlayClientRrJournalMetrics` prefers filtered journal rows.
+            // Avg Targeted R:R, V3 `sum_rr` fallback; `overlayClientRrJournalMetrics` prefers filtered journal rows.
             averageRR: DashboardAnalyticsComposer.averageRR(ingredients),
             averageMaxRrReached: nil,
             rrTargetAnalysis: DashboardRrTargetAnalysis(
@@ -429,7 +429,7 @@ nonisolated enum DashboardAnalyticsMapper {
     }
 
     private static func formatDuration(_ seconds: Double?) -> String {
-        guard let seconds, seconds > 0 else { return "—" }
+        guard let seconds, seconds > 0 else { return "–" }
         let total = Int(seconds.rounded())
         let h = total / 3600
         let m = (total % 3600) / 60

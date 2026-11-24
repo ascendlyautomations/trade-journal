@@ -1,6 +1,6 @@
 import Foundation
 
-/// Server-confirmed membership rows from join RPC — consumed by open conversation screens.
+/// Server-confirmed membership rows from join RPC, consumed by open conversation screens.
 @MainActor
 enum TradeRoomConfirmedMembershipCache {
     private static var byRoom: [RoomID: RoomMembership] = [:]

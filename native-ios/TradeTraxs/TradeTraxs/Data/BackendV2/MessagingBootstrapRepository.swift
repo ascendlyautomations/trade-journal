@@ -1,6 +1,6 @@
 import Foundation
 
-/// Messaging inbox V2 bootstrap — `rpc_v2_messaging_bootstrap`.
+/// Messaging inbox V2 bootstrap, `rpc_v2_messaging_bootstrap`.
 nonisolated struct MessagingRpcBootstrapRepository: MessagesBootstrapProviding {
     private let client: BackendV2RPCClient
 
@@ -41,7 +41,7 @@ nonisolated struct MessagingRpcBootstrapRepository: MessagesBootstrapProviding {
     }
 }
 
-/// Lightweight inbox catch-up — `rpc_v1_messaging_bootstrap` (no notification writes).
+/// Lightweight inbox catch-up, `rpc_v1_messaging_bootstrap` (no notification writes).
 nonisolated struct MessagingCatchUpRpcRepository {
     private let client: BackendV2RPCClient
 
@@ -109,11 +109,11 @@ enum MessagingInboxFreshness {
 }
 
 enum MessagingInboxLoadIntent: Sendable {
-    /// First authoritative inbox — full V2 bootstrap; may mark message notifications read on intentional cold open.
+    /// First authoritative inbox, full V2 bootstrap; may mark message notifications read on intentional cold open.
     case coldBootstrap
-    /// Disk/cache already painted — patch inbox from server without notification writes.
+    /// Disk/cache already painted, patch inbox from server without notification writes.
     case catchUp
-    /// User-visible soft revalidate — catch-up when possible.
+    /// User-visible soft revalidate, catch-up when possible.
     case softRevalidate
 }
 

@@ -14,12 +14,12 @@ enum CurrencyAmountFieldSupport {
         return value
     }
 
-    /// Standard USD display — always 2 decimal places, e.g. `$53,242.50`.
+    /// Standard USD display, always 2 decimal places, e.g. `$53,242.50`.
     static func formatDisplay(_ amount: Decimal) -> String {
         usdDisplayFormatter.string(from: NSDecimalNumber(decimal: amount)) ?? "$0.00"
     }
 
-    /// Programmatic seed for editable text — grouped whole dollars with cents when present.
+    /// Programmatic seed for editable text, grouped whole dollars with cents when present.
     static func seedEditingText(from amount: Decimal) -> String {
         NumericInputFieldSupport.seedEditingText(from: amount, style: editingStyle)
     }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared axis model for ``ProfileEquityCurveView`` — trade index or timeline (X) and one balance scale (Y).
+/// Shared axis model for ``ProfileEquityCurveView``, trade index or timeline (X) and one balance scale (Y).
 nonisolated enum ProfileEquityCurveChartModel {
     /// Single Y plottable for equity and drawdown floor (Swift Charts uses separate scales per value name).
     static let balanceYPlottable = "Account balance"
@@ -8,7 +8,7 @@ nonisolated enum ProfileEquityCurveChartModel {
     static let timelineXPlottable = "Chart time"
 
     enum XAxisMode: Equatable, Sendable {
-        /// Sparse trade-level series — even index spacing (pre-aggregation behavior).
+        /// Sparse trade-level series, even index spacing (pre-aggregation behavior).
         case tradeIndex
         /// Aggregated buckets positioned on the time axis.
         case timeline
@@ -18,7 +18,7 @@ nonisolated enum ProfileEquityCurveChartModel {
         var id: Int { index }
         /// Contiguous scrub target (0…n−1); not used as the trade-level X coordinate.
         var index: Int
-        /// Plotted X for trade-level series — matches ``ProfileStatisticsMetrics/EquityPoint/index``.
+        /// Plotted X for trade-level series, matches ``ProfileStatisticsMetrics/EquityPoint/index``.
         var tradeIndex: Int
         var equity: Decimal
         var equityY: Double
@@ -57,17 +57,31 @@ nonisolated enum ProfileEquityCurveChartModel {
 
     static func tradeIndexDomain(for renderPoints: [RenderPoint]) -> ClosedRange<Int> {
         let maxIndex = renderPoints.map(\.tradeIndex).max() ?? 1
-        return 0...max(1, maxIndex)
+        let upper = max(1, maxIndex)
+        let trailingSlots = tradeIndexTrailingAxisInset(maxTradeIndex: upper)
+        return 0...(upper + trailingSlots)
+    }
+
+    /// Extra slots past the last trade so the terminal `MMMd` label is not clipped at the plot edge.
+    private static func tradeIndexTrailingAxisInset(maxTradeIndex: Int) -> Int {
+        max(1, Int(ceil(Double(max(1, maxTradeIndex + 1)) * 0.07)))
     }
 
     static func timelineDomain(for renderPoints: [RenderPoint]) -> ClosedRange<Date>? {
         let stamps = renderPoints.compactMap(\.plotTime)
         guard let minDate = stamps.min(), let maxDate = stamps.max(), minDate < maxDate else { return nil }
         let span = maxDate.timeIntervalSince1970 - minDate.timeIntervalSince1970
-        let pad = max(span * 0.02, 86_400)
-        let start = Date(timeIntervalSince1970: minDate.timeIntervalSince1970 - pad)
-        let end = Date(timeIntervalSince1970: maxDate.timeIntervalSince1970 + pad)
+        let insets = timelineXAxisInsets(span: span)
+        let start = Date(timeIntervalSince1970: minDate.timeIntervalSince1970 - insets.leading)
+        let end = Date(timeIntervalSince1970: maxDate.timeIntervalSince1970 + insets.trailing)
         return start...end
+    }
+
+    /// Asymmetric domain padding sized for `MMMyy` / `MMMd` axis labels without over-shrinking the curve.
+    static func timelineXAxisInsets(span: TimeInterval) -> (leading: TimeInterval, trailing: TimeInterval) {
+        let leading = min(max(span * 0.04, 4 * 3_600), 86_400 * 3)
+        let trailing = min(max(span * 0.07, 8 * 3_600), 86_400 * 5)
+        return (leading, trailing)
     }
 
     static func xAxisMode(for series: ProfileEquityCurveDisplaySeries) -> XAxisMode {

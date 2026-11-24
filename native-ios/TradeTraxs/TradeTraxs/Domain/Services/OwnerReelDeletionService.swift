@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single owner clip deletion path — Clip Detail and Profile grid.
+/// Single owner clip deletion path, Clip Detail and Profile grid.
 @MainActor
 enum OwnerReelDeletionService {
     static func deleteOwnedReel(

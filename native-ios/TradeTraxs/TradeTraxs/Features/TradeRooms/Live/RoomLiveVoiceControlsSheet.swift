@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// In-room voice controls — same session as ``RoomLiveVoiceBar`` (no second LiveKit connection).
+/// In-room voice controls, same session as ``RoomLiveVoiceBar`` (no second LiveKit connection).
 struct RoomLiveVoiceControlsSheet: View {
     @Bindable var coordinator: RoomLiveVoiceCoordinator
     @Environment(\.themeColors) private var colors

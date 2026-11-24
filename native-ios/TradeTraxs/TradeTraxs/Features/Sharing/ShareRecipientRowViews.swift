@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// DM destination row — profile avatar + name / @username + optional selection checkmark.
+/// DM destination row, profile avatar + name / @username + optional selection checkmark.
 struct ShareRecipientConversationRow: View {
     let conversation: Conversation
     let imagePipeline: any ImagePipeline
@@ -83,7 +83,7 @@ struct ShareRecipientConversationRow: View {
     }
 }
 
-/// Trade Room destination row — room image + name / "Trade Room" + optional selection checkmark.
+/// Trade Room destination row, room image + name / "Trade Room" + optional selection checkmark.
 struct ShareRecipientTradeRoomRow: View {
     let room: TradeRoom
     let imagePipeline: any ImagePipeline

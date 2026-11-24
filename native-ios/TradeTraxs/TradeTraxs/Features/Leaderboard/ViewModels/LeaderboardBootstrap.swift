@@ -1,6 +1,6 @@
 import Foundation
 
-/// Coordinated Leaderboard first-paint — owned exclusively by ``LeaderboardScreenViewModel``.
+/// Coordinated Leaderboard first-paint, owned exclusively by ``LeaderboardScreenViewModel``.
 ///
 /// Server-windowed rankings via `rpc_v1_leaderboard_bootstrap` (V2), with legacy trade-corpus
 /// fallback only when the leaderboard flag is off.
@@ -20,7 +20,7 @@ enum LeaderboardBootstrap: ScreenBootstrap {
         var limit: Int = 100
         var forceNetwork: Bool = false
         var rankOffset: Int = 0
-        /// Legacy only — re-rank from cached trades when V2 is unavailable.
+        /// Legacy only, re-rank from cached trades when V2 is unavailable.
         var cachedTrades: [LeaderboardTradeRow]? = nil
     }
 
@@ -177,7 +177,7 @@ enum LeaderboardBootstrap: ScreenBootstrap {
         )
     }
 
-    /// Friends filter only — one followers edge query intersected with cached following IDs.
+    /// Friends filter only, one followers edge query intersected with cached following IDs.
     static func loadFriends(
         viewer: ProfileID,
         following: Set<ProfileID>,

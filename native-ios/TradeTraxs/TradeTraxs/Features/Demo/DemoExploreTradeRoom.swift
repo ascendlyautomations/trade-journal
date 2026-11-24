@@ -1,6 +1,6 @@
 import Foundation
 
-/// Local read-only Trade Room for Explore Mode — never synced to Supabase.
+/// Local read-only Trade Room for Explore Mode, never synced to Supabase.
 nonisolated enum DemoExploreTradeRoom {
     static let roomID = RoomID("demo.explore.trade-room")
     static let hostProfileID = ProfileID("demo.explore.community.host")
@@ -136,7 +136,7 @@ nonisolated enum DemoExploreTradeRoom {
                 id: RoomMessageID("\(roomID.rawValue)-welcome"),
                 roomID: roomID,
                 senderProfileID: hostProfileID,
-                body: "Welcome to TradeTraxs Traders — share your plan before the open and recap after the close.",
+                body: "Welcome to TradeTraxs Traders, share your plan before the open and recap after the close.",
                 attachedTradeID: nil,
                 media: [],
                 parentMessageID: nil,
@@ -160,7 +160,7 @@ nonisolated enum DemoExploreTradeRoom {
                 id: RoomMessageID("\(roomID.rawValue)-reply"),
                 roomID: roomID,
                 senderProfileID: hostProfileID,
-                body: "Solid — post your screenshot when you're flat so we can review R-multiple.",
+                body: "Solid, post your screenshot when you're flat so we can review R-multiple.",
                 attachedTradeID: nil,
                 media: [],
                 parentMessageID: RoomMessageID("\(roomID.rawValue)-nq-levels"),
@@ -172,7 +172,7 @@ nonisolated enum DemoExploreTradeRoom {
                 id: RoomMessageID("\(roomID.rawValue)-viewer-recap"),
                 roomID: roomID,
                 senderProfileID: viewerID,
-                body: "Took one MNQ long off the sweep — stopped at BE after partial. Journaled in TradeTraxs.",
+                body: "Took one MNQ long off the sweep, stopped at BE after partial. Journaled in TradeTraxs.",
                 attachedTradeID: nil,
                 media: [],
                 parentMessageID: nil,

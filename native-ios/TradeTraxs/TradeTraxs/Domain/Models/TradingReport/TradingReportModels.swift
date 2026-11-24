@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `TradingReportPeriodKey` — exact period catalog used by Dashboard Trading Reports.
+/// Web `TradingReportPeriodKey`, exact period catalog used by Dashboard Trading Reports.
 nonisolated enum TradingReportPeriodKey: String, Hashable, Codable, Sendable, CaseIterable, Identifiable {
     case weeklyThis = "weekly_this"
     case weeklyLast = "weekly_last"
@@ -94,7 +94,7 @@ nonisolated enum TradingReportKind: String, Hashable, Codable, Sendable {
     }
 }
 
-/// Arbitrary eastern calendar range — `custom:YYYY-MM-DD:YYYY-MM-DD`.
+/// Arbitrary eastern calendar range, `custom:YYYY-MM-DD:YYYY-MM-DD`.
 nonisolated struct TradingReportCustomRangeRef: Hashable, Sendable {
     var startKey: String
     var endKey: String
@@ -179,7 +179,7 @@ struct TradingReportMetrics: Hashable, Codable, Sendable {
     var averageHoldTimeSeconds: Int?
 }
 
-/// Web `TradingReport` — deterministic report payload (`summarySource: "deterministic"`).
+/// Web `TradingReport`, deterministic report payload (`summarySource: "deterministic"`).
 struct TradingReport: Hashable, Codable, Sendable, Identifiable {
     var periodKey: TradingReportPeriodKey
     var kind: TradingReportKind

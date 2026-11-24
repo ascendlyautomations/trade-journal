@@ -2,7 +2,7 @@
 import Foundation
 import OSLog
 
-/// Phase 8D — Journal TradeSummary load/decode/cache telemetry (Debug only).
+/// Phase 8D, Journal TradeSummary load/decode/cache telemetry (Debug only).
 nonisolated enum TradeSummaryJournalTelemetry {
     private static let log = Logger(subsystem: "com.tradetraxs.app", category: "TradeSummary.Journal")
 

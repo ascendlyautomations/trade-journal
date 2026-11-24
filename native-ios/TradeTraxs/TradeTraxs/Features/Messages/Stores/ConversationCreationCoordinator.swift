@@ -30,7 +30,7 @@ final class ConversationCreationCoordinator {
         #endif
     }
 
-    /// Opens or creates a 1:1 conversation — never duplicates when inbox or server already has one.
+    /// Opens or creates a 1:1 conversation, never duplicates when inbox or server already has one.
     func openDirectConversation(
         viewerID: ProfileID,
         recipient: Profile,

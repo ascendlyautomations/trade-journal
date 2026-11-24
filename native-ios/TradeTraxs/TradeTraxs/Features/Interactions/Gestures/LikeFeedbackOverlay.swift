@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Brief heart burst for double-tap Like — SF Symbol only, non-blocking.
+/// Brief heart burst for double-tap Like, SF Symbol only, non-blocking.
 struct LikeFeedbackOverlay: View {
     var isVisible: Bool
     var reduceMotion: Bool

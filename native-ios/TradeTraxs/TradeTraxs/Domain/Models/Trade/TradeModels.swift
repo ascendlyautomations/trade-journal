@@ -13,7 +13,7 @@ nonisolated enum TradeMode: String, Hashable, Codable, Sendable {
     case copyTraded
 }
 
-/// Screenshot rendering — `trades.image_display_mode` (`fit` | `fill`).
+/// Screenshot rendering, `trades.image_display_mode` (`fit` | `fill`).
 nonisolated enum TradeScreenshotDisplayMode: String, Hashable, Codable, Sendable {
     case fit
     case fill
@@ -60,21 +60,21 @@ nonisolated enum TradingAccountMode: String, Hashable, Codable, Sendable {
     }
 }
 
-/// Prop-firm rule columns on `accounts` — source of truth mirrors web `PropfirmAccountRules`.
+/// Prop-firm rule columns on `accounts`, source of truth mirrors web `PropfirmAccountRules`.
 nonisolated struct PropFirmAccountRules: Hashable, Codable, Sendable {
-    /// DB `consistency` — max single winning trade as % of total winning-trade profit.
+    /// DB `consistency`, max single winning trade as % of total winning-trade profit.
     var consistencyPercent: Decimal?
-    /// DB `max_drawdown` — max loss limit ($).
+    /// DB `max_drawdown`, max loss limit ($).
     var maxDrawdown: Decimal?
     /// DB `drawdown_type`: `static` | `intraday_trailing` | `end_of_day_trailing`.
     var drawdownType: PropFirmDrawdownType?
-    /// DB `daily_drawdown` — worst single futures-day loss cap ($).
+    /// DB `daily_drawdown`, worst single futures-day loss cap ($).
     var dailyDrawdown: Decimal?
     /// DB `profit_target`.
     var profitTarget: Decimal?
-    /// DB `winning_days` — minimum **winning** days (not all trading days).
+    /// DB `winning_days`, minimum **winning** days (not all trading days).
     var winningDaysRequired: Int?
-    /// DB `winning_day_threshold` — min daily net to count as a winning day.
+    /// DB `winning_day_threshold`, min daily net to count as a winning day.
     var winningDayThreshold: Decimal?
     /// DB `payout_drawdown_behavior`: `reset_to_account` | `keep_trailing`.
     var payoutDrawdownBehavior: String?
@@ -161,9 +161,9 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var dollarRisk: Decimal? = nil
     var maxRrReached: Decimal? = nil
     var realizedRr: Decimal? = nil
-    /// Manual journal — winner closed at full take-profit (`trades.full_tp`).
+    /// Manual journal, winner closed at full take-profit (`trades.full_tp`).
     var fullTakeProfit: Bool = false
-    /// Manual journal — winner closed before full TP (`trades.early_exit`).
+    /// Manual journal, winner closed before full TP (`trades.early_exit`).
     var earlyExit: Bool = false
     /// Manual early-exit exit R:R when prices cannot derive realized (`trades.exit_rr`).
     var exitRr: Decimal? = nil
@@ -173,7 +173,7 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var publicCaption: String?
     /// Primary screenshot from the trade row (`image_url`) when present.
     var thumbnail: MediaReference?
-    /// `trades.image_display_mode` — defaults to `.fit` when unset.
+    /// `trades.image_display_mode`, defaults to `.fit` when unset.
     var imageDisplayMode: TradeScreenshotDisplayMode = .fit
     /// Note preview from the trade row (`notes`) when present.
     var notePreview: String?
@@ -186,26 +186,26 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var confidence: Int? = nil
     var emotion: String? = nil
     var followedPlan: Bool? = nil
-    /// Owner-only mistake tag — `trades.mistake_type` (scorecard discipline coverage).
+    /// Owner-only mistake tag, `trades.mistake_type` (scorecard discipline coverage).
     var mistakeType: String? = nil
     var marketCondition: String? = nil
     var psychologyNotes: String? = nil
-    /// Owner-only emotion after exit — `trades.exit_emotion`.
+    /// Owner-only emotion after exit, `trades.exit_emotion`.
     var exitEmotion: String? = nil
-    /// Owner-only execution/discipline rating 1–5 — `trades.execution_rating`.
+    /// Owner-only execution/discipline rating 1–5, `trades.execution_rating`.
     var executionRating: Int? = nil
     /// Authoritative hold duration from `duration_text` / `duration_seconds` when present.
     var durationText: String? = nil
     var durationSeconds: Int? = nil
-    /// CSV import review flag — `trades.reviewed`.
+    /// CSV import review flag, `trades.reviewed`.
     var reviewed: Bool? = nil
-    /// Bulk CSV import marker — `trades.is_initial_import`.
+    /// Bulk CSV import marker, `trades.is_initial_import`.
     var isInitialImport: Bool? = nil
-    /// Import origin — `trades.import_source` (`manual` | `csv` | `screenshot`).
+    /// Import origin, `trades.import_source` (`manual` | `csv` | `screenshot`).
     var importSource: TradeImportSource? = nil
-    /// Deterministic import fingerprint — `trades.import_fingerprint`.
+    /// Deterministic import fingerprint, `trades.import_fingerprint`.
     var importFingerprint: String? = nil
-    /// Raw `trades.mode` column — dashboard account-type filter uses this before `wireAccountType` (web parity).
+    /// Raw `trades.mode` column, dashboard account-type filter uses this before `wireAccountType` (web parity).
     var wireMode: String? = nil
     /// Raw `trades.account_type` column.
     var wireAccountType: String? = nil

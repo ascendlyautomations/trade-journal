@@ -2,7 +2,7 @@
 import Foundation
 import os
 
-/// DEBUG-only — upward scroll remounts vs session image restore (see ``FeedDisplayImageSessionCache``).
+/// DEBUG-only, upward scroll remounts vs session image restore (see ``FeedDisplayImageSessionCache``).
 enum FeedScrollRowLifecycleDiagnostics {
     private static let log = Logger(subsystem: AppLog.subsystem, category: "FeedScrollRow")
 

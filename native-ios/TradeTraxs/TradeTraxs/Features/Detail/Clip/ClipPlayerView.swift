@@ -3,7 +3,7 @@ import AVKit
 import SwiftUI
 import UIKit
 
-/// Native ``AVPlayerViewController`` — play/pause, scrubbing, fullscreen.
+/// Native ``AVPlayerViewController``, play/pause, scrubbing, fullscreen.
 /// Optional double-tap Like uses a non-cancelling recognizer so controls keep working.
 struct ClipPlayerView: UIViewControllerRepresentable {
     let player: AVPlayer

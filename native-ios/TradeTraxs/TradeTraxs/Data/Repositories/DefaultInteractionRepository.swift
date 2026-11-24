@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Production likes/comments — mirrors web table routing (no invented RPCs).
+/// Production likes/comments, mirrors web table routing (no invented RPCs).
 nonisolated struct DefaultInteractionRepository: InteractionRepository {
     private let supabase: SupabaseInfrastructure
     private let session: any SessionProviding
@@ -335,7 +335,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         case .achievement: insert.achievement_post_id = contentID
         }
 
-        // Same profiles embed as list load — no follow-up profile query after create.
+        // Same profiles embed as list load, no follow-up profile query after create.
         let row: InteractionDTO.CommentRow = try await supabase.database.insert(
             insert,
             into: tables.comments,

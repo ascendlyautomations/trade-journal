@@ -5,7 +5,7 @@ enum BrokerOnboardingPersistence {
     private static let finishedKeyPrefix = "brokerOnboarding.finished."
 
     enum Status: Equatable, Sendable {
-        /// New profile setup just finished — show broker onboarding once.
+        /// New profile setup just finished, show broker onboarding once.
         case pending
         /// User skipped, connected, or was grandfathered before this feature existed.
         case finished

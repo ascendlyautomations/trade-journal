@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Monochrome bank/building glyph — matches the former Profile Accounts tab picker icon.
+/// Monochrome bank/building glyph, matches the former Profile Accounts tab picker icon.
 enum ProfileBankIcon {
     static let systemName = AppIcon.payouts.systemName
 

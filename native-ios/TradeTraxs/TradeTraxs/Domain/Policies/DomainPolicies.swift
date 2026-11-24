@@ -1,6 +1,6 @@
 import Foundation
 
-/// Soft guidance for list loading — implementations live in Data later.
+/// Soft guidance for list loading, implementations live in Data later.
 nonisolated enum PaginationPolicy {
     static let defaultPageSize = 30
     static let maximumPageSize = 100
@@ -10,7 +10,7 @@ nonisolated enum PaginationPolicy {
 nonisolated enum FreeTierPolicy {
     /// Clips per UTC calendar day on Free (TraxsPro unlimited). Internal `reels` table unchanged.
     static let dailyClipLimit = 4
-    /// Legacy name — same as ``dailyClipLimit``.
+    /// Legacy name, same as ``dailyClipLimit``.
     static let dailyReelLimit = dailyClipLimit
     static let maxTradeEntryAccounts = 3
 }

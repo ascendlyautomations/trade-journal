@@ -1,6 +1,6 @@
 import Foundation
 
-/// Discovery / search member counts — carry into room detail until bootstrap supplies authority.
+/// Discovery / search member counts, carry into room detail until bootstrap supplies authority.
 @MainActor
 enum TradeRoomDiscoveryMemberCountCache {
     private static var counts: [RoomID: Int] = [:]

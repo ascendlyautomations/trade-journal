@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Compact Discord/iMessage-style room chrome — logo, name, members/info actions.
+/// Compact Discord/iMessage-style room chrome, logo, name, members/info actions.
 struct RoomConversationHeaderView: View {
     let room: TradeRoom
     let memberCountLabel: String

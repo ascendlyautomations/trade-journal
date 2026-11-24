@@ -3,7 +3,7 @@ import Foundation
 /// PapaParse-style CSV → rows of string dictionaries (header row required).
 ///
 /// RFC4180 parsing uses `UnicodeScalar` (not Swift `Character`) so CRLF is two scalars,
-/// not one grapheme cluster — otherwise record boundaries are invisible to the parser.
+/// not one grapheme cluster, otherwise record boundaries are invisible to the parser.
 nonisolated enum CSVTextParser {
     private static let comma = UnicodeScalar(0x2C)!
     private static let quote = UnicodeScalar(0x22)!

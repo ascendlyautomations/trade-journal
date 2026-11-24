@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// Single Manage Accounts experience — Settings, Dashboard, and Calendar all land here.
+/// Single Manage Accounts experience, Settings, Dashboard, and Calendar all land here.
 struct SettingsTradingAccountsView: View {
     @State private var viewModel: ManageAccountsViewModel
     @State private var editorPresentation: EditorPresentation?
+    @State private var showsUnsavedAccountDisplayDialog = false
+    @State private var unsavedNavigationIntercept = TradingRulesUnsavedNavigationGuard.UnsavedNavigationInterceptBox()
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.dismiss) private var dismiss
 
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
@@ -117,7 +120,7 @@ struct SettingsTradingAccountsView: View {
                     }
                     .accessibilityIdentifier("manageAccounts.clearFilters")
                 } header: {
-                    ManageAccountsYourAccountsSectionHeader()
+                    yourAccountsSectionHeader
                 }
             } else if viewModel.accounts.isEmpty, !viewModel.isLoading {
                 Section {
@@ -129,7 +132,7 @@ struct SettingsTradingAccountsView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 } header: {
-                    ManageAccountsYourAccountsSectionHeader()
+                    yourAccountsSectionHeader
                 }
             } else if showsFreePlanAccountGroups {
                 freePlanGroupedAccountSections
@@ -139,7 +142,7 @@ struct SettingsTradingAccountsView: View {
                         accountRow(account, tradeEntryBadge: nil)
                     }
                 } header: {
-                    ManageAccountsYourAccountsSectionHeader()
+                    yourAccountsSectionHeader
                 }
             }
             }
@@ -149,7 +152,48 @@ struct SettingsTradingAccountsView: View {
         }
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Manage Accounts")
+        .navigationBarBackButtonHidden(viewModel.hasUnsavedAccountDisplayChanges)
+        .background {
+            TradingRulesUnsavedNavigationGuard(
+                isActive: viewModel.hasUnsavedAccountDisplayChanges,
+                interceptBox: unsavedNavigationIntercept
+            )
+            .equatable()
+        }
+        .onAppear {
+            unsavedNavigationIntercept.onIntercept = { showsUnsavedAccountDisplayDialog = true }
+        }
+        .confirmationDialog(
+            "Unsaved Changes",
+            isPresented: $showsUnsavedAccountDisplayDialog,
+            titleVisibility: .visible
+        ) {
+            Button("Save & Exit") {
+                Task { await saveAccountDisplayAndExit() }
+            }
+            Button("Discard Changes", role: .destructive) {
+                viewModel.discardAccountDisplayDraft()
+                dismiss()
+            }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("You have unsaved account display changes. Save before leaving?")
+        }
         .toolbar {
+            if viewModel.hasUnsavedAccountDisplayChanges {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showsUnsavedAccountDisplayDialog = true
+                    } label: {
+                        HStack(spacing: ExperienceSpacing.xxs) {
+                            Image(systemName: "chevron.backward")
+                                .fontWeight(.semibold)
+                            Text("Back")
+                        }
+                    }
+                    .accessibilityIdentifier("manageAccounts.back")
+                }
+            }
             if !AppLaunchController.shared.isDemoExperienceActive {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -191,9 +235,36 @@ struct SettingsTradingAccountsView: View {
         }
         .onAppear { viewModel.loadIfNeeded() }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            guard !viewModel.hasUnsavedAccountDisplayChanges else { return }
             Task { await viewModel.refresh() }
         }
         .accessibilityIdentifier("settings.tradingAccounts")
+    }
+
+    private var yourAccountsSectionHeader: some View {
+        ManageAccountsYourAccountsSectionHeader(
+            showsSave: !AppLaunchController.shared.isDemoExperienceActive && !viewModel.accounts.isEmpty,
+            hasUnsavedChanges: viewModel.hasUnsavedAccountDisplayChanges,
+            isSaving: viewModel.isSavingAccountDisplay,
+            onSave: {
+                Task { await saveAccountDisplayAndStay() }
+            }
+        )
+    }
+
+    private func saveAccountDisplayAndStay() async {
+        let saved = await viewModel.saveAccountDisplayPreferences()
+        if saved {
+            SaveSuccessConfirmationCenter.shared.present(SaveSuccessToastMessage.settingsSaved)
+        }
+    }
+
+    private func saveAccountDisplayAndExit() async {
+        let saved = await viewModel.saveAccountDisplayPreferences()
+        if saved {
+            SaveSuccessConfirmationCenter.shared.present(SaveSuccessToastMessage.settingsSaved)
+            dismiss()
+        }
     }
 
     private enum TradeEntryAccountBadge {
@@ -210,7 +281,7 @@ struct SettingsTradingAccountsView: View {
                 }
                 .accessibilityIdentifier("manageAccounts.chooseTradeEntrySlots")
             } header: {
-                ManageAccountsYourAccountsSectionHeader()
+                yourAccountsSectionHeader
             }
         }
 
@@ -239,7 +310,7 @@ struct SettingsTradingAccountsView: View {
     private var freePlanActiveAccountsSectionHeader: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             if !showsFreePlanTradeEntryReconfigure {
-                ManageAccountsYourAccountsSectionHeader()
+                yourAccountsSectionHeader
             }
             Text("Active Accounts (\(freePlanActiveSlotCount)/\(FreeTierPolicy.maxTradeEntryAccounts))")
         }
@@ -249,7 +320,7 @@ struct SettingsTradingAccountsView: View {
     private var freePlanReadOnlyAccountsSectionHeader: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             if !showsFreePlanTradeEntryReconfigure, freePlanActiveAccounts.isEmpty {
-                ManageAccountsYourAccountsSectionHeader()
+                yourAccountsSectionHeader
             }
             Text("Read-Only Accounts")
         }
@@ -265,12 +336,7 @@ struct SettingsTradingAccountsView: View {
                     get: { viewModel.showInAccountDropdowns(for: account.id) },
                     set: { show in
                         guard !AppLaunchController.shared.isDemoExperienceActive else { return }
-                        Task {
-                            await viewModel.setShowInAccountDropdowns(
-                                id: account.id,
-                                show: show
-                            )
-                        }
+                        viewModel.setDraftShowInAccountDropdowns(id: account.id, show: show)
                     }
                 ),
                 accessibilityIdentifier:
@@ -403,16 +469,35 @@ struct SettingsTradingAccountsView: View {
 
 private struct ManageAccountsYourAccountsSectionHeader: View {
     private static let infoMessage =
-        "Choose which accounts appear in selectors across TradeTraxs. Toggle each account on or off."
+        "Choose which accounts appear in selectors across TradeTraxs. Toggle each account on or off, then tap Save."
+
+    var showsSave: Bool
+    var hasUnsavedChanges: Bool
+    var isSaving: Bool
+    var onSave: () -> Void
+
+    @Environment(\.themeColors) private var colors
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
-            Text("Your Accounts")
-            AnalyticsMetricInfoButton(
-                title: "Your Accounts",
-                bodyText: Self.infoMessage,
-                accessibilityID: "manageAccounts.dropdownIntro"
-            )
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+                Text("Your Accounts")
+                AnalyticsMetricInfoButton(
+                    title: "Your Accounts",
+                    bodyText: Self.infoMessage,
+                    accessibilityID: "manageAccounts.dropdownIntro"
+                )
+            }
+            Spacer(minLength: ExperienceSpacing.xs)
+            if showsSave {
+                Button(isSaving ? "Saving…" : "Save") {
+                    onSave()
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(hasUnsavedChanges ? colors.accent : colors.tertiaryText)
+                .disabled(!hasUnsavedChanges || isSaving)
+                .accessibilityIdentifier("manageAccounts.saveAccountDisplay")
+            }
         }
     }
 }

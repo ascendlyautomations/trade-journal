@@ -2,7 +2,7 @@ import Foundation
 
 /// Viewer-scoped on-disk snapshots for Feed first-page timelines.
 ///
-/// Structured metadata only — no image/video blobs. Server + RLS remain authoritative.
+/// Structured metadata only, no image/video blobs. Server + RLS remain authoritative.
 nonisolated enum FeedDiskCache {
     static let folderName = "FeedDiskCache"
     static let schemaVersion = 2
@@ -112,7 +112,7 @@ nonisolated enum FeedDiskCache {
         }
     }
 
-    /// Disk + decode work for blocked-author pruning — safe off the main actor.
+    /// Disk + decode work for blocked-author pruning, safe off the main actor.
     struct PrunedPageSnapshot: Sendable {
         var cacheKey: String
         var entries: [FeedTimelineEntry]
@@ -257,7 +257,7 @@ nonisolated enum FeedDiskCache {
             let data = try JSONEncoder().encode(value)
             try data.write(to: url, options: [.atomic])
         } catch {
-            // Soft-fail — disk cache must never break networking.
+            // Soft-fail, disk cache must never break networking.
         }
     }
 

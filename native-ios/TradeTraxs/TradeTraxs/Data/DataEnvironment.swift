@@ -43,20 +43,20 @@ final class DataEnvironment {
     let tradingPreferences: any TradingPreferencesRepository
     let authentication: any AuthenticationRepository
     let home: any HomeRepository
-    /// Platform likes/comments — content-agnostic (Trade / Post / Clip / Feed).
+    /// Platform likes/comments, content-agnostic (Trade / Post / Clip / Feed).
     let interactions: any InteractionRepository
     /// Session-scoped engagement cache shared by lists + detail.
     let engagementStore: EngagementStore
     /// Shared BFF AI contracts (analyze-trade, future coach endpoints).
     let ai: any AIRepository
-    /// Dashboard Trading Reports — web-parity deterministic generator + notify.
+    /// Dashboard Trading Reports, web-parity deterministic generator + notify.
     let tradingReports: any TradingReportRepository
     let psychologyReports: any PsychologyReportRepository
     let dailyCheckIns: any TraderDailyCheckInRepository
     let contentReports: any ContentReportRepository
     let userSubmissions: any UserSubmissionRepository
     let vault: any VaultRepository
-    /// Session-scoped private Vault cache — shared by Feed, detail, and Vault home.
+    /// Session-scoped private Vault cache, shared by Feed, detail, and Vault home.
     let vaultStore: VaultStore
     let brokerIntegrations: any BrokerIntegrationRepository
     let adminUsers: any AdminUsersRepository
@@ -176,9 +176,9 @@ final class DataEnvironment {
 
     enum LaunchMode: Sendable {
         case production
-        /// Logged-out shell — no realtime boot, no session store wiring, unconfigured Supabase seam.
+        /// Logged-out shell, no realtime boot, no session store wiring, unconfigured Supabase seam.
         case loginShell
-        /// Explore Mode — local demo journal + guest public community repositories.
+        /// Explore Mode, local demo journal + guest public community repositories.
         case demoExplore
     }
 
@@ -241,7 +241,7 @@ final class DataEnvironment {
         RealtimePressureSnapshotProvider.bind(realtimeHub: realtimeHub)
 
         AppLog.application.info(
-            "DataEnvironment ready — Supabase configured=\(supabase.client.isConfigured, privacy: .public)"
+            "DataEnvironment ready, Supabase configured=\(supabase.client.isConfigured, privacy: .public)"
         )
 
         let defaultProfiles = DefaultProfileRepository(
@@ -407,7 +407,7 @@ final class DataEnvironment {
     ) -> DataEnvironment {
         // Login shell uses `SupabaseInfrastructure.unconfigured` (no transport). Production
         // `Default*` repos are inert at init except `DefaultContentReportRepository`, which
-        // must not be constructed here — use `LoginShellContentReportRepository` instead.
+        // must not be constructed here, use `LoginShellContentReportRepository` instead.
         let configuration = StartupTrace.measure("LoginShell.DataConfiguration") {
             DataConfiguration.make(for: appConfiguration)
         }
@@ -420,7 +420,7 @@ final class DataEnvironment {
         let storage = SupabaseObjectStorageProvider(storage: supabase.storage)
         let uploadService = DefaultUploadService(storage: storage)
         let downloadService = DefaultDownloadService(storage: storage)
-        // Login does not load media — avoid DefaultImagePipeline / URLSession.shared / ImageIO on cold launch.
+        // Login does not load media, avoid DefaultImagePipeline / URLSession.shared / ImageIO on cold launch.
         let imagePipeline: any ImagePipeline = StartupTrace.measure("LoginShell.ImagePipeline") {
             PlaceholderImagePipeline()
         }
@@ -509,7 +509,7 @@ final class DataEnvironment {
                 )
             )
         }
-        AppLog.application.info("DataEnvironment ready — login shell (deferred production stack)")
+        AppLog.application.info("DataEnvironment ready, login shell (deferred production stack)")
 
         return DataEnvironment(
             configuration: configuration,
@@ -567,7 +567,7 @@ final class DataEnvironment {
         )
     }
 
-    /// Logged-out Explore Mode — ``ExploreGuestRepositories`` + local demo journal repositories.
+    /// Logged-out Explore Mode, ``ExploreGuestRepositories`` + local demo journal repositories.
     private static func makeDemoExploreShell(
         appConfiguration: AppConfiguration,
         networking: NetworkingEnvironment,
@@ -634,7 +634,7 @@ final class DataEnvironment {
         )
 
         AppLog.application.info(
-            "DataEnvironment ready — explore (local journal + guest Feed/Explore/Rooms; configured=\(supabase.client.isConfigured, privacy: .public))"
+            "DataEnvironment ready, explore (local journal + guest Feed/Explore/Rooms; configured=\(supabase.client.isConfigured, privacy: .public))"
         )
 
         return DataEnvironment(

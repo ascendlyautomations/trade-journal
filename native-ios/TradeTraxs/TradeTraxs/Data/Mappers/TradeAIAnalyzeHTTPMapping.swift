@@ -68,6 +68,7 @@ nonisolated enum TradeAIAnalyzeHTTPMapping {
         case 401: return "unauthorized"
         case 403: return "forbidden"
         case 429: return "rateLimited"
+        case 502, 503: return "serviceUnavailable"
         case 400 ..< 500: return "client"
         case 500 ..< 600: return "server"
         default: return "unknown"

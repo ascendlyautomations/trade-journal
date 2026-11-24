@@ -32,7 +32,7 @@ struct ProfileSectionSwipeModifier: ViewModifier {
 }
 
 extension View {
-    /// Horizontal swipe between profile tabs — same thresholds as Feed filter swipe.
+    /// Horizontal swipe between profile tabs, same thresholds as Feed filter swipe.
     func profileSectionSwipe(
         section: ProfileSection,
         isEnabled: Bool = true,

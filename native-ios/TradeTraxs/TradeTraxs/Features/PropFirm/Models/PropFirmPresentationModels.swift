@@ -29,7 +29,7 @@ nonisolated struct PropFirmStatusSnapshot: Hashable, Sendable, Identifiable {
     var dailyDrawdownBreached: Bool
     var completedPayoutHistory: [AccountPayoutCycle] = []
 
-    // Detail presentation — authoritative rules + live cycle metrics.
+    // Detail presentation, authoritative rules + live cycle metrics.
     var firmName: String = ""
     var configuredAccountSize: Decimal = 0
     var cycleStartBalance: Decimal = 0

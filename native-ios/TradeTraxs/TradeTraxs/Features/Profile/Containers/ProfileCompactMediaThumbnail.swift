@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Compact Profile card thumbnail sizing — container hugs the final cropped image aspect ratio.
+/// Compact Profile card thumbnail sizing, container hugs the final cropped image aspect ratio.
 enum ProfileCompactThumbnailLayout {
     static let width: CGFloat = 96
     static let placeholderHeight: CGFloat = 96
@@ -21,7 +21,7 @@ enum ProfileCompactThumbnailLayout {
     }
 }
 
-/// Left-side Profile browse thumbnail — width fixed, height derived from loaded image pixels.
+/// Left-side Profile browse thumbnail, width fixed, height derived from loaded image pixels.
 struct ProfileCompactMediaThumbnail: View {
     let reference: MediaReference?
     let purpose: ImagePurpose
@@ -117,7 +117,7 @@ struct ProfileCompactMediaThumbnail: View {
     }
 }
 
-/// Compact Profile card media row — height is max(thumbnail, metadata); thumbnail centers vertically in that region.
+/// Compact Profile card media row, height is max(thumbnail, metadata); thumbnail centers vertically in that region.
 struct ProfileCompactCardMediaSection<Thumbnail: View, Metadata: View>: View {
     var spacing: CGFloat = ExperienceSpacing.md
     @ViewBuilder let thumbnail: () -> Thumbnail

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Leaderboard data — same public trade set as web `GET /api/leaderboard/trades`.
+/// Leaderboard data, same public trade set as web `GET /api/leaderboard/trades`.
 ///
 /// Timeframe filtering is **client-side** (web `filterTradesForLeaderboardWindow`).
 nonisolated protocol LeaderboardRepository: Sendable {

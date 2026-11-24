@@ -195,7 +195,7 @@ struct BrokerImportProgressView: View {
         )
     }
 
-    /// Linked Tradovate imports always recover via reconnect OAuth — never a bare Retry.
+    /// Linked Tradovate imports always recover via reconnect OAuth, never a bare Retry.
     private func resolvedFailureAction(
         _ action: BrokerImportFlowModel.BrokerImportFailureAction
     ) -> BrokerImportFlowModel.BrokerImportFailureAction {

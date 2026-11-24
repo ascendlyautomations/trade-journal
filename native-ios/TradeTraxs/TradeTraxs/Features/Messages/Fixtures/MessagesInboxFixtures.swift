@@ -43,7 +43,7 @@ nonisolated enum MessagesInboxFixtures {
                 avatar: nil,
                 isGroup: false,
                 isPinned: false,
-                lastMessagePreview: "You: Locked in — R:R looks clean.",
+                lastMessagePreview: "You: Locked in, R:R looks clean.",
                 lastMessageAt: now.addingTimeInterval(-86_400),
                 unreadCount: 0,
                 isMuted: true,
@@ -101,7 +101,7 @@ nonisolated enum MessagesInboxFixtures {
     static func roomPreviews() -> [RoomID: String] {
         [
             RoomID("dev-room-desk"): "Ada: Watching the 15m FVG fill.",
-            RoomID("dev-room-risk"): "New member joined — say hello.",
+            RoomID("dev-room-risk"): "New member joined, say hello.",
         ]
     }
 

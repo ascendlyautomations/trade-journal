@@ -37,7 +37,7 @@ enum TradeRoomFavoriteAction {
             let ids = try await rooms.favoritedRoomIDs(for: viewerID)
             favoritesStore.patchFromServer(roomIDs: ids)
         } catch {
-            // Non-fatal — optimistic UI still works per-room after toggle.
+            // Non-fatal, optimistic UI still works per-room after toggle.
         }
     }
 }

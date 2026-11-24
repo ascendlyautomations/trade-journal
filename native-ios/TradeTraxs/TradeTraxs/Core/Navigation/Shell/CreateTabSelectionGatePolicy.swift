@@ -1,6 +1,6 @@
 import UIKit
 
-/// UIKit tab-bar visibility — complements SwiftUI path depth gating.
+/// UIKit tab-bar visibility, complements SwiftUI path depth gating.
 enum CreateTabSelectionGatePolicy {
     static func allowsCreateShield(
         tabBar: UITabBar,

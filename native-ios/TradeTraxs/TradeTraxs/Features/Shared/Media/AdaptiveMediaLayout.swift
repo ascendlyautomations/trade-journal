@@ -2,7 +2,7 @@ import CoreGraphics
 import SwiftUI
 import UIKit
 
-/// Feed/Profile card framing — full width, maximum 4:5 portrait, aspect-fill when cropping.
+/// Feed/Profile card framing, full width, maximum 4:5 portrait, aspect-fill when cropping.
 nonisolated enum FeedMediaLayout {
     /// Tallest allowed Feed/Profile portrait ratio (width / height). 4:5 = 0.8.
     static let minimumFeedAspectRatio: CGFloat = 4.0 / 5.0

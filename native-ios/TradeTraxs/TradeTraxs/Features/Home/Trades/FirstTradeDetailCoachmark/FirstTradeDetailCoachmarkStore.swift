@@ -35,7 +35,7 @@ final class FirstTradeDetailCoachmarkStore {
         markSeenAndClearPending()
     }
 
-    /// User tapped the highlighted journal card — allow normal detail navigation.
+    /// User tapped the highlighted journal card, allow normal detail navigation.
     func completeIfOpeningTrade(_ tradeID: TradeID) {
         guard pendingTradeID == tradeID else { return }
         markSeenAndClearPending()

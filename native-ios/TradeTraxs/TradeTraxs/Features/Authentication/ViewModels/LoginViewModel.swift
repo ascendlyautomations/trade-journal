@@ -112,7 +112,7 @@ final class LoginViewModel {
         isOAuthInteractionInFlight = false
     }
 
-    /// Apple / Google — same pipeline regardless of email Sign In vs Create Account mode.
+    /// Apple / Google, same pipeline regardless of email Sign In vs Create Account mode.
     func signInWithApple(credential: AppleIDCredentialPayload) async {
         if isSubmitting {
             endOAuthProviderInteraction()

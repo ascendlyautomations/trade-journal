@@ -1,7 +1,7 @@
 import OSLog
 import SwiftUI
 
-/// Settings → Admin entry — root only; deeper admin routes use ``ProfileRoute/admin(_:)``.
+/// Settings → Admin entry, root only; deeper admin routes use ``ProfileRoute/admin(_:)``.
 struct AdminPortalView: View {
     let data: DataEnvironment
     let navigationCoordinator: NavigationCoordinator

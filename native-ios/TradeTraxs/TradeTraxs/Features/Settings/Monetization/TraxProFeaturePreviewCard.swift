@@ -5,6 +5,9 @@ struct TraxProFeaturePreviewCard: View {
     let title: String
     let message: String
     let feature: ProFeatureKind
+    var showsActionButtons: Bool = true
+    var previewFeature: TraxsProPreviewFeature? = nil
+    var previewEntryPoint: TraxsProPreviewEntryPoint = .featurePreviewCard
     var accessibilityIdentifier: String
 
     @Environment(\.themeColors) private var colors
@@ -37,56 +40,39 @@ struct TraxProFeaturePreviewCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.leading)
 
-            if showsInteractivePreview,
-               let previewFeature = TraxsProPreviewCatalog.previewFeature(for: feature)
-            {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    TraxsProPreviewCoordinator.shared.presentPreview(
-                        feature: previewFeature,
-                        entryPoint: .featurePreviewCard
-                    )
-                } label: {
-                    Text(MonetizationPlanCopy.previewWithSampleDataButtonTitle)
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, ExperienceSpacing.sm)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("\(accessibilityIdentifier).preview")
-            }
-
-            if canPresentPaywall {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    ProUpgradeCoordinator.shared.present(reason: .feature(feature))
-                } label: {
-                    Text("Explore \(MonetizationPlanCopy.proPlanName)")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(colors.onAccent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, ExperienceSpacing.sm)
-                        .background(colors.accent, in: RoundedRectangle(
-                            cornerRadius: ExperienceRadius.sm,
-                            style: .continuous
-                        ))
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("\(accessibilityIdentifier).upgrade")
-            } else if IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled {
-                Text(
-                    "TraxsPro upgrades aren't available in this build yet. "
-                        + "Check back soon or contact support if you already subscribe."
+            if showsActionButtons {
+                MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
+                    feature: feature,
+                    previewFeature: previewFeature,
+                    previewEntryPoint: previewEntryPoint,
+                    previewAccessibilityIdentifier: "\(accessibilityIdentifier).preview",
+                    unlockAccessibilityIdentifier: "\(accessibilityIdentifier).upgrade"
                 )
-                .experienceStyle(.footnote, color: colors.tertiaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.leading)
-                .accessibilityIdentifier("\(accessibilityIdentifier).unavailable")
+
+                if !canPresentPaywall,
+                   !showsInteractivePreview,
+                   IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled
+                {
+                    unavailableFootnote
+                }
+            } else if !canPresentPaywall, IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled {
+                unavailableFootnote
             }
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .experienceDashboardCard(prominence: .standard)
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var unavailableFootnote: some View {
+        Text(
+            "TraxsPro upgrades aren't available in this build yet. "
+                + "Check back soon or contact support if you already subscribe."
+        )
+        .experienceStyle(.footnote, color: colors.tertiaryText)
+        .fixedSize(horizontal: false, vertical: true)
+        .multilineTextAlignment(.leading)
+        .accessibilityIdentifier("\(accessibilityIdentifier).unavailable")
     }
 }

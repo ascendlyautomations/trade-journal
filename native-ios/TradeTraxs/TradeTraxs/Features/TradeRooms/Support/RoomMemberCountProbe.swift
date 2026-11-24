@@ -15,7 +15,7 @@ enum RoomMemberCountAuthority {
 
 /// Reconciles list-derived counts with bootstrap/discovery when RLS hides `room_members`.
 enum RoomMemberCountReconcile {
-    /// Non-members often get `0` from `activeMemberCounts` — do not clobber a known positive count.
+    /// Non-members often get `0` from `activeMemberCounts`, do not clobber a known positive count.
     static func choose(
         listedActiveCount: Int?,
         currentCount: Int?,

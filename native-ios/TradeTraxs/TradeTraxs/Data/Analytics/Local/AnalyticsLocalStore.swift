@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-/// Viewer-scoped analytical store (shadow write + typed read APIs — not UI-authoritative through Phase 5D).
+/// Viewer-scoped analytical store (shadow write + typed read APIs, not UI-authoritative through Phase 5D).
 nonisolated struct AnalyticsLocalStore: Sendable {
     struct IngestScope: Sendable, Equatable {
         var startDate: String

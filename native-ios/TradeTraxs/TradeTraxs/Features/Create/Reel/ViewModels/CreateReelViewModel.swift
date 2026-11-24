@@ -140,7 +140,7 @@ final class CreateReelViewModel {
         loadIfNeeded()
     }
 
-    /// Single entry for PhotosPicker selections — loads provider once, then prepares.
+    /// Single entry for PhotosPicker selections, loads provider once, then prepares.
     func importFromPhotosPicker(_ item: PhotosPickerItem) {
         do {
             try VideoUploadDurationValidation.throwIfPhotoLibraryExceedsReelUploadLimit(item)
@@ -195,7 +195,7 @@ final class CreateReelViewModel {
         }
     }
 
-    /// Camera recordings — copy into app-owned storage, then prepare once.
+    /// Camera recordings, copy into app-owned storage, then prepare once.
     func importFromLocalFile(_ url: URL, contentType: String?) {
         selectionGeneration &+= 1
         let generation = selectionGeneration

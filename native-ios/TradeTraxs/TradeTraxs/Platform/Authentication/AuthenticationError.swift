@@ -1,10 +1,10 @@
 import Foundation
 
-/// Typed authentication failures — never wraps transport SDK strings for UI.
+/// Typed authentication failures, never wraps transport SDK strings for UI.
 nonisolated enum AuthenticationError: Error, Sendable, Equatable {
     case notConfigured
     case invalidCredentials
-    /// Sign-up rejected because the email is already registered (GoTrue — not a password sign-in failure).
+    /// Sign-up rejected because the email is already registered (GoTrue, not a password sign-in failure).
     case emailAlreadyRegistered
     case invalidEmail
     case invalidPassword

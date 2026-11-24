@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session cache for `account_payout_cycles` — drives Dashboard prop-firm cycle boundaries.
+/// Session cache for `account_payout_cycles`, drives Dashboard prop-firm cycle boundaries.
 @Observable
 @MainActor
 final class SessionPayoutCyclesStore {
@@ -45,7 +45,7 @@ final class SessionPayoutCyclesStore {
         invalidate(accountID: nil, profileID: nil)
     }
 
-    /// Cache-first payout cycle history — one in-flight request per account.
+    /// Cache-first payout cycle history, one in-flight request per account.
     func cycles(
         for accountID: TradingAccountID,
         profileID: ProfileID,

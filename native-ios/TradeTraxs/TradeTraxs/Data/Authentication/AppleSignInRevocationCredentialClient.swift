@@ -26,7 +26,7 @@ nonisolated struct AppleSignInRevocationCredentialClient: Sendable {
                 requiresAuthentication: true
             )
         } catch {
-            // Best-effort — Sign in with Apple must not fail if revocation storage fails.
+            // Best-effort, Sign in with Apple must not fail if revocation storage fails.
         }
     }
 }

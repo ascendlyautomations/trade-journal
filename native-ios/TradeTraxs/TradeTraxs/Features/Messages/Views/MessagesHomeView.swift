@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Permanent Messages home — Direct Messages + Trade Rooms foundation.
+/// Permanent Messages home, Direct Messages + Trade Rooms foundation.
 struct MessagesHomeView: View {
     @State private var viewModel: MessagesHomeViewModel
     @Bindable private var inboxStore = MessagesInboxStore.shared
@@ -191,7 +191,7 @@ struct MessagesHomeView: View {
     }
 
     private var inboxList: some View {
-        // Observe canonical inbox activity — preview text, sort order, and unread.
+        // Observe canonical inbox activity, preview text, sort order, and unread.
         let _ = inboxStore.activityRevision
         let orderSignature = inboxStore.visibleConversations.map {
             "\($0.id.rawValue)|\($0.lastMessageAt?.timeIntervalSince1970 ?? 0)|\($0.lastMessagePreview ?? "")|\($0.lastMessageID?.rawValue ?? "")"
@@ -448,10 +448,12 @@ struct MessagesHomeView: View {
 
     @ViewBuilder
     private func roomTrailingActions(_ item: TradeRoomInboxItem) -> some View {
-        Button(role: .destructive) {
-            viewModel.requestLeaveRoom(id: item.id)
-        } label: {
-            Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+        if !viewModel.isViewerOwner(of: item.room) {
+            Button(role: .destructive) {
+                viewModel.requestLeaveRoom(id: item.id)
+            } label: {
+                Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+            }
         }
         Button {
             viewModel.toggleMute(roomID: item.id)
@@ -479,11 +481,13 @@ struct MessagesHomeView: View {
                 systemImage: item.isMuted ? "bell" : "bell.slash"
             )
         }
-        Divider()
-        Button(role: .destructive) {
-            viewModel.requestLeaveRoom(id: item.id)
-        } label: {
-            Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+        if !viewModel.isViewerOwner(of: item.room) {
+            Divider()
+            Button(role: .destructive) {
+                viewModel.requestLeaveRoom(id: item.id)
+            } label: {
+                Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+            }
         }
     }
 
@@ -552,7 +556,7 @@ struct MessagesHomeView: View {
 // MARK: - Shared inbox row chrome (DM + Trade Room)
 
 private extension View {
-    /// Inset grouped list row — matches Direct Messages and Trade Rooms on Messages home.
+    /// Inset grouped list row, matches Direct Messages and Trade Rooms on Messages home.
     func messagesInboxConversationListRowStyle(colors: SemanticColorPalette) -> some View {
         listRowBackground(colors.backgroundPrimary)
     }

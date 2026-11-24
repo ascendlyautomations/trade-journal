@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pure presentation transforms — no networking.
+/// Pure presentation transforms, no networking.
 enum LeaderboardPresentation {
     static func buildState(
         entries: [LeaderboardEntry],
@@ -280,7 +280,7 @@ enum LeaderboardPresentation {
 /// Display formatting for leaderboard metric columns.
 enum LeaderboardMetricFormat {
     static func winRate(_ rate: Decimal?) -> String {
-        guard let rate else { return "—" }
+        guard let rate else { return "–" }
         return NumberDisplay.percent(
             NSDecimalNumber(decimal: rate * 100).doubleValue,
             minimumFractionDigits: 1,
@@ -293,17 +293,17 @@ enum LeaderboardMetricFormat {
     }
 
     static func expectancy(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return TradeDisplay.pnlText(Money(amount: value))
     }
 
     static func riskReward(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.ratio(value, fractionDigits: 2)
     }
 
     static func percent(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return NumberDisplay.percent(
             NSDecimalNumber(decimal: value).doubleValue,
             minimumFractionDigits: 1,

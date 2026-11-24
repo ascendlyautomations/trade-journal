@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Per-room push preferences — web `RoomNotificationSettingsSheet` parity.
+/// Per-room push preferences, web `RoomNotificationSettingsSheet` parity.
 struct RoomNotificationSettingsView: View {
     @State private var viewModel: RoomNotificationSettingsViewModel
     @Environment(\.dismiss) private var dismiss

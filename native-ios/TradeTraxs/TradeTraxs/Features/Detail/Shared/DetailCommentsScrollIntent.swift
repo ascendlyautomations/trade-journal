@@ -17,7 +17,7 @@ extension DetailCommentsScrollIntent {
     }
 }
 
-/// Scrolls to the comments anchor once detail content is on-screen — retries while async layout settles.
+/// Scrolls to the comments anchor once detail content is on-screen, retries while async layout settles.
 struct DetailCommentsScrollOnOpenModifier: ViewModifier {
     let intent: DetailCommentsScrollIntent
     let anchorID: String

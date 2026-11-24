@@ -1,7 +1,7 @@
 import Charts
 import SwiftUI
 
-/// Native Charts equity curve — Apple Stocks-style axes, grid, and scrub overlay.
+/// Native Charts equity curve, Apple Stocks-style axes, grid, and scrub overlay.
 ///
 /// Data shape matches web `ProfileEquityLineChart` via ``ProfileStatisticsMetrics/EquityPoint``.
 struct ProfileEquityCurveView: View {
@@ -129,6 +129,7 @@ struct ProfileEquityCurveView: View {
                 }
             }
         }
+        .padding(.horizontal, ExperienceSpacing.xxs)
         .padding(.top, ExperienceSpacing.xs)
     }
 
@@ -408,11 +409,12 @@ private struct EquityCurveXAxisModifier: ViewModifier {
                             .foregroundStyle(colors.border.opacity(0.35))
                         AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(colors.border.opacity(0.45))
-                        AxisValueLabel {
-                            if let date = value.as(Date.self) {
+                        if let date = value.as(Date.self) {
+                            AxisValueLabel(anchor: xAxisLabelAnchor(for: date, in: timelineAxisValues)) {
                                 Text(timelineLabel(date))
                                     .font(.system(.caption2, design: .rounded))
                                     .foregroundStyle(colors.tertiaryText)
+                                    .fixedSize(horizontal: true, vertical: false)
                             }
                         }
                     }
@@ -428,16 +430,35 @@ private struct EquityCurveXAxisModifier: ViewModifier {
                             .foregroundStyle(colors.border.opacity(0.35))
                         AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(colors.border.opacity(0.45))
-                        AxisValueLabel {
-                            if let index = value.as(Int.self) {
+                        if let index = value.as(Int.self) {
+                            AxisValueLabel(anchor: xAxisLabelAnchor(for: index, in: tradeAxisValues)) {
                                 Text(tradeLabel(index))
                                     .font(.system(.caption2, design: .rounded))
                                     .foregroundStyle(colors.tertiaryText)
+                                    .fixedSize(horizontal: true, vertical: false)
                             }
                         }
                     }
                 }
                 .chartXSelection(value: $selectedTradeIndex)
         }
+    }
+
+    private func xAxisLabelAnchor(for date: Date, in values: [Date]) -> UnitPoint {
+        guard let first = values.first, let last = values.last, values.count > 1 else { return .center }
+        if datesMatchForAxisLabel(date, first) { return .leading }
+        if datesMatchForAxisLabel(date, last) { return .trailing }
+        return .center
+    }
+
+    private func xAxisLabelAnchor(for index: Int, in values: [Int]) -> UnitPoint {
+        guard let first = values.first, let last = values.last, values.count > 1 else { return .center }
+        if index == first { return .leading }
+        if index == last { return .trailing }
+        return .center
+    }
+
+    private func datesMatchForAxisLabel(_ lhs: Date, _ rhs: Date) -> Bool {
+        abs(lhs.timeIntervalSince(rhs)) < 1
     }
 }

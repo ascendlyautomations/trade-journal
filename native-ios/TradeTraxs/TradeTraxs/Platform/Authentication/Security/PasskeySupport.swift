@@ -1,6 +1,6 @@
 import Foundation
 
-/// Future Passkey / WebAuthn surface — architecture reserved, not implemented.
+/// Future Passkey / WebAuthn surface, architecture reserved, not implemented.
 nonisolated protocol PasskeyAuthenticating: Sendable {
     var isSupported: Bool { get }
     func signIn() async throws -> AuthenticationSession

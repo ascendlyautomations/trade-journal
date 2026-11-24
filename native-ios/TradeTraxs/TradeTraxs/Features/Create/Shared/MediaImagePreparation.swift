@@ -9,7 +9,7 @@ enum MediaImagePreparation {
     static let storyMaxHeight: CGFloat = 1920
     static let storyJPEGQuality: CGFloat = 0.85
 
-    /// Trade, post, achievement — single Phase 1 delivery asset (~1440px long edge).
+    /// Trade, post, achievement, single Phase 1 delivery asset (~1440px long edge).
     static let contentMaxLongEdge: CGFloat = 1440
     static let contentJPEGQuality: CGFloat = 0.85
 
@@ -47,7 +47,7 @@ enum MediaImagePreparation {
         jpegData(from: image, maxDimension: avatarMaxDimension, quality: avatarJPEGQuality)
     }
 
-    /// Web `prepareImageForUpload("story")` — fit inside 1080×1920, preserve aspect.
+    /// Web `prepareImageForUpload("story")`, fit inside 1080×1920, preserve aspect.
     static func storyJPEGData(from image: UIImage) -> Data? {
         let normalized = MediaImageOrientation.normalized(image)
         let pixelSize = MediaImageOrientation.pixelSize(of: normalized)

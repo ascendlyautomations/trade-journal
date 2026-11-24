@@ -26,7 +26,7 @@ nonisolated enum ReportsTradeScope {
         )
     }
 
-    /// When a single account is selected, keep check-ins only on Eastern days that account traded —
+    /// When a single account is selected, keep check-ins only on Eastern days that account traded –
     /// avoids attributing account-independent check-ins to that account.
     static func scopedCheckIns(
         _ checkIns: [TraderDailyCheckIn],

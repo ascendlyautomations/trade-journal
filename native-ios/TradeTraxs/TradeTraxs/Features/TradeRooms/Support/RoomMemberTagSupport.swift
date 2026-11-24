@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Preset color keys for room member tags — maps to theme accents.
+/// Preset color keys for room member tags, maps to theme accents.
 enum RoomMemberTagSupport {
     static let defaultColorKey = "accent"
 
@@ -93,7 +93,7 @@ struct RoomMemberTagChipsView: View {
     }
 }
 
-/// Manage Tags assignment rows — color matches the tag chip on member lists.
+/// Manage Tags assignment rows, color matches the tag chip on member lists.
 struct RoomMemberTagAssignPickerRow: View {
     let tag: RoomMemberTag
     var assigned: Bool
@@ -125,7 +125,7 @@ struct RoomMemberTagAssignPickerRow: View {
     }
 }
 
-/// Manage Tags sheet — local multi-select until Save (web-style draft, then persist).
+/// Manage Tags sheet, local multi-select until Save (web-style draft, then persist).
 struct RoomMemberTagAssignmentEditor: View {
     let tags: [RoomMemberTag]
     @Binding var selectedTagIDs: Set<RoomMemberTagID>

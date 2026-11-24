@@ -2,7 +2,7 @@ import Foundation
 import os.signpost
 
 #if DEBUG
-/// Structured cold-launch timing — no credentials or PII.
+/// Structured cold-launch timing, no credentials or PII.
 enum StartupTrace {
     nonisolated private static let lock = NSLock()
     nonisolated private static let signpostLog = OSLog(subsystem: "com.tradetraxs.TradeTraxs", category: "Startup")

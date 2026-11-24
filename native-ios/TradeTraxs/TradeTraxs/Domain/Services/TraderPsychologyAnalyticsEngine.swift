@@ -1,6 +1,6 @@
 import Foundation
 
-/// Deterministic psychology-performance analytics — no AI, no persisted streak columns.
+/// Deterministic psychology-performance analytics, no AI, no persisted streak columns.
 nonisolated enum TraderPsychologyAnalyticsEngine {
     // MARK: - Public entry
 
@@ -236,7 +236,7 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
     }
 
     static func formatWinRate(_ rate: Decimal?) -> String {
-        guard let rate else { return "—" }
+        guard let rate else { return "–" }
         return NumberDisplay.percent(rate * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)
     }
 

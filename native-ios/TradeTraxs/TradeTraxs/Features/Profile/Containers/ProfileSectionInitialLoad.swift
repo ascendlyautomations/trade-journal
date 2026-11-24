@@ -13,7 +13,7 @@ enum ProfileSectionInitialLoad {
         return snapshot.phase == .loading
     }
 
-    /// Plan state + deferred fetch when bootstrap omitted this section. No inout — caller assigns once, then kicks load.
+    /// Plan state + deferred fetch when bootstrap omitted this section. No inout, caller assigns once, then kicks load.
     struct BootstrapMissingSectionPlan: Equatable, Sendable {
         var nextState: ProfileSectionLoadState?
         var kickDeferredLoad: Bool

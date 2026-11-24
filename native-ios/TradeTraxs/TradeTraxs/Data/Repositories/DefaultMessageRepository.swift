@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Production messaging repository — mirrors web `fetchUserDmConversations` / unread / `ensureDmConversation`.
+/// Production messaging repository, mirrors web `fetchUserDmConversations` / unread / `ensureDmConversation`.
 nonisolated struct DefaultMessageRepository: MessageRepository {
     private let supabase: SupabaseInfrastructure
     private let cache: CacheStack
@@ -57,7 +57,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             return ConversationListResult(items: [], nextCursor: nil, embeddedProfiles: [])
         }
 
-        // PostgREST `in.()` batches — keep under URL limits for large inboxes.
+        // PostgREST `in.()` batches, keep under URL limits for large inboxes.
         var rows: [MessageDTO.Conversation] = []
         for chunk in conversationIDs.chunked(into: 80) {
             let batch: [MessageDTO.Conversation] = try await supabase.database.select(
@@ -229,7 +229,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             AppLog.networking.info(
                 "messages.send ok message=\(SafeInboxLog.hash(id), privacy: .public) status=201"
             )
-            // Web: `void createDirectMessagePush(supabase, insertedMessage.id)` — push must not
+            // Web: `void createDirectMessagePush(supabase, insertedMessage.id)`, push must not
             // gate message persistence. Failures are logged inside the client.
             scheduleDirectMessagePush(messageID: id)
             let createdAt = ISO8601.date(from: inserted.created_at) ?? message.createdAt
@@ -988,7 +988,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         }
     }
 
-    /// Web `sortConversationsDesc` — pinned first, then `last_message_at` desc.
+    /// Web `sortConversationsDesc`, pinned first, then `last_message_at` desc.
     private func sortConversations(_ items: [Conversation]) -> [Conversation] {
         items.sorted { lhs, rhs in
             if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
@@ -998,7 +998,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         }
     }
 
-    /// Web `handleSendTrade` payload — does not invent a new message type.
+    /// Web `handleSendTrade` payload, does not invent a new message type.
     private func sendTradeShare(_ message: Message, tradeID: TradeID) async throws -> Message {
         let body = MessageInsertBodies.TradeShare(
             conversation_id: message.conversationID.rawValue,
@@ -1218,7 +1218,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         )
     }
 
-    /// Web `void createDirectMessagePush(...)` — start the BFF pipeline without blocking send.
+    /// Web `void createDirectMessagePush(...)`, start the BFF pipeline without blocking send.
     private func scheduleDirectMessagePush(messageID: String) {
         let transport = supabase.transport
         Task {

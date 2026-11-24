@@ -1,7 +1,7 @@
 import Foundation
 
 #if DEBUG
-/// DEBUG timing for logged-out cold launch — no credentials or tokens.
+/// DEBUG timing for logged-out cold launch, no credentials or tokens.
 enum UnauthLaunchProbe {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var appStartTime: CFAbsoluteTime?
@@ -32,7 +32,7 @@ enum UnauthLaunchProbe {
         scheduleMainThreadResponsiveCheckIfNeeded()
     }
 
-    /// Legacy alias — prefer ``loginFirstFramePresented()``.
+    /// Legacy alias, prefer ``loginFirstFramePresented()``.
     static func loginPresented() {
         loginFirstFramePresented()
     }

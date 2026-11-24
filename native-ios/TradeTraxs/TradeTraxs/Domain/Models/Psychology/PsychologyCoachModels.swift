@@ -1,6 +1,6 @@
 import Foundation
 
-/// Structured facts derived from Phase 4 analytics — sole source for coach copy and AI context.
+/// Structured facts derived from Phase 4 analytics, sole source for coach copy and AI context.
 nonisolated struct PsychologyCoachFacts: Hashable, Codable, Sendable {
     var generatedAt: Date
     var factsHash: String

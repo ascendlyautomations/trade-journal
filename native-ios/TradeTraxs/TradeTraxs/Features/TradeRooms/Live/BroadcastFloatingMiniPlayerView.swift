@@ -2,7 +2,7 @@ import LiveKit
 import SwiftUI
 import UIKit
 
-/// Draggable 16:9 floating livestream — tab-shell overlay (not safe-area inset).
+/// Draggable 16:9 floating livestream, tab-shell overlay (not safe-area inset).
 struct BroadcastFloatingMiniPlayerOverlay: View {
     @Bindable var coordinator: RoomBroadcastCoordinator
     @Bindable private var tabBarMetrics = MainTabBarLayoutMetrics.shared
@@ -182,7 +182,7 @@ enum BroadcastMiniPlayerLayout {
         )
     }
 
-    /// Overlay ignores safe area — `GeometryReader` often reports `top == 0`; use the key window then.
+    /// Overlay ignores safe area, `GeometryReader` often reports `top == 0`; use the key window then.
     static func resolvedTopSafeArea(_ safeArea: EdgeInsets) -> CGFloat {
         let windowTop = keyWindowSafeAreaInsets().top
         if safeArea.top > 0 {

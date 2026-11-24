@@ -153,7 +153,7 @@ struct PsychologyCoachView: View {
                     .experienceStyle(.body, color: colors.secondaryText)
             }
             .padding(ExperienceSpacing.md)
-            .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+            .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
         default:
             if let reply = viewModel.aiReply, viewModel.messages.isEmpty {
                 coachBubble(reply)

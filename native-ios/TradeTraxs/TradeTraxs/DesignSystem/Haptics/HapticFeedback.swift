@@ -1,6 +1,6 @@
 import UIKit
 
-/// Centralized haptics. Features call this API — never UIKit generators directly.
+/// Centralized haptics. Features call this API, never UIKit generators directly.
 enum HapticEvent: String, Sendable {
     case selection
     case success

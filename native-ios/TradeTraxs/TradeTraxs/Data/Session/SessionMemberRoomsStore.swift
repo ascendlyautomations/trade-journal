@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped member Trade Rooms — single-flight across Messages + Trade Rooms home.
+/// Session-scoped member Trade Rooms, single-flight across Messages + Trade Rooms home.
 @Observable
 @MainActor
 final class SessionMemberRoomsStore {

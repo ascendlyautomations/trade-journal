@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Trading Report detail — real web-parity sections (no fake placeholders).
+/// Trading Report detail, real web-parity sections (no fake placeholders).
 struct ReportDetailView: View {
     @State private var viewModel: ReportDetailViewModel
 
@@ -115,19 +115,7 @@ struct ReportDetailView: View {
         }
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            colors.accent.opacity(0.14),
-                            colors.fillSecondary.opacity(0.6),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        }
+        .modifier(YearlyReportHeroSurface())
         .accessibilityIdentifier("reports.detail.header")
     }
 

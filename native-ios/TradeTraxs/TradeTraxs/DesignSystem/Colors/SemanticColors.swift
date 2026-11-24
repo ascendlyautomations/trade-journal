@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Semantic palette — features consume these names, never raw hex.
+/// Semantic palette, features consume these names, never raw hex.
 struct SemanticColorPalette: Sendable {
     // Brand / accent
     let accent: Color
@@ -64,7 +64,7 @@ struct SemanticColorPalette: Sendable {
         backgroundElevated: .experience(lightHex: 0xFFFFFF, darkHex: 0x1A2430),
 
         surfacePrimary: .experience(lightHex: 0xFFFFFF, darkHex: 0x151E28),
-        surfaceSecondary: .experience(lightHex: 0xF0F3F7, darkHex: 0x1C2733),
+        surfaceSecondary: .experience(lightHex: 0xF2F5F9, darkHex: 0x1C2733),
         surfaceGrouped: .experience(lightHex: 0xE8EEF4, darkHex: 0x121A22),
         surfaceOverlay: .experience(lightHex: 0x0B1218, darkHex: 0x000000, lightAlpha: 0.45, darkAlpha: 0.55),
 
@@ -135,26 +135,26 @@ extension SemanticColorPalette {
 
     // MARK: - TradeTraxs promotion aliases (all themes map to semantic fields)
 
-    /// App canvas — maps to ``backgroundPrimary``.
+    /// App canvas, maps to ``backgroundPrimary``.
     var appBackground: Color { backgroundPrimary }
 
-    /// Primary card / grouped surface — maps to ``surfacePrimary``.
+    /// Primary card / grouped surface, maps to ``surfacePrimary``.
     var surface: Color { surfacePrimary }
 
-    /// Elevated card / row — maps to ``surfaceSecondary``.
+    /// Elevated card / row, maps to ``surfaceSecondary``.
     var elevatedSurface: Color { surfaceSecondary }
 
-    /// Input and picker fills — maps to ``fillPrimary``.
+    /// Input and picker fills, maps to ``fillPrimary``.
     var inputSurface: Color { fillPrimary }
 
-    /// Nested tertiary surface — maps to ``fillTertiary``.
+    /// Nested tertiary surface, maps to ``fillTertiary``.
     var secondarySurface: Color { fillTertiary }
 
-    /// Selected / muted accent fill — maps to ``accentMuted``.
+    /// Selected / muted accent fill, maps to ``accentMuted``.
     var selectedSurface: Color { accentMuted }
 }
 
-/// Static facade — resolves through the active Theme Engine palette.
+/// Static facade, resolves through the active Theme Engine palette.
 /// Prefer `@Environment(\.themeColors)` inside Views for live updates.
 enum ExperienceColor {
     static var palette: SemanticColorPalette { ThemePaletteAnchor.current }
@@ -197,7 +197,7 @@ enum ExperienceColor {
     static var loss: Color { palette.loss }
     static var neutralMetric: Color { palette.neutralMetric }
 
-    /// PnL-aware color helper. Pair with sign / accessibility labels — never color alone.
+    /// PnL-aware color helper. Pair with sign / accessibility labels, never color alone.
     static func metric(_ value: Double, highContrast: Bool = false) -> Color {
         let colors = palette
         if value > 0 { return highContrast ? colors.accessibilityProfit : colors.profit }

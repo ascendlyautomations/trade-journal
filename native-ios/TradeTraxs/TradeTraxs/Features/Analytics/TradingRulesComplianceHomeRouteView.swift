@@ -113,6 +113,9 @@ struct TradingRulesComplianceHomeRouteView: View {
         .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
             entitlementGateRevision += 1
         }
+        .onOwnerAccountMutation {
+            scopeController.handleAccountMutation(detailCache: data.detailCache)
+        }
         .onChange(of: analyticsStackDepth) { oldDepth, newDepth in
             if oldDepth == 0, newDepth == 1, isTradingRulesAnalyticsTop {
                 TradingRulesAnalyticsScrollStore.resetForFreshNavigation()
@@ -143,7 +146,7 @@ struct TradingRulesComplianceHomeRouteView: View {
         }
     }
 
-    /// Stable identity — must not include `contentRevision` (publish bumps would retrigger `.task` forever).
+    /// Stable identity, must not include `contentRevision` (publish bumps would retrigger `.task` forever).
     private var taskIdentity: String {
         activeProfileID?.rawValue ?? "none"
     }
@@ -192,6 +195,9 @@ struct TradingRulesComplianceHomeRouteView: View {
 
         let accounts = await loadAccountsForScope(profileID: profileID)
         scopeController.hydrate(profileID: profileID, accounts: accounts)
+        if TraxsProPreviewSupport.isTradingRulesPreviewActive {
+            scopeController.applyTraxsProPreviewScopeDefaultsIfNeeded()
+        }
 
         loadGeneration += 1
         let generation = loadGeneration

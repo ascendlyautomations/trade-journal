@@ -47,7 +47,7 @@ nonisolated struct TradovateScreenshotAdapter: ScreenshotTradePlatformAdapter {
     }
 }
 
-/// Alpha adapter shell — no invented column layouts until real fixtures exist.
+/// Alpha adapter shell, no invented column layouts until real fixtures exist.
 nonisolated struct AlphaScreenshotAdapter: ScreenshotTradePlatformAdapter {
     var platform: ScreenshotImportPlatform { .alpha }
 

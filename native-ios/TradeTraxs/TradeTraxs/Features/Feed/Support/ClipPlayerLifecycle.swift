@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 #if DEBUG
-/// DEBUG-only Clips player identity — correlates with ``VideoTransferAudit`` instance IDs.
+/// DEBUG-only Clips player identity, correlates with ``VideoTransferAudit`` instance IDs.
 enum ClipPlayerLifecycle {
     static func log(
         clipID: String,

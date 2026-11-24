@@ -18,7 +18,7 @@ nonisolated struct CompositeRequestInterceptor: RequestInterceptor {
     }
 }
 
-/// Adds default headers already present on the request builder — reserved for future auth.
+/// Adds default headers already present on the request builder, reserved for future auth.
 nonisolated struct PassthroughRequestInterceptor: RequestInterceptor {
     func intercept(_ request: HTTPRequest) async throws -> HTTPRequest {
         request
@@ -31,7 +31,7 @@ nonisolated struct AuthenticationRequestInterceptor: RequestInterceptor {
 
     func intercept(_ request: HTTPRequest) async throws -> HTTPRequest {
         guard request.endpoint.requiresAuthentication else {
-            // GoTrue token grants must not await ``SessionNetworkGate`` — the active refresh holds that gate.
+            // GoTrue token grants must not await ``SessionNetworkGate``, the active refresh holds that gate.
             return request
         }
 

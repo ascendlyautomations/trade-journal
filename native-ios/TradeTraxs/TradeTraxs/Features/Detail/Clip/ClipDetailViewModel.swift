@@ -19,7 +19,7 @@ final class ClipDetailViewModel {
     private(set) var isOwner = false
     private(set) var isDeleting = false
     private(set) var deleteErrorMessage: String?
-    /// Resolved from network embed / authoritative owner cache — never stale list seed alone.
+    /// Resolved from network embed / authoritative owner cache, never stale list seed alone.
     private(set) var resolvedLinkedTrade: Trade?
     private(set) var player: AVPlayer?
     private(set) var videoPresentation: VideoPresentationInfo?
@@ -136,7 +136,7 @@ final class ClipDetailViewModel {
             if let viewer = await session.currentUserID,
                viewer.rawValue.hasPrefix("dev.")
             {
-                // Local development — mutate caches only.
+                // Local development, mutate caches only.
             } else {
                 try await feed.deleteReel(id: reelID)
             }

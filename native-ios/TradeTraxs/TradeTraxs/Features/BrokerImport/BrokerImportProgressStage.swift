@@ -1,6 +1,6 @@
 import Foundation
 
-/// Client-side stages mapped to real broker sync work (single HTTP request — no fake per-trade ticks).
+/// Client-side stages mapped to real broker sync work (single HTTP request, no fake per-trade ticks).
 nonisolated enum BrokerImportProgressStage: String, Sendable, Equatable, CaseIterable {
     case connecting
     case fetchingExecutions

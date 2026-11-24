@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Permanent Achievement detail destination — same hierarchy as Trade Detail.
+/// Permanent Achievement detail destination, same hierarchy as Trade Detail.
 struct AchievementDetailView: View {
     @State private var viewModel: AchievementDetailViewModel
     @State private var contentRevealed = false

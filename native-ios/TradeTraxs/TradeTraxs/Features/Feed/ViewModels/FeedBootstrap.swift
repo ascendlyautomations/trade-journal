@@ -1,6 +1,6 @@
 import Foundation
 
-/// Coordinated Feed first-paint / page load — owned exclusively by ``FeedScreenViewModel``.
+/// Coordinated Feed first-paint / page load, owned exclusively by ``FeedScreenViewModel``.
 ///
 /// Timeline and stories run concurrently. Stories failure never fails the timeline
 /// (same product behavior as before; ownership is now explicit).
@@ -28,7 +28,7 @@ enum FeedBootstrap: ScreenBootstrap {
         var usedDevelopmentFixtures: Bool
     }
 
-    /// ``ScreenBootstrap`` entry — same as ``loadInitial``.
+    /// ``ScreenBootstrap`` entry, same as ``loadInitial``.
     static func load(_ context: Context) async throws -> PageResult {
         try await loadInitial(context)
     }
@@ -91,7 +91,7 @@ enum FeedBootstrap: ScreenBootstrap {
         )
     }
 
-    /// Pagination — timeline only (stories already on screen).
+    /// Pagination, timeline only (stories already on screen).
     static func loadMore(_ context: Context) async throws -> PageResult {
         let viewer = await context.session.currentUserID.map { ProfileID($0.rawValue) }
         let timeline = try await loadTimeline(context)
@@ -140,7 +140,7 @@ enum FeedBootstrap: ScreenBootstrap {
         guard let viewer else { return [] }
         guard context.scope == .following else {
             #if DEBUG
-            StoriesLoadProbe.record(stage: "scope", detail: "skipped — global mode")
+            StoriesLoadProbe.record(stage: "scope", detail: "skipped, global mode")
             #endif
             return []
         }
@@ -188,7 +188,7 @@ enum FeedBootstrap: ScreenBootstrap {
 
     // MARK: - Hydration (unchanged query semantics)
 
-    /// Builds timeline entries from RPC-seeded cache — no network (V2 bootstrap path).
+    /// Builds timeline entries from RPC-seeded cache, no network (V2 bootstrap path).
     static func buildEntriesFromSeededItems(
         _ items: [FeedItem],
         detailCache: DetailPresentationCache
@@ -206,7 +206,7 @@ enum FeedBootstrap: ScreenBootstrap {
         return result
     }
 
-    /// Cache + inline embed stubs only — never awaits network.
+    /// Cache + inline embed stubs only, never awaits network.
     static func buildEntryFromItemSync(
         _ item: FeedItem,
         detailCache: DetailPresentationCache

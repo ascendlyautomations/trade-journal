@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared DM outbound path — internal share sheet, in-thread composer, story share.
+/// Shared DM outbound path, internal share sheet, in-thread composer, story share.
 @MainActor
 enum ConversationOutboundMessageDelivery {
     struct SendContext {
@@ -11,7 +11,7 @@ enum ConversationOutboundMessageDelivery {
         var detailCache: DetailPresentationCache
     }
 
-    /// Optimistic row first, then persisted server row — same reconciliation as Trade Rooms.
+    /// Optimistic row first, then persisted server row, same reconciliation as Trade Rooms.
     static func send(
         message: Message,
         context: SendContext,

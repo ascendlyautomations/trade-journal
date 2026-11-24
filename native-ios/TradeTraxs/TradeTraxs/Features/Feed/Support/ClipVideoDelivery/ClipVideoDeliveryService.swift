@@ -282,7 +282,7 @@ actor ClipVideoDeliveryService {
         }
     }
 
-    /// Active clip player released — cancel pending decision and in-flight fill (Phase 12E).
+    /// Active clip player released, cancel pending decision and in-flight fill (Phase 12E).
     func activeClipReleased(cacheKey: String) async {
         guard var state = clipStates[cacheKey] else { return }
         state.isActiveConsumer = false

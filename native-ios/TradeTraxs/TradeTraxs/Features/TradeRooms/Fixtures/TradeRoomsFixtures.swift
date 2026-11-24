@@ -71,7 +71,7 @@ nonisolated enum TradeRoomsFixtures {
                 id: RoomMessageID("\(roomID.rawValue)-m1"),
                 roomID: roomID,
                 senderProfileID: peer,
-                body: "Watching the 15m FVG fill — liquidity resting above.",
+                body: "Watching the 15m FVG fill, liquidity resting above.",
                 attachedTradeID: nil,
                 media: [],
                 parentMessageID: nil,

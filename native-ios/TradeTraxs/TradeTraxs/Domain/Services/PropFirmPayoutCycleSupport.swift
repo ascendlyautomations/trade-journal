@@ -109,7 +109,7 @@ nonisolated enum PropFirmPayoutCycleSupport {
         )
     }
 
-    /// Manual ledger withdrawal (`account_payout_entries`) — social achievement only; ledger row already saved.
+    /// Manual ledger withdrawal (`account_payout_entries`), social achievement only; ledger row already saved.
     static func liveWithdrawalAchievementPrefill(
         account: TradingAccount,
         draft: AccountPayoutEntryDraft,

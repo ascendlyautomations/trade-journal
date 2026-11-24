@@ -2,7 +2,7 @@ import Foundation
 
 /// Lightweight on-disk session presentation cache (Codable JSON).
 ///
-/// GRDB is not yet a project dependency — this fills the persistence seam for
+/// GRDB is not yet a project dependency, this fills the persistence seam for
 /// cold-launch reuse of accounts / following IDs / recent owner trades without
 /// storing secrets. Cleared on logout.
 nonisolated enum SessionDiskCache {
@@ -31,7 +31,7 @@ nonisolated enum SessionDiskCache {
         var totalTradeCount: Int?
     }
 
-    /// Align with dashboard trade window — single owner snapshot, not a second trade database.
+    /// Align with dashboard trade window, single owner snapshot, not a second trade database.
     static let ownerTradesMaxCount = 500
     static let ownerTradesMaxAge: TimeInterval = 7 * 24 * 60 * 60
 
@@ -125,7 +125,7 @@ nonisolated enum SessionDiskCache {
             try data.write(to: url, options: [.atomic])
             DiskCacheIOProbe.recordWrite()
         } catch {
-            // Soft-fail — disk cache must never break networking.
+            // Soft-fail, disk cache must never break networking.
         }
     }
 

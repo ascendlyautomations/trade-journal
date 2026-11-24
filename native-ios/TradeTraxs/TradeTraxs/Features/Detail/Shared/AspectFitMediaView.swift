@@ -1,11 +1,11 @@
 import SwiftUI
 import UIKit
 
-/// Shared aspect-fit media for Post / Trade — Instagram-style natural proportions.
+/// Shared aspect-fit media for Post / Trade, Instagram-style natural proportions.
 ///
 /// Root layout contract:
 /// 1. Load the **same public object bytes the web uses** (`/storage/v1/object/public/...`)
-/// 2. Decode at the screen’s display scale (retina) — never `UIImage(data:)` at scale 1.0
+/// 2. Decode at the screen’s display scale (retina), never `UIImage(data:)` at scale 1.0
 /// 3. Size from the bitmap’s aspect ratio (width-driven, height-capped)
 /// 4. Never use `scaledToFill` / never crop
 ///
@@ -105,7 +105,7 @@ struct AspectFitMediaView: View {
         )
     }
 
-    /// Width-driven aspect box — the image defines height, not a fixed frame.
+    /// Width-driven aspect box, the image defines height, not a fixed frame.
     private func media(_ image: UIImage) -> some View {
         let framed = Group {
             if let layoutWidth, let pixelSize = ImageFidelityTrace.pixelSize(of: image) {
@@ -283,7 +283,7 @@ private struct AspectFitMediaSizeKey: PreferenceKey {
     }
 }
 
-/// Full-resolution pinch-zoom — loads only when presented.
+/// Full-resolution pinch-zoom, loads only when presented.
 private struct AspectFitFullImageViewer: View {
     let reference: MediaReference?
     let purpose: ImagePurpose
@@ -318,7 +318,7 @@ private struct AspectFitFullImageViewer: View {
     }
 }
 
-/// Tap precedence for detail media — double-tap Like vs single-tap open viewer.
+/// Tap precedence for detail media, double-tap Like vs single-tap open viewer.
 private struct AspectFitMediaTapModifier: ViewModifier {
     var allowsFullResolutionViewer: Bool
     var canOpenViewer: Bool

@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Fixed-size circular profile thumbnail for Explore — same pipeline/presentation as ``TradeRoomCircularAvatar``.
+/// Fixed-size circular profile thumbnail for Explore, same pipeline/presentation as ``TradeRoomCircularAvatar``.
 struct ExploreProfileAvatarView: View {
     let profile: Profile
     let imagePipeline: any ImagePipeline

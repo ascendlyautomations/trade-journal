@@ -31,7 +31,7 @@ nonisolated enum ConversationMessageMerge {
         return sortByCreatedAt(uniqueByID(result))
     }
 
-    /// Server first-page refresh — upsert incoming rows and drop in-window rows the server omitted
+    /// Server first-page refresh, upsert incoming rows and drop in-window rows the server omitted
     /// (soft-deleted / filtered). Older paginated rows below the window are preserved.
     ///
     /// When ``dropOmittedInWindow`` is false, disk/cache rows are never dropped because incoming
@@ -59,7 +59,7 @@ nonisolated enum ConversationMessageMerge {
         return mergeMessageLists(existing: preserved, incoming: incoming)
     }
 
-    /// Web `mergeMessageLists` — Map-by-id upsert without optimistic matching.
+    /// Web `mergeMessageLists`, Map-by-id upsert without optimistic matching.
     static func mergeMessageLists(existing: [Message], incoming: [Message]) -> [Message] {
         var byID: [MessageID: Message] = [:]
         for message in existing {

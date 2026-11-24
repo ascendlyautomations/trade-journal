@@ -1,6 +1,6 @@
 import Foundation
 
-/// Public/shared account privacy — mirrors web `lib/publicAccountPrivacy.ts`.
+/// Public/shared account privacy, mirrors web `lib/publicAccountPrivacy.ts`.
 ///
 /// Account numbers and owner-only identifiers must never appear on profile, feed,
 /// messages, or other shared surfaces. Names that embed account numbers are replaced
@@ -53,7 +53,7 @@ nonisolated enum PublicAccountPrivacy {
         }
     }
 
-    /// Safe public account title — strips embedded numbers; never appends `#account_number`.
+    /// Safe public account title, strips embedded numbers; never appends `#account_number`.
     static func publicSafeAccountName(
         rawName: String?,
         accountNumber: String?,
@@ -87,7 +87,7 @@ nonisolated enum PublicAccountPrivacy {
         }
     }
 
-    /// Owner trade write — public trades store sanitized denormalized account fields only.
+    /// Owner trade write, public trades store sanitized denormalized account fields only.
     static func sanitizedTradeAccountFieldsForSave(
         accountName: String?,
         accountSize: String?,

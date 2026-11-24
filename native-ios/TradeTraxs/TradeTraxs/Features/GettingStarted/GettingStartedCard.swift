@@ -16,12 +16,7 @@ struct GettingStartedCard: View {
             }
         }
         .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        )
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
         .accessibilityIdentifier("gettingStarted.card")
     }
 

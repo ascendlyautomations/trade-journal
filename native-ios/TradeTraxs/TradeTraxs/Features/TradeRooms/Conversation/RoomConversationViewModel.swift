@@ -295,7 +295,7 @@ final class RoomConversationViewModel {
         return inboxStore.rooms.contains { $0.id == resolvedRoomID }
     }
 
-    /// Active `room_members` row — required for RLS inserts (`is_active_room_member`).
+    /// Active `room_members` row, required for RLS inserts (`is_active_room_member`).
     var hasServerConfirmedMembership: Bool {
         isOwner || membership != nil
     }
@@ -313,7 +313,7 @@ final class RoomConversationViewModel {
         return true
     }
 
-    /// Read-only public preview — join CTA at composer instead of send shell.
+    /// Read-only public preview, join CTA at composer instead of send shell.
     var showsJoinToSendPrompt: Bool {
         phase == .loaded
             && canViewMessages
@@ -374,13 +374,13 @@ final class RoomConversationViewModel {
         refreshViewerModeratorStatus()
     }
 
-    /// Member/owner shell — composer may still be read-only on announcement channels.
+    /// Member/owner shell, composer may still be read-only on announcement channels.
     var canShowComposer: Bool {
         guard selectedChannel != nil else { return false }
         return hasServerConfirmedMembership
     }
 
-    /// Composer stays visible for empty threads and while channel metadata is resolving — independent of header chrome.
+    /// Composer stays visible for empty threads and while channel metadata is resolving, independent of header chrome.
     var shouldShowMessageComposer: Bool {
         guard canViewMessages, !showsJoinPreviewPlaceholder else { return false }
         guard canShowComposer else { return false }
@@ -388,7 +388,7 @@ final class RoomConversationViewModel {
         return room != nil && selectedChannel != nil
     }
 
-    /// Web `canPostInRoom` — owner and Moderator tag bypass channel chat lock.
+    /// Web `canPostInRoom`, owner and Moderator tag bypass channel chat lock.
     var canPostInSelectedChannel: Bool {
         guard selectedChannel != nil else { return false }
         if isOwner { return true }
@@ -754,7 +754,7 @@ final class RoomConversationViewModel {
             applyKnownDiscoveryMemberCountIfNeeded()
             await reconcileMemberCount(source: .mutation)
         } catch {
-            // Soft-fail — stale header is acceptable until next full load.
+            // Soft-fail, stale header is acceptable until next full load.
         }
     }
 
@@ -790,11 +790,11 @@ final class RoomConversationViewModel {
                 replaceMessages([])
             }
         } catch {
-            // Soft-fail — channel switcher may be stale until next full load.
+            // Soft-fail, channel switcher may be stale until next full load.
         }
     }
 
-    /// Switch channel without recreating the room shell — swaps message list + cache only.
+    /// Switch channel without recreating the room shell, swaps message list + cache only.
     func selectChannel(_ channelID: RoomChannelID) {
         guard channelID != selectedChannelID else { return }
         cancelPendingNavigationIntent(reason: "manualSelect")
@@ -1525,7 +1525,7 @@ final class RoomConversationViewModel {
             )
             inboxStore.setRoomMuted(roomID: resolvedRoomID, muted: !delivers)
         } catch {
-            // Soft-fail — settings page loads authoritative prefs on open.
+            // Soft-fail, settings page loads authoritative prefs on open.
         }
     }
 
@@ -1784,7 +1784,7 @@ final class RoomConversationViewModel {
     private func performInitialLoad() async {
         phase = .loading
         resetThreadScrollPosition()
-        // Web optimistic clear when the room is selected — badge drops before history finishes.
+        // Web optimistic clear when the room is selected, badge drops before history finishes.
         if isMember || isOwner {
             inboxStore.markRoomRead(roomID: roomID)
         }
@@ -2341,7 +2341,7 @@ final class RoomConversationViewModel {
         generation == channelDisplayGeneration && selectedChannelID == channelID
     }
 
-    /// Central channel presentation — manual selection, notifications, and bootstrap recovery share this path.
+    /// Central channel presentation, manual selection, notifications, and bootstrap recovery share this path.
     private func presentChannel(
         _ channelID: RoomChannelID,
         isBootstrap: Bool,
@@ -3073,11 +3073,11 @@ final class RoomConversationViewModel {
             await hydrateSenders(for: mapped)
             _ = viewerID
         } catch {
-            // Non-destructive — keep cached thread.
+            // Non-destructive, keep cached thread.
         }
     }
 
-    /// Incremental apply from Realtime — never reloads the whole room.
+    /// Incremental apply from Realtime, never reloads the whole room.
     private func applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
         if let reaction = signal.reactionEvent {
             applyReactionRealtime(reaction, kind: signal.kind)
@@ -3158,7 +3158,7 @@ final class RoomConversationViewModel {
         }
     }
 
-    /// Sole write path for thread rows — web `mergeMessages` semantics.
+    /// Sole write path for thread rows, web `mergeMessages` semantics.
     private func commitMessages(_ incoming: [Message], recordScrollEvents: Bool = true) {
         let previousIDs = Set(messages.map(\.id))
         let previousTempIDs = Set(

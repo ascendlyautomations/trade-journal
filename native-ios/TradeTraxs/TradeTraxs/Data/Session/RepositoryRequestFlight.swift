@@ -9,14 +9,14 @@ private enum RepositoryRequestCoalesceOutcome<T: Sendable> {
 /// Shared single-flight coalescer for identical concurrent repository network operations.
 ///
 /// Callers with the same `key` share one in-flight `Task`. Completed flights are cleared
-/// immediately — this is **not** a result cache. Session stores remain responsible for
+/// immediately, this is **not** a result cache. Session stores remain responsible for
 /// TTL / disk / memory caching where product policy already requires it.
 ///
 /// Standard repository lifecycle (composition):
-/// - **fetch** — repository method (may check memory/session cache first)
-/// - **coalesce** — wrap the network body with ``coalesce(key:resource:fetch:)``
-/// - **refresh(force:)** — feature/bootstrap layer clears cache then fetches
-/// - **invalidate** — drop in-flight bookkeeping on logout / identity change
+/// - **fetch**, repository method (may check memory/session cache first)
+/// - **coalesce**, wrap the network body with ``coalesce(key:resource:fetch:)``
+/// - **refresh(force:)**, feature/bootstrap layer clears cache then fetches
+/// - **invalidate**, drop in-flight bookkeeping on logout / identity change
 nonisolated final class RepositoryRequestFlight: @unchecked Sendable {
     static let shared = RepositoryRequestFlight()
 

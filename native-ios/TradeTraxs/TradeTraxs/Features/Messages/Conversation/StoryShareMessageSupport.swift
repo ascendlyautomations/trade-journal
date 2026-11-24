@@ -1,6 +1,6 @@
 import Foundation
 
-/// Story-share DM / Trade Room payload — mirrors web `lib/storyShareMessage.ts`.
+/// Story-share DM / Trade Room payload, mirrors web `lib/storyShareMessage.ts`.
 nonisolated enum StoryShareMessageSupport {
     static let messageType = "story_share"
 
@@ -98,7 +98,7 @@ nonisolated enum StoryShareMessageSupport {
         return "Shared a story"
     }
 
-    /// Ephemeral seed for navigation — authoritative story still comes from feed fetch.
+    /// Ephemeral seed for navigation, authoritative story still comes from feed fetch.
     static func provisionalStory(from payload: Payload) -> Story {
         Story(
             id: StoryID(payload.storyID),

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Funded prop-firm Record Payout — mirrors web PayoutSetupModal + confirm + optional achievement share.
+/// Funded prop-firm Record Payout, mirrors web PayoutSetupModal + confirm + optional achievement share.
 struct RecordPayoutFlowView: View {
     @State private var viewModel: RecordPayoutFlowViewModel
     @Environment(\.dismiss) private var dismiss
@@ -187,7 +187,7 @@ struct RecordPayoutFlowView: View {
 
 }
 
-/// Shown only after a withdrawal/payout row is persisted — optional Achievement composer entry.
+/// Shown only after a withdrawal/payout row is persisted, optional Achievement composer entry.
 struct PostWithdrawalAchievementPrompt: View {
     let onCreateAchievement: () -> Void
     let onNotNow: () -> Void
@@ -211,7 +211,7 @@ struct PostWithdrawalAchievementPrompt: View {
     }
 }
 
-/// Focus-aware USD field — raw decimal input while editing, `$1,234.56` when idle.
+/// Focus-aware USD field, raw decimal input while editing, `$1,234.56` when idle.
 private struct RecordPayoutCurrencyField: View {
     @Binding var amountText: String
     var onEditingChange: (() -> Void)? = nil

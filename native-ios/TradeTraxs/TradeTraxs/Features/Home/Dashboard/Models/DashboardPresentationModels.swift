@@ -1,13 +1,13 @@
 import Foundation
 
-/// Dashboard date-range presets — mirrors web `timeFilter` ids.
+/// Dashboard date-range presets, mirrors web `timeFilter` ids.
 nonisolated enum DashboardDateRange: String, CaseIterable, Identifiable, Sendable {
     case all
     case sevenDays
     case thirtyDays
     case ninetyDays
     case oneYear
-    /// Legacy persisted preset — maps to calendar YTD for V3 bundles.
+    /// Legacy persisted preset, maps to calendar YTD for V3 bundles.
     case ytd
 
     var id: String { rawValue }
@@ -51,7 +51,7 @@ nonisolated enum DashboardDateRange: String, CaseIterable, Identifiable, Sendabl
     }
 }
 
-/// Automatic dashboard timeframe — default 30D, expand while empty (matches web).
+/// Automatic dashboard timeframe, default 30D, expand while empty (matches web).
 nonisolated enum DashboardDateRangeFallback {
     static let minimumTradeCountForInitialRange = 1
 
@@ -132,7 +132,7 @@ nonisolated enum DashboardDateRangeFallback {
     }
 }
 
-/// Equity hero only — widens from the dashboard-selected preset until the curve can draw (≥2 trades).
+/// Equity hero only, widens from the dashboard-selected preset until the curve can draw (≥2 trades).
 /// Does not mutate ``DashboardViewModel/dateRange``.
 nonisolated enum DashboardEquityChartRangeResolver {
     /// ``ProfileEquityCurveView`` needs at least two equity points (two closed trades in range).
@@ -536,7 +536,7 @@ nonisolated struct DashboardInsightItem: Identifiable, Hashable, Sendable {
     /// Optional highlighted metric (avg P&L, win rate line, etc.).
     var metric: String?
 
-    /// Display copy — em dashes normalized to commas (templates + future dynamic text).
+    /// Display copy, legacy em dashes normalized to commas (templates + dynamic text).
     var displayTitle: String { GeneratedProseNormalizer.normalize(title) }
     var displayBody: String { GeneratedProseNormalizer.normalize(body) }
 }

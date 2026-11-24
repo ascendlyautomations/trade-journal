@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Authoritative vertical Clips pager — page height is always the SwiftUI-assigned container height.
+/// Authoritative vertical Clips pager, page height is always the SwiftUI-assigned container height.
 struct FeedClipsVerticalPager: UIViewRepresentable {
     let pageCount: Int
     @Binding var activeIndex: Int
@@ -156,7 +156,7 @@ final class FeedClipsPagingContainerView: UIView {
             lastViewportSize = bounds.size
         }
 
-        // During an active user drag/deceleration, UIKit owns contentOffset — do not relayout/correct.
+        // During an active user drag/deceleration, UIKit owns contentOffset, do not relayout/correct.
         if isUserInteracting, !viewportChanged {
             return
         }
@@ -452,7 +452,7 @@ final class FeedClipsPagingContainerView: UIView {
             viewportHeight: pageHeight
         )
 
-        // `isPagingEnabled` already snaps — only correct genuine drift without a second animation.
+        // `isPagingEnabled` already snaps, only correct genuine drift without a second animation.
         if abs(scrollView.contentOffset.y - expectedY) > 1.0 {
             ClipsPagerScrollProbe.programmaticScroll(
                 from: activeIndex,

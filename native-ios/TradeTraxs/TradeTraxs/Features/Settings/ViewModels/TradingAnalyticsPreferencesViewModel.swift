@@ -684,9 +684,9 @@ final class TradingAnalyticsPreferencesViewModel {
         if let value = Self.optionalInt(waitMinutes, min: 0, max: 1440) { preferences.waitAfterLossMinutes = value }
         else { message = "Enter waiting time in whole minutes from 0 to 1440, or leave it blank."; return false }
         if let value = Self.optionalPositive(minAcceptableRr) { preferences.minAcceptableRr = value }
-        else { message = "Enter a minimum R:R above 0, or leave it blank."; return false }
+        else { message = "Enter a min R:R above 0, or leave it blank."; return false }
         if let value = Self.optionalPositive(maxRisk) { preferences.maxRiskPerTrade = value }
-        else { message = "Enter a maximum risk amount above 0, or leave it blank."; return false }
+        else { message = "Enter a max risk amount above 0, or leave it blank."; return false }
         if let value = Self.optionalInt(maxContracts, min: 1, max: 10_000) { preferences.maxContractsPerTrade = value }
         else { message = "Enter whole contracts from 1 to 10,000, or leave it blank."; return false }
         if let value = Self.optionalPositive(maxWeeklyLoss) { preferences.maxWeeklyLoss = value }

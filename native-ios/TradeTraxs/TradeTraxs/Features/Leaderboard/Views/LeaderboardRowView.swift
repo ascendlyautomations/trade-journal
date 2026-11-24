@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Single ranked trader row — render-only.
+/// Single ranked trader row, render-only.
 struct LeaderboardRowView: View {
     let row: LeaderboardRow
     let profile: Profile

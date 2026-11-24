@@ -1,6 +1,6 @@
 import Foundation
 
-/// Client-side dashboard insights — mirrors web `useDashboardAnalytics` narratives.
+/// Client-side dashboard insights, mirrors web `useDashboardAnalytics` narratives.
 nonisolated enum DashboardClientInsights {
     struct CombinedSetup: Sendable, Equatable {
         var key: String
@@ -17,7 +17,7 @@ nonisolated enum DashboardClientInsights {
         let groups = analyzeBestSetups(trades)
 
         if let bestSession = groups.first(where: { $0.type == "session" && $0.avgPnL > 0 }),
-           bestSession.value != "—",
+           bestSession.value != "–",
            groups.filter({ $0.type == "session" && $0.trades >= 5 }).count >= 2
         {
             items.append(
@@ -33,7 +33,7 @@ nonisolated enum DashboardClientInsights {
         }
 
         if let bestTicker = groups.first(where: { $0.type == "ticker" && $0.avgPnL > 0 }),
-           bestTicker.value != "—",
+           bestTicker.value != "–",
            groups.filter({ $0.type == "ticker" && $0.trades >= 5 }).count >= 2
         {
             items.append(
@@ -49,7 +49,7 @@ nonisolated enum DashboardClientInsights {
         }
 
         if let bestDirection = groups.first(where: { $0.type == "direction" && $0.avgPnL > 0 }),
-           bestDirection.value != "—",
+           bestDirection.value != "–",
            groups.filter({ $0.type == "direction" && $0.trades >= 5 }).count >= 2
         {
             items.append(
@@ -67,7 +67,7 @@ nonisolated enum DashboardClientInsights {
         return items
     }
 
-    /// Web `BestSetupCard` / `bestSetup` — first tagged strategy with ≥3 trades in the filtered set.
+    /// Web `BestSetupCard` / `bestSetup`, first tagged strategy with ≥3 trades in the filtered set.
     static func bestPerformingStrategyInsight(
         from trades: [Trade],
         highlights: DashboardStrategyHighlights?
@@ -78,7 +78,7 @@ nonisolated enum DashboardClientInsights {
         if let winRate = best.winRate {
             winRateText = String(format: "%.0f", winRate)
         } else {
-            winRateText = "—"
+            winRateText = "–"
         }
         let pnl = money(Decimal(best.netPnL))
         return DashboardInsightItem(
@@ -94,7 +94,7 @@ nonisolated enum DashboardClientInsights {
 
     static func advancedEdge(from trades: [Trade]) -> [DashboardInsightItem] {
         let results = analyzeCombinedSetups(trades)
-        let meaningful = results.filter { !$0.key.contains("—") && $0.trades >= 5 }
+        let meaningful = results.filter { !$0.key.contains("–") && $0.trades >= 5 }
         guard meaningful.count >= 2, let best = meaningful.first, best.avgPnL > 0 else { return [] }
         return [
             DashboardInsightItem(
@@ -110,7 +110,7 @@ nonisolated enum DashboardClientInsights {
 
     static func worstCombinedSetup(from trades: [Trade]) -> DashboardInsightItem? {
         let results = analyzeCombinedSetups(trades)
-            .filter { !$0.key.contains("—") && $0.trades >= 5 }
+            .filter { !$0.key.contains("–") && $0.trades >= 5 }
         guard results.count >= 2,
               let worst = results.min(by: { $0.avgPnL < $1.avgPnL }),
               worst.avgPnL < 0
@@ -207,8 +207,8 @@ nonisolated enum DashboardClientInsights {
         for trade in trades {
             let pnl = trade.realizedPnL?.amount
             guard let pnl else { continue }
-            let session = normalizedSession(trade.sessionLabel) ?? "—"
-            let ticker = trade.symbol.ticker.isEmpty ? "—" : trade.symbol.ticker
+            let session = normalizedSession(trade.sessionLabel) ?? "–"
+            let ticker = trade.symbol.ticker.isEmpty ? "–" : trade.symbol.ticker
             let direction = trade.side == .long ? "Long" : "Short"
 
             for group in [
@@ -247,8 +247,8 @@ nonisolated enum DashboardClientInsights {
         for trade in trades {
             let pnl = trade.realizedPnL?.amount
             guard let pnl else { continue }
-            let session = normalizedSession(trade.sessionLabel) ?? "—"
-            let ticker = trade.symbol.ticker.isEmpty ? "—" : trade.symbol.ticker
+            let session = normalizedSession(trade.sessionLabel) ?? "–"
+            let ticker = trade.symbol.ticker.isEmpty ? "–" : trade.symbol.ticker
             let direction = trade.side == .long ? "Long" : "Short"
 
             let combos = [

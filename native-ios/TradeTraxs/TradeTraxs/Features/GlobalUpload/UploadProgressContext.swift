@@ -1,6 +1,6 @@
 import Foundation
 
-/// Active global upload job — set for the duration of encode/upload work so Storage can report byte progress.
+/// Active global upload job, set for the duration of encode/upload work so Storage can report byte progress.
 nonisolated enum UploadProgressContext {
     @TaskLocal static var jobID: String?
 }

@@ -30,6 +30,15 @@ final class ProGateReasonParserTests: XCTestCase {
         }
     }
 
+    func testPremiumAnalyticsServerToken() {
+        let reason = ProGateReasonParser.reason(
+            from: AppError.unknown(message: "TRAXPRO_PREMIUM_ANALYTICS_REQUIRED")
+        )
+        guard case .feature(.premiumAnalytics)? = reason else {
+            return XCTFail("Expected premium_analytics feature")
+        }
+    }
+
     func testStalePublicTradeCopyIsNotMapped() {
         XCTAssertNil(
             ProGateReasonParser.reason(

@@ -109,7 +109,7 @@ struct CheckInDayDetailView: View {
                     ("Avg Trade", TraderPsychologyAnalyticsEngine.money(detail.metrics.averagePnL ?? 0)),
                     ("Profit Factor", detail.metrics.profitFactor.map {
                         NumberDisplay.ratio($0, fractionDigits: 2)
-                    } ?? "—"),
+                    } ?? "–"),
                 ])
             }
         }
@@ -173,12 +173,12 @@ struct CheckInDayDetailView: View {
     }
 
     private func ratingText(_ value: Int?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "–" }
         return "\(value)/5"
     }
 
     private func sleepText(_ hours: Decimal?) -> String {
-        guard let hours else { return "—" }
+        guard let hours else { return "–" }
         return NumberDisplay.hours(NSDecimalNumber(decimal: hours).doubleValue)
     }
 }

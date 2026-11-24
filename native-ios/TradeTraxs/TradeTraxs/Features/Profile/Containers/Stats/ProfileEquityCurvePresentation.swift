@@ -1,6 +1,6 @@
 import Foundation
 
-/// Presentation model for ``ProfileEquityCurveView`` — enables regression tests on the chart pipeline.
+/// Presentation model for ``ProfileEquityCurveView``, enables regression tests on the chart pipeline.
 nonisolated enum ProfileEquityCurvePresentation {
   struct ChartPoint: Equatable {
     var index: Int

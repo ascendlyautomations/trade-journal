@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped Getting Started checklist — one RPC, no polling.
+/// Session-scoped Getting Started checklist, one RPC, no polling.
 @Observable
 @MainActor
 final class GettingStartedStore {
@@ -20,13 +20,13 @@ final class GettingStartedStore {
     private var pendingUserActionRefresh = false
     /// Monotonic checklist hints applied before first RPC load or merged after refresh.
     private var pendingLocalPatches = GettingStartedLocalPatches.empty
-    /// Device-local monotonic mirror for the active viewer — survives RPC refresh / restart.
+    /// Device-local monotonic mirror for the active viewer, survives RPC refresh / restart.
     private var persistedCompletion = GettingStartedSignals.empty
     /// True after a local wall-post create until RPC confirms `profile_posts`.
     private var trustLocalProfilePostHint = false
 
     var isCollapsed = false
-    /// One-time completion celebration. Presentation only — not a checklist signal.
+    /// One-time completion celebration. Presentation only, not a checklist signal.
     var showsGettingStartedCompletion = false
 
     private var hasEstablishedCompletionBaseline = false
@@ -324,7 +324,7 @@ final class GettingStartedStore {
 
 }
 
-/// Device-local presentation preferences — not synchronized across platforms.
+/// Device-local presentation preferences, not synchronized across platforms.
 enum GettingStartedPreferences {
     private static let collapsedKeyBase = "tradetraxs_getting_started_collapsed_v1"
     private static let sessionDismissKeyBase = "tradetraxs_getting_started_dismissed_session_v1"
@@ -369,7 +369,7 @@ enum GettingStartedPreferences {
     }
 }
 
-/// Monotonic local checklist hints — merged with RPC/bootstrap (never regress).
+/// Monotonic local checklist hints, merged with RPC/bootstrap (never regress).
 struct GettingStartedLocalPatches: Sendable, Equatable {
     var onboardingCompleted: Bool?
     var tradeCountDelta: Int = 0
@@ -512,7 +512,7 @@ enum GettingStartedRefreshCenter {
         )
     }
 
-    /// Debounced RPC reconcile — not used for instant UI.
+    /// Debounced RPC reconcile, not used for instant UI.
     static func noteEligibleUserAction() {
         scheduleDebouncedReconcile()
     }

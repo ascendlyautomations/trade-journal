@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import UserNotifications
 
-/// iOS system notification permission — never confuse with in-app preference toggles.
+/// iOS system notification permission, never confuse with in-app preference toggles.
 enum SystemNotificationAuthorizationStatus: Equatable, Sendable {
     case notDetermined
     case denied

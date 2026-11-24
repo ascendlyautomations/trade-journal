@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared Trade Room outbound path — internal share, in-room composer, and story share.
+/// Shared Trade Room outbound path, internal share, in-room composer, and story share.
 @MainActor
 enum RoomOutboundMessageDelivery {
     struct SendContext {

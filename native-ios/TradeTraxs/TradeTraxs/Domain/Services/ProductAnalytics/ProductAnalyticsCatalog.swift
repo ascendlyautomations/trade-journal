@@ -1,6 +1,6 @@
 import Foundation
 
-/// Canonical names — must match Supabase `product_analytics_allowed_event_names()`.
+/// Canonical names, must match Supabase `product_analytics_allowed_event_names()`.
 nonisolated enum ProductAnalyticsEventName: String, Sendable {
     case sessionStarted = "session_started"
     case appOpened = "app_opened"

@@ -2,7 +2,7 @@ import Foundation
 
 /// Viewer-scoped on-disk snapshots for Messages, Activity, and Trade Rooms.
 ///
-/// Presentation-only — server + RLS remain authoritative for protected actions.
+/// Presentation-only, server + RLS remain authoritative for protected actions.
 nonisolated enum SocialDiskCache {
     static let folderName = "SocialDiskCache"
 
@@ -236,7 +236,7 @@ nonisolated enum SocialDiskCache {
             let data = try JSONEncoder().encode(value)
             try data.write(to: url, options: [.atomic])
         } catch {
-            // Soft-fail — disk cache must never break networking.
+            // Soft-fail, disk cache must never break networking.
         }
     }
 

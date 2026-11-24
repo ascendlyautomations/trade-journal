@@ -1,6 +1,6 @@
 import Foundation
 
-/// Shared instrument source for Add Trade / Edit Trade — built-ins, customs, and trade history.
+/// Shared instrument source for Add Trade / Edit Trade, built-ins, customs, and trade history.
 @MainActor
 enum InstrumentCatalog {
     static func pickerSnapshot(

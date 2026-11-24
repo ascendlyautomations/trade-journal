@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Phase 1 enrichment — sequential native trade edit for broker-imported IDs.
+/// Phase 1 enrichment, sequential native trade edit for broker-imported IDs.
 struct BrokerImportedTradesReviewView: View {
     let tradeIDs: [TradeID]
     let data: DataEnvironment

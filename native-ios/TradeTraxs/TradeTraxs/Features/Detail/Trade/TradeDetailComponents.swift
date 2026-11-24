@@ -3,7 +3,7 @@ import SwiftUI
 private enum TradeDetailLayout {
     static let sectionSpacing: CGFloat = ExperienceSpacing.md
     static let groupSpacing: CGFloat = ExperienceSpacing.xs
-    /// Space between journal detail blocks (Setup, Execution, etc.) — reads as separate cards on the page.
+    /// Space between journal detail blocks (Setup, Execution, etc.), reads as separate cards on the page.
     static let journalBlockSpacing: CGFloat = ExperienceSpacing.md
     static let cardCornerRadius: CGFloat = ExperienceRadius.sm
 
@@ -313,7 +313,7 @@ struct TradeDetailQuickStatsSection: View {
                         ),
                         TradeDetailStatCell(
                             label: "Targeted R:R",
-                            value: TradeDisplay.compactRRText(trade.riskReward) ?? "—"
+                            value: TradeDisplay.compactRRText(trade.riskReward) ?? "–"
                         ),
                     ]
                     if let maxRr = TradeDisplay.compactRRText(trade.maxRrReached) {
@@ -336,15 +336,15 @@ struct TradeDetailQuickStatsSection: View {
                     var cells: [TradeDetailStatCell] = [
                         TradeDetailStatCell(
                             label: "Points Targeted",
-                            value: TradeDisplay.pointsText(trade.points) ?? "—"
+                            value: TradeDisplay.pointsText(trade.points) ?? "–"
                         ),
                         TradeDetailStatCell(
                             label: "Actual Points",
-                            value: TradeDisplay.pointsText(TradePointsAndRealizedRr.computeActualPoints(trade: trade)) ?? "—"
+                            value: TradeDisplay.pointsText(TradePointsAndRealizedRr.computeActualPoints(trade: trade)) ?? "–"
                         ),
                         TradeDetailStatCell(
                             label: "Realized R:R",
-                            value: TradeDisplay.compactRRText(TradePointsAndRealizedRr.resolveRealizedRr(trade: trade)) ?? "—"
+                            value: TradeDisplay.compactRRText(TradePointsAndRealizedRr.resolveRealizedRr(trade: trade)) ?? "–"
                         ),
                     ]
                     if let risk = trade.dollarRisk, risk > 0 {
@@ -373,7 +373,7 @@ struct TradeDetailQuickStatsSection: View {
                     ),
                     TradeDetailStatCell(
                         label: "Duration",
-                        value: TradeDisplay.holdDuration(for: trade) ?? "—"
+                        value: TradeDisplay.holdDuration(for: trade) ?? "–"
                     ),
                 ])
             }
@@ -471,8 +471,8 @@ struct TradeDetailComparisonSection: View {
                     if let tradeRR = trade.riskReward, let avgRR = cohort.avgRR {
                         comparisonRow(
                             label: "RR",
-                            thisValue: TradeDisplay.compactRRText(tradeRR) ?? "—",
-                            avgValue: TradeDisplay.compactRRText(avgRR) ?? "—"
+                            thisValue: TradeDisplay.compactRRText(tradeRR) ?? "–",
+                            avgValue: TradeDisplay.compactRRText(avgRR) ?? "–"
                         )
                     }
 
@@ -481,8 +481,8 @@ struct TradeDetailComparisonSection: View {
                     {
                         comparisonRow(
                             label: "Hold",
-                            thisValue: TradeDisplay.compactHoldDuration(seconds: tradeHold) ?? "—",
-                            avgValue: TradeDisplay.compactHoldDuration(seconds: avgHold) ?? "—"
+                            thisValue: TradeDisplay.compactHoldDuration(seconds: tradeHold) ?? "–",
+                            avgValue: TradeDisplay.compactHoldDuration(seconds: avgHold) ?? "–"
                         )
                     }
 

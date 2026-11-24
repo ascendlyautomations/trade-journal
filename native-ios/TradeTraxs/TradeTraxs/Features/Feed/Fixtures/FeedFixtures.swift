@@ -1,6 +1,6 @@
 import Foundation
 
-/// Mixed Home Feed samples for development / screenshots — reuses Profile section fixtures.
+/// Mixed Home Feed samples for development / screenshots, reuses Profile section fixtures.
 nonisolated enum FeedFixtures {
     static let viewerID = ProfileID("dev.viewer")
 
@@ -172,7 +172,7 @@ nonisolated enum FeedFixtures {
         )
     }
 
-    /// Stories row samples — one request path via `FeedRepository.stories` in production.
+    /// Stories row samples, one request path via `FeedRepository.stories` in production.
     static func stories(viewerID: ProfileID = viewerID) -> [Story] {
         let now = Date()
         let authors: [(ProfileID, Bool)] = [
@@ -198,7 +198,7 @@ nonisolated enum FeedFixtures {
         }
     }
 
-    /// Fixture authors with avatars — seeded once into DetailPresentationCache (no N+1).
+    /// Fixture authors with avatars, seeded once into DetailPresentationCache (no N+1).
     static func authorProfiles(including viewerID: ProfileID) -> [Profile] {
         let owner = ProfileID("dev.fixture-owner")
         var profiles = FollowListFixtures.followers(owner: owner)

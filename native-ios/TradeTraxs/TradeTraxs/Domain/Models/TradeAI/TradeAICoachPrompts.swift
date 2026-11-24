@@ -26,7 +26,7 @@ nonisolated enum TradeAICoachPrompts {
     Maximum 3 short bullet points. Specific and actionable.
 
     ## Next Trade Focus
-    Exactly one sentence — the single highest-priority fix for the next trade.
+    Exactly one sentence, the single highest-priority fix for the next trade.
     """
 
     static func apiContent(for prompt: TradeAISuggestedPrompt) -> String {
@@ -60,7 +60,7 @@ nonisolated enum TradeAICoachPrompts {
         case "analyze":
             return """
             Give a full coach review of this trade using the required structure.
-            Lead with the single most valuable insight — do not narrate every field.
+            Lead with the single most valuable insight, do not narrate every field.
             """
         case "winning":
             return """
@@ -87,7 +87,7 @@ nonisolated enum TradeAICoachPrompts {
         case "execution":
             return """
             Rate execution quality.
-            In Verdict, include an explicit score like "Execution 7/10 — …" after the emoji.
+            In Verdict, include an explicit score like "Execution 7/10, …" after the emoji.
             Explain entry, management, and exit briefly under Biggest Insight / Key Improvements.
             """
         case "emotional":
@@ -103,7 +103,7 @@ nonisolated enum TradeAICoachPrompts {
             """
         case "journal":
             return """
-            Write an objective journal summary of what happened — facts first, then a short coach takeaway.
+            Write an objective journal summary of what happened, facts first, then a short coach takeaway.
             Still use the Verdict / Biggest Insight / Key Improvements / Next Trade Focus structure.
             Keep the tone like a clean trade journal entry, not a pep talk.
             """

@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 extension AnalyticsLocalStore {
-    /// Calendar coverage rows older than `revision` — bounded remote repair (Phase 6D).
+    /// Calendar coverage rows older than `revision`, bounded remote repair (Phase 6D).
     func calendarCoveragesBelowRevision(
         viewerID: ProfileID,
         revision: Int64,
@@ -188,7 +188,7 @@ extension AnalyticsLocalStore {
         )
     }
 
-    /// Viewer-scoped Calendar shadow read — coverage validated before rows are authoritative.
+    /// Viewer-scoped Calendar shadow read, coverage validated before rows are authoritative.
     func readCalendarRange(
         viewerID: ProfileID,
         startDate: String,

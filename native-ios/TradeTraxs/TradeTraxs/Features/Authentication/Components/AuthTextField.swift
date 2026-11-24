@@ -158,7 +158,7 @@ struct AuthTextField: View {
     }
 }
 
-/// Applies exactly one focus binding — Login enum or standalone bool (reset password, etc.).
+/// Applies exactly one focus binding, Login enum or standalone bool (reset password, etc.).
 private struct AuthTextFieldFocusModifier: ViewModifier {
     let loginField: AuthLoginField?
     let loginFocusedField: FocusState<AuthLoginField?>.Binding?

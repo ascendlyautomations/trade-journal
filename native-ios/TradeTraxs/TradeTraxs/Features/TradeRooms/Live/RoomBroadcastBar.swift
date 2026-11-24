@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Persistent livestream chrome above the tab bar — same session as ``RoomBroadcastWatchView``.
+/// Persistent livestream chrome above the tab bar, same session as ``RoomBroadcastWatchView``.
 struct RoomBroadcastBar: View {
     @Bindable var coordinator: RoomBroadcastCoordinator
     @Environment(\.themeColors) private var colors

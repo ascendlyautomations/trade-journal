@@ -1,6 +1,6 @@
 import Foundation
 
-/// Phase 8C baseline — approximate detail JSON size without logging private fields.
+/// Phase 8C baseline, approximate detail JSON size without logging private fields.
 nonisolated enum TradeDetailPayloadProbe {
     static func estimatedUtf8Bytes(for detail: TradeDetail) -> Int {
         var components: [String] = [

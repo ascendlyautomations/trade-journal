@@ -45,7 +45,7 @@ nonisolated enum ScreenshotImportPlatform: String, Hashable, Codable, Sendable, 
     }
 }
 
-/// Metadata for screenshot import review — not persisted on `CSVParsedTrade`.
+/// Metadata for screenshot import review, not persisted on `CSVParsedTrade`.
 nonisolated struct ScreenshotImportTradeMetadata: Hashable, Codable, Sendable {
     enum AggregationSource: String, Hashable, Codable, Sendable {
         case completedRow

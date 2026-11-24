@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 #if DEBUG
-/// DEBUG-only network media egress accounting — counts actual transferred bytes once per HTTP response / access-log delta.
+/// DEBUG-only network media egress accounting, counts actual transferred bytes once per HTTP response / access-log delta.
 enum MediaEgressTracker {
     enum MediaType: String {
         case image

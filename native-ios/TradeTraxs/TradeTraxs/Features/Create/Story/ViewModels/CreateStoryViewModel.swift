@@ -19,7 +19,7 @@ final class CreateStoryViewModel {
 
     private(set) var imagePreview: UIImage?
     private(set) var imageData: Data?
-    /// Original picked image — preserved separately from the rendered upload.
+    /// Original picked image, preserved separately from the rendered upload.
     private(set) var sourceImage: UIImage?
     private(set) var localVideoFileURL: URL?
     private var pendingVideoTextOverlays: [StoryTextOverlayRecord] = []

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Performance metrics — 4 + 3 grid for Backtest Lab (web `/backtest` parity).
+/// Performance metrics, 4 + 3 grid for Backtest Lab (web `/backtest` parity).
 struct BacktestLabMetricsGrid: View {
     let snapshot: BacktestLabMetrics.Snapshot
 
@@ -37,7 +37,7 @@ struct BacktestLabMetricsGrid: View {
                 )
                 metricTile(
                     label: "Avg R:R",
-                    value: snapshot.averageRR.map { TradeDisplay.compactRRText(Decimal($0)) ?? "—" } ?? "—",
+                    value: snapshot.averageRR.map { TradeDisplay.compactRRText(Decimal($0)) ?? "–" } ?? "–",
                     tone: .neutral
                 )
             }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Livestream-only compact trade attachment — not the full DM trade share card.
+/// Livestream-only compact trade attachment, not the full DM trade share card.
 struct BroadcastChatCompactTradeCard: View {
     let trade: Trade?
     let tradeID: TradeID

@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// Non-sensitive rejoin diagnostics — room id hashes, row counts, active flag only.
+/// Non-sensitive rejoin diagnostics, room id hashes, row counts, active flag only.
 enum TradeRoomMembershipRejoinTrace {
     private nonisolated static let log = Logger(subsystem: "com.tradetraxs.trade-rooms", category: "membership-rejoin")
 

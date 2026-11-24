@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web-parity checklist rules — mirrors `lib/gettingStartedChecklist.ts`.
+/// Web-parity checklist rules, mirrors `lib/gettingStartedChecklist.ts`.
 nonisolated enum GettingStartedChecklistPolicy {
     static func computeProgress(from signals: GettingStartedSignals) -> GettingStartedProgress {
         let tasks: [GettingStartedTask] = [
@@ -76,7 +76,7 @@ nonisolated enum GettingStartedChecklistPolicy {
         progress.allComplete && !signals.hasSeenOnboardingCompletePopup
     }
 
-    /// Intro popup is disabled on web — keep native aligned.
+    /// Intro popup is disabled on web, keep native aligned.
     static func shouldShowIntroPopup(
         onboardingCompleted: Bool,
         hasSeenGettingStartedIntro: Bool

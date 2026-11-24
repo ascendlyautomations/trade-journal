@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared owner member actions — Members list and message long-press **Manage User**.
+/// Shared owner member actions, Members list and message long-press **Manage User**.
 struct RoomMemberManagementSheet: View {
     let member: RoomMemberItem
     let imagePipeline: any ImagePipeline

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Web `lib/tradingReports/generateTradingReport.ts` — deterministic report builder.
+/// Web `lib/tradingReports/generateTradingReport.ts`, deterministic report builder.
 ///
 /// iOS consumes the same rules/copy as web. No separate AI prompts or BFF generate route.
 nonisolated enum TradingReportGenerator {
@@ -41,7 +41,12 @@ nonisolated enum TradingReportGenerator {
         return generate(trades: trades, bounds: bounds, now: now, preferences: preferences)
     }
 
-    /// Custom performance report — same narrative engine, filtered by active report filters.
+    /// KPI grid for an already-scoped trade sample (dashboard preview, profile stats).
+    static func metrics(for scopedTrades: [Trade]) -> TradingReportMetrics {
+        buildMetrics(scopedTrades)
+    }
+
+    /// Custom performance report, same narrative engine, filtered by active report filters.
     static func generateCustomRange(
         trades: [Trade],
         interval: DateInterval,

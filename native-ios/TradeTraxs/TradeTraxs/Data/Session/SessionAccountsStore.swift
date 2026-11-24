@@ -1,15 +1,15 @@
 import Foundation
 import Observation
 
-/// Provenance for cached owner account rows — partial summaries must never satisfy Manage Accounts.
+/// Provenance for cached owner account rows, partial summaries must never satisfy Manage Accounts.
 enum OwnerAccountsSnapshotKind: Equatable, Sendable {
     /// Full `ACCOUNTS_SELECT` (+ native insight columns) from REST.
     case rest
-    /// Dashboard bootstrap RPC — ACCOUNTS_SELECT-shaped but may omit insight-only columns.
+    /// Dashboard bootstrap RPC, ACCOUNTS_SELECT-shaped but may omit insight-only columns.
     case dashboard
 }
 
-/// Authoritative session account list — single-flight coalescing across Dashboard / Calendar / Trades / Settings.
+/// Authoritative session account list, single-flight coalescing across Dashboard / Calendar / Trades / Settings.
 @Observable
 @MainActor
 final class SessionAccountsStore {
@@ -19,8 +19,10 @@ final class SessionAccountsStore {
     private var snapshotKindByProfile: [ProfileID: OwnerAccountsSnapshotKind] = [:]
     private var inFlight: [ProfileID: Task<[TradingAccount], Error>] = [:]
     private var loadedAt: [ProfileID: Date] = [:]
+    /// Bumps on every ``seed`` so SwiftUI can react without polling session caches.
+    private(set) var accountsContentRevision: Int = 0
 
-    /// Account metadata changes rarely — treat as fresh for the session unless invalidated.
+    /// Account metadata changes rarely, treat as fresh for the session unless invalidated.
     private let freshTTL: TimeInterval = 15 * 60
 
     private init() {}
@@ -141,6 +143,7 @@ final class SessionAccountsStore {
             incoming: resolvedKind
         )
         loadedAt[profileID] = Date()
+        accountsContentRevision &+= 1
         detailCache?.seed(accounts: merged, for: profileID)
         SessionDiskCache.saveAccounts(merged, for: profileID)
         TradingAccountOwnerDiagnostics.logLoadSummary(
@@ -220,8 +223,11 @@ final class SessionAccountsStore {
                 var merged = account
                 if merged.accountNumber == nil { merged.accountNumber = prior.accountNumber }
                 if merged.size == nil { merged.size = prior.size }
-                merged.showInAccountDropdowns = prior.showInAccountDropdowns
-                merged.customPublicStatus = prior.customPublicStatus
+                // REST owner snapshot is authoritative for insights toggles; dashboard rows may lag a session refresh.
+                if incomingKind == .dashboard {
+                    merged.showInAccountDropdowns = prior.showInAccountDropdowns
+                    merged.customPublicStatus = prior.customPublicStatus
+                }
                 if merged.propFirmRules == nil { merged.propFirmRules = prior.propFirmRules }
                 merged.mergeLivePersonalDrawdownPreservingNewer(from: prior)
                 return merged

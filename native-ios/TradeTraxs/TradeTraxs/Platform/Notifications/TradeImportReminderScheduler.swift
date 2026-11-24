@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import UserNotifications
 
-/// Local trade-import reminders — Mon–Fri 11:15 AM and 4:00 PM Eastern only.
+/// Local trade-import reminders, Mon–Fri 11:15 AM and 4:00 PM Eastern only.
 enum TradeImportReminderScheduler {
     static let identifierPrefix = "trade-import-reminder:"
 

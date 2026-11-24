@@ -13,7 +13,7 @@ enum VideoPreparationFailure: Error, Equatable {
     case cancelled
 }
 
-/// Delivery optimization for Clip uploads — inspect, decide, transcode/remux/passthrough.
+/// Delivery optimization for Clip uploads, inspect, decide, transcode/remux/passthrough.
 nonisolated enum VideoDeliveryExporter {
     enum DeliveryMode: String, Sendable {
         case passthrough
@@ -57,7 +57,7 @@ nonisolated enum VideoDeliveryExporter {
     /// Max dimensions when transcode is required for bitrate/size (720p delivery export).
     static let maxTranscodeCompressionLongEdge: CGFloat = 1280
     static let maxTranscodeCompressionShortEdge: CGFloat = 720
-    /// Delivery ceiling — sources above this are reduced to 60 FPS (e.g. 120/240 → 60).
+    /// Delivery ceiling, sources above this are reduced to 60 FPS (e.g. 120/240 → 60).
     static let maxDeliveryFrameRate: Double = 60
     static let highFrameRateBitrateThreshold: Double = 30.5
 
@@ -166,7 +166,7 @@ nonisolated enum VideoDeliveryExporter {
         )
     }
 
-    /// Transcode encoder rate — ceiling cap; stay near source when already efficient.
+    /// Transcode encoder rate, ceiling cap; stay near source when already efficient.
     static func transcodeVideoBitrate(profile: SourceProfile, ceiling: Int) -> Int {
         let audioAllowance = profile.hasAudio ? 128_000 : 0
         let sourceVideoEstimate = max(
@@ -222,7 +222,7 @@ nonisolated enum VideoDeliveryExporter {
         return CMTime(value: ticksPerFrame, timescale: timescale)
     }
 
-    /// Composition output cadence — only reduces sources above 60 FPS to a stable 60 FPS cadence.
+    /// Composition output cadence, only reduces sources above 60 FPS to a stable 60 FPS cadence.
     static func compositionOutputFrameRate(sourceFPS: Double, targetFPS: Double) -> Double {
         if sourceFPS > maxDeliveryFrameRate + 0.5 {
             return maxDeliveryFrameRate
@@ -237,7 +237,7 @@ nonisolated enum VideoDeliveryExporter {
         return max(1, Int(round(cadenceFPS)))
     }
 
-    /// Social playback targets — tuned for feed delivery (1080p ~4–6 Mbps, 720p ~2.5–4 Mbps).
+    /// Social playback targets, tuned for feed delivery (1080p ~4–6 Mbps, 720p ~2.5–4 Mbps).
     static func targetVideoBitrate(longEdge: CGFloat, targetFPS: Double) -> Int {
         let highFPS = targetFPS > highFrameRateBitrateThreshold
         switch resolutionClass(for: longEdge) {
@@ -297,7 +297,7 @@ nonisolated enum VideoDeliveryExporter {
         return (.remux, "compatible-codecs-non-mp4")
     }
 
-    /// Video stream is within delivery limits — used for post-encode size guard (ignore audio codec differences).
+    /// Video stream is within delivery limits, used for post-encode size guard (ignore audio codec differences).
     static func isDeliveryCompatibleVideo(profile: SourceProfile, target: DeliveryTarget) -> Bool {
         let needsScale = target.outputSize.width < profile.orientedSize.width - 1
             || target.outputSize.height < profile.orientedSize.height - 1
@@ -331,7 +331,7 @@ nonisolated enum VideoDeliveryExporter {
         switch mode {
         case .passthrough, .remux:
             // Always remux through AVAssetExportSession so `shouldOptimizeForNetworkUse`
-            // moves the `moov` atom to the file start — raw copy skips fast-start.
+            // moves the `moov` atom to the file start, raw copy skips fast-start.
             try await exportWithSession(
                 asset: sourceAsset,
                 outputURL: outputURL,

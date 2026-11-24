@@ -1,6 +1,6 @@
 import Foundation
 
-/// One-time plan chooser completion — not cleared on logout (per account).
+/// One-time plan chooser completion, not cleared on logout (per account).
 struct PostOnboardingPlanSelectionProgressStore {
     private let defaults: UserDefaults
 

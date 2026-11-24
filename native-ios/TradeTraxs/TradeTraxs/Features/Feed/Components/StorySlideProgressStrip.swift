@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Multi-slide segment indicators — inset matches author row / overflow menu.
+/// Multi-slide segment indicators, inset matches author row / overflow menu.
 struct StorySlideProgressStrip: View {
     let slideCount: Int
     let activeIndex: Int

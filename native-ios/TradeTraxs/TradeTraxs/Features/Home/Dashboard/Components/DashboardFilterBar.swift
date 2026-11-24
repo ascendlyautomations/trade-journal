@@ -71,7 +71,7 @@ struct DashboardFilterBar: View {
                     width: ExperienceAccessibility.minTouchTarget,
                     height: ExperienceAccessibility.minTouchTarget
                 )
-                .background(colors.fillSecondary, in: Circle())
+                .experienceFilterIconCircle()
         }
         .buttonStyle(.experiencePlain)
         .accessibilityLabel(accessibilityLabel)
@@ -127,7 +127,7 @@ struct DashboardFilterBar: View {
             }
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
-            .background(colors.fillSecondary, in: Capsule())
+            .experienceFilterCapsule()
             .overlay(alignment: .topTrailing) {
                 if viewModel.showsScopeFilterIndicator {
                     Circle()
@@ -156,8 +156,7 @@ struct DashboardFilterBar: View {
         }
         .padding(.horizontal, ExperienceSpacing.sm)
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 32, alignment: .leading)
-        .background(colors.fillSecondary)
-        .clipShape(Capsule())
+        .experienceFilterCapsule()
     }
 
 }

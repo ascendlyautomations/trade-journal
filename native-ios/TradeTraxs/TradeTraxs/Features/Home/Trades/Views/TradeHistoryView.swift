@@ -1,14 +1,16 @@
 import SwiftUI
 import UIKit
 
-/// Dashboard → Trades — owner journal / trade history browser.
+/// Dashboard → Trades, owner journal / trade history browser.
 struct TradeHistoryView: View {
     @State private var viewModel: TradeHistoryViewModel
     @State private var browseLayout = TradeHistoryBrowseLayoutStore.layout()
     private let imagePipeline: any ImagePipeline
     private let engagementStore: EngagementStore
+    private let injectedShareData: DataEnvironment?
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.appEnvironment) private var appEnvironment
 
     init(
         data: DataEnvironment,
@@ -26,6 +28,7 @@ struct TradeHistoryView: View {
         )
         self.imagePipeline = data.imagePipeline
         self.engagementStore = data.engagementStore
+        self.injectedShareData = data
     }
 
     init(
@@ -36,6 +39,11 @@ struct TradeHistoryView: View {
         _viewModel = State(initialValue: viewModel)
         self.imagePipeline = imagePipeline
         self.engagementStore = engagementStore
+        self.injectedShareData = nil
+    }
+
+    private var shareData: DataEnvironment {
+        injectedShareData ?? appEnvironment.data
     }
 
     private var usesPictureGrid: Bool {
@@ -154,8 +162,16 @@ struct TradeHistoryView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
-        .sheet(item: $viewModel.sharePayload) { payload in
-            TradeHistoryShareSheet(items: [payload.text])
+        .sheet(item: $viewModel.journalSharePresentation) { presentation in
+            SharedContentShareSheet(
+                target: presentation.target,
+                data: shareData,
+                tradeOwnerShareAccess: presentation.ownerAccess,
+                onTradeVisibilityUpdated: { trade in
+                    viewModel.applyOwnerTradeVisibilityUpdate(trade)
+                },
+                onClose: { viewModel.journalSharePresentation = nil }
+            )
         }
         .accessibilityIdentifier("trades.home")
         .firstTradeDetailCoachmarkHost()
@@ -367,7 +383,7 @@ struct TradeHistoryView: View {
                         }
                         .padding(.horizontal, ExperienceSpacing.sm)
                         .padding(.vertical, 6)
-                        .background(colors.fillSecondary, in: Capsule())
+                        .experienceFilterCapsule()
                     }
                     .buttonStyle(.experiencePlain)
                     .accessibilityLabel("Remove \(chip.title) filter")

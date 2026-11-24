@@ -96,7 +96,7 @@ nonisolated enum BrokerSyncFailureResolution: Equatable, Sendable {
         }
     }
 
-    /// Existing linked Tradovate mapping — any import failure offers reconnect (never Retry-only).
+    /// Existing linked Tradovate mapping, any import failure offers reconnect (never Retry-only).
     static func tradovateLinkedImportFailureAction(
         for resolution: BrokerSyncFailureResolution,
         response: TradovateAccountSyncResponse

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Advanced Trade History filters — applied on confirm.
+/// Advanced Trade History filters, applied on confirm.
 struct TradeHistoryFilterSheet: View {
     @Bindable var viewModel: TradeHistoryViewModel
     @Environment(\.themeColors) private var colors

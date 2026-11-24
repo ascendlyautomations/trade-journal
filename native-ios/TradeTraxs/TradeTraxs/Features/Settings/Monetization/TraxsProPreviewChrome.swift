@@ -11,73 +11,19 @@ extension EnvironmentValues {
     }
 }
 
-nonisolated enum TraxsProPreviewBannerStyle: Sendable {
-    case standard
-    case compact
-}
-
-/// Persistent chrome for TraxsPro interactive previews (Reports + Dashboard).
-struct TraxsProPreviewSampleDataBanner: View {
+/// Shared sample-data chrome for every TraxsPro full-screen preview (Dashboard reference layout).
+struct TraxsProSampleDataHeader: View {
     let unlockFeature: ProFeatureKind
     var subtitle: String = MonetizationPlanCopy.traxsProPreviewGenericSubtitle
-    var style: TraxsProPreviewBannerStyle = .standard
     var onExit: () -> Void
     var onUnlock: () -> Void
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Group {
-            switch style {
-            case .standard:
-                standardBanner
-            case .compact:
-                compactBanner
-            }
-        }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.vertical, style == .compact ? ExperienceSpacing.xs : ExperienceSpacing.sm)
-        .background(colors.surfacePrimary.opacity(0.98))
-        .overlay(alignment: .bottom) {
-            Divider()
-                .background(colors.border.opacity(0.6))
-        }
-        .accessibilityIdentifier("traxspro.preview.banner")
-    }
-
-    private var standardBanner: some View {
-        VStack(spacing: ExperienceSpacing.xs) {
-            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-                sampleDataIcon(compact: false)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sample Data")
-                        .experienceStyle(.headline, color: colors.primaryText)
-                    Text(subtitle)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: ExperienceSpacing.xs)
-                Button(MonetizationPlanCopy.exitPreviewButtonTitle, action: onExit)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(colors.secondaryText)
-                    .accessibilityIdentifier("traxspro.preview.exit")
-            }
-
-            if canPresentPaywall {
-                Button(action: onUnlock) {
-                    Text(MonetizationPlanCopy.paywallUnlockTitle)
-                        .font(.caption.weight(.semibold))
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .accessibilityIdentifier("traxspro.preview.unlock")
-            }
-        }
-    }
-
-    private var compactBanner: some View {
         HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-            sampleDataIcon(compact: true)
+            sampleDataIcon
             VStack(alignment: .leading, spacing: 2) {
                 Text("Sample Data")
                     .font(.subheadline.weight(.bold))
@@ -111,11 +57,28 @@ struct TraxsProPreviewSampleDataBanner: View {
             }
             .fixedSize(horizontal: true, vertical: false)
         }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.xs)
+        .background(colors.surfacePrimary)
+        .overlay {
+            if colorScheme == .light {
+                Rectangle()
+                    .strokeBorder(
+                        colors.border.opacity(ExperienceDashboardSurface.LightChrome.borderOpacity),
+                        lineWidth: ExperienceBorder.hairline
+                    )
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Divider()
+                .background(colors.border.opacity(0.6))
+        }
+        .accessibilityIdentifier("traxspro.preview.banner")
     }
 
-    private func sampleDataIcon(compact: Bool) -> some View {
+    private var sampleDataIcon: some View {
         Image(systemName: "doc.text.magnifyingglass")
-            .font(compact ? .subheadline.weight(.semibold) : .title3.weight(.semibold))
+            .font(.subheadline.weight(.semibold))
             .foregroundStyle(colors.accent)
             .accessibilityHidden(true)
     }

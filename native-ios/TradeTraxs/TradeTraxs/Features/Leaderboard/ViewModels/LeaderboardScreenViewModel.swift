@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Canonical Leaderboards screen owner — one bootstrap, one ``LeaderboardState``.
+/// Canonical Leaderboards screen owner, one bootstrap, one ``LeaderboardState``.
 @Observable
 @MainActor
 final class LeaderboardScreenViewModel: ScreenLifecycle {
@@ -129,7 +129,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         }
     }
 
-    /// Current profile for a visible row — always reads the shared session dictionary.
+    /// Current profile for a visible row, always reads the shared session dictionary.
     func resolvedProfile(for profileID: ProfileID) -> Profile {
         _ = profileRevision
         return LeaderboardPresentation.resolveProfile(profileID, from: store.profilesByID)

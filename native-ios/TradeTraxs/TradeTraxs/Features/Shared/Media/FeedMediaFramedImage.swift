@@ -1,1 +1,1 @@
-// Legacy module path — see TradeTraxsContentImage.swift
+// Legacy module path, see TradeTraxsContentImage.swift

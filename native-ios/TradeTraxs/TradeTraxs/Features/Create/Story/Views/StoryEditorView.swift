@@ -1,7 +1,7 @@
 import AVFoundation
 import SwiftUI
 
-/// Full-screen Instagram-style story editor — crop/zoom image + text overlays.
+/// Full-screen Instagram-style story editor, crop/zoom image + text overlays.
 struct StoryEditorView: View {
     @State private var viewModel: StoryEditorViewModel
     @FocusState private var textFieldFocused: Bool

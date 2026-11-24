@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 #if DEBUG
-/// DEBUG-only session bootstrap auth diagnostics — never logs tokens.
+/// DEBUG-only session bootstrap auth diagnostics, never logs tokens.
 @MainActor
 enum SessionBootstrapAuthDebug {
     static var snapshotProvider: () -> (
@@ -29,7 +29,7 @@ enum SessionBootstrapAuthDebug {
 
     static func requestCompleted(responseStatus: Int?, classification: String) {
         let snap = snapshotProvider()
-        let statusLabel = responseStatus.map(String.init) ?? "—"
+        let statusLabel = responseStatus.map(String.init) ?? "–"
         logger.debug(
             """
             [SessionBootstrapAuth] request.completed sessionPhase=\(snap.sessionPhase, privacy: .public) \
