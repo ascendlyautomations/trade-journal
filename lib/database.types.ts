@@ -4167,6 +4167,45 @@ export type Database = {
           },
         ]
       }
+      room_live_broadcast_chat_trade_shares: {
+        Row: {
+          broadcast_session_id: string
+          chat_message_id: string
+          shared_at: string
+          shared_by_user_id: string
+          trade_id: string
+        }
+        Insert: {
+          broadcast_session_id: string
+          chat_message_id: string
+          shared_at?: string
+          shared_by_user_id: string
+          trade_id: string
+        }
+        Update: {
+          broadcast_session_id?: string
+          chat_message_id?: string
+          shared_at?: string
+          shared_by_user_id?: string
+          trade_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_live_broadcast_chat_trade_shares_broadcast_session_id_fkey"
+            columns: ["broadcast_session_id"]
+            isOneToOne: false
+            referencedRelation: "room_live_broadcasts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_live_broadcast_chat_trade_shares_trade_id_fkey"
+            columns: ["trade_id"]
+            isOneToOne: false
+            referencedRelation: "trades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_live_broadcast_hands: {
         Row: {
           broadcast_session_id: string
@@ -6913,6 +6952,10 @@ export type Database = {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
       }
+      can_read_broadcast_chat_trade_share: {
+        Args: { p_broadcast_session_id: string }
+        Returns: boolean
+      }
       can_read_trade_room_messages: {
         Args: { p_room_id: string }
         Returns: boolean
@@ -7691,6 +7734,14 @@ export type Database = {
       }
       rpc_v1_ban_trade_room_member: {
         Args: { p_room_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      rpc_v1_broadcast_chat_register_trade_share: {
+        Args: {
+          p_broadcast_session_id: string
+          p_chat_message_id: string
+          p_trade_id: string
+        }
         Returns: undefined
       }
       rpc_v1_broker_integration_status: {
