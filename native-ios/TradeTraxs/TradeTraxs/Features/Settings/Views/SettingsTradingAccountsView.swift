@@ -70,21 +70,38 @@ struct SettingsTradingAccountsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        List {
             if !viewModel.accounts.isEmpty {
-                ManageAccountsFilterBar(viewModel: viewModel)
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.top, ExperienceSpacing.xs)
-                    .padding(.bottom, ExperienceSpacing.xxs)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Section {
+                    ManageAccountsFilterBar(viewModel: viewModel)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: ExperienceSpacing.xs,
+                                leading: ExperienceSpacing.md,
+                                bottom: ExperienceSpacing.xxs,
+                                trailing: ExperienceSpacing.md
+                            )
+                        )
+                        .listRowBackground(colors.backgroundPrimary)
+                        .listRowSeparator(.hidden)
+                }
             }
 
-            List {
             if let error = viewModel.errorMessage {
                 Section {
                     SettingsInlineError(message: error) {
                         Task { await viewModel.refresh() }
                     }
+                }
+            }
+
+            if let formError = viewModel.formError {
+                Section {
+                    Text(formError)
+                        .experienceStyle(.footnote, color: colors.loss)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("manageAccounts.saveAccountDisplay.error")
                 }
             }
 
@@ -145,12 +162,10 @@ struct SettingsTradingAccountsView: View {
                     yourAccountsSectionHeader
                 }
             }
-            }
-            .experienceInsetGroupedListStyle(pageBackground: false)
-            .listSectionSpacing(ExperienceSpacing.xxs)
-            .contentMargins(.top, viewModel.accounts.isEmpty ? ExperienceSpacing.xs : 0, for: .scrollContent)
         }
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: false)
+        .listSectionSpacing(ExperienceSpacing.xxs)
+        .contentMargins(.top, viewModel.accounts.isEmpty ? ExperienceSpacing.xs : 0, for: .scrollContent)
         .experienceNavigationTitle("Manage Accounts")
         .navigationBarBackButtonHidden(viewModel.hasUnsavedAccountDisplayChanges)
         .background {

@@ -2,13 +2,18 @@ import SwiftUI
 
 struct CommentComposerView: View {
     @Bindable var viewModel: CommentsViewModel
-    var viewerProfile: Profile?
     var imagePipeline: (any ImagePipeline)?
 
     @Environment(\.themeColors) private var colors
     @FocusState private var focused: Bool
     /// Vertical `TextField` can report Return as both a newline and `onSubmit`.
     @State private var keyboardSendScheduled = false
+    @State private var pendingPrivateTradeConfirm: Trade?
+
+    private var canPost: Bool {
+        let text = viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !text.isEmpty || viewModel.pendingSharedTrade != nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
@@ -16,14 +21,17 @@ struct CommentComposerView: View {
                 replyBanner(for: replyTarget)
             }
 
-            HStack(alignment: .bottom, spacing: ExperienceSpacing.sm) {
-                if let viewerProfile, let imagePipeline {
-                    FollowListAvatarView(
-                        profile: viewerProfile,
-                        imagePipeline: imagePipeline,
-                        size: 32
-                    )
+            if let trade = viewModel.pendingSharedTrade, let imagePipeline {
+                pendingTradePreview(trade: trade, imagePipeline: imagePipeline)
+                if trade.visibility == .private {
+                    Text(CommentTradeShareSupport.privateAttachmentDisclaimer)
+                        .experienceStyle(.caption2, color: colors.secondaryText)
+                        .padding(.horizontal, ExperienceSpacing.xs)
                 }
+            }
+
+            HStack(alignment: .bottom, spacing: ExperienceSpacing.sm) {
+                attachmentLauncher
 
                 TextField(
                     viewModel.replyTarget == nil ? "Add a comment…" : "Add to reply…",
@@ -44,6 +52,9 @@ struct CommentComposerView: View {
                     viewModel.draft = previous
                     submitFromKeyboard()
                 }
+                .onChange(of: focused) { _, isFocused in
+                    viewModel.maintainKeyboardScrollAnchor = isFocused
+                }
                 .accessibilityIdentifier("interaction.comment.composer")
                 .experienceTextInputProbe(
                     screen: "comments",
@@ -62,31 +73,115 @@ struct CommentComposerView: View {
                             Image(systemName: "arrow.up.circle.fill")
                                 .font(.system(size: 28))
                                 .foregroundStyle(
-                                    viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                        ? colors.tertiaryText
-                                        : colors.accent
+                                    canPost ? colors.accent : colors.tertiaryText
                                 )
                         }
                     }
                     .experienceTouchTarget()
                 }
                 .buttonStyle(.experiencePlain)
-                .disabled(
-                    viewModel.isPosting
-                        || viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                )
+                .disabled(viewModel.isPosting || !canPost)
                 .accessibilityLabel("Post comment")
                 .accessibilityIdentifier("interaction.comment.send")
             }
         }
         .onChange(of: viewModel.composerFocusToken) { _, _ in
             focused = true
+            viewModel.maintainKeyboardScrollAnchor = true
         }
         .experienceFormFocusSync($focused)
-        .background {
-            CommentComposerKeyboardVisibility()
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+        .alert(
+            "Attach private trade?",
+            isPresented: Binding(
+                get: { pendingPrivateTradeConfirm != nil },
+                set: { if !$0 { pendingPrivateTradeConfirm = nil } }
+            )
+        ) {
+            Button("Attach", role: .none) {
+                if let trade = pendingPrivateTradeConfirm {
+                    viewModel.stageSharedTrade(trade)
+                }
+                pendingPrivateTradeConfirm = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingPrivateTradeConfirm = nil
+            }
+        } message: {
+            Text(CommentTradeShareSupport.privateAttachmentDisclaimer)
+        }
+        .sheet(isPresented: $viewModel.showsTradePicker) {
+            if let imagePipeline {
+                TradeSharePickerSheet(
+                    trades: viewModel.tradePickerTrades,
+                    imagePipeline: imagePipeline,
+                    isLoading: viewModel.isLoadingTradePicker,
+                    title: "Attach Trade",
+                    onSelect: { trade in
+                        if trade.visibility == .private {
+                            pendingPrivateTradeConfirm = trade
+                        } else {
+                            viewModel.stageSharedTrade(trade)
+                        }
+                    },
+                    onClose: {
+                        viewModel.showsTradePicker = false
+                    }
+                )
+                .task {
+                    await viewModel.loadTradePickerIfNeeded()
+                }
+            }
+        }
+    }
+
+    private var attachmentLauncher: some View {
+        Menu {
+            Button {
+                viewModel.presentTradePicker()
+            } label: {
+                Label("Trade", systemImage: "chart.line.uptrend.xyaxis")
+            }
+            .accessibilityIdentifier("interaction.comment.attach.trade")
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(colors.accent)
+                .frame(width: 28, height: 28)
+                .background(colors.fillSecondary, in: Circle())
+                .frame(
+                    width: ExperienceAccessibility.minTouchTarget,
+                    height: ExperienceAccessibility.minTouchTarget
+                )
+                .contentShape(Rectangle())
+                .experienceControlHitTarget()
+        }
+        .menuStyle(.button)
+        .buttonStyle(.experiencePlain)
+        .fixedSize(horizontal: true, vertical: true)
+        .disabled(viewModel.isPosting)
+        .accessibilityLabel("Add attachment")
+        .accessibilityIdentifier("interaction.comment.attach")
+    }
+
+    @ViewBuilder
+    private func pendingTradePreview(trade: Trade, imagePipeline: any ImagePipeline) -> some View {
+        HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
+            SharedTradePreviewCard(
+                trade: trade,
+                tradeID: trade.id,
+                imagePipeline: imagePipeline,
+                style: .composerStrip
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                viewModel.clearPendingSharedTrade()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(colors.tertiaryText)
+            }
+            .buttonStyle(.experiencePlain)
+            .accessibilityLabel("Remove attached trade")
         }
     }
 
@@ -94,8 +189,7 @@ struct CommentComposerView: View {
     /// One key press must not run it twice.
     private func submitFromKeyboard() {
         guard !keyboardSendScheduled else { return }
-        let text = viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !viewModel.isPosting else { return }
+        guard canPost, !viewModel.isPosting else { return }
         keyboardSendScheduled = true
         Task { @MainActor in
             await viewModel.submit()

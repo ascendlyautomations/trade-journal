@@ -13,8 +13,8 @@ final class BroadcastChromeVisibilityTests: XCTestCase {
         )
     }
 
-    func testObsHostBarVisibleWhenLiveAndSheetDismissed() {
-        XCTAssertTrue(
+    func testObsHostBarNeverShownUsesFloatingMiniPlayerInstead() {
+        XCTAssertFalse(
             BroadcastChromeVisibility.shouldShowObsHostBar(
                 hasHostBarSession: true,
                 isLivePublic: true,

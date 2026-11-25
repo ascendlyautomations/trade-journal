@@ -52,7 +52,11 @@ enum OwnerAccountDropdownSupport {
             if kind == .rest {
                 return cached
             }
-            return mergePreferringOwnerFields(primary: cached, secondary: fallback)
+            let withInsights = overlayInsightsFromDiskSnapshot(
+                cached,
+                profileID: profileID
+            )
+            return mergePreferringOwnerFields(primary: withInsights, secondary: fallback)
         }
         if let disk = SessionDiskCache.loadAccounts(for: profileID),
            !disk.isEmpty,
@@ -214,7 +218,33 @@ enum OwnerAccountDropdownSupport {
         if merged.size == nil { merged.size = other.size }
         if merged.propFirmRules == nil { merged.propFirmRules = other.propFirmRules }
         if merged.customPublicStatus == nil { merged.customPublicStatus = other.customPublicStatus }
+        if merged.showInAccountDropdowns != other.showInAccountDropdowns {
+            merged.showInAccountDropdowns = other.showInAccountDropdowns
+        }
         return merged
+    }
+
+    /// Session disk cache is written from REST owner selects and carries authoritative insights toggles.
+    private static func overlayInsightsFromDiskSnapshot(
+        _ accounts: [TradingAccount],
+        profileID: ProfileID
+    ) -> [TradingAccount] {
+        guard let disk = SessionDiskCache.loadAccounts(for: profileID),
+              !disk.isEmpty,
+              !TradingAccountOwnerDiagnostics.looksLikeSessionSummaryStub(disk)
+        else { return accounts }
+        let insightsByID = Dictionary(
+            uniqueKeysWithValues: disk.map { account in
+                (account.id, (account.showInAccountDropdowns, account.customPublicStatus))
+            }
+        )
+        return accounts.map { account in
+            guard let insight = insightsByID[account.id] else { return account }
+            var merged = account
+            merged.showInAccountDropdowns = insight.0
+            if let status = insight.1 { merged.customPublicStatus = status }
+            return merged
+        }
     }
 }
 

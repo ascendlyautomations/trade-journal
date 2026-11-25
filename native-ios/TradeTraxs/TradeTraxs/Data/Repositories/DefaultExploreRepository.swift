@@ -17,7 +17,6 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
                     "id,username,name,bio,avatar_url,trader_type,trading_style,trading_model,primary_market,started_trading,is_private,created_at"
                 ),
                 URLQueryItem(name: "username", value: "not.is.null"),
-                URLQueryItem(name: "is_private", value: "neq.true"),
                 URLQueryItem(name: "avatar_url", value: "not.is.null"),
                 URLQueryItem(name: "order", value: "created_at.desc"),
                 URLQueryItem(name: "limit", value: String(capped)),
@@ -45,7 +44,6 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         var query: [URLQueryItem] = [
             SupabaseQuery.select(columns),
             URLQueryItem(name: "username", value: "not.is.null"),
-            URLQueryItem(name: "is_private", value: "neq.true"),
             URLQueryItem(name: "order", value: "created_at.desc"),
             URLQueryItem(name: "offset", value: String(offset)),
             URLQueryItem(name: "limit", value: String(limit)),

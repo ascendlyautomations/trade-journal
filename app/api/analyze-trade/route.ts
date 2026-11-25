@@ -14,6 +14,8 @@ import {
   analyzeTradeFailureFromError,
   getOpenAiClient,
   openAiApiKey,
+  openAiErrorMetaForLog,
+  openAiRetryDelayMs,
 } from "@/lib/server/openAiRouteSupport"
 import { requireAIFeatureEntitlement } from "@/lib/server/requireAIFeatureEntitlement"
 import type { Database } from "@/lib/database.types"
@@ -97,20 +99,30 @@ async function createTradeAnalysisCompletion(
     })
 
   if (!imageUrl) {
-    return run(false)
+    return runWithTransientRetry(() => run(false))
   }
 
   try {
-    return await run(true)
+    return await runWithTransientRetry(() => run(true))
   } catch (error) {
     if (!isOpenAiImageFetchError(error)) {
       throw error
     }
-    console.warn(
-      "[analyze-trade] Screenshot unavailable. Proceeding with trade-only analysis.",
-      error
-    )
-    return run(false)
+    console.warn("[analyze-trade] Screenshot unavailable; trade-only analysis.", {
+      openAi: openAiErrorMetaForLog(error),
+    })
+    return runWithTransientRetry(() => run(false))
+  }
+}
+
+async function runWithTransientRetry<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    const delayMs = openAiRetryDelayMs(error)
+    if (delayMs == null) throw error
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+    return operation()
   }
 }
 
@@ -303,8 +315,7 @@ export async function POST(req: Request) {
       code: failure.code,
       tradeId: String(tradeId),
       userId: user.id,
-      detail: failure.detail,
-      error,
+      openAi: openAiErrorMetaForLog(error),
     })
     return NextResponse.json(
       {

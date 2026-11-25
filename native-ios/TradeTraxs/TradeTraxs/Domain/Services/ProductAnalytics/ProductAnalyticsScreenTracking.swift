@@ -8,7 +8,7 @@ enum ProductAnalyticsScreenTracking {
             ProductAnalyticsCoordinator.shared.noteScreen(.trades)
         case .tradeDetail:
             ProductAnalyticsCoordinator.shared.noteScreen(.tradeDetail)
-        case .calendar, .tradingDay:
+        case .calendar, .tradingDay, .backtestCalendar, .backtestTradingDay:
             ProductAnalyticsCoordinator.shared.noteScreen(.calendar)
         case .reports, .report:
             ProductAnalyticsCoordinator.shared.noteScreen(.reports)

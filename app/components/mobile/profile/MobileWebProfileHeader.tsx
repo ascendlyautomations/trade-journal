@@ -40,6 +40,7 @@ type MobileWebProfileHeaderProps = {
   onCreateRoom: () => void
   onViewRoom: () => void
   overviewVisible: boolean
+  overviewPublicHeaderOnly?: boolean
   overviewIsPrivate: boolean
   overviewTotalTrades: number
   overviewPostsCount: number | null
@@ -139,6 +140,7 @@ export default function MobileWebProfileHeader({
   onCreateRoom,
   onViewRoom,
   overviewVisible,
+  overviewPublicHeaderOnly = false,
   overviewIsPrivate,
   overviewTotalTrades,
   overviewPostsCount,
@@ -252,6 +254,7 @@ export default function MobileWebProfileHeader({
 
       <MobileWebProfileStatsRow
         visible={overviewVisible}
+        publicHeaderOnly={overviewPublicHeaderOnly}
         isPrivate={overviewIsPrivate}
         totalTrades={overviewTotalTrades}
         postsCount={overviewPostsCount}

@@ -63,6 +63,9 @@ struct MessagesHomeView: View {
                         onRetry: { Task { await viewModel.refresh() } }
                     )
                 }
+            case .loaded where ExploreModeSupport.skipsAuthenticatedViewerServices:
+                guestMessagesUnavailableState
+                    .experienceScreenContentAreaFill(alignment: .center)
             case .loaded where viewModel.showsEmpty:
                 messagesEmptyState
                     .experienceScreenContentAreaFill(alignment: .center)
@@ -82,14 +85,16 @@ struct MessagesHomeView: View {
                 .accessibilityLabel("Settings")
                 .accessibilityIdentifier("messages.settings")
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    viewModel.presentNewChat()
-                } label: {
-                    ExperienceIcon(icon: .compose, size: .md, color: colors.accent)
+            if !ExploreModeSupport.isActive {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        viewModel.presentNewChat()
+                    } label: {
+                        ExperienceIcon(icon: .compose, size: .md, color: colors.accent)
+                    }
+                    .accessibilityLabel("New Chat")
+                    .accessibilityIdentifier("messages.newChat")
                 }
-                .accessibilityLabel("New Chat")
-                .accessibilityIdentifier("messages.newChat")
             }
         }
         .searchable(
@@ -550,6 +555,30 @@ struct MessagesHomeView: View {
             hint: "Start a conversation with another trader.",
             identifier: "messages.emptyState"
         )
+    }
+
+    private var guestMessagesUnavailableState: some View {
+        VStack(spacing: ExperienceSpacing.sm) {
+            ExperienceIcon(icon: .messages, size: .md, color: colors.tertiaryText)
+            Text("Messages require an account")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.primaryText)
+            Text("Guest Mode can explore public Feed, profiles, and the showcase journal. Sign in to message other traders.")
+                .font(.caption)
+                .foregroundStyle(colors.secondaryText)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            ExperienceButton(
+                title: "Create Account",
+                kind: .primary,
+                accessibilityIdentifier: "messages.guest.createAccount"
+            ) {
+                AppLaunchController.shared.exitDemoExplore(authIntent: .createAccount)
+            }
+            .padding(.top, ExperienceSpacing.xs)
+        }
+        .padding(.horizontal, ExperienceSpacing.lg)
+        .accessibilityIdentifier("messages.guest.unavailable")
     }
 }
 

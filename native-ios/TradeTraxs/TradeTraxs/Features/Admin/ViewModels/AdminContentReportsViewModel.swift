@@ -37,7 +37,7 @@ final class AdminContentReportsViewModel {
             nextOffset = page.rows.count
         } catch {
             snapshots = []
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 
@@ -60,7 +60,7 @@ final class AdminContentReportsViewModel {
             hasMore = page.hasMore
             nextOffset += page.rows.count
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 

@@ -9,6 +9,13 @@ final class TradeRoomLiveSessionChromeMetrics {
     private(set) var bottomInset: CGFloat = 0
     /// When true, ``RoomConversationView`` renders session chrome flush above the composer (tab shell skips its inset).
     private(set) var roomConversationEmbedsSessionChrome = false
+    /// When true, a screen hosts voice chrome under its navigation header (tab shell skips its inset).
+    private(set) var topSessionChromeEmbedded = false
+
+    func setTopSessionChromeEmbedded(_ embedded: Bool) {
+        guard topSessionChromeEmbedded != embedded else { return }
+        topSessionChromeEmbedded = embedded
+    }
 
     func setRoomConversationEmbedsSessionChrome(_ embeds: Bool) {
         guard roomConversationEmbedsSessionChrome != embeds else { return }

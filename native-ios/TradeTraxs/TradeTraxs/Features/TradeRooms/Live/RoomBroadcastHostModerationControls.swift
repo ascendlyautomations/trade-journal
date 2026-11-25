@@ -33,7 +33,7 @@ struct RoomBroadcastHostModerationControls: View {
             if surface == .raisedHand {
                 inviteButton(label: isBusy ? "Inviting…" : "Invite")
             } else if !isSpeaker, !isPendingInvite {
-                inviteButton(label: "Invite to speak")
+                inviteButton(label: isBusy ? "Inviting…" : "Invite")
             }
 
             Menu {
@@ -73,9 +73,16 @@ struct RoomBroadcastHostModerationControls: View {
             )
         }
         .font(.system(.caption, design: .rounded).weight(.semibold))
-        .buttonStyle(.borderedProminent)
-        .tint(colors.accent)
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.horizontal, ExperienceSpacing.sm)
+        .padding(.vertical, 6)
+        .background(colors.accent)
+        .foregroundStyle(colors.onAccent)
+        .clipShape(Capsule(style: .continuous))
+        .buttonStyle(.experiencePlain)
         .disabled(isBusy || isSpeaker || isPendingInvite)
+        .accessibilityIdentifier("broadcast.moderation.invite")
     }
 
     private func run(

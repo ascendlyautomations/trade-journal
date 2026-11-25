@@ -27,6 +27,7 @@ struct ManageAccountsFilterBar: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             filterMenu(
                 title: viewModel.modeFilter.menuTitle,
@@ -51,27 +52,9 @@ struct ManageAccountsFilterBar: View {
                     }
                 }
             }
-
-            filterMenu(
-                title: "Sort: \(viewModel.sort.menuTitle)",
-                accessibilityID: "manageAccounts.filter.sort"
-            ) {
-                ForEach(
-                    [
-                        ManageAccountsFiltering.Sort.accountName,
-                        .propFirm,
-                        .accountType,
-                    ],
-                    id: \.self
-                ) { option in
-                    Button {
-                        viewModel.setSort(option)
-                    } label: {
-                        filterRow(option.menuTitle, selected: viewModel.sort == option)
-                    }
-                }
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("manageAccounts.filterBar")
     }
 
@@ -88,10 +71,11 @@ struct ManageAccountsFilterBar: View {
                 Text(title)
                     .experienceStyle(.footnote, color: colors.primaryText)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.secondaryText)
             }
             .padding(.horizontal, ExperienceSpacing.sm)
-            .frame(minHeight: 32)
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
             .experienceFilterCapsule()
             .experienceControlHitTarget()
         }

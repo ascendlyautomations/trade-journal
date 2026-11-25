@@ -55,6 +55,8 @@ nonisolated enum NavigationPathProbeFormatter {
         case .propFirmPayouts: return "propFirmPayouts"
         case .analyst: return "analyst"
         case .backtest: return "backtest"
+        case .backtestCalendar: return "backtestCalendar"
+        case .backtestTradingDay: return "backtestTradingDay"
         case .achievements: return "achievements"
         case .achievementDetail: return "achievementDetail"
         case .streaks: return "streaks"
@@ -66,6 +68,8 @@ nonisolated enum NavigationPathProbeFormatter {
         case .tradingRulesAnalytics: return "tradingRulesAnalytics"
         case .tradingRulesRuleDetail: return "tradingRulesRuleDetail"
         case .tradingRulesDayDetail: return "tradingRulesDayDetail"
+        case .tradingRulesTrends: return "tradingRulesTrends"
+        case .tradingRulesViolationHistory: return "tradingRulesViolationHistory"
         case .tradingScorecard: return "tradingScorecard"
         case .psychologyCoach: return "psychologyCoach"
         case .checkInHistory: return "checkInHistory"
@@ -109,6 +113,8 @@ nonisolated enum NavigationPathProbeFormatter {
         case .tradingRulesAnalytics: return "tradingRulesAnalytics"
         case .tradingRulesRuleDetail: return "tradingRulesRuleDetail"
         case .tradingRulesDayDetail: return "tradingRulesDayDetail"
+        case .tradingRulesTrends: return "tradingRulesTrends"
+        case .tradingRulesViolationHistory: return "tradingRulesViolationHistory"
         }
     }
 
@@ -132,6 +138,8 @@ nonisolated enum NavigationPathProbeFormatter {
         case .tradingRulesAnalytics: return "tradingRulesAnalytics"
         case .tradingRulesRuleDetail: return "tradingRulesRuleDetail"
         case .tradingRulesDayDetail: return "tradingRulesDayDetail"
+        case .tradingRulesTrends: return "tradingRulesTrends"
+        case .tradingRulesViolationHistory: return "tradingRulesViolationHistory"
         }
     }
 
@@ -161,6 +169,8 @@ nonisolated enum NavigationPathProbeFormatter {
         case .tradingRulesAnalytics: return "tradingRulesAnalytics"
         case .tradingRulesRuleDetail: return "tradingRulesRuleDetail"
         case .tradingRulesDayDetail: return "tradingRulesDayDetail"
+        case .tradingRulesTrends: return "tradingRulesTrends"
+        case .tradingRulesViolationHistory: return "tradingRulesViolationHistory"
         }
     }
 }

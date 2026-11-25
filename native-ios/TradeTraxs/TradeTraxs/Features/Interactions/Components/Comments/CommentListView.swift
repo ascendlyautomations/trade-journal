@@ -3,8 +3,10 @@ import SwiftUI
 /// Reusable comment list, Trade / Post / Clip detail and Clips bottom sheet.
 struct CommentListView: View {
     enum Presentation {
-        /// Full detail section, header, sort, list, composer.
+        /// Full detail section: header + list + inline composer (legacy).
         case detail
+        /// List + header inside parent scroll; composer pinned externally.
+        case embeddedList
         /// Sheet scroll body, list rows only (header/composer provided by sheet chrome).
         case sheetScrollContent
     }
@@ -22,7 +24,7 @@ struct CommentListView: View {
     var body: some View {
         Group {
             switch presentation {
-            case .detail:
+            case .detail, .embeddedList:
                 detailBody
             case .sheetScrollContent:
                 commentThreadContent
@@ -54,7 +56,9 @@ struct CommentListView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             commentHeader
             commentThreadContent
-            CommentComposerView(viewModel: viewModel)
+            if presentation == .detail {
+                CommentComposerView(viewModel: viewModel)
+            }
         }
     }
 
@@ -102,6 +106,7 @@ struct CommentListView: View {
                         comment: comment,
                         isOwn: currentUserID == comment.authorProfileID,
                         imagePipeline: imagePipeline,
+                        sharedTrade: viewModel.sharedTrade(for: comment),
                         likeSnapshot: viewModel.likeSnapshot(for: comment.id),
                         canLike: viewModel.canLikeComments,
                         isLikeBusy: viewModel.isCommentLikeBusy(comment.id),
@@ -120,7 +125,8 @@ struct CommentListView: View {
                                 pendingDelete = comment
                             }
                             : nil,
-                        onReport: commentReportAction(for: comment)
+                        onReport: commentReportAction(for: comment),
+                        onSharedTradeTap: openSharedTrade
                     )
                     CommentReplyThreadView(
                         viewModel: viewModel,
@@ -131,11 +137,25 @@ struct CommentListView: View {
                             ExperienceHaptics.play(.warning)
                             pendingDelete = reply
                         },
-                        commentReportAction: commentReportAction(for:)
+                        commentReportAction: commentReportAction(for:),
+                        onSharedTradeTap: openSharedTrade
                     )
                 }
+                Color.clear
+                    .frame(height: 1)
+                    .id(CommentThreadScrollIDs.threadBottom)
             }
         }
+    }
+
+    private func openSharedTrade(_ tradeID: TradeID) {
+        ExperienceHaptics.play(.selection)
+        let preview = viewModel.sharedTrades[tradeID]
+        appEnvironment.navigation.coordinator.pushSocialTrade(
+            tradeID,
+            cache: appEnvironment.data.detailCache,
+            preview: preview
+        )
     }
 
     private func commentReportAction(for comment: InteractionComment) -> (() -> Void)? {

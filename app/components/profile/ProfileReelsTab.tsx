@@ -51,7 +51,7 @@ function ProfileReelsTab({
             className="py-10"
           />
         ) : !canView ? (
-          <ProfilePrivateTabMessage variant="reels" />
+          <ProfilePrivateTabMessage />
         ) : (
           <p className="text-center text-sm text-gray-400">No clips yet.</p>
         )

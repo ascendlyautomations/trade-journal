@@ -9,7 +9,6 @@ struct RoomInfoView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var logoImage: Image?
     @State private var ownerAvatarImage: Image?
-    @State private var inviteLinkCopied = false
     @State private var showsInviteShareSheet = false
 
     init(
@@ -253,7 +252,7 @@ struct RoomInfoView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(colors.accent)
                 .accessibilityIdentifier("tradeRooms.info.invite.share")
-                Button(inviteLinkCopied ? "Copied" : "Copy") {
+                Button("Copy") {
                     copyInviteLink()
                 }
                 .font(.subheadline.weight(.semibold))
@@ -343,14 +342,8 @@ struct RoomInfoView: View {
     }
 
     private func copyInviteLink() {
-        UIPasteboard.general.string = viewModel.inviteLink
+        guard ExperienceClipboard.copy(viewModel.inviteLink) else { return }
         ExperienceHaptics.play(.selection)
-        inviteLinkCopied = true
-        viewModel.statusMessage = "Invite link copied."
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            inviteLinkCopied = false
-        }
     }
 
     private func roomLogo(size: CGFloat) -> some View {

@@ -138,37 +138,12 @@ nonisolated enum TradingReportGenerator {
     // MARK: - Metrics
 
     private static func buildMetrics(_ trades: [Trade]) -> TradingReportMetrics {
-        let priced = trades.compactMap { knownPnl($0) }
-        let wins = priced.filter { $0 > 0 }.count
-        let winRate = priced.isEmpty ? 0 : (Double(wins) / Double(priced.count)) * 100
-        let totalPnL = priced.reduce(0, +)
-        let avgRR = averageRr(trades)
-        let daily = computeDailyPnl(trades)
-        let sessions = computeSessionPnl(trades)
-        let bestDay = pickExtremeDay(daily, mode: .best)
-        let worstDay = pickExtremeDay(daily, mode: .worst)
-        let bestSession = pickExtremeSession(sessions, mode: .best)
-        let worstSession = pickExtremeSession(sessions, mode: .worst)
-        let sameDay = bestDay.label != nil && bestDay.label == worstDay.label
+        TradingReportGeneratorMetricsBridge.buildMetrics(from: trades, includeSessionExtremes: true)
+    }
 
-        return TradingReportMetrics(
-            netPnl: totalPnL,
-            winRate: winRate,
-            knownResultCount: priced.count,
-            averageRr: avgRR,
-            profitFactor: computeProfitFactor(trades),
-            tradesTaken: trades.count,
-            bestDayLabel: sameDay ? nil : bestDay.label,
-            bestDayPnl: sameDay ? nil : bestDay.pnl,
-            worstDayLabel: sameDay ? nil : worstDay.label,
-            worstDayPnl: sameDay ? nil : worstDay.pnl,
-            bestSessionLabel: bestSession.label,
-            bestSessionPnl: bestSession.pnl,
-            worstSessionLabel: worstSession.label,
-            worstSessionPnl: worstSession.pnl,
-            mostTradedSymbol: mostTradedTicker(trades),
-            averageHoldTimeSeconds: averageHoldSeconds(trades)
-        )
+    private static func averageTargetedRr(_ trades: [Trade]) -> Double? {
+        guard let average = TradePointsAndRealizedRr.averageTargetedRr(trades: trades) else { return nil }
+        return NSDecimalNumber(decimal: average).doubleValue
     }
 
     private static func knownPnl(_ trade: Trade) -> Double? {
@@ -224,23 +199,6 @@ nonisolated enum TradingReportGenerator {
             let endKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: prior.1)
             return key >= startKey && key <= endKey
         }
-    }
-
-    private static func averageRr(_ trades: [Trade]) -> Double? {
-        let values = trades.compactMap { trade -> Double? in
-            guard let rr = trade.riskReward else { return nil }
-            return NSDecimalNumber(decimal: rr).doubleValue
-        }
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
-    }
-
-    private static func computeProfitFactor(_ trades: [Trade]) -> Double? {
-        let values = trades.compactMap { knownPnl($0) }
-        let grossProfit = values.filter { $0 > 0 }.reduce(0, +)
-        let grossLoss = values.filter { $0 < 0 }.reduce(0) { $0 + abs($1) }
-        guard grossLoss > 0 else { return nil }
-        return grossProfit / grossLoss
     }
 
     private struct PricedBucket {
@@ -435,7 +393,7 @@ nonisolated enum TradingReportGenerator {
            comparisonTrades.compactMap({ knownPnl($0) }).count >= comparativeMinimum,
            metrics.knownResultCount >= comparativeMinimum,
            let current = metrics.averageRr,
-           let prior = averageRr(comparisonTrades),
+           let prior = averageTargetedRr(comparisonTrades),
            prior != 0,
            current > prior * 1.05 {
             let pct = Int((((current - prior) / abs(prior)) * 100).rounded())

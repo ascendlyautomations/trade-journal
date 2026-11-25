@@ -86,6 +86,10 @@ final class FollowListViewModel {
     /// Bumped by ``FollowMutationCoordinator``, read from views so follow buttons stay in sync across screens.
     var followRevision: Int { FollowMutationCoordinator.shared.revision }
 
+    func isRemoveInFlight(for profile: Profile) -> Bool {
+        inFlightRemove.contains(profile.id)
+    }
+
     /// Authenticated viewer, used to label the viewer's own row in the list.
     var authenticatedProfileID: ProfileID? { viewerID }
 
@@ -95,6 +99,7 @@ final class FollowListViewModel {
     }
 
     func refresh() async {
+        guard inFlightRemove.isEmpty else { return }
         loadTask?.cancel()
         loadMoreTask?.cancel()
         nextCursor = nil
@@ -405,53 +410,43 @@ final class FollowListViewModel {
             return
         }
 
-        loadTask?.cancel()
-        loadMoreTask?.cancel()
         inFlightRemove.insert(profile.id)
         defer { inFlightRemove.remove(profile.id) }
 
         removeFollowerErrorMessage = nil
-        let previous = items
         let removedID = profile.id
         let countBefore = items.count
-        suppressedFollowerIDs.insert(removedID)
 
-        applyListItemsMutation {
-            items.removeAll { $0.id == removedID }
-            seedListCache(items)
-        }
-        FollowListRemoveDiagnostics.optimistic(
-            beforeCount: countBefore,
-            afterCount: items.count,
-            followerID: removedID.rawValue
-        )
-        await deferListCollectionSnapshot()
-        FollowMutationCoordinator.shared.applyFollowerRemoved(owner: listOwnerID, follower: removedID)
-        ExperienceHaptics.play(.warning)
-
-        if removedID.rawValue.hasPrefix("dev.") {
-            FollowListRemoveDiagnostics.apiSucceeded(followerID: removedID.rawValue)
-            return
+        let localOnly = ProfileSectionSupport.isLocalDevelopmentProfile(listOwnerID)
+        if !localOnly {
+            FollowListRemoveDiagnostics.apiStarted(followerID: removedID.rawValue, ownerID: listOwnerID.rawValue)
         }
 
-        FollowListRemoveDiagnostics.apiStarted(followerID: removedID.rawValue, ownerID: listOwnerID.rawValue)
         do {
-            try await profiles.removeFollower(removedID, from: listOwnerID)
-            FollowListRemoveDiagnostics.apiSucceeded(followerID: removedID.rawValue)
+            if localOnly {
+                FollowListRemoveDiagnostics.apiSucceeded(followerID: removedID.rawValue)
+            } else {
+                try await profiles.removeFollower(removedID, from: listOwnerID)
+                FollowListRemoveDiagnostics.apiSucceeded(followerID: removedID.rawValue)
+            }
+
+            suppressedFollowerIDs.insert(removedID)
+            items = items.filter { $0.id != removedID }
+            seedListCache(items)
+            FollowListRemoveDiagnostics.listUpdatedAfterSuccess(
+                beforeCount: countBefore,
+                afterCount: items.count,
+                followerID: removedID.rawValue
+            )
+            FollowMutationCoordinator.shared.applyFollowerRemoved(
+                owner: listOwnerID,
+                follower: removedID,
+                publishListRefresh: false
+            )
+            ExperienceHaptics.play(.selection)
         } catch {
             let message = ProfileSectionSupport.message(for: error)
             FollowListRemoveDiagnostics.apiFailed(followerID: removedID.rawValue, message: message)
-            suppressedFollowerIDs.remove(removedID)
-            applyListItemsMutation {
-                items = previous
-                seedListCache(previous)
-            }
-            FollowListRemoveDiagnostics.rollback(followerID: removedID.rawValue, restoredCount: items.count)
-            await deferListCollectionSnapshot()
-            FollowMutationCoordinator.shared.applyIncomingFollowAccepted(
-                owner: listOwnerID,
-                requester: removedID
-            )
             removeFollowerErrorMessage = message
             ExperienceHaptics.play(.warning)
         }
@@ -462,11 +457,6 @@ final class FollowListViewModel {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction, mutation)
-    }
-
-    /// Lets `UICollectionView` finish applying the prior item count before relationship revision bumps re-render rows.
-    private func deferListCollectionSnapshot() async {
-        await Task.yield()
     }
 
     private func filterSuppressedFollowers(_ profiles: [Profile]) -> [Profile] {

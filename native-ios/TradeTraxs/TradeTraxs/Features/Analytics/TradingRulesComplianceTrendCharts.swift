@@ -19,13 +19,6 @@ struct TradingRulesComplianceTrendCharts: View {
         layout == .compact ? 128 : 144
     }
 
-    private enum YAxisLayout {
-        /// Fixed column for 0% / 50% / 100% labels (right-aligned inside).
-        static let labelColumnWidth: CGFloat = 38
-        /// Gap between label column and plot (gridlines / bars).
-        static let plotLeadingGap: CGFloat = 10
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: layout == .compact ? ExperienceSpacing.sm : ExperienceSpacing.md) {
             trendBlock(
@@ -51,6 +44,7 @@ struct TradingRulesComplianceTrendCharts: View {
         selectedPeriodKey: Binding<String?>
     ) -> some View {
         let series = Array(points)
+        let seriesKeys = series.map(\.key)
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text(title)
                 .font(.caption.weight(.semibold))
@@ -85,13 +79,11 @@ struct TradingRulesComplianceTrendCharts: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(title) compliance trend chart")
                 .accessibilityValue(trendAccessibilitySummary(series))
+                .accessibilityHint("Select a bar to view period details.")
                 .chartYScale(domain: 0 ... 100, range: .plotDimension(endPadding: 6))
-                .chartXScale(range: .plotDimension(padding: 6), type: .category)
-                .chartPlotStyle { plotArea in
-                    plotArea.padding(.leading, YAxisLayout.plotLeadingGap)
-                }
+                .chartXScale(domain: seriesKeys, range: .plotDimension(padding: 0))
                 .chartYAxis {
-                    AxisMarks(position: .leading, values: [0, 50, 100]) { value in
+                    AxisMarks(position: .trailing, values: [0, 50, 100]) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(colors.divider.opacity(0.6))
                         AxisValueLabel {
@@ -100,25 +92,30 @@ struct TradingRulesComplianceTrendCharts: View {
                                     .font(.system(size: 10, weight: .medium, design: .rounded))
                                     .monospacedDigit()
                                     .foregroundStyle(colors.tertiaryText)
-                                    .frame(width: YAxisLayout.labelColumnWidth, alignment: .trailing)
                             }
                         }
                     }
                 }
                 .chartXAxis {
-                    AxisMarks { value in
+                    AxisMarks(preset: .aligned, values: seriesKeys) { value in
                         AxisValueLabel(centered: true, collisionResolution: .greedy) {
                             if let key = value.as(String.self) {
-                                Text(TradingRulesComplianceTrendAxisFormat.axisLabel(for: key, period: period))
-                                    .font(.system(size: 10, design: .rounded))
-                                    .foregroundStyle(
-                                        selectedPeriodKey.wrappedValue == key
-                                            ? colors.primaryText
-                                            : colors.tertiaryText
+                                Text(
+                                    TradingRulesComplianceTrendAxisFormat.axisLabel(
+                                        for: key,
+                                        period: period,
+                                        peerKeys: seriesKeys
                                     )
-                                    .fontWeight(selectedPeriodKey.wrappedValue == key ? .semibold : .regular)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.7)
+                                )
+                                .font(.system(size: 10, design: .rounded))
+                                .foregroundStyle(
+                                    selectedPeriodKey.wrappedValue == key
+                                        ? colors.primaryText
+                                        : colors.tertiaryText
+                                )
+                                .fontWeight(selectedPeriodKey.wrappedValue == key ? .semibold : .regular)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
                             }
                         }
                     }
@@ -130,35 +127,12 @@ struct TradingRulesComplianceTrendCharts: View {
                 {
                     TradingRulesTrendPeriodDetailCard(
                         periodTitle: title,
+                        periodKind: period,
+                        peerKeys: seriesKeys,
                         point: point,
                         onDismiss: { selectedPeriodKey.wrappedValue = nil }
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-
-                if layout == .standard {
-                    ForEach(series, id: \.id) { point in
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack {
-                                Text(point.label)
-                                    .experienceStyle(.caption2, color: colors.secondaryText)
-                                Spacer()
-                                Text(
-                                    point.insufficientData
-                                        ? "Insufficient data"
-                                        : point.adherencePercent.map { String(format: "%.1f%%", $0) } ?? "–"
-                                )
-                                .experienceStyle(.caption2, color: colors.primaryText)
-                                .monospacedDigit()
-                            }
-                            Text("\(point.evaluated) evaluated · \(point.violations) violations")
-                                .experienceStyle(.caption2, color: colors.tertiaryText)
-                            if let note = point.coverageNote {
-                                Text(note)
-                                    .experienceStyle(.caption2, color: colors.loss.opacity(0.85))
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -185,49 +159,91 @@ struct TradingRulesComplianceTrendCharts: View {
 }
 
 /// Presentation-only period labels from trend bucket keys (does not affect aggregation).
-private enum TradingRulesComplianceTrendAxisFormat {
+enum TradingRulesComplianceTrendAxisFormat {
     enum Period {
         case weekly
         case monthly
     }
 
-    private static let weekStartFormatter: DateFormatter = {
+    private static let easternTimeZone = TimeZone(identifier: "America/New_York")!
+
+    private static var easternCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = easternTimeZone
+        return calendar
+    }
+
+    private static let weekFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "MMM d"
+        formatter.timeZone = easternTimeZone
+        formatter.dateFormat = "M/d"
         return formatter
     }()
 
     private static let monthFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.timeZone = easternTimeZone
         formatter.dateFormat = "MMM"
         return formatter
     }()
 
-    static func axisLabel(for key: String, period: Period) -> String {
+    private static let monthWithYearFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = easternTimeZone
+        formatter.dateFormat = "MMM yyyy"
+        return formatter
+    }()
+
+    static func axisLabel(for key: String, period: Period, peerKeys: [String]) -> String {
+        displayLabel(for: key, period: period, peerKeys: peerKeys, style: .axis)
+    }
+
+    static func displayLabel(for key: String, period: Period, peerKeys: [String]) -> String {
+        displayLabel(for: key, period: period, peerKeys: peerKeys, style: .detail)
+    }
+
+    private enum LabelStyle {
+        case axis
+        case detail
+    }
+
+    private static func displayLabel(
+        for key: String,
+        period: Period,
+        peerKeys: [String],
+        style: LabelStyle
+    ) -> String {
+        let spansMultipleYears = distinctYears(in: peerKeys).count > 1
         switch period {
         case .weekly:
-            return weekStartLabel(from: key)
+            guard let date = parseDateKey(key, requiresDay: true) else {
+                return shortFallback(key)
+            }
+            return weekFormatter.string(from: date)
         case .monthly:
-            return monthLabel(from: key)
+            guard let date = parseDateKey(key, requiresDay: false) else {
+                return shortFallback(key)
+            }
+            if spansMultipleYears {
+                return style == .axis
+                    ? monthWithYearFormatter.string(from: date)
+                    : monthWithYearFormatter.string(from: date)
+            }
+            return monthFormatter.string(from: date)
         }
     }
 
-    private static func weekStartLabel(from key: String) -> String {
-        guard let date = parseDateKey(key, requiresDay: true) else {
-            return shortFallback(key)
-        }
-        return weekStartFormatter.string(from: date)
-    }
-
-    private static func monthLabel(from key: String) -> String {
-        guard let date = parseDateKey(key, requiresDay: false) else {
-            return shortFallback(key)
-        }
-        return monthFormatter.string(from: date)
+    private static func distinctYears(in keys: [String]) -> Set<Int> {
+        Set(
+            keys.compactMap { key -> Int? in
+                let parts = key.split(separator: "-")
+                guard let year = parts.first.flatMap({ Int($0) }) else { return nil }
+                return year
+            }
+        )
     }
 
     private static func parseDateKey(_ key: String, requiresDay: Bool) -> Date? {
@@ -236,13 +252,12 @@ private enum TradingRulesComplianceTrendAxisFormat {
         if requiresDay {
             guard parts.count >= 3 else { return nil }
         }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         var components = DateComponents()
         components.year = parts[0]
         components.month = parts[1]
         components.day = requiresDay ? parts[2] : 1
-        return calendar.date(from: components)
+        components.timeZone = easternTimeZone
+        return easternCalendar.date(from: components)
     }
 
     private static func shortFallback(_ key: String) -> String {

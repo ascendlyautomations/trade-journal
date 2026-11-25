@@ -2,6 +2,21 @@ import Foundation
 
 /// User-facing subscription copy derived from unified entitlement, no external checkout URLs.
 nonisolated enum SubscriptionPresentationPolicy {
+    /// Permanent Pro from the early-user campaign (`profiles.lifetime_access_source`).
+    static let lifetimeGrantedAccessCampaignKey = "traxs_pro_for_life_v1"
+
+    static func showsLifetimeGrantedAppreciation(
+        status: BillingStatus,
+        sessionProfile: SessionProfileV1?
+    ) -> Bool {
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return false }
+        guard status.hasTraxProAccess else { return false }
+        guard status.entitlementSource == .manual else { return false }
+        let lifetimeSource = sessionProfile?.lifetime_access_source?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return lifetimeSource == lifetimeGrantedAccessCampaignKey
+    }
+
     static func activeSummary(for status: BillingStatus) -> String {
         switch status.entitlementSource {
         case .apple:

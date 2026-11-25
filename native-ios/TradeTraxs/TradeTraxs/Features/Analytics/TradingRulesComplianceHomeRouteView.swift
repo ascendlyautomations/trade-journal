@@ -44,6 +44,11 @@ struct TradingRulesComplianceHomeRouteView: View {
         )
     }
 
+    private var analyticsPresentation: TradingRulesComplianceDetailView.AnalyticsPresentation {
+        if restrictsFullAnalytics { return .freeSamplePreview }
+        return .fullAnalytics
+    }
+
     var body: some View {
         Group {
             if showsEntitlementVerification {
@@ -57,7 +62,7 @@ struct TradingRulesComplianceHomeRouteView: View {
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
                     loadDependencies: loadDependencies,
-                    presentation: restrictsFullAnalytics ? .freeTierBasic : .fullAnalytics,
+                    presentation: analyticsPresentation,
                     onRetry: { Task { await refreshAnalytics(forceReveal: false) } }
                 )
                 .id(presentationRevision)
@@ -85,7 +90,30 @@ struct TradingRulesComplianceHomeRouteView: View {
         }
         .task(id: taskIdentity) {
             guard !showsEntitlementVerification else { return }
+            if restrictsFullAnalytics, let profileID = activeProfileID {
+                TradingRulesAnalyticsPreviewSupport.beginEphemeralSampleIfNeeded(
+                    profileID: profileID,
+                    detailCache: data.detailCache
+                )
+                scopeController.applyTraxsProPreviewScopeDefaultsIfNeeded()
+            }
             await refreshAnalytics(forceReveal: true)
+        }
+        .task(id: restrictsFullAnalytics) {
+            if restrictsFullAnalytics {
+                guard let profileID = activeProfileID else { return }
+                TradingRulesAnalyticsPreviewSupport.beginEphemeralSampleIfNeeded(
+                    profileID: profileID,
+                    detailCache: data.detailCache
+                )
+                scopeController.applyTraxsProPreviewScopeDefaultsIfNeeded()
+                await refreshAnalytics(forceReveal: true)
+            } else {
+                TradingRulesAnalyticsPreviewSupport.endEphemeralSampleIfNeeded(
+                    profileID: activeProfileID,
+                    detailCache: data.detailCache
+                )
+            }
         }
         .task(id: showsEntitlementVerification) {
             if showsEntitlementVerification {

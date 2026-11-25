@@ -159,24 +159,126 @@ nonisolated struct TradingReportCustomRangeRef: Hashable, Sendable {
     }
 }
 
-struct TradingReportMetrics: Hashable, Codable, Sendable {
+nonisolated struct TradingReportMetrics: Hashable, Codable, Sendable {
     var netPnl: Double
     var winRate: Double
     /// Trades with a recorded P&L. Missing results are excluded from money and win rate.
     var knownResultCount: Int
+    /// Mean targeted R:R (`TradePointsAndRealizedRr.averageTargetedRr`).
     var averageRr: Double?
+    /// Mean `maxRrReached` across trades that recorded it.
+    var averageReachedRr: Double?
     var profitFactor: Double?
     var tradesTaken: Int
+    var averageWinner: Double?
+    var averageLoser: Double?
+    var expectancy: Double?
+    var bestTrade: Double?
+    var worstTrade: Double?
+    var maxDrawdown: Double?
     var bestDayLabel: String?
     var bestDayPnl: Double?
     var worstDayLabel: String?
     var worstDayPnl: Double?
+    var winningDays: Int?
+    var losingDays: Int?
     var bestSessionLabel: String?
     var bestSessionPnl: Double?
     var worstSessionLabel: String?
     var worstSessionPnl: Double?
     var mostTradedSymbol: String?
     var averageHoldTimeSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case netPnl, winRate, knownResultCount, averageRr, averageReachedRr, profitFactor, tradesTaken
+        case averageWinner, averageLoser, expectancy, bestTrade, worstTrade, maxDrawdown
+        case bestDayLabel, bestDayPnl, worstDayLabel, worstDayPnl, winningDays, losingDays
+        case bestSessionLabel, bestSessionPnl, worstSessionLabel, worstSessionPnl
+        case mostTradedSymbol, averageHoldTimeSeconds
+    }
+
+    init(
+        netPnl: Double,
+        winRate: Double,
+        knownResultCount: Int,
+        averageRr: Double? = nil,
+        averageReachedRr: Double? = nil,
+        profitFactor: Double? = nil,
+        tradesTaken: Int,
+        averageWinner: Double? = nil,
+        averageLoser: Double? = nil,
+        expectancy: Double? = nil,
+        bestTrade: Double? = nil,
+        worstTrade: Double? = nil,
+        maxDrawdown: Double? = nil,
+        bestDayLabel: String? = nil,
+        bestDayPnl: Double? = nil,
+        worstDayLabel: String? = nil,
+        worstDayPnl: Double? = nil,
+        winningDays: Int? = nil,
+        losingDays: Int? = nil,
+        bestSessionLabel: String? = nil,
+        bestSessionPnl: Double? = nil,
+        worstSessionLabel: String? = nil,
+        worstSessionPnl: Double? = nil,
+        mostTradedSymbol: String? = nil,
+        averageHoldTimeSeconds: Int? = nil
+    ) {
+        self.netPnl = netPnl
+        self.winRate = winRate
+        self.knownResultCount = knownResultCount
+        self.averageRr = averageRr
+        self.averageReachedRr = averageReachedRr
+        self.profitFactor = profitFactor
+        self.tradesTaken = tradesTaken
+        self.averageWinner = averageWinner
+        self.averageLoser = averageLoser
+        self.expectancy = expectancy
+        self.bestTrade = bestTrade
+        self.worstTrade = worstTrade
+        self.maxDrawdown = maxDrawdown
+        self.bestDayLabel = bestDayLabel
+        self.bestDayPnl = bestDayPnl
+        self.worstDayLabel = worstDayLabel
+        self.worstDayPnl = worstDayPnl
+        self.winningDays = winningDays
+        self.losingDays = losingDays
+        self.bestSessionLabel = bestSessionLabel
+        self.bestSessionPnl = bestSessionPnl
+        self.worstSessionLabel = worstSessionLabel
+        self.worstSessionPnl = worstSessionPnl
+        self.mostTradedSymbol = mostTradedSymbol
+        self.averageHoldTimeSeconds = averageHoldTimeSeconds
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        netPnl = try container.decode(Double.self, forKey: .netPnl)
+        winRate = try container.decode(Double.self, forKey: .winRate)
+        knownResultCount = try container.decode(Int.self, forKey: .knownResultCount)
+        averageRr = try container.decodeIfPresent(Double.self, forKey: .averageRr)
+        averageReachedRr = try container.decodeIfPresent(Double.self, forKey: .averageReachedRr)
+        profitFactor = try container.decodeIfPresent(Double.self, forKey: .profitFactor)
+        tradesTaken = try container.decode(Int.self, forKey: .tradesTaken)
+        averageWinner = try container.decodeIfPresent(Double.self, forKey: .averageWinner)
+        averageLoser = try container.decodeIfPresent(Double.self, forKey: .averageLoser)
+        expectancy = try container.decodeIfPresent(Double.self, forKey: .expectancy)
+        bestTrade = try container.decodeIfPresent(Double.self, forKey: .bestTrade)
+        worstTrade = try container.decodeIfPresent(Double.self, forKey: .worstTrade)
+        maxDrawdown = try container.decodeIfPresent(Double.self, forKey: .maxDrawdown)
+        bestDayLabel = try container.decodeIfPresent(String.self, forKey: .bestDayLabel)
+        bestDayPnl = try container.decodeIfPresent(Double.self, forKey: .bestDayPnl)
+        worstDayLabel = try container.decodeIfPresent(String.self, forKey: .worstDayLabel)
+        worstDayPnl = try container.decodeIfPresent(Double.self, forKey: .worstDayPnl)
+        winningDays = try container.decodeIfPresent(Int.self, forKey: .winningDays)
+        losingDays = try container.decodeIfPresent(Int.self, forKey: .losingDays)
+        bestSessionLabel = try container.decodeIfPresent(String.self, forKey: .bestSessionLabel)
+        bestSessionPnl = try container.decodeIfPresent(Double.self, forKey: .bestSessionPnl)
+        worstSessionLabel = try container.decodeIfPresent(String.self, forKey: .worstSessionLabel)
+        worstSessionPnl = try container.decodeIfPresent(Double.self, forKey: .worstSessionPnl)
+        mostTradedSymbol = try container.decodeIfPresent(String.self, forKey: .mostTradedSymbol)
+        averageHoldTimeSeconds = try container.decodeIfPresent(Int.self, forKey: .averageHoldTimeSeconds)
+    }
 }
 
 /// Web `TradingReport`, deterministic report payload (`summarySource: "deterministic"`).

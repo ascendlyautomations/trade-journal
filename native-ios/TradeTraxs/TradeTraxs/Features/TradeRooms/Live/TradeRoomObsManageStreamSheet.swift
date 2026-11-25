@@ -71,7 +71,7 @@ extension View {
                 }
             ),
             onDismiss: {
-                if obsController.phase == .livePublic {
+                if obsController.phase == .livePublic || obsController.phase == .preparing {
                     obsController.acknowledgeManagementSheetDismissed()
                 }
             }

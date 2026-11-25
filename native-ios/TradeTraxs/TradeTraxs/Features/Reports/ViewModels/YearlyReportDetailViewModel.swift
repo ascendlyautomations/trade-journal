@@ -37,6 +37,9 @@ final class YearlyReportDetailViewModel: ScreenLifecycle {
     var accounts: [TradingAccount] { state.accounts }
     var title: String { state.report?.title ?? "\(year) Performance Report" }
     var dateRangeLabel: String? { state.report?.dateRangeLabel }
+
+    /// Year or in-progress year span for the navigation bar trailing label.
+    var navigationPeriodLabel: String { dateRangeLabel ?? String(year) }
     var ownerProfileID: ProfileID? { state.profileID }
 
     var accountsForMenu: [TradingAccount] {

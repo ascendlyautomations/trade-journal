@@ -40,8 +40,23 @@ nonisolated enum BacktestLabTimeFilter: String, CaseIterable, Identifiable, Hash
 }
 
 nonisolated enum BacktestLabFilters {
+    /// Accounts created in **Backtest** mode (`accounts.mode`), not name or category alone.
     static func eligibleBacktestAccounts(_ accounts: [TradingAccount]) -> [TradingAccount] {
-        accounts.filter { $0.mode == .backtest || $0.category == .backtest }
+        accounts.filter { $0.mode == .backtest }
+    }
+
+    static func backtestModeAccountIDs(from accounts: [TradingAccount]) -> Set<TradingAccountID> {
+        Set(eligibleBacktestAccounts(accounts).map(\.id))
+    }
+
+    /// Keeps `.all` or a selected id only when that id is a Backtest-mode account.
+    static func sanitizedAccountFilter(
+        _ filter: DashboardAccountFilter,
+        eligibleAccounts: [TradingAccount]
+    ) -> DashboardAccountFilter {
+        guard case .account(let id) = filter else { return .all }
+        guard eligibleAccounts.contains(where: { $0.id == id }) else { return .all }
+        return filter
     }
 
     static func apply(
@@ -50,9 +65,16 @@ nonisolated enum BacktestLabFilters {
         strategy: String,
         timeFilter: BacktestLabTimeFilter,
         customInterval: DateInterval?,
+        backtestModeAccountIDs: Set<TradingAccountID> = [],
         now: Date = Date()
     ) -> [Trade] {
         var result = trades
+        if !backtestModeAccountIDs.isEmpty {
+            result = result.filter { trade in
+                guard let accountID = trade.accountID else { return false }
+                return backtestModeAccountIDs.contains(accountID)
+            }
+        }
         if case .account(let id) = accountFilter {
             result = result.filter { $0.accountID == id }
         }

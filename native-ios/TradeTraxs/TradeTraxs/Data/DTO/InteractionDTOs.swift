@@ -35,6 +35,7 @@ nonisolated enum InteractionDTO {
         var content: String?
         var body: String?
         var parent_comment_id: String?
+        var shared_trade_id: String?
         var pinned: Bool?
         var created_at: String?
         var profiles: ProfileEmbed?

@@ -114,6 +114,7 @@ final class RoomConversationViewModel {
     private var retryingMessageIDs: Set<MessageID> = []
     private var deletingMessageIDs: Set<MessageID> = []
     private var outboundSharedContentObserver: NSObjectProtocol?
+    private var sharedContentDeletionHandlerToken: UUID?
     private var sharedContentHydrationTask: Task<Void, Never>?
     private var sharedContentHydrationBacklog: [Message] = []
     private let messagesRepo: (any MessageRepository)?
@@ -909,6 +910,7 @@ final class RoomConversationViewModel {
         VoiceMessagePlaybackController.shared.stopAll()
         activePresenceMembers = []
         stopOutboundSharedContentObserver()
+        stopSharedContentDeletionObserver()
         if inboxStore.activeRoomID == resolvedRoomID {
             inboxStore.setActiveRoom(nil)
         }
@@ -1106,8 +1108,11 @@ final class RoomConversationViewModel {
     }
 
     func isSharedContentUnavailable(_ message: Message) -> Bool {
-        guard let reference = message.sharedContent else { return false }
-        return unavailableSharedContentKeys.contains(reference.stableKey)
+        SharedContentMessageReconciliation.unavailableKeys(
+            for: message,
+            unavailableKeys: unavailableSharedContentKeys,
+            sharedPosts: sharedPosts
+        )
     }
 
     func senderProfile(for profileID: ProfileID) -> Profile? {
@@ -2795,8 +2800,73 @@ final class RoomConversationViewModel {
         )
     }
 
+    private func startSharedContentDeletionObserver() {
+        stopSharedContentDeletionObserver()
+        sharedContentDeletionHandlerToken = MessagingSharedContentDeletionCoordinator.shared.addHandler {
+            [weak self] keys in
+            self?.handleSharedContentDeletionSignal(keys)
+        }
+    }
+
+    private func stopSharedContentDeletionObserver() {
+        if let sharedContentDeletionHandlerToken {
+            MessagingSharedContentDeletionCoordinator.shared.removeHandler(sharedContentDeletionHandlerToken)
+            self.sharedContentDeletionHandlerToken = nil
+        }
+    }
+
+    private func handleSharedContentDeletionSignal(_ keys: Set<String>) {
+        var merged = keys
+        if merged.isEmpty,
+           let achievementID = MessagingSharedContentDeletionCoordinator.shared.latestDeletedAchievementID
+        {
+            merged = SharedContentMessageReconciliation.supplementaryUnavailableKeys(
+                afterAchievementDeleted: achievementID,
+                messages: messages,
+                sharedAchievements: sharedAchievements,
+                detailCache: detailCache
+            )
+        }
+        reconcileUnavailableSharedContent(keys: merged)
+    }
+
+    private func reconcileUnavailableSharedContent(keys: Set<String>) {
+        if !keys.isEmpty {
+            unavailableSharedContentKeys.formUnion(keys)
+        }
+        guard !unavailableSharedContentKeys.isEmpty else { return }
+        let applied = SharedContentMessageReconciliation.apply(
+            to: messages,
+            unavailableKeys: unavailableSharedContentKeys,
+            sharedPosts: sharedPosts
+        )
+        guard applied.didChange else { return }
+        messages = applied.messages
+
+        var cachesChanged = false
+        for (channelID, cache) in channelCaches {
+            let channelApplied = SharedContentMessageReconciliation.apply(
+                to: cache.messages,
+                unavailableKeys: unavailableSharedContentKeys,
+                sharedPosts: sharedPosts
+            )
+            guard channelApplied.didChange else { continue }
+            var updated = cache
+            updated.messages = channelApplied.messages
+            channelCaches[channelID] = updated
+            cachesChanged = true
+        }
+        if cachesChanged || applied.didChange {
+            persistRoomSnapshotToDisk()
+        }
+        if selectedChannelID != nil {
+            persistActiveChannelCache(scrollAnchor: messages.last?.id)
+        }
+    }
+
     private func startOutboundSharedContentObserver() {
         stopOutboundSharedContentObserver()
+        startSharedContentDeletionObserver()
         outboundSharedContentObserver = NotificationCenter.default.addObserver(
             forName: SharedContentOutboundDelivery.notification,
             object: nil,
@@ -2887,6 +2957,7 @@ final class RoomConversationViewModel {
         )
         #endif
         primeSharedContentFromCaches(messages: messages)
+        reconcileUnavailableSharedContent(keys: [])
         enqueueSharedContentNetworkHydration(messages: messages)
     }
 
@@ -2958,6 +3029,7 @@ final class RoomConversationViewModel {
         for (id, achievement) in hydrated.sharedAchievements { sharedAchievements[id] = achievement }
         unavailableSharedContentKeys.formUnion(hydrated.unavailableSharedContentKeys)
         persistSharedContentNetworkResults(hydrated, messages: messages, context: context)
+        reconcileUnavailableSharedContent(keys: hydrated.unavailableSharedContentKeys)
         #if DEBUG
         RoomTimelineTrace.logHydration(
             stage: "sharedContentHydrationCompleted",
@@ -2965,7 +3037,6 @@ final class RoomConversationViewModel {
             tradeReferenceCount: 0,
             extra: "timelineCountBefore=\(timelineCountBefore) timelineCountAfter=\(self.messages.count)"
         )
-        assert(self.messages.count == timelineCountBefore, "SharedContent hydration must not mutate the message timeline")
         #endif
     }
 

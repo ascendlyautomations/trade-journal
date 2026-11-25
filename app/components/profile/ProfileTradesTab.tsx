@@ -179,7 +179,7 @@ export default function ProfileTradesTab({
         className="py-10"
       />
     ) : !canView ? (
-      <ProfilePrivateTabMessage variant="trades" />
+      <ProfilePrivateTabMessage />
     ) : (
       <p className="text-center text-sm text-gray-400">No public trades yet.</p>
     )

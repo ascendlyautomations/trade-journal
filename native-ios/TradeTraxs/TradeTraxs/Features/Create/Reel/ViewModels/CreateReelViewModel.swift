@@ -1107,7 +1107,7 @@ final class CreateReelViewModel {
                 if message.contains("Couldn't read") || message.contains("helper application") {
                     return "Couldn't import that video. Please select it again."
                 }
-                return message
+                return UserFacingError.map(AppError.unknown(message: message)).message
             case .unknown:
                 return "Couldn't publish clip. Try again."
             case .authentication(.sessionExpired), .authentication(.invalidCredentials):

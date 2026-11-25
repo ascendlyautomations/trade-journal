@@ -157,10 +157,11 @@ struct ProfileAchievementCard: View {
                 .trimmingCharacters(in: .whitespacesAndNewlines),
                !description.isEmpty
             {
-                Text(description)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
+                ExperienceExpandableText(
+                    text: description,
+                    typography: .footnote,
+                    textColor: colors.secondaryText
+                )
             }
 
             if let context = AchievementDetailPresentation.contextCaption(for: achievement) {

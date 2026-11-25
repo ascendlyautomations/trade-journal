@@ -3,76 +3,24 @@ import SwiftUI
 enum RoomBroadcastStudioHostTab: String, CaseIterable, Identifiable {
     case chat = "Chat"
     case members = "Members"
-    case hands = "Hands Raised"
+    case hands = "Hands"
 
     var id: String { rawValue }
 }
 
-/// Host sidebar tabs: chat, members, raised hands (mirrors web host studio).
-struct RoomBroadcastStudioHostSidebar: View {
-    let roomID: RoomID
-    var isHostBroadcaster: Bool = false
-    let broadcasterUserId: String?
-    @Bindable var coordinator: RoomBroadcastCoordinator
-    let imagePipeline: any ImagePipeline
-    let userId: String?
-    let displayName: String
-    @Binding var chatDraft: String
+struct RoomBroadcastStudioHostTabBar: View {
     @Binding var selectedTab: RoomBroadcastStudioHostTab
+    let memberCount: Int
+    let raisedHandCount: Int
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(spacing: 0) {
-            if isHostBroadcaster {
-                BroadcastDurationCountdownView(expiresAt: coordinator.broadcastExpiresAt)
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.top, ExperienceSpacing.xs)
-            }
-            if let modErr = coordinator.broadcastModerationError, !modErr.isEmpty {
-                HStack {
-                    Text(modErr)
-                        .font(.system(.caption2, design: .rounded))
-                        .foregroundStyle(colors.error)
-                        .lineLimit(2)
-                    Spacer(minLength: 0)
-                    Button("Dismiss") {
-                        coordinator.acknowledgeBroadcastModerationError()
-                    }
-                    .font(.system(.caption2, design: .rounded).weight(.semibold))
-                }
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.vertical, ExperienceSpacing.xxs)
-                .background(colors.error.opacity(0.08))
-            }
-            tabBar
-            Group {
-                switch selectedTab {
-                case .chat:
-                    RoomBroadcastStudioChatPane(
-                        coordinator: coordinator,
-                        imagePipeline: imagePipeline,
-                        userId: userId,
-                        displayName: displayName,
-                        chatDraft: $chatDraft
-                    )
-                case .members:
-                    membersPane
-                case .hands:
-                    handsPane
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(colors.primaryBackground)
-    }
-
-    private var tabBar: some View {
         HStack(spacing: 0) {
             ForEach(RoomBroadcastStudioHostTab.allCases) { tab in
                 Button {
                     selectedTab = tab
                 } label: {
-                    Text(tabLabel(tab))
+                    Text(label(for: tab))
                         .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(selectedTab == tab ? colors.primaryText : colors.secondaryText)
                         .frame(maxWidth: .infinity)
@@ -89,17 +37,81 @@ struct RoomBroadcastStudioHostSidebar: View {
         .background(colors.navigationBackground.opacity(0.98))
     }
 
-    private func tabLabel(_ tab: RoomBroadcastStudioHostTab) -> String {
+    private func label(for tab: RoomBroadcastStudioHostTab) -> String {
         switch tab {
         case .chat:
             return tab.rawValue
         case .members:
-            let count = memberRows.count
-            return count > 0 ? "Members (\(count))" : tab.rawValue
+            return memberCount > 0 ? "Members (\(memberCount))" : tab.rawValue
         case .hands:
-            let count = raisedHandRows.count
-            return count > 0 ? "Hands (\(count))" : "Hands Raised"
+            return raisedHandCount > 0 ? "Hands (\(raisedHandCount))" : tab.rawValue
         }
+    }
+}
+
+/// Host sidebar tabs: chat, members, raised hands (mirrors web host studio).
+struct RoomBroadcastStudioHostSidebar: View {
+    let roomID: RoomID
+    var isHostBroadcaster: Bool = false
+    var embedsTabBar: Bool = true
+    let broadcasterUserId: String?
+    @Bindable var coordinator: RoomBroadcastCoordinator
+    let imagePipeline: any ImagePipeline
+    let userId: String?
+    let displayName: String
+    @Binding var chatDraft: String
+    @Binding var selectedTab: RoomBroadcastStudioHostTab
+    /// Matches viewer livestream: Send key, keyboard + compact video, scroll-to-latest on focus.
+    var useViewerKeyboardChrome: Bool = false
+    var composerFocusedBinding: Binding<Bool>? = nil
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let modErr = coordinator.broadcastModerationError, !modErr.isEmpty {
+                HStack {
+                    Text(modErr)
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(colors.error)
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                    Button("Dismiss") {
+                        coordinator.acknowledgeBroadcastModerationError()
+                    }
+                    .font(.system(.caption2, design: .rounded).weight(.semibold))
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.xxs)
+                .background(colors.error.opacity(0.08))
+            }
+            if embedsTabBar {
+                RoomBroadcastStudioHostTabBar(
+                    selectedTab: $selectedTab,
+                    memberCount: memberRows.count,
+                    raisedHandCount: raisedHandRows.count
+                )
+            }
+            Group {
+                switch selectedTab {
+                case .chat:
+                    RoomBroadcastStudioChatPane(
+                        coordinator: coordinator,
+                        imagePipeline: imagePipeline,
+                        userId: userId,
+                        displayName: displayName,
+                        chatDraft: $chatDraft,
+                        useViewerKeyboardChrome: useViewerKeyboardChrome,
+                        composerFocusedBinding: composerFocusedBinding
+                    )
+                case .members:
+                    membersPane
+                case .hands:
+                    handsPane
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(colors.primaryBackground)
     }
 
     private var membersPane: some View {
@@ -147,23 +159,41 @@ struct RoomBroadcastStudioHostSidebar: View {
         }
     }
 
+    private var programPublisherIdentity: String? {
+        coordinator.polledStatus.primaryMediaPublisherIdentity
+    }
+
     private var memberRows: [BroadcastRosterParticipant] {
         coordinator.rosterParticipants.filter { participant in
             participant.roleLabel != "Broadcaster"
+                && BroadcastRosterPresentation.shouldListInRoster(
+                    identity: participant.identity,
+                    programPublisherIdentity: programPublisherIdentity
+                )
         }
     }
 
     private var raisedHandRows: [BroadcastRosterParticipant] {
-        let fromRoster = coordinator.rosterParticipants.filter(\.isHandRaised)
+        let fromRoster = coordinator.rosterParticipants.filter { participant in
+            participant.isHandRaised
+                && BroadcastRosterPresentation.shouldListInRoster(
+                    identity: participant.identity,
+                    programPublisherIdentity: programPublisherIdentity
+                )
+        }
         let ids = coordinator.broadcastRaisedHandIdentities
             .union(coordinator.interactiveRaisedHandUserIds)
         let known = Set(fromRoster.map(\.identity))
         let extras = ids.subtracting(known).sorted().compactMap { identity -> BroadcastRosterParticipant? in
             guard isModerationTargetIdentity(identity) else { return nil }
+            let profile = coordinator.chatProfileCache.profile(forUserId: identity)
             return BroadcastRosterParticipant(
                 identity: identity,
-                displayName: coordinator.chatProfileCache.profile(forUserId: identity)?.displayName
-                    ?? identity,
+                displayName: BroadcastRosterPresentation.memberRowLabel(
+                    profile: profile,
+                    liveKitFallbackName: "",
+                    userId: identity
+                ),
                 roleLabel: "Viewer",
                 isHandRaised: true,
                 isLocal: false
@@ -172,27 +202,32 @@ struct RoomBroadcastStudioHostSidebar: View {
         return fromRoster + extras
     }
 
-    @ViewBuilder
     private func participantRow(
         _ participant: BroadcastRosterParticipant,
         surface: RoomBroadcastHostModerationControls.Surface
     ) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+        let profile = coordinator.chatProfileCache.profile(forUserId: participant.identity)
+        let rowLabel = BroadcastRosterPresentation.memberRowLabel(
+            profile: profile,
+            liveKitFallbackName: participant.displayName,
+            userId: participant.identity
+        )
+        return HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
             RoomBroadcastProfileIdentityControl(
                 userId: participant.identity,
-                displayName: participant.displayName,
-                username: coordinator.chatProfileCache.profile(forUserId: participant.identity)?.username
-                    ?? participant.identity,
+                displayName: profile?.displayName ?? rowLabel,
+                username: profile?.username ?? rowLabel,
                 avatarDiameter: 36,
                 coordinator: coordinator,
                 imagePipeline: imagePipeline,
-                profile: coordinator.chatProfileCache.profile(forUserId: participant.identity)
+                profile: profile
             )
+            .layoutPriority(1)
             RoomBroadcastParticipantStatusBadges(
                 userId: participant.identity,
                 coordinator: coordinator
             )
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(0)
             if surface == .raisedHand {
                 Image(systemName: "hand.raised.fill")
                     .font(.caption)
@@ -207,12 +242,16 @@ struct RoomBroadcastStudioHostSidebar: View {
                 RoomBroadcastHostModerationControls(
                     roomID: roomID,
                     targetUserId: participant.identity,
-                    targetDisplayName: participant.displayName,
+                    targetDisplayName: BroadcastRosterPresentation.moderationDisplayName(
+                        profile: profile,
+                        participant: participant
+                    ),
                     surface: surface,
                     coordinator: coordinator,
                     hostUserId: userId,
                     hostDisplayName: displayName
                 )
+                .layoutPriority(0)
             }
         }
     }
@@ -225,6 +264,9 @@ struct RoomBroadcastStudioHostSidebar: View {
     }
 
     private func isModerationTargetIdentity(_ identity: String) -> Bool {
-        ProfileIDQueryPolicy.isQueryable(ProfileID(identity))
+        BroadcastRosterPresentation.shouldListInRoster(
+            identity: identity,
+            programPublisherIdentity: programPublisherIdentity
+        )
     }
 }

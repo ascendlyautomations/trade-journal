@@ -150,6 +150,21 @@ final class ManageAccountsExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.showInAccountDropdowns(for: accountID))
     }
 
+    func testSessionAccountsStoreDashboardReseedDoesNotFreezeDropdownVisibility() {
+        let profile = SettingsFixtures.viewerID
+        var dashboard = SettingsFixtures.accounts(owner: profile)
+        let accountID = dashboard[0].id
+        SessionAccountsStore.shared.seed(dashboard, for: profile, kind: .dashboard)
+
+        dashboard[0].showInAccountDropdowns = false
+        SessionAccountsStore.shared.seed(dashboard, for: profile, kind: .dashboard)
+
+        XCTAssertFalse(
+            SessionAccountsStore.shared.cached(for: profile)?
+                .first(where: { $0.id == accountID })?.showInAccountDropdowns ?? true
+        )
+    }
+
     func testSessionAccountsStoreRestReseedHonorsDropdownVisibility() {
         let profile = SettingsFixtures.viewerID
         var accounts = SettingsFixtures.accounts(owner: profile)

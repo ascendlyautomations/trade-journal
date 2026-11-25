@@ -36,6 +36,10 @@ final class ProfileContentStore {
     private(set) var isRequested = false
     private(set) var followsYou = false
     private(set) var canViewTrades = true
+
+    var isContentLocked: Bool {
+        !isOwner && !canViewTrades
+    }
     private(set) var resolvedProfileID: ProfileID?
     /// First owned Trade Room when present (hidden in UI when nil after resolve).
     private(set) var ownedTradeRoom: TradeRoom?
@@ -429,9 +433,7 @@ final class ProfileContentStore {
                 if profile == nil {
                     phase = .failed
                 }
-                errorMessage = UserFacingError.map(
-                    error as? AppError ?? AppError.unknown(message: error.localizedDescription)
-                ).message
+                errorMessage = UserFacingError.message(for: error)
                 loadTask = nil
                 return
             }
@@ -489,9 +491,7 @@ final class ProfileContentStore {
             if profile == nil {
                 phase = .failed
             }
-            errorMessage = UserFacingError.map(
-                error as? AppError ?? AppError.unknown(message: error.localizedDescription)
-            ).message
+            errorMessage = UserFacingError.message(for: error)
         }
         loadTask = nil
     }

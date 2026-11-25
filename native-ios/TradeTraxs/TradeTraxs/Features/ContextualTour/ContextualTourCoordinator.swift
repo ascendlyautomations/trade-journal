@@ -23,6 +23,8 @@ final class ContextualTourCoordinator {
     private(set) var stepIndex: Int = 0
     private(set) var spotlightFrame: CGRect = .zero
     private(set) var scrollTarget: ContextualTourTargetID?
+    /// Bumps on every autoscroll request so list screens re-run `scrollTo` even for the same target.
+    private(set) var scrollGeneration: UInt64 = 0
     /// Set when the next spotlight lives on another screen. The shell performs the navigation.
     private(set) var navigationRequest: ContextualTourSurface?
     /// Shown after Exit. Nil while the walkthrough is running.
@@ -40,6 +42,10 @@ final class ContextualTourCoordinator {
     private var resolveStartedAt: Date?
     private var previousFrame: CGRect?
     private var scrollIssuedForStep: Int?
+    private var scrollRetryCountForStep: Int = 0
+    private var lastViewport: CGRect?
+    private var lastTopInset: CGFloat = 0
+    private var lastBottomInset: CGFloat = 0
     private var measurementToken: UInt64 = 0
     private var timeoutTask: Task<Void, Never>?
     private var confirmationTask: Task<Void, Never>?
@@ -241,6 +247,10 @@ final class ContextualTourCoordinator {
             return
         }
 
+        lastViewport = viewport
+        lastTopInset = topInset
+        lastBottomInset = bottomInset
+
         if let frame,
            ContextualTourGeometry.isUsable(frame),
            let target = spotlightTarget,
@@ -277,13 +287,19 @@ final class ContextualTourCoordinator {
         let elapsed = now.timeIntervalSince(resolveStartedAt ?? now)
         switch ContextualTourGeometry.resolve(frame: frame, previous: previousFrame, elapsed: elapsed) {
         case .ready(let stable):
-            presentResolvedStep(frame: stable)
-        case .waiting, .skip:
+            if ContextualTourGeometry.isRenderableSpotlight(stable, in: viewport) {
+                presentResolvedStep(frame: stable)
+            } else {
+                previousFrame = stable
+            }
+        case .waiting:
             let needsConfirmation = previousFrame == nil
             previousFrame = frame
             if needsConfirmation {
                 scheduleConfirmation(of: frame, viewport: viewport, topInset: topInset, bottomInset: bottomInset)
             }
+        case .skip:
+            previousFrame = frame
         }
     }
 
@@ -304,8 +320,20 @@ final class ContextualTourCoordinator {
         }
         let elapsed = now.timeIntervalSince(resolveStartedAt ?? now)
         guard elapsed >= ContextualTourGeometry.resolveTimeout else { return }
-        if let previousFrame, ContextualTourGeometry.isUsable(previousFrame) {
+        if let previousFrame,
+           ContextualTourGeometry.isUsable(previousFrame),
+           let viewport = lastViewport,
+           ContextualTourGeometry.isRenderableSpotlight(previousFrame, in: viewport)
+        {
             presentResolvedStep(frame: previousFrame)
+            return
+        }
+        let maxScrollRetries = settingsListScrollRetries(for: spotlightTarget)
+        if scrollIssuedForStep == stepIndex,
+           scrollRetryCountForStep < maxScrollRetries
+        {
+            scrollRetryCountForStep += 1
+            issueScroll(now: now)
             return
         }
         if currentStep?.presentsIfUnmeasured == true {
@@ -467,7 +495,9 @@ final class ContextualTourCoordinator {
         confirmationTask?.cancel()
         previousFrame = nil
         scrollIssuedForStep = nil
+        scrollRetryCountForStep = 0
         scrollTarget = nil
+        lastViewport = nil
         resolveStartedAt = Date()
         if step.target == .feedContentFilters {
             FeedFilterBarTourLayoutGate.resetForTourStep()
@@ -491,6 +521,7 @@ final class ContextualTourCoordinator {
             scheduleTimeout()
             return
         }
+        scrollGeneration &+= 1
         scrollTarget = spotlightTarget
         previousFrame = nil
         resolveStartedAt = now
@@ -596,6 +627,15 @@ final class ContextualTourCoordinator {
             }
             navigationRequest = definition.steps[nextIndex].surface
             stepIndex = nextIndex
+        }
+    }
+
+    private func settingsListScrollRetries(for target: ContextualTourTargetID?) -> Int {
+        switch target {
+        case .settingsAppearance, .settingsTradingRules:
+            return 2
+        default:
+            return 1
         }
     }
 

@@ -76,9 +76,7 @@ final class DailyCheckInViewModel {
             }
             return true
         } catch {
-            errorMessage = UserFacingError.map(
-                error as? AppError ?? AppError.unknown(message: error.localizedDescription)
-            ).message
+            errorMessage = UserFacingError.message(for: error)
             return false
         }
     }

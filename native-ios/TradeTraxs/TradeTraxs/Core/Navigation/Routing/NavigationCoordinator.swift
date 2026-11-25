@@ -351,7 +351,8 @@ final class NavigationCoordinator {
         case .room(let roomID):
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
         case .roomMembers, .roomInfo, .manageRoom, .roomSettings, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .followers, .following, .rooms, .settings,
-            .tradingRulesAnalytics, .tradingRulesRuleDetail, .tradingRulesDayDetail:
+            .tradingRulesAnalytics, .tradingRulesRuleDetail, .tradingRulesDayDetail,
+            .tradingRulesTrends, .tradingRulesViolationHistory:
             break
         }
         let pathBefore = store.paths.messages.count
@@ -580,6 +581,38 @@ final class NavigationCoordinator {
             pushMessages(.tradingRulesDayDetail(dayKey))
         case .profile:
             pushProfile(.tradingRulesDayDetail(dayKey))
+        case .create:
+            break
+        }
+    }
+
+    func pushTradingRulesTrends() {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.tradingRulesTrends)
+        case .feed:
+            pushFeed(.tradingRulesTrends)
+        case .messages:
+            pushMessages(.tradingRulesTrends)
+        case .profile:
+            pushProfile(.tradingRulesTrends)
+        case .create:
+            break
+        }
+    }
+
+    func pushTradingRulesViolationHistory() {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.tradingRulesViolationHistory)
+        case .feed:
+            pushFeed(.tradingRulesViolationHistory)
+        case .messages:
+            pushMessages(.tradingRulesViolationHistory)
+        case .profile:
+            pushProfile(.tradingRulesViolationHistory)
         case .create:
             break
         }

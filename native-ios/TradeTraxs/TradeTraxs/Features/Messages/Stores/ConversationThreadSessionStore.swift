@@ -182,6 +182,24 @@ final class ConversationThreadSessionStore {
         return Array(sorted.suffix(limit))
     }
 
+    /// Rewrites cached DM first pages when shared entities were deleted or became inaccessible.
+    func reconcileUnavailableSharedContent(viewerID: ProfileID, unavailableKeys: Set<String>) {
+        guard !unavailableKeys.isEmpty else { return }
+        let prefix = viewerID.rawValue + "|"
+        for key in snapshots.keys where key.hasPrefix(prefix) {
+            guard var snapshot = snapshots[key] else { continue }
+            let applied = SharedContentMessageReconciliation.apply(
+                to: snapshot.messages,
+                unavailableKeys: unavailableKeys
+            )
+            guard applied.didChange else { continue }
+            snapshot.messages = applied.messages
+            snapshot.contentGeneration &+= 1
+            snapshots[key] = snapshot
+            persistSnapshot(snapshot)
+        }
+    }
+
     func removeMessage(
         viewerID: ProfileID,
         conversationID: ConversationID,

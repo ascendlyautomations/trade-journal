@@ -69,6 +69,8 @@ struct PsychologyAnalyticsDetailView: View {
     var highlightedSectionID: String?
     var onOpenCoach: (() -> Void)?
     var onOpenCheckInHistory: (() -> Void)?
+    var onOpenCheckInHistoryDay: ((CheckInHistoryDaySummary) -> Void)?
+    var freePreviewHistorySummaries: [CheckInHistoryDaySummary] = []
     var navigationCoordinator: NavigationCoordinator?
     var preferences: (any TradingPreferencesRepository)?
     var viewerID: ProfileID?
@@ -81,6 +83,10 @@ struct PsychologyAnalyticsDetailView: View {
         "sleep", "mentalState", "conviction", "discipline", "emotion",
         "afterLosses", "tradeFrequency", "combined"
     ]
+
+    private var showsFreePreviewOnlyContent: Bool {
+        !freePreviewHistorySummaries.isEmpty
+    }
 
     private var coachSummary: PsychologyCoachSummary? {
         PsychologyCoachSessionStore.shared.deterministicSummary
@@ -110,37 +116,36 @@ struct PsychologyAnalyticsDetailView: View {
                     }
                     overviewSection
 
-                    if navigationCoordinator != nil {
+                    if !freePreviewHistorySummaries.isEmpty {
+                        freePreviewHistorySection
+                    }
+
+                    if !showsFreePreviewOnlyContent, navigationCoordinator != nil {
                         tradingRulesAnalyticsLink
                             .padding(.horizontal, ExperienceSpacing.md)
                     }
 
-                    if let onOpenCheckInHistory {
-                        Button(action: onOpenCheckInHistory) {
-                            Label("Check-In History", systemImage: "calendar")
-                                .frame(maxWidth: .infinity)
+                    if !showsFreePreviewOnlyContent {
+                        if !resolvedInsightCards.isEmpty {
+                            comparisonInsightsSection
+                        } else {
+                            noMatchedDaysInsightSection
                         }
-                        .buttonStyle(.bordered)
-                        .padding(.horizontal, ExperienceSpacing.md)
                     }
 
-                    if !resolvedInsightCards.isEmpty {
-                        comparisonInsightsSection
-                    } else {
-                        noMatchedDaysInsightSection
+                    if !showsFreePreviewOnlyContent, !advancedSections.isEmpty {
+                        advancedAnalyticsSection
                     }
 
-                    if let coachSummary, !coachSummary.recommendations.isEmpty {
+                    if !showsFreePreviewOnlyContent,
+                       let coachSummary,
+                       !coachSummary.recommendations.isEmpty {
                         PsychologySummarySection(
                             summary: coachSummary,
                             onOpenCoach: onOpenCoach,
                             recommendationsOnly: true
                         )
                         .padding(.horizontal, ExperienceSpacing.md)
-                    }
-
-                    if !advancedSections.isEmpty {
-                        advancedAnalyticsSection
                     }
                 }
                 .padding(.vertical, ExperienceSpacing.md)
@@ -180,8 +185,12 @@ struct PsychologyAnalyticsDetailView: View {
                     .foregroundStyle(colors.tertiaryText)
             }
             .padding(ExperienceSpacing.md)
-            .background(colors.elevatedSurface)
-            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg))
+            .modifier(
+                PsychologyAnalyticsOverviewCardChrome(
+                    cornerRadius: ExperienceRadius.lg,
+                    darkFill: colors.elevatedSurface
+                )
+            )
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("psychologyAnalytics.openTradingRules")
@@ -189,9 +198,28 @@ struct PsychologyAnalyticsDetailView: View {
 
     private var overviewSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Overview")
-                .experienceStyle(.headline, color: colors.primaryText)
-                .padding(.horizontal, ExperienceSpacing.md)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Overview")
+                    .experienceStyle(.headline, color: colors.primaryText)
+                Spacer(minLength: ExperienceSpacing.sm)
+                if let onOpenCheckInHistory {
+                    Button(action: onOpenCheckInHistory) {
+                        HStack(spacing: ExperienceSpacing.xxs) {
+                            ExperienceIcon(icon: .calendar, size: .sm, color: colors.accent)
+                            Text("History")
+                                .experienceStyle(.footnote, color: colors.accent)
+                                .fontWeight(.semibold)
+                        }
+                        .padding(.horizontal, ExperienceSpacing.sm)
+                        .padding(.vertical, ExperienceSpacing.xs)
+                        .experienceFilterChipRect(cornerRadius: ExperienceRadius.md)
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .accessibilityLabel("Check-In History")
+                    .accessibilityIdentifier("psychologyAnalytics.checkInHistory")
+                }
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
 
             HStack(spacing: ExperienceSpacing.xs) {
                 countTile(
@@ -228,6 +256,48 @@ struct PsychologyAnalyticsDetailView: View {
             }
         }
         .accessibilityIdentifier("psychologyAnalytics.overview")
+    }
+
+    private var freePreviewHistorySection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("History")
+                    .experienceStyle(.headline, color: colors.primaryText)
+                Spacer(minLength: ExperienceSpacing.sm)
+                if let onOpenCheckInHistory {
+                    Button(action: onOpenCheckInHistory) {
+                        Text("See all")
+                            .experienceStyle(.footnote, color: colors.accent)
+                            .fontWeight(.semibold)
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .accessibilityIdentifier("psychologyAnalytics.history.seeAll")
+                }
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .accessibilityAddTraits(.isHeader)
+
+            Text(MonetizationPlanCopy.psychologyAnalyticsFreePreviewHistorySubtitle)
+                .experienceStyle(.caption, color: colors.tertiaryText)
+                .padding(.horizontal, ExperienceSpacing.md)
+
+            VStack(spacing: ExperienceSpacing.xs) {
+                ForEach(freePreviewHistorySummaries) { day in
+                    if let onOpenCheckInHistoryDay = onOpenCheckInHistoryDay {
+                        Button {
+                            onOpenCheckInHistoryDay(day)
+                        } label: {
+                            CheckInHistoryDayRow(summary: day, contentFilter: .psychology)
+                        }
+                        .buttonStyle(.experiencePlain)
+                    } else {
+                        CheckInHistoryDayRow(summary: day, contentFilter: .psychology)
+                    }
+                }
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
+        }
+        .accessibilityIdentifier("psychologyAnalytics.history.preview")
     }
 
     private var comparisonInsightsSection: some View {
@@ -332,7 +402,7 @@ struct PsychologyAnalyticsDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, ExperienceSpacing.sm)
-        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
+        .modifier(PsychologyAnalyticsOverviewCardChrome(cornerRadius: ExperienceRadius.sm))
     }
 
     private func sectionView(_ section: PsychologyAnalyticsSection) -> some View {
@@ -405,6 +475,39 @@ struct PsychologyAnalyticsDetailView: View {
             Text(value)
                 .font(.caption.weight(.semibold).monospacedDigit())
                 .foregroundStyle(colors.primaryText)
+        }
+    }
+}
+
+/// Light mode uses white overview tiles; dark mode keeps nested / elevated fills.
+private struct PsychologyAnalyticsOverviewCardChrome: ViewModifier {
+    @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
+
+    var cornerRadius: CGFloat
+    var darkFill: Color?
+
+    func body(content: Content) -> some View {
+        if colorScheme == .light {
+            content
+                .background(
+                    colors.surfacePrimary,
+                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            colors.border.opacity(ExperienceDashboardSurface.LightChrome.borderOpacity),
+                            lineWidth: ExperienceBorder.hairline
+                        )
+                }
+        } else if let darkFill {
+            content.background(
+                darkFill,
+                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            )
+        } else {
+            content.experienceDashboardNestedCard(cornerRadius: cornerRadius)
         }
     }
 }

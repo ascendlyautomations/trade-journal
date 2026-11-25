@@ -170,6 +170,7 @@ enum LeaderboardPresentation {
             winStreak: entry.winStreak,
             profitPercent: entry.profitPercent,
             consistency: entry.consistency,
+            payoutTotal: entry.payoutTotal,
             followerCount: followers[entry.profileID] ?? 0,
             isFollowing: following.contains(entry.profileID),
             isCurrentUser: entry.profileID == viewerID
@@ -192,6 +193,8 @@ enum LeaderboardPresentation {
             return LeaderboardMetricFormat.expectancy(row.expectancy)
         case .rr:
             return LeaderboardMetricFormat.riskReward(row.averageRiskReward)
+        case .payouts:
+            return LeaderboardMetricFormat.payoutTotal(row.payoutTotal)
         case .winStreak:
             return NumberDisplay.integer(row.winStreak)
         case .profitPercent:
@@ -211,6 +214,8 @@ enum LeaderboardPresentation {
             return tradeDetailLine(for: row)
         case .winRate, .profitFactor, .expectancy, .profitPercent, .consistency:
             return TradeDisplay.pnlText(row.totalPnL)
+        case .payouts:
+            return row.tradeCount > 0 ? NumberDisplay.tradeCount(row.tradeCount) : "–"
         case .rr, .winStreak:
             return NumberDisplay.tradeCount(row.tradeCount)
         }
@@ -269,7 +274,7 @@ enum LeaderboardPresentation {
             if amount > 0 { return .up }
             if amount < 0 { return .down }
             return .flat
-        case .winRate, .profitPercent, .consistency, .winStreak, .rr:
+        case .winRate, .profitPercent, .consistency, .winStreak, .rr, .payouts:
             return row.sortValue(for: category) > Decimal(-999_999) ? .up : .flat
         case .profitFactor:
             return row.profitFactor != nil ? .up : .flat
@@ -309,5 +314,10 @@ enum LeaderboardMetricFormat {
             minimumFractionDigits: 1,
             maximumFractionDigits: 1
         )
+    }
+
+    static func payoutTotal(_ value: Decimal?) -> String {
+        guard let value, value > 0 else { return "–" }
+        return TradeDisplay.pnlText(Money(amount: value))
     }
 }

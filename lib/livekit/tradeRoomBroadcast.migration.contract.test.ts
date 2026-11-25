@@ -30,6 +30,14 @@ const durationLimitSql = readFileSync(
   "supabase/migrations/20261123194500_trade_room_broadcast_duration_limit.sql",
   "utf8"
 )
+const ingressLeaseSql = readFileSync(
+  "supabase/migrations/20261124240000_trade_room_broadcast_ingress_lease.sql",
+  "utf8"
+)
+const broadcastChatTradeSharesSql = readFileSync(
+  "supabase/migrations/20261125020000_broadcast_chat_trade_shares.sql",
+  "utf8"
+)
 
 describe("Trade Room live broadcast migration contract", () => {
   it("defines room_live_broadcasts with one active row per room", () => {
@@ -73,5 +81,19 @@ describe("Trade Room live broadcast migration contract", () => {
     assert.match(durationLimitSql, /expires_at/)
     assert.match(durationLimitSql, /room_live_broadcast_broadcaster_cooldowns/)
     assert.match(durationLimitSql, /room_live_broadcasts_duration_expired_due_idx/)
+  })
+
+  it("adds cross-instance OBS ingress creation lease RPCs", () => {
+    assert.match(ingressLeaseSql, /ingress_creation_lease_token/)
+    assert.match(ingressLeaseSql, /trade_room_broadcast_claim_ingress_lease/)
+    assert.match(ingressLeaseSql, /trade_room_broadcast_commit_ingress/)
+    assert.match(ingressLeaseSql, /for update/)
+  })
+
+  it("adds livestream chat trade share grants without publishing trades", () => {
+    assert.match(broadcastChatTradeSharesSql, /room_live_broadcast_chat_trade_shares/)
+    assert.match(broadcastChatTradeSharesSql, /trades_select_shared_in_broadcast_chat/)
+    assert.match(broadcastChatTradeSharesSql, /rpc_v1_broadcast_chat_register_trade_share/)
+    assert.match(broadcastChatTradeSharesSql, /trades\.is_public/)
   })
 })

@@ -202,8 +202,7 @@ export function rankActiveTraders(
     .filter(
       (p) =>
         p.username?.trim() &&
-        !excludeUserIds.has(p.id) &&
-        p.is_private !== true
+        !excludeUserIds.has(p.id)
     )
     .map((profile) => ({
       profile,
@@ -536,7 +535,6 @@ export function rankProfilesByTraderType(
     .filter(
       (profile) =>
         profile.username?.trim() &&
-        profile.is_private !== true &&
         !excludeUserIds.has(profile.id) &&
         normalizeTraderType(profile.trader_type) === traderType
     )
@@ -574,7 +572,6 @@ export function rankNewTraders(
     .filter(
       (profile) =>
         profile.username?.trim() &&
-        profile.is_private !== true &&
         !excludeUserIds.has(profile.id)
     )
     .map((profile) => ({
@@ -606,7 +603,6 @@ export function rankExploreDiscoverList(
     .filter(
       (profile) =>
         profile.username?.trim() &&
-        profile.is_private !== true &&
         !excludeUserIds.has(profile.id)
     )
     .map((profile) => ({

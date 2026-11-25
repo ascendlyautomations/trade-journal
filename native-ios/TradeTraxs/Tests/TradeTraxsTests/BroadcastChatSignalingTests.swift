@@ -53,4 +53,38 @@ final class BroadcastChatSignalingTests: XCTestCase {
         XCTAssertEqual(preview.count, TradeRoomBroadcastChatConstants.replyPreviewMaxLength + 1)
         XCTAssertTrue(preview.hasSuffix("…"))
     }
+
+    func testChatReactionApplyOnePerUser() throws {
+        let data = try BroadcastChatReactionSignaling.encodeOutgoing(
+            messageId: "m1",
+            userId: "u1",
+            emoji: "🔥"
+        )
+        let event = BroadcastChatReactionSignaling.parseIncoming(data: data, senderIdentity: "u1")
+        XCTAssertNotNil(event)
+        var rows = BroadcastChatReactionSignaling.apply(
+            [],
+            messageId: event!.messageId,
+            userId: event!.userId,
+            emoji: event!.emoji,
+            updatedAt: event!.updatedAt
+        )
+        XCTAssertEqual(rows.count, 1)
+
+        let replaceData = try BroadcastChatReactionSignaling.encodeOutgoing(
+            messageId: "m1",
+            userId: "u1",
+            emoji: "❤️"
+        )
+        let replace = BroadcastChatReactionSignaling.parseIncoming(data: replaceData, senderIdentity: "u1")
+        rows = BroadcastChatReactionSignaling.apply(
+            rows,
+            messageId: replace!.messageId,
+            userId: replace!.userId,
+            emoji: replace!.emoji,
+            updatedAt: replace!.updatedAt
+        )
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].emoji, "❤️")
+    }
 }

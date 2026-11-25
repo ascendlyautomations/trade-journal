@@ -535,9 +535,7 @@ final class TradeHistoryViewModel {
 
     func applyOwnerTradeVisibilityUpdate(_ trade: Trade) {
         guard journalSharePresentation?.ownerAccess.tradeID == trade.id else { return }
-        journalSharePresentation = JournalTradeShareSupport.presentation(
-            for: TradeSummaryMapper.ownerJournal(fromListTrade: trade)
-        )
+        journalSharePresentation = JournalTradeShareSupport.presentation(for: trade)
     }
 
     func requestDelete(_ item: TradeOwnerJournalSummary) {

@@ -286,6 +286,7 @@ private struct TradeHistoryScreenshotInteractionRepository: InteractionRepositor
     func addComment(
         body: String,
         parentID: CommentID?,
+        sharedTradeID: TradeID?,
         on target: InteractionTarget
     ) async throws -> InteractionComment {
         InteractionComment(
@@ -294,6 +295,7 @@ private struct TradeHistoryScreenshotInteractionRepository: InteractionRepositor
             authorProfileID: ProfileID("dev.trades.shots"),
             authorUsername: nil,
             body: body,
+            sharedTradeID: sharedTradeID,
             parentCommentID: parentID,
             createdAt: .now,
             isPinned: false

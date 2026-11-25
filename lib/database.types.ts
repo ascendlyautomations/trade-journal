@@ -4306,6 +4306,8 @@ export type Database = {
           expires_at: string | null
           go_live_notified_at: string | null
           id: string
+          ingress_creation_lease_at: string | null
+          ingress_creation_lease_token: string | null
           ingress_status_snapshot: string | null
           last_livekit_signal_at: string | null
           livekit_ingress_id: string | null
@@ -4327,6 +4329,8 @@ export type Database = {
           expires_at?: string | null
           go_live_notified_at?: string | null
           id?: string
+          ingress_creation_lease_at?: string | null
+          ingress_creation_lease_token?: string | null
           ingress_status_snapshot?: string | null
           last_livekit_signal_at?: string | null
           livekit_ingress_id?: string | null
@@ -4348,6 +4352,8 @@ export type Database = {
           expires_at?: string | null
           go_live_notified_at?: string | null
           id?: string
+          ingress_creation_lease_at?: string | null
+          ingress_creation_lease_token?: string | null
           ingress_status_snapshot?: string | null
           last_livekit_signal_at?: string | null
           livekit_ingress_id?: string | null
@@ -8064,6 +8070,36 @@ export type Database = {
       trade_room_suggested_official_slug: {
         Args: { p_user_id: string }
         Returns: string
+      }
+      trade_room_broadcast_claim_ingress_lease: {
+        Args: {
+          p_broadcaster_id: string
+          p_room_id: string
+          p_session_id: string
+          p_ttl_seconds?: number
+        }
+        Returns: string
+      }
+      trade_room_broadcast_commit_ingress: {
+        Args: {
+          p_broadcaster_id: string
+          p_ingress_id: string
+          p_lease_token: string
+          p_primary_identity: string
+          p_room_id: string
+          p_session_id: string
+          p_status_label: string
+        }
+        Returns: boolean
+      }
+      trade_room_broadcast_release_ingress_lease: {
+        Args: {
+          p_broadcaster_id: string
+          p_lease_token?: string
+          p_room_id: string
+          p_session_id: string
+        }
+        Returns: boolean
       }
       trade_summary_json: {
         Args: {

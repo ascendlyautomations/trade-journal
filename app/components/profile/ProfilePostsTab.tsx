@@ -102,7 +102,7 @@ export default function ProfilePostsTab({
             className="py-10"
           />
         ) : !canView ? (
-          <ProfilePrivateTabMessage variant="posts" />
+          <ProfilePrivateTabMessage />
         ) : (
           <p className="text-center text-sm text-gray-400">No posts yet.</p>
         )

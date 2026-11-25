@@ -167,8 +167,10 @@ import { toggleMessageReaction } from "@/lib/messageReactionToggle"
 import { handleMessageReactionDoubleClick } from "@/lib/messageReactionDoubleTap"
 import {
   aggregateRoomMessageReactions,
+  MESSAGE_REACTION_BUBBLE_RESERVE_CLASS,
   MESSAGE_REACTION_DOUBLE_TAP_EMOJI,
   patchRoomMessageReactions,
+  shouldReserveMessageReactionBubbleSpace,
   type RoomMessageReactionEmoji,
   type RoomMessageReactionRow,
 } from "@/lib/roomMessageReactions"
@@ -281,6 +283,18 @@ type RoomMessage = {
 
 const ROOM_MESSAGE_PAGE_SIZE = 25
 const ROOM_MESSAGE_REALTIME_SELECT = ROOM_MESSAGE_SELECT_SHAPE
+
+function roomMessageReactionReserveClass(
+  reactions: RoomMessageReactionRow[] | null | undefined,
+  viewerUserId: string | undefined,
+  canReact: boolean,
+  nativeIos: boolean
+) {
+  if (!nativeIos || !canReact) return ""
+  return shouldReserveMessageReactionBubbleSpace(reactions, viewerUserId, true)
+    ? MESSAGE_REACTION_BUBBLE_RESERVE_CLASS
+    : ""
+}
 
 type RoomMemberManage = {
   user_id: string
@@ -5386,6 +5400,11 @@ function CommunityContent() {
                         const parentTargetId = String(
                           parentMessage?.id ?? msg.parent_message_id
                         )
+                        const messageCanReact =
+                          Boolean(user?.id) &&
+                          !needsJoin &&
+                          msg.send_status !== "sending" &&
+                          msg.send_status !== "failed"
                         return (
                           <TradeRoomMessageGestureSurface
                             key={msg.id}
@@ -5402,7 +5421,12 @@ function CommunityContent() {
                               user?.id && msg.user_id === user.id
                                 ? "max-md:ml-10 max-md:bg-blue-500/25"
                                 : "max-md:mr-8 max-md:bg-white/10"
-                            }`}
+                            } ${roomMessageReactionReserveClass(
+                              msg.room_message_reactions,
+                              user?.id,
+                              messageCanReact,
+                              nativeIos
+                            )}`}
                             onDoubleClick={(e) =>
                               handleMessageReactionDoubleClick(
                                 e,
@@ -5518,6 +5542,7 @@ function CommunityContent() {
                                 reactions={msg.room_message_reactions}
                                 viewerUserId={user?.id}
                                 readOnly={needsJoin}
+                                attachToBubble={nativeIos && messageCanReact}
                                 onReply={
                                   needsJoin
                                     ? undefined
@@ -5540,6 +5565,11 @@ function CommunityContent() {
                     const parentTargetId = String(
                       parentMessage?.id ?? msg.parent_message_id
                     )
+                    const messageCanReact =
+                      Boolean(user?.id) &&
+                      !needsJoin &&
+                      msg.send_status !== "sending" &&
+                      msg.send_status !== "failed"
                     return (
                     <TradeRoomMessageGestureSurface
                       key={msg.id}
@@ -5560,7 +5590,12 @@ function CommunityContent() {
                         msg.send_status === "sending" || msg.send_status === "failed"
                           ? MICRO.softEnter
                           : ""
-                      }`.trim()}
+                      } ${roomMessageReactionReserveClass(
+                        msg.room_message_reactions,
+                        user?.id,
+                        messageCanReact,
+                        nativeIos
+                      )}`.trim()}
                       onDoubleClick={(e) =>
                         handleMessageReactionDoubleClick(
                           e,
@@ -5662,6 +5697,7 @@ function CommunityContent() {
                           reactions={msg.room_message_reactions}
                           viewerUserId={user?.id}
                           readOnly={needsJoin}
+                          attachToBubble={nativeIos && messageCanReact}
                           onReply={
                             needsJoin ? undefined : () => startReplyToMessage(msg)
                           }

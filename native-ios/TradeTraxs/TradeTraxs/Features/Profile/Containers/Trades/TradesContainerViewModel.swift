@@ -147,7 +147,7 @@ final class TradesContainerViewModel {
             canViewContent = false
             hasLoaded = true
             journalItems = []
-            state = .empty
+            state = .contentLocked
             return
         }
         canViewContent = true
@@ -315,7 +315,7 @@ final class TradesContainerViewModel {
         guard !hasLoaded, loadTask == nil else { return }
         guard canViewContent else {
             hasLoaded = true
-            state = .empty
+            state = .contentLocked
             return
         }
         if awaitingScreenBootstrap {

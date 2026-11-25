@@ -4,10 +4,15 @@ import Foundation
 
 nonisolated enum TradeDTO {
     static let tradesPublicReadTable = "trades_public_read"
+    static let tradesTable = "trades"
 
     /// Mirrors web `PUBLIC_TRADE_SELECT`, non-owner social reads only.
     static let publicSocialSelect =
         "id,user_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,public_description,is_public,is_pinned,image_url,image_crop,image_display_mode,entry_time,exit_time,entry_price,exit_price,duration_seconds,duration_text,account_type,mode,market_condition,timeframe,trade_mode,trade_type,first_published_at,copied_account_ids,copy_trading_group_id,source_account_id,participating_account_modes"
+
+    /// Direct `trades` SELECT for message-scoped private shares (RLS); omits view-only `participating_account_modes`.
+    static let socialScopedSelect =
+        "id,user_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,public_description,is_public,is_pinned,image_url,image_crop,image_display_mode,entry_time,exit_time,entry_price,exit_price,duration_seconds,duration_text,account_type,mode,market_condition,timeframe,trade_mode,trade_type,first_published_at,copied_account_ids,copy_trading_group_id,source_account_id"
 
     /// Mirrors web `PUBLIC_TRADE_SELECT` / owner list fields used by Profile + Trade Detail.
     static let profileListSelect =

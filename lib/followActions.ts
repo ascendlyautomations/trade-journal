@@ -37,11 +37,13 @@ export function isMutualFollow(
 /** Primary action label for Follow / Follow Back / Requested (not the dropdown trigger). */
 export function followButtonLabel(
   state: FollowUiState,
-  followsYou: boolean
+  followsYou: boolean,
+  targetIsPrivate = false
 ): string {
   if (state === "following") return "Following"
   if (state === "requested") return "Requested"
   if (followsYou) return "Follow Back"
+  if (targetIsPrivate) return "Request to Follow"
   return "Follow"
 }
 

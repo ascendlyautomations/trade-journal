@@ -72,6 +72,7 @@ enum LeaderboardCategory: String, CaseIterable, Hashable, Sendable {
     case profitFactor
     case expectancy
     case rr
+    case payouts
     case winStreak
     case profitPercent
     case followers
@@ -84,6 +85,7 @@ enum LeaderboardCategory: String, CaseIterable, Hashable, Sendable {
         case .profitFactor: return "Profit Factor"
         case .expectancy: return "Expectancy"
         case .rr: return "RR"
+        case .payouts: return "Payouts"
         case .winStreak: return "Win Streak"
         case .profitPercent: return "Profit %"
         case .followers: return "Followers"
@@ -117,6 +119,7 @@ struct LeaderboardRow: Hashable, Identifiable, Sendable {
     var winStreak: Int
     var profitPercent: Decimal?
     var consistency: Decimal?
+    var payoutTotal: Decimal?
     var followerCount: Int
     var isFollowing: Bool
     var isCurrentUser: Bool
@@ -135,6 +138,8 @@ struct LeaderboardRow: Hashable, Identifiable, Sendable {
             return expectancy ?? Decimal(-999_999)
         case .rr:
             return averageRiskReward ?? Decimal(-999_999)
+        case .payouts:
+            return payoutTotal ?? Decimal(-999_999)
         case .winStreak:
             return Decimal(winStreak)
         case .profitPercent:

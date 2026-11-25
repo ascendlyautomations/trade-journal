@@ -50,6 +50,7 @@ struct AchievementDetailView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle(viewModel.achievement?.title ?? "Achievement")
+        .liveVoiceTopSessionChrome()
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
@@ -108,10 +109,32 @@ struct AchievementDetailView: View {
 
     @ViewBuilder
     private var content: some View {
+        Group {
+            if let achievement = viewModel.achievement {
+                CommentsDetailChrome(
+                    target: engagementTarget(for: achievement),
+                    contentOwnerUserID: achievement.ownerProfileID.rawValue,
+                    data: data
+                ) { commentsVM, currentUserID, _ in
+                    achievementScroll(
+                        achievement: achievement,
+                        commentsVM: commentsVM,
+                        currentUserID: currentUserID
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func achievementScroll(
+        achievement: Achievement,
+        commentsVM: CommentsViewModel,
+        currentUserID: ProfileID?
+    ) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if let achievement = viewModel.achievement {
                         DetailIdentityHeader(
                             initials: viewModel.authorInitials,
                             avatar: viewModel.authorAvatar,
@@ -165,7 +188,9 @@ struct AchievementDetailView: View {
                         achievementBody(
                             achievement,
                             scrollProxy: proxy,
-                            showsMediaEngagement: achievementHasAttachedImage(achievement)
+                            showsMediaEngagement: achievementHasAttachedImage(achievement),
+                            commentsVM: commentsVM,
+                            currentUserID: currentUserID
                         )
                             .padding(.horizontal, ExperienceSpacing.lg)
                             .padding(
@@ -175,14 +200,18 @@ struct AchievementDetailView: View {
                                     : ExperienceSpacing.sm
                             )
                             .padding(.bottom, ExperienceSpacing.xl)
-                    }
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .commentThreadScrollSupport(
+                viewModel: commentsVM,
+                scrollProxy: proxy,
+                reduceMotion: reduceMotion
+            )
             .detailCommentsScrollOnOpen(
                 intent: .achievement(viewModel.achievementID),
                 anchorID: Self.commentsAnchorID,
-                isContentReady: viewModel.achievement != nil,
+                isContentReady: true,
                 contentRevealed: contentRevealed,
                 detailCache: data.detailCache,
                 scrollProxy: proxy,
@@ -194,7 +223,9 @@ struct AchievementDetailView: View {
     private func achievementBody(
         _ achievement: Achievement,
         scrollProxy: ScrollViewProxy,
-        showsMediaEngagement: Bool
+        showsMediaEngagement: Bool,
+        commentsVM: CommentsViewModel,
+        currentUserID: ProfileID?
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             if !showsMediaEngagement {
@@ -207,11 +238,11 @@ struct AchievementDetailView: View {
             }
 
             CommentsSectionView(
-                target: engagementTarget(for: achievement),
-                contentOwnerUserID: achievement.ownerProfileID.rawValue,
-                data: data
+                viewModel: commentsVM,
+                currentUserID: currentUserID,
+                imagePipeline: imagePipeline
             )
-                .id(Self.commentsAnchorID)
+            .id(Self.commentsAnchorID)
         }
     }
 

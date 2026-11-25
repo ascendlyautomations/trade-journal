@@ -101,7 +101,7 @@ final class AdminChartsViewModel {
                         guard !Task.isCancelled, self.selectedRange == range else { return }
                         failedRanges.insert(range)
                         bundle = nil
-                        errorMessage = error.localizedDescription
+                        errorMessage = UserFacingError.message(for: error)
                     }
                 }
             }
@@ -120,7 +120,7 @@ final class AdminChartsViewModel {
                         guard !Task.isCancelled, self.selectedRange == range else { return }
                         productFailedRanges.insert(range)
                         productBundle = nil
-                        productErrorMessage = error.localizedDescription
+                        productErrorMessage = UserFacingError.message(for: error)
                     }
                 }
             }
@@ -146,7 +146,7 @@ final class AdminChartsViewModel {
                             guard !Task.isCancelled, self.historicalQuery == historicalQuerySnapshot else { return }
                             historicalFailedQueries.insert(historicalQuerySnapshot)
                             historicalBundle = nil
-                            historicalErrorMessage = error.localizedDescription
+                            historicalErrorMessage = UserFacingError.message(for: error)
                         }
                     }
                 }
@@ -165,7 +165,7 @@ final class AdminChartsViewModel {
                         guard !Task.isCancelled, self.lifecycleQuery == lifecycleQuerySnapshot else { return }
                         lifecycleFailedQueries.insert(lifecycleQuerySnapshot)
                         lifecycleBundle = nil
-                        lifecycleErrorMessage = error.localizedDescription
+                        lifecycleErrorMessage = UserFacingError.message(for: error)
                     }
                 }
             }

@@ -136,7 +136,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
                 return .failed("Purchase could not be completed")
             }
         } catch {
-            return .failed(error.localizedDescription)
+            return .failed(UserFacingError.message(for: error))
         }
     }
 

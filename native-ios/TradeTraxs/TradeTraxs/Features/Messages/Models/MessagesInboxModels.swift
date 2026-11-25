@@ -40,10 +40,7 @@ nonisolated enum MessagesInboxSupport {
     }
 
     static func message(for error: Error) -> String {
-        if let app = error as? AppError {
-            return UserFacingError.map(app).message
-        }
-        return UserFacingError.map(AppError.unknown(message: error.localizedDescription)).message
+        UserFacingError.message(for: error)
     }
 
     static func relativeTimestamp(_ date: Date?, now: Date = .now) -> String {

@@ -8,10 +8,9 @@ import { usePhoneWebTouchTarget } from "@/lib/usePhoneWebTouchTarget"
 import { useMobileWebSheetDismiss } from "@/lib/useMobileWebSheetDismiss"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { UI_MODAL_BACKDROP } from "@/lib/uiPrimitiveStyles"
-import {
-  MESSAGE_REACTIONS,
-  type MessageReactionEmoji,
-} from "@/lib/roomMessageReactions"
+import type { MessageReactionEmoji } from "@/lib/roomMessageReactions"
+import MessageReactionQuickRow from "@/app/components/messages/MessageReactionQuickRow.tsx"
+import UnicodeEmojiPickerOverlay from "@/app/components/messages/UnicodeEmojiPickerOverlay.tsx"
 
 export function useRoomMessageOpenActions(
   messageId: string,
@@ -103,6 +102,7 @@ export function MobileWebRoomMessageActionSheet({
   deleting = false,
 }: MobileWebRoomMessageActionSheetProps) {
   const [mounted, setMounted] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const sheetDismiss = useMobileWebSheetDismiss(onClose)
 
   useEffect(() => setMounted(true), [])
@@ -147,25 +147,16 @@ export function MobileWebRoomMessageActionSheet({
           </div>
         </div>
         {canReact ? (
-          <div
-            className="flex justify-center gap-1 border-b border-white/10 px-4 py-3"
-            role="group"
-            aria-label="React to message"
-          >
-            {MESSAGE_REACTIONS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                className="flex h-11 w-11 items-center justify-center rounded-full text-xl active:bg-white/10"
-                aria-label={`React with ${emoji}`}
-                onClick={() => {
-                  onSelectReaction(emoji)
-                  onClose()
-                }}
-              >
-                {emoji}
-              </button>
-            ))}
+          <div className="border-b border-white/10 px-4 py-3">
+            <MessageReactionQuickRow
+              onQuickPick={(emoji) => {
+                onSelectReaction(emoji)
+                onClose()
+              }}
+              onOpenFullPicker={() => setPickerOpen(true)}
+              buttonClassName="flex h-11 w-11 items-center justify-center rounded-full text-xl active:bg-white/10"
+              plusClassName="text-lg font-semibold text-gray-300"
+            />
           </div>
         ) : null}
         <div className="py-1">
@@ -195,6 +186,15 @@ export function MobileWebRoomMessageActionSheet({
         </div>
         <div className="h-[max(0.75rem,env(safe-area-inset-bottom))]" />
       </div>
+      <UnicodeEmojiPickerOverlay
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={(emoji) => {
+          onSelectReaction(emoji)
+          onClose()
+          setPickerOpen(false)
+        }}
+      />
     </div>,
     document.body
   )

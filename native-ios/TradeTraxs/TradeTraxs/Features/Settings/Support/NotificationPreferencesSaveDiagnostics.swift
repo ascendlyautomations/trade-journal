@@ -25,11 +25,8 @@ nonisolated enum NotificationPreferencesSaveDiagnostics {
     }
 
     static func userSaveMessage(for error: Error) -> String {
-        let detail = describe(error)
-        if detail.isEmpty {
-            return "Couldn't save. Changes were reverted."
-        }
-        return "Couldn't save. Changes were reverted. (\(detail))"
+        _ = describe(error)
+        return "Couldn't save notification settings. Your changes were reverted."
     }
 
     private static func describe(_ error: Error) -> String {

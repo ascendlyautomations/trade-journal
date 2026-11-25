@@ -14,9 +14,12 @@ struct TradeRoomDiscoveryRow: View {
     var isYourRoomsContext: Bool = false
     var isOwner: Bool = false
     var presentation: Presentation = .elevatedCard
+    /// When true, a joined ``plainList`` row can tap through to leave (Explore search).
+    var allowsTogglingJoinedMembership: Bool = false
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
     let onJoin: () -> Void
+    var onLeaveJoined: (() -> Void)? = nil
     var isFavorited: Bool = false
     var onToggleFavorite: (() -> Void)? = nil
 
@@ -198,7 +201,23 @@ struct TradeRoomDiscoveryRow: View {
                 .controlSize(.small)
                 .frame(width: 72)
         case .joined, .requested:
-            if presentation == .plainList {
+            if presentation == .plainList,
+               allowsTogglingJoinedMembership,
+               joinState == .joined,
+               let onLeaveJoined
+            {
+                Button(action: onLeaveJoined) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(Capsule().fill(colors.fillSecondary))
+                }
+                .buttonStyle(.experiencePlain)
+                .accessibilityLabel("Leave room")
+                .accessibilityIdentifier("tradeRooms.discovery.leave.\(room.id.rawValue)")
+            } else if presentation == .plainList {
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(colors.primaryText)

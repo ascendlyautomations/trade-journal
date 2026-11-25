@@ -75,7 +75,7 @@ final class AdminSupportTicketDetailViewModel {
             snapshot.row.updatedAt = Date()
             return true
         } catch {
-            saveMessage = error.localizedDescription
+            saveMessage = UserFacingError.message(for: error)
             return false
         }
     }
@@ -108,7 +108,7 @@ final class AdminSupportTicketDetailViewModel {
             let byHandle = try await adminUsers.fetchDirectory(query)
             return byHandle.rows.first(where: { $0.id == snapshot.row.userID }) ?? byHandle.rows.first
         } catch {
-            openUserError = error.localizedDescription
+            openUserError = UserFacingError.message(for: error)
             return nil
         }
     }

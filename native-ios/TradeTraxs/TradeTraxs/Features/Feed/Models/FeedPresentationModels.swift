@@ -151,10 +151,7 @@ nonisolated enum FeedSupport {
     }
 
     static func message(for error: Error) -> String {
-        if let app = error as? AppError {
-            return UserFacingError.map(app).message
-        }
-        return UserFacingError.map(AppError.unknown(message: error.localizedDescription)).message
+        UserFacingError.message(for: error)
     }
 
     /// Web `sortFeedItemsDesc`, newest `created_at` first.

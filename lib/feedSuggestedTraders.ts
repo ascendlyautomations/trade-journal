@@ -91,7 +91,6 @@ export async function fetchSuggestedTraderPool(
       .from("profiles")
       .select(SUGGESTED_TRADER_FIELDS)
       .not("username", "is", null)
-      .neq("is_private", true)
       .neq("id", viewerId)
       .order("created_at", { ascending: false })
       .limit(SUGGESTED_TRADERS_POOL),

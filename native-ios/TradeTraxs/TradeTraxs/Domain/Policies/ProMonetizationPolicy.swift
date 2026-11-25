@@ -208,7 +208,10 @@ enum ProMonetizationPolicy {
         demoModeActive: Bool,
         profileID: ProfileID?
     ) -> Bool {
-        TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
+        if TraxsProPreviewSession.shared.isBacktestLabPreviewActive {
+            return false
+        }
+        return TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
             demoModeActive: demoModeActive,
             profileID: profileID
         )

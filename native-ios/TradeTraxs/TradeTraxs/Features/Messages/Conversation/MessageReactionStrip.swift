@@ -44,15 +44,15 @@ struct MessageReactionConfiguration: Hashable {
 
 /// Layout metrics for floating reaction pills (DM + Trade Room bubbles).
 enum MessageReactionLayout {
-    /// Space between bubble bottom and the reaction row (before overlap pull-up).
-    static let pillVerticalOffset: CGFloat = 6
-    /// Pulls the reaction row up so pills lightly overlap the bubble bottom edge.
-    static let pillBubbleEdgeOverlap: CGFloat = 5
+    /// Approximate pill height (emoji + padding + stroke).
+    static let pillHeight: CGFloat = 24
+    /// Pills overlap the bubble bottom border only (not content — sits in flow below bubble).
+    static let pillOverlapIntoBubble: CGFloat = 5
     /// Gap between adjacent reaction pills (each pill keeps its own capsule background).
     static let pillSpacing: CGFloat = 4
-    /// Layout space under the bubble for the floating row + breathing room before the next message.
-    static let reservedSpaceBelowBubble: CGFloat = 20
-    static let chipHorizontalInset: CGFloat = 6
+    /// Gap between timestamp and the bubble/reaction stack above it.
+    static let timestampTopGap: CGFloat = 5
+    static let chipHorizontalInset: CGFloat = 4
 
     private static let rowHorizontalPadding: CGFloat = ExperienceSpacing.md
     private static let oppositeGutterMin: CGFloat = 48
@@ -92,7 +92,7 @@ struct MessageReactionStrip: View {
                     )
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
+        .fixedSize(horizontal: true, vertical: true)
         .animation(.spring(response: 0.34, dampingFraction: 0.82), value: summaries)
     }
 
@@ -156,15 +156,10 @@ struct MessageReactionStrip: View {
     }
 }
 
-/// Reaction row anchored to the bubble's trailing (sent) or leading (received) edge.
+/// Reaction pills for a single message bubble (intrinsic width — no full-column frame).
 struct MessageReactionBubbleAttachment: View {
     let configuration: MessageReactionConfiguration
     let isOutgoing: Bool
-    var columnMaxWidth: CGFloat? = nil
-
-    private var rowAlignment: Alignment {
-        isOutgoing ? .trailing : .leading
-    }
 
     var body: some View {
         MessageReactionStrip(
@@ -173,12 +168,6 @@ struct MessageReactionBubbleAttachment: View {
             isEnabled: configuration.isEnabled,
             onToggle: configuration.onToggle
         )
-        .frame(
-            maxWidth: columnMaxWidth ?? MessageReactionLayout.maxHorizontalReach(isOutgoing: isOutgoing),
-            alignment: rowAlignment
-        )
-        .padding(.leading, isOutgoing ? 0 : MessageReactionLayout.chipHorizontalInset)
-        .padding(.trailing, isOutgoing ? MessageReactionLayout.chipHorizontalInset : 0)
         .allowsHitTesting(configuration.isEnabled)
         .accessibilityIdentifier("message.reaction.attachment")
     }

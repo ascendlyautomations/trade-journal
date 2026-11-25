@@ -88,6 +88,16 @@ enum ContextualTourGeometry {
         }
     }
 
+    /// Extra clearance so settings rows are not treated as visible under the navigation bar.
+    static func measurementTopInset(for target: ContextualTourTargetID?) -> CGFloat {
+        switch target {
+        case .settingsAppearance, .settingsTradingRules:
+            return ContextualTourCardPlacement.navigationClearance
+        default:
+            return 0
+        }
+    }
+
     static func needsScroll(
         frame: CGRect,
         viewport: CGRect,
@@ -100,9 +110,34 @@ enum ContextualTourGeometry {
             width: viewport.width,
             height: max(0, viewport.height - topInset - bottomInset)
         )
+        if isRenderableSpotlight(frame, in: visible) {
+            return false
+        }
         let intersection = visible.intersection(frame)
         if intersection.isNull || intersection.isEmpty { return true }
         return intersection.height < frame.height * 0.6 || intersection.width < frame.width * 0.6
+    }
+
+    /// Tall dashboard sections read better with a top anchor; compact controls stay centered.
+    static func scrollAnchor(for target: ContextualTourTargetID) -> UnitPoint {
+        switch target {
+        case .dashboardPerformance,
+             .dashboardTrades,
+             .dashboardReports,
+             .dashboardWithdrawals,
+             .payoutsHistory,
+             .expenseTrackerAdd,
+             .expenseTrackerIncome,
+             .expenseTrackerAnalytics,
+             .expenseTrackerExport:
+            return .top
+        case .settingsAppearance:
+            return UnitPoint(x: 0.5, y: 0.28)
+        case .settingsTradingRules:
+            return UnitPoint(x: 0.5, y: 0.22)
+        default:
+            return .center
+        }
     }
 }
 

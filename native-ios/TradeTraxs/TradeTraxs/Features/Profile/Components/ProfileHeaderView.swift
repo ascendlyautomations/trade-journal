@@ -72,6 +72,9 @@ struct ProfileHeaderView: View {
         let stats = store.stats
 
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            if store.isOwner, ExploreModeSupport.isActive {
+                GuestModeShowcaseProfileBanner()
+            }
             profileIdentityAndStats(profile, stats: stats)
 
             if let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
@@ -85,7 +88,9 @@ struct ProfileHeaderView: View {
 
             ProfileActionRow(
                 mode: viewModel.actionMode,
-                onEdit: viewModel.openEditProfile,
+                onEdit: viewModel.actionMode == .guestShowcase
+                    ? viewModel.exitGuestToCreateAccount
+                    : viewModel.openEditProfile,
                 onShare: viewModel.presentShare,
                 onCreateTradeRoom: viewModel.createTradeRoom,
                 onViewTradeRoom: viewModel.openTradeRoom,
@@ -96,7 +101,7 @@ struct ProfileHeaderView: View {
                 canMessage: viewModel.canMessage
             )
 
-            if store.isOwner {
+            if store.isOwner, !ExploreModeSupport.isActive {
                 ProfileTradeRoomDestinationRow(
                     title: store.hasTradeRoom ? "View Trade Room" : "Create Trade Room",
                     accessibilityIdentifier: store.hasTradeRoom
@@ -123,7 +128,10 @@ struct ProfileHeaderView: View {
     private func profileIdentityAndStats(_ profile: Profile, stats: ProfileStats?) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             identityBlock(profile, stats: stats)
-            ProfileStatisticsRow(metrics: ProfileDisplay.headerMetrics(from: stats))
+            ProfileStatisticsRow(metrics: ProfileDisplay.headerMetrics(
+                from: stats,
+                contentLocked: store.isContentLocked
+            ))
         }
         .contextualTourTarget(.profileIdentity)
     }
@@ -177,7 +185,7 @@ struct ProfileHeaderView: View {
         }
         .contextMenu {
             Button {
-                UIPasteboard.general.string = "@\(profile.username)"
+                _ = ExperienceClipboard.copy("@\(profile.username)")
                 ExperienceHaptics.play(.success)
             } label: {
                 Label("Copy Username", systemImage: "doc.on.doc")
@@ -263,6 +271,33 @@ struct ProfileHeaderView: View {
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Profile tab callout while exploring the live showcase account as a guest.
+private struct GuestModeShowcaseProfileBanner: View {
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text("Showcase account")
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
+            Text(
+                "You're browsing TradeTraxs as a guest. This journal belongs to our public showcase trader—not your personal account."
+            )
+            .experienceStyle(.footnote, color: colors.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.fillSecondary.opacity(0.55), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                .strokeBorder(colors.border.opacity(0.7), lineWidth: ExperienceBorder.hairline)
+        }
+        .accessibilityIdentifier("profile.guestShowcase.banner")
     }
 }
 

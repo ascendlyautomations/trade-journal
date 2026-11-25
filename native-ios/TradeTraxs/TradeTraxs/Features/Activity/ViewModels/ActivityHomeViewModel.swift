@@ -319,6 +319,39 @@ final class ActivityHomeViewModel {
         }
     }
 
+    func markUnread(row: ActivityRowModel) {
+        ExperienceHaptics.play(.selection)
+        let readIDs = row.groupedNotificationIDs.filter { id in
+            presentationItems.first(where: { $0.id == id })?.isRead == true
+        }
+        guard !readIDs.isEmpty else { return }
+
+        let inboxIDs = readIDs.filter { id in inboxStore.items.contains(where: { $0.id == id }) }
+        if !inboxIDs.isEmpty {
+            inboxStore.markUnreadLocally(ids: inboxIDs)
+        }
+        for id in readIDs where !inboxIDs.contains(id) {
+            markFilteredUnreadLocally(id: id)
+        }
+        for id in readIDs {
+            patchFilteredItem(id: id) { $0.isRead = false }
+        }
+        Task {
+            do {
+                _ = try await notifications.markUnread(ids: readIDs)
+                AppIconBadgeSync.refresh(animated: true)
+            } catch {
+                for id in readIDs where inboxIDs.contains(id) {
+                    inboxStore.markReadLocally(id: id)
+                }
+                for id in readIDs {
+                    patchFilteredItem(id: id) { $0.isRead = true }
+                }
+                ExperienceHaptics.play(.warning)
+            }
+        }
+    }
+
     func delete(row: ActivityRowModel) {
         ExperienceHaptics.play(.selection)
         let ids = row.groupedNotificationIDs
@@ -635,6 +668,14 @@ final class ActivityHomeViewModel {
         else { return }
         filteredItems[index].isRead = true
         inboxStore.setUnreadCount(max(0, inboxStore.unreadCount - 1))
+    }
+
+    private func markFilteredUnreadLocally(id: NotificationID) {
+        guard let index = filteredItems.firstIndex(where: { $0.id == id }),
+              filteredItems[index].isRead
+        else { return }
+        filteredItems[index].isRead = false
+        inboxStore.setUnreadCount(inboxStore.unreadCount + 1)
     }
 
     private func patchFilteredItem(id: NotificationID, patch: (inout ActivityNotification) -> Void) {

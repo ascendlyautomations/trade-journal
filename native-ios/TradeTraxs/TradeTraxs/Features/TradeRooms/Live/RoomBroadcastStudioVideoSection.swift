@@ -7,6 +7,9 @@ struct RoomBroadcastStudioVideoSection: View {
     @Binding var isFullscreen: Bool
     /// Viewer sheet while typing: short live strip; does not recreate the video renderer.
     var isCompactForChatComposer: Bool = false
+    var showsPictureInPictureControl: Bool = false
+    var isPictureInPictureActive: Bool = false
+    var onTogglePictureInPicture: (() -> Void)? = nil
     @Environment(\.themeColors) private var colors
 
     private var compactVideoHeight: CGFloat { 56 }
@@ -14,12 +17,12 @@ struct RoomBroadcastStudioVideoSection: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Color.black
-            BroadcastStreamZoomableVideoView(
+            LiveKitBroadcastVideoView(
                 track: coordinator.videoTrackForExpandedViewer,
-                isFullscreen: false,
+                trackRevision: coordinator.programVideoTrackRevision,
                 onFirstFrame: { coordinator.markProgramVideoFrameRendered() }
             )
-            .id(coordinator.programVideoTrackRevision)
+            .id(coordinator.programVideoRendererIdentity)
             .opacity(coordinator.hasDisplayableProgramVideo ? 1 : 0)
 
             if let placeholder = coordinator.programVideoPlaceholder {
@@ -29,8 +32,26 @@ struct RoomBroadcastStudioVideoSection: View {
                 )
             }
 
+            BroadcastLiveReactionOverlay(reactions: coordinator.floatingReactions)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+
             HStack(spacing: ExperienceSpacing.xs) {
                 RoomBroadcastStreamPlaybackMuteButton(coordinator: coordinator)
+                if showsPictureInPictureControl, let onTogglePictureInPicture {
+                    Button(action: onTogglePictureInPicture) {
+                        Image(systemName: isPictureInPictureActive ? "pip.exit" : "pip.enter")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(
+                                isPictureInPictureActive ? colors.accent : .white
+                            )
+                            .padding(8)
+                            .background(Circle().fill(Color.black.opacity(0.55)))
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .accessibilityLabel(
+                        isPictureInPictureActive ? "Expand video" : "Minimize video for chat"
+                    )
+                }
                 if !isCompactForChatComposer {
                     Button {
                         isFullscreen = true
@@ -56,6 +77,7 @@ struct RoomBroadcastStudioVideoSection: View {
                 ? "tradeRooms.broadcast.video.compact"
                 : "tradeRooms.broadcast.video.expanded"
         )
+        .onAppear { coordinator.adoptProgramVideoSurface(.inlineExpanded) }
     }
 }
 

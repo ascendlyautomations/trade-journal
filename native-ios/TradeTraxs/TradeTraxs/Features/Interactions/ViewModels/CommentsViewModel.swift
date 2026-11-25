@@ -13,10 +13,19 @@ final class CommentsViewModel {
     var draft = ""
     private(set) var replyTarget: CommentThreadSupport.ReplyTarget?
     private(set) var composerFocusToken = UUID()
+    private(set) var scrollToThreadBottomToken: UInt64 = 0
+    /// When true, list growth triggers scroll-to-bottom (keyboard stays up after send).
+    var maintainKeyboardScrollAnchor = false
+
+    var showsTradePicker = false
+    var isLoadingTradePicker = false
+    private(set) var tradePickerTrades: [Trade] = []
+    var pendingSharedTrade: Trade?
 
     let target: InteractionTarget
 
     private let repository: any InteractionRepository
+    private let tradesRepository: (any TradeRepository)?
     private let engagementStore: EngagementStore
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache?
@@ -35,6 +44,7 @@ final class CommentsViewModel {
     private var commentLikeMutationEpoch: [CommentID: UInt64] = [:]
     private var expandedReplyThreads: Set<CommentID> = []
     private var viewerUserID: String?
+    private(set) var sharedTrades: [TradeID: Trade] = [:]
 
     init(
         target: InteractionTarget,
@@ -43,16 +53,90 @@ final class CommentsViewModel {
         session: any SessionProviding,
         contentOwnerUserID: String? = nil,
         detailCache: DetailPresentationCache? = nil,
-        realtimeHub: RealtimeHub? = nil
+        realtimeHub: RealtimeHub? = nil,
+        trades: (any TradeRepository)? = nil
     ) {
         self.target = target
         self.repository = repository
+        self.tradesRepository = trades
         self.engagementStore = engagementStore
         self.session = session
         self.contentOwnerUserID = contentOwnerUserID
         self.detailCache = detailCache
         self.realtimeHub = realtimeHub
         self.commentLikeSource = CommentLikeSource.from(target.kind)
+    }
+
+    func sharedTrade(for comment: InteractionComment) -> Trade? {
+        guard let id = comment.sharedTradeID else { return nil }
+        return sharedTrades[id]
+    }
+
+    func presentTradePicker() {
+        ExperienceHaptics.play(.selection)
+        showsTradePicker = true
+    }
+
+    func clearPendingSharedTrade() {
+        pendingSharedTrade = nil
+    }
+
+    func stageSharedTrade(_ trade: Trade) {
+        pendingSharedTrade = trade
+        sharedTrades[trade.id] = trade
+        showsTradePicker = false
+        composerFocusToken = UUID()
+    }
+
+    func loadTradePickerIfNeeded() async {
+        guard tradePickerTrades.isEmpty, !isLoadingTradePicker else { return }
+        guard let tradesRepository else { return }
+        guard let viewerID = await session.currentUserID.map({ ProfileID($0.rawValue) }) else { return }
+        isLoadingTradePicker = true
+        defer { isLoadingTradePicker = false }
+        if viewerID.rawValue.hasPrefix("dev-") {
+            tradePickerTrades = TradeShareFixtures.sampleTrades(ownerID: viewerID)
+            return
+        }
+        do {
+            let page = try await tradesRepository.trades(
+                ownedBy: viewerID,
+                accountID: nil,
+                page: PageRequest(limit: 40),
+                publicOnly: false
+            )
+            let previews = page.items.map {
+                TradeSummaryMapper.previewTrade(
+                    from: TradeSummaryMapper.summary(fromPartialListTrade: $0)
+                )
+            }
+            tradePickerTrades = CommentTradeShareSupport.eligibleForAttachment(
+                previews,
+                viewerID: viewerID
+            )
+        } catch {
+            tradePickerTrades = []
+        }
+    }
+
+    private func hydrateSharedTrades(from comments: [InteractionComment]) async {
+        let ids = Set(comments.compactMap(\.sharedTradeID))
+        guard !ids.isEmpty, let tradesRepository else { return }
+        let missing = ids.filter { sharedTrades[$0] == nil }
+        guard !missing.isEmpty else { return }
+        do {
+            for tradeID in missing {
+                let trade = try await tradesRepository.trade(id: tradeID)
+                sharedTrades[tradeID] = trade
+                detailCache?.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
+            }
+        } catch {
+            // Keep cards in loading state until next refresh.
+        }
+    }
+
+    private func requestThreadScrollToBottom() {
+        scrollToThreadBottomToken &+= 1
     }
 
     var topLevelComments: [InteractionComment] {
@@ -139,6 +223,7 @@ final class CommentsViewModel {
                 hasLoaded = true
                 engagementStore.replaceCommentCount(loaded.count, on: target)
                 await loadCommentLikeMeta(for: loaded)
+                await hydrateSharedTrades(from: comments)
                 restartCommentLikeRealtime(for: loaded)
                 restartCommentPinRealtime()
             }
@@ -158,10 +243,12 @@ final class CommentsViewModel {
 
     func submit() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isPosting else { return }
+        let sharedTrade = pendingSharedTrade
+        guard (!text.isEmpty || sharedTrade != nil), !isPosting else { return }
 
         let parentID = replyTarget?.parentCommentID
         let capturedReplyTarget = replyTarget
+        let capturedSharedTrade = sharedTrade
 
         isPosting = true
         defer { isPosting = false }
@@ -184,15 +271,24 @@ final class CommentsViewModel {
             authorDisplayName: cachedViewer?.displayName,
             authorAvatarURL: cachedViewer?.avatar?.id,
             body: text,
+            sharedTradeID: sharedTrade?.id,
             parentCommentID: parentID,
             createdAt: Date(),
             isPinned: false
         )
         let previous = comments
         let previousReplyTarget = replyTarget
+        let previousPendingTrade = pendingSharedTrade
         insertSorted(optimistic)
+        if let sharedTrade {
+            sharedTrades[sharedTrade.id] = sharedTrade
+        }
         draft = ""
+        pendingSharedTrade = nil
         replyTarget = nil
+        maintainKeyboardScrollAnchor = true
+        requestThreadScrollToBottom()
+        composerFocusToken = UUID()
         if let rootID = parentID {
             expandedReplyThreads.insert(rootID)
         }
@@ -205,18 +301,32 @@ final class CommentsViewModel {
         }
 
         do {
-            let created = try await repository.addComment(body: text, parentID: parentID, on: target)
+            let created = try await repository.addComment(
+                body: text,
+                parentID: parentID,
+                sharedTradeID: capturedSharedTrade?.id,
+                on: target
+            )
             reconcileCreatedComment(created, replacingOptimisticID: optimisticID)
             likesByCommentID[created.id] = .empty
+            if let tradeID = created.sharedTradeID, let cached = sharedTrades[tradeID] {
+                sharedTrades[tradeID] = cached
+            }
+            await hydrateSharedTrades(from: [created])
             restartCommentLikeRealtime(for: comments)
+            requestThreadScrollToBottom()
             ExperienceHaptics.play(.success)
         } catch {
             comments = previous
             replyTarget = previousReplyTarget
+            pendingSharedTrade = previousPendingTrade
             engagementStore.applyCommentCountDelta(-1, on: target)
             draft = text
             if capturedReplyTarget != nil {
                 replyTarget = capturedReplyTarget
+            }
+            if let capturedSharedTrade {
+                pendingSharedTrade = capturedSharedTrade
             }
             errorMessage = ProfileSectionSupport.message(for: error)
             ExperienceHaptics.play(.warning)

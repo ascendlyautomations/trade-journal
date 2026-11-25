@@ -358,6 +358,7 @@ final class PropFirmExpensesViewModel {
         let through = periodEnd < PropFirmExpenseMoney.dayString(from: .now)
             ? periodEnd
             : PropFirmExpenseMoney.dayString(from: .now)
+        let accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
         let file = PropFirmExpenseTaxExport.trackerFile(
             periodStart: periodStart,
             periodEnd: periodEnd,
@@ -365,7 +366,8 @@ final class PropFirmExpensesViewModel {
             payouts: payoutRows,
             kinds: kinds,
             projectKey: projectKey,
-            reservePercent: reservePercent
+            reservePercent: reservePercent,
+            accountNames: accountNames
         )
         return try PropFirmExpenseTaxExport.writeFile(csv: file.csv, filename: file.filename)
     }

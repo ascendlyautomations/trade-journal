@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import TradeTraxs
 
@@ -471,6 +472,60 @@ final class ContextualTourTests: XCTestCase {
             bottomInset: bottom
         )
         XCTAssertLessThanOrEqual(top + cardHeight, hole.minY - ContextualTourCardPlacement.gap + 0.5)
+    }
+
+    func testNeedsScrollStopsWhenSpotlightIsRenderable() {
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let equityBlock = CGRect(x: 16, y: 160, width: 358, height: 320)
+        XCTAssertFalse(
+            ContextualTourGeometry.needsScroll(
+                frame: equityBlock,
+                viewport: viewport,
+                topInset: 59,
+                bottomInset: 83
+            )
+        )
+    }
+
+    func testDashboardPerformanceUsesTopScrollAnchor() {
+        XCTAssertEqual(
+            ContextualTourGeometry.scrollAnchor(for: .dashboardPerformance),
+            .top
+        )
+        XCTAssertEqual(
+            ContextualTourGeometry.scrollAnchor(for: .dashboardAccountAndDates),
+            .center
+        )
+    }
+
+    func testSettingsTourScrollAnchorsAndMeasurementInset() {
+        XCTAssertEqual(
+            ContextualTourGeometry.scrollAnchor(for: .settingsAppearance),
+            UnitPoint(x: 0.5, y: 0.28)
+        )
+        XCTAssertEqual(
+            ContextualTourGeometry.scrollAnchor(for: .settingsTradingRules),
+            UnitPoint(x: 0.5, y: 0.22)
+        )
+        XCTAssertEqual(
+            ContextualTourGeometry.measurementTopInset(for: .settingsAppearance),
+            ContextualTourCardPlacement.navigationClearance
+        )
+        XCTAssertEqual(ContextualTourGeometry.measurementTopInset(for: .dashboardTrades), 0)
+    }
+
+    func testSettingsAppearanceStepRequiresScrollWhenBelowFold() {
+        let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let row = CGRect(x: 16, y: 720, width: 358, height: 52)
+        let topInset: CGFloat = 59 + ContextualTourCardPlacement.navigationClearance
+        XCTAssertTrue(
+            ContextualTourGeometry.needsScroll(
+                frame: row,
+                viewport: viewport,
+                topInset: topInset,
+                bottomInset: 83
+            )
+        )
     }
 
     func testSpotlightRejectsAFullScreenFrame() {

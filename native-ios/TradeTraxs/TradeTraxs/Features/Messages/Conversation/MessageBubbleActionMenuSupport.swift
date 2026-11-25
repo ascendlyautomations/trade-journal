@@ -29,6 +29,7 @@ enum MessageBubbleActionMenuSupport {
         onReport: (() -> Void)?,
         onReply: (() -> Void)? = nil,
         onSelectEmoji: @escaping (String) -> Void,
+        onBrowseEmojis: (() -> Void)? = nil,
         onDismiss: @escaping () -> Void
     ) -> MessageBubbleActionMenu {
         let reactionsEnabled = item.sendState == .sent && reactionConfiguration?.isEnabled == true
@@ -38,7 +39,7 @@ enum MessageBubbleActionMenuSupport {
         let copyAction: (() -> Void)? = {
             guard let text = item.copyableMessageText else { return nil }
             return {
-                UIPasteboard.general.string = text
+                _ = ExperienceClipboard.copy(text)
                 ExperienceHaptics.play(.success)
             }
         }()
@@ -54,6 +55,7 @@ enum MessageBubbleActionMenuSupport {
             supportedEmojis: emojis,
             selectedEmoji: selected,
             onSelectEmoji: onSelectEmoji,
+            onBrowseEmojis: reactionsEnabled ? onBrowseEmojis : nil,
             onCopy: copyAction,
             onRetry: retryAction,
             onDelete: deleteForMeAction,
@@ -96,6 +98,6 @@ enum MessageBubbleActionMenuSupport {
         reactionConfiguration: MessageReactionConfiguration?
     ) -> Int {
         guard item.sendState == .sent, reactionConfiguration?.isEnabled == true else { return 0 }
-        return reactionConfiguration?.supportedEmojis.count ?? 0
+        return (reactionConfiguration?.supportedEmojis.count ?? 0) + 1
     }
 }

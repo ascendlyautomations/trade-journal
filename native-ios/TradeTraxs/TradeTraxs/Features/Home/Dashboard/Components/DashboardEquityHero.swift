@@ -128,7 +128,7 @@ struct DashboardEquityHero: View {
                 .accessibilityIdentifier("dashboard.equity.loading")
                 .accessibilityLabel("Loading equity chart")
         case .chart:
-            ProfileEquityCurveView(points: chartPoints)
+            ProfileEquityCurveView(points: chartPoints, horizontalLayout: .dashboard)
                 .frame(height: 280)
                 .accessibilityIdentifier("dashboard.equity.chart")
                 .accessibilityLabel(title == "Account Value" ? "Account value curve" : "Equity curve")

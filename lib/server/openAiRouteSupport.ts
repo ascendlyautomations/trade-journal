@@ -18,12 +18,59 @@ export function getOpenAiClient(): OpenAI | null {
   return cachedClient
 }
 
+export type OpenAiErrorMeta = {
+  httpStatus?: number
+  type?: string
+  code?: string
+  requestId?: string
+}
+
+/** Safe fields for server logs (no API keys, no long upstream copy). */
+export function openAiErrorMetaForLog(error: unknown): OpenAiErrorMeta {
+  if (!error || typeof error !== "object") return {}
+  const e = error as {
+    status?: number
+    code?: string
+    type?: string
+    requestID?: string
+    error?: { type?: string; code?: string; message?: string }
+  }
+  return {
+    httpStatus: e.status,
+    type: e.type ?? e.error?.type,
+    code: e.code ?? e.error?.code,
+    requestId: e.requestID,
+  }
+}
+
 export type AnalyzeTradeFailurePayload = {
   status: number
   error: string
   reply: string
   code: string
-  detail?: string
+}
+
+function isQuotaExhausted(meta: OpenAiErrorMeta): boolean {
+  const type = (meta.type ?? "").toLowerCase()
+  const code = (meta.code ?? "").toLowerCase()
+  return (
+    type === "insufficient_quota" ||
+    code === "insufficient_quota" ||
+    code === "credit_balance_exhausted" ||
+    code.includes("insufficient_quota") ||
+    code.includes("credit_balance")
+  )
+}
+
+function isRateLimited(meta: OpenAiErrorMeta): boolean {
+  const type = (meta.type ?? "").toLowerCase()
+  const code = (meta.code ?? "").toLowerCase()
+  return (
+    type === "rate_limit_exceeded" ||
+    type === "tokens" ||
+    code === "rate_limit_exceeded" ||
+    code.includes("rate_limit_exceeded")
+  )
 }
 
 export function analyzeTradeFailureFromError(error: unknown): AnalyzeTradeFailurePayload {
@@ -34,55 +81,61 @@ export function analyzeTradeFailureFromError(error: unknown): AnalyzeTradeFailur
       error: "AI service unavailable",
       reply:
         "Trade AI is temporarily unavailable on the server. Our team has been notified. Please try again later.",
-      detail: "OPENAI_API_KEY is not set in the deployment environment.",
     }
   }
 
-  if (error && typeof error === "object") {
-    const e = error as {
-      status?: number
-      code?: string
-      message?: string
-      error?: { message?: string; code?: string; type?: string }
-    }
-    const message = `${e.message ?? ""} ${e.error?.message ?? ""}`.trim()
-    const apiCode = `${e.code ?? ""} ${e.error?.code ?? ""}`.toLowerCase()
-    const status = e.status
+  const meta = openAiErrorMetaForLog(error)
 
-    if (status === 401 || apiCode.includes("invalid_api_key")) {
-      return {
-        status: 503,
-        code: "openai_auth_failed",
-        error: "AI service misconfigured",
-        reply:
-          "Trade AI could not reach the analysis service. Please try again later.",
-        detail: message || "OpenAI rejected the API key.",
-      }
+  if (meta.httpStatus === 401 || meta.code === "invalid_api_key") {
+    return {
+      status: 503,
+      code: "openai_auth_failed",
+      error: "AI service misconfigured",
+      reply:
+        "Trade AI could not reach the analysis service. Please try again later.",
     }
+  }
 
-    if (status === 429 || apiCode.includes("rate_limit")) {
-      return {
-        status: 503,
-        code: "openai_rate_limited",
-        error: "AI service busy",
-        reply:
-          "Trade AI is busy right now. Wait a moment and try your analysis again.",
-        detail: message,
-      }
+  if (isQuotaExhausted(meta)) {
+    return {
+      status: 503,
+      code: "openai_quota_exhausted",
+      error: "AI service unavailable",
+      reply:
+        "Trade AI is temporarily unavailable. The analysis service needs to be restored on our side. Please try again later or contact support if this continues.",
     }
+  }
 
-    if (
-      status === 400 &&
-      (apiCode.includes("invalid") || message.toLowerCase().includes("model"))
-    ) {
-      return {
-        status: 503,
-        code: "openai_request_invalid",
-        error: "AI request rejected",
-        reply:
-          "We couldn't run this analysis with the current trade data. Try again or contact support if it persists.",
-        detail: message,
-      }
+  if (meta.httpStatus === 429 && isRateLimited(meta)) {
+    return {
+      status: 503,
+      code: "openai_rate_limited",
+      error: "AI service busy",
+      reply:
+        "Trade AI is busy right now. Wait a moment and try your analysis again.",
+    }
+  }
+
+  if (meta.httpStatus === 429) {
+    return {
+      status: 503,
+      code: "openai_upstream_throttled",
+      error: "AI service busy",
+      reply:
+        "Trade AI could not complete the request right now. Wait a moment and try again.",
+    }
+  }
+
+  if (
+    meta.httpStatus === 400 &&
+    (meta.code?.includes("invalid") || meta.type === "invalid_request_error")
+  ) {
+    return {
+      status: 503,
+      code: "openai_request_invalid",
+      error: "AI request rejected",
+      reply:
+        "We couldn't run this analysis with the current trade data. Try again or contact support if it persists.",
     }
   }
 
@@ -92,6 +145,15 @@ export function analyzeTradeFailureFromError(error: unknown): AnalyzeTradeFailur
     error: "Analysis failed",
     reply:
       "We couldn't complete the analysis right now. Please try again in a moment.",
-    detail: error instanceof Error ? error.message : String(error),
   }
+}
+
+const TRANSIENT_OPENAI_RETRY_MS = 1_200
+
+export function openAiRetryDelayMs(error: unknown): number | null {
+  const meta = openAiErrorMetaForLog(error)
+  if (meta.httpStatus === 429 && isRateLimited(meta) && !isQuotaExhausted(meta)) {
+    return TRANSIENT_OPENAI_RETRY_MS
+  }
+  return null
 }

@@ -165,18 +165,6 @@ struct ActivityHomeView: View {
                             } label: {
                                 Label("Open", systemImage: "arrow.up.right.square")
                             }
-                            if row.isUnread {
-                                Button {
-                                    viewModel.markRead(row: row)
-                                } label: {
-                                    Label("Mark as Read", systemImage: "envelope.open")
-                                }
-                            }
-                            Button(role: .destructive) {
-                                viewModel.delete(row: row)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
                             if !row.usesTradeTraxsBrandAvatar,
                                let actorID = row.notification.actorProfileID
                             {
@@ -185,6 +173,24 @@ struct ActivityHomeView: View {
                                 } label: {
                                     Label("View Profile", systemImage: "person.crop.circle")
                                 }
+                            }
+                            if row.isUnread {
+                                Button {
+                                    viewModel.markRead(row: row)
+                                } label: {
+                                    Label("Mark as Read", systemImage: "envelope.open")
+                                }
+                            } else {
+                                Button {
+                                    viewModel.markUnread(row: row)
+                                } label: {
+                                    Label("Mark as Unread", systemImage: "envelope.badge")
+                                }
+                            }
+                            Button(role: .destructive) {
+                                viewModel.delete(row: row)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
                         } preview: {
                             ActivityRowView(

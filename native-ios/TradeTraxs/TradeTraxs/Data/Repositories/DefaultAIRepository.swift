@@ -83,6 +83,10 @@ nonisolated struct DefaultAIRepository: AIRepository {
             TradeAITrace.persistenceCompleted(rowCount: rows.count)
         } catch {
             if Self.isMissingTableError(error) { return }
+            if let domain = Self.traxProFeatureError(from: error) {
+                TradeAITrace.persistenceFailed(error: error)
+                throw domain
+            }
             TradeAITrace.persistenceFailed(error: error)
             throw error
         }
@@ -199,6 +203,14 @@ nonisolated struct DefaultAIRepository: AIRepository {
             || text.contains("schema cache")
             || text.contains("does not exist")
             || text.contains("404")
+    }
+
+    private static func traxProFeatureError(from error: Error) -> AppError? {
+        let text = String(describing: error)
+        if text.localizedCaseInsensitiveContains("TRAXPRO_AI_ANALYST_REQUIRED") {
+            return .unknown(message: "TRAXPRO_AI_ANALYST_REQUIRED")
+        }
+        return nil
     }
 }
 

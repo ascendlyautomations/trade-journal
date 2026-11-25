@@ -20,6 +20,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     private let messages: (any MessageRepository)?
 
     private var bootstrapTask: Task<Void, Never>?
+    private var curveTask: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var blockListObserver: NSObjectProtocol?
     private var filterGeneration: UInt64 = 0
     /// Bumps when ``LeaderboardSessionStore/profilesByID`` changes so views re-resolve avatars.
@@ -72,6 +73,17 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     var timeframe: LeaderboardTimeframe { state.timeframe }
     var category: LeaderboardCategory { state.category }
     var timeframeFallbackMessage: String? { state.timeframeFallbackMessage }
+    var displayMode: LeaderboardDisplayMode { state.displayMode }
+    var curvePoints: [LeaderboardCurveChartPoint] { state.curvePoints }
+    var curveMetricFormat: LeaderboardCurveV1.MetricFormat { state.curveMetricFormat }
+    var curvePhase: LeaderboardState.CurvePhase { state.curvePhase }
+
+    var canShowCurveToggle: Bool {
+        store.usesServerRankings
+            && category.supportsCurveChart
+            && rpc != nil
+            && BackendV2FeatureFlags.isEnabled(.leaderboard)
+    }
 
     // MARK: - Lifecycle
 
@@ -96,9 +108,12 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
 
     func refresh() async {
         bootstrapTask?.cancel()
+        cancelCurveLoad()
         state.isRefreshing = true
         await DiscoveryBlockedPeersObserver.sync(messages: messages, force: true)
+        let generation = filterGeneration
         await performBootstrap(forceNetwork: true, resetting: true)
+        await loadCurveIfNeeded(generation: generation)
         state.isRefreshing = false
     }
 
@@ -136,7 +151,8 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     }
 
     func loadMoreIfNeeded(currentID: ProfileID) async {
-        guard state.listRows.last?.profileID == currentID else { return }
+        let paginationRows = state.displayMode == .curve ? state.rows : state.listRows
+        guard paginationRows.last?.profileID == currentID else { return }
         await loadMore()
     }
 
@@ -154,19 +170,28 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         let generation = filterGeneration
         if store.usesServerRankings {
             bootstrapTask?.cancel()
-            bootstrapTask = Task { await performBootstrap(forceNetwork: false, resetting: true) }
+            cancelCurveLoad()
+            bootstrapTask = Task {
+                await performBootstrap(forceNetwork: false, resetting: true)
+                await loadCurveIfNeeded(generation: filterGeneration)
+            }
             return
         }
         if next == .friends, store.friendIDs.isEmpty {
             bootstrapTask?.cancel()
+            cancelCurveLoad()
             bootstrapTask = Task {
                 await loadFriendsFilterIfNeeded(generation: generation)
+                await loadCurveIfNeeded(generation: filterGeneration)
             }
             return
         }
         reapplyPresentationFromStore()
         bootstrapTask?.cancel()
-        bootstrapTask = Task { await hydrateVisibleProfiles(generation: generation) }
+        bootstrapTask = Task {
+            await hydrateVisibleProfiles(generation: generation)
+            await loadCurveIfNeeded(generation: filterGeneration)
+        }
     }
 
     func setTimeframe(_ next: LeaderboardTimeframe) {
@@ -181,10 +206,17 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             category: state.category
         )
         bootstrapTask?.cancel()
+        cancelCurveLoad()
         if store.usesServerRankings {
-            bootstrapTask = Task { await performBootstrap(forceNetwork: false, resetting: true) }
+            bootstrapTask = Task {
+                await performBootstrap(forceNetwork: false, resetting: true)
+                await loadCurveIfNeeded(generation: filterGeneration)
+            }
         } else {
-            bootstrapTask = Task { await refilterFromCachedTrades(generation: generation) }
+            bootstrapTask = Task {
+                await refilterFromCachedTrades(generation: generation)
+                await loadCurveIfNeeded(generation: filterGeneration)
+            }
         }
     }
 
@@ -195,9 +227,39 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         store.updateFilters(audience: state.audience, timeframe: state.timeframe, category: next)
         filterGeneration &+= 1
         let generation = filterGeneration
-        reapplyPresentationFromStore()
         bootstrapTask?.cancel()
-        bootstrapTask = Task { await hydrateVisibleProfiles(generation: generation) }
+        cancelCurveLoad()
+        if store.usesServerRankings {
+            bootstrapTask = Task {
+                await performBootstrap(forceNetwork: false, resetting: true)
+                await loadCurveIfNeeded(generation: generation)
+            }
+            return
+        }
+        reapplyPresentationFromStore()
+        bootstrapTask = Task {
+            await hydrateVisibleProfiles(generation: generation)
+            await loadCurveIfNeeded(generation: filterGeneration)
+        }
+    }
+
+    func toggleDisplayMode() {
+        guard canShowCurveToggle else { return }
+        ExperienceHaptics.play(.selection)
+        if state.displayMode == .curve {
+            state.displayMode = .rankings
+            cancelCurveLoad()
+            clearCurveState()
+        } else {
+            state.displayMode = .curve
+            let generation = filterGeneration
+            curveTask?.cancel()
+            curveTask = Task { await loadCurve(generation: generation) }
+        }
+    }
+
+    func awaitCurveWork() async {
+        await curveTask?.value
     }
 
     func markPodiumEntrancePlayed() {
@@ -206,6 +268,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
 
     func awaitPendingWork() async {
         await bootstrapTask?.value
+        await curveTask?.value
     }
 
     // MARK: - Actions
@@ -293,6 +356,11 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             )
             reapplyPresentationFromStore(didPlayPodiumEntrance: !resetting && state.didPlayPodiumEntrance)
             await hydrateVisibleProfiles(generation: startedGeneration)
+            if state.displayMode == .rankings {
+                clearCurveState()
+            } else {
+                await loadCurveIfNeeded(generation: startedGeneration)
+            }
         } catch {
             guard !Task.isCancelled, startedGeneration == filterGeneration else { return }
             if state.rows.isEmpty {
@@ -426,6 +494,10 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
 
     private func applyStoreToState(didPlayPodiumEntrance: Bool) {
         let entries = FeedBlockedAuthorsFilter.shared.filterLeaderboardEntries(store.rawEntries)
+        let preservedDisplayMode = state.displayMode
+        let preservedCurvePhase = state.curvePhase
+        let preservedCurvePoints = state.curvePoints
+        let preservedCurveMetricFormat = state.curveMetricFormat
         var next = LeaderboardPresentation.buildState(
             entries: entries,
             profiles: store.profilesByID,
@@ -444,6 +516,10 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         next.timeframeFallbackMessage = state.timeframeFallbackMessage
         next.isRefreshing = state.isRefreshing
         next.isLoadingMore = state.isLoadingMore
+        next.displayMode = preservedDisplayMode
+        next.curvePhase = preservedCurvePhase
+        next.curvePoints = preservedCurvePoints
+        next.curveMetricFormat = preservedCurveMetricFormat
         state = next
         #if DEBUG
         LeaderboardHydrationDiagnostics.log(
@@ -456,6 +532,54 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
 
     private func applyBlockedPeersToVisibleLeaderboard() {
         applyStoreToState(didPlayPodiumEntrance: state.didPlayPodiumEntrance)
+    }
+
+    private func loadCurveIfNeeded(generation: UInt64) async {
+        guard state.displayMode == .curve, state.category.supportsCurveChart else { return }
+        guard store.usesServerRankings, rpc != nil else { return }
+        await loadCurve(generation: generation)
+    }
+
+    private func loadCurve(generation: UInt64) async {
+        defer { curveTask = nil }
+        guard let rpc else {
+            state.curvePhase = .failed("Chart unavailable")
+            return
+        }
+        state.curvePhase = .loading
+        do {
+            let applied = try await LeaderboardCurveLoader.load(
+                viewerID: store.viewerID,
+                timeframe: state.timeframe,
+                category: state.category,
+                audience: state.audience,
+                rpc: rpc,
+                forceNetwork: false
+            )
+            guard generation == filterGeneration, !Task.isCancelled else { return }
+            state.curvePoints = applied.points
+            state.curveMetricFormat = applied.metricFormat
+            state.curvePhase = applied.points.count >= 2 ? .loaded : .loaded
+        } catch LeaderboardCurveLoader.LoaderError.unsupported {
+            guard generation == filterGeneration else { return }
+            state.displayMode = .rankings
+            clearCurveState()
+        } catch {
+            guard generation == filterGeneration, !Task.isCancelled else { return }
+            state.curvePhase = .failed(Self.userFacingMessage(for: error))
+            state.curvePoints = []
+        }
+    }
+
+    private func cancelCurveLoad() {
+        curveTask?.cancel()
+        curveTask = nil
+    }
+
+    private func clearCurveState() {
+        state.curvePoints = []
+        state.curvePhase = .idle
+        state.curveMetricFormat = .currency
     }
 
     private func makeContext(cursor: String?, forceNetwork: Bool) -> LeaderboardBootstrap.Context {

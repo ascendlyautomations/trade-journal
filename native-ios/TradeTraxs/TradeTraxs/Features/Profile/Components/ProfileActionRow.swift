@@ -4,14 +4,14 @@ import SwiftUI
 struct ProfileActionRow: View {
     enum Mode: Equatable {
         case owner(hasTradeRoom: Bool)
+        /// Read-only showcase profile while exploring as a guest.
+        case guestShowcase
         /// `showsTradeRoom` mirrors web `canShowVisitorRoomCta` (View Trade Room only).
-        case visitor(isFollowing: Bool, isRequested: Bool, showsTradeRoom: Bool)
+        case visitor(isFollowing: Bool, isRequested: Bool, showsTradeRoom: Bool, isPrivate: Bool)
 
         var showsContent: Bool {
             switch self {
-            case .owner:
-                return true
-            case .visitor:
+            case .owner, .guestShowcase, .visitor:
                 return true
             }
         }
@@ -33,12 +33,38 @@ struct ProfileActionRow: View {
             switch mode {
             case .owner:
                 ownerPrimaryRow
-            case .visitor(let isFollowing, let isRequested, _):
-                visitorPrimaryRow(isFollowing: isFollowing, isRequested: isRequested)
+            case .guestShowcase:
+                guestShowcasePrimaryRow
+            case .visitor(let isFollowing, let isRequested, _, let isPrivate):
+                visitorPrimaryRow(
+                    isFollowing: isFollowing,
+                    isRequested: isRequested,
+                    isPrivate: isPrivate
+                )
             }
         }
         .padding(.top, ExperienceSpacing.xxs)
         .accessibilityIdentifier("profile.actionRow")
+    }
+
+    private var guestShowcasePrimaryRow: some View {
+        HStack(spacing: ExperienceSpacing.xs) {
+            actionChip(
+                title: "Share",
+                icon: .share,
+                style: .outline,
+                accessibilityIdentifier: "profile.share",
+                expands: true,
+                action: onShare
+            )
+            actionChip(
+                title: "Create Account",
+                style: .filled,
+                accessibilityIdentifier: "profile.guest.createAccount",
+                expands: true,
+                action: onEdit
+            )
+        }
     }
 
     private var ownerPrimaryRow: some View {
@@ -61,18 +87,8 @@ struct ProfileActionRow: View {
         }
     }
 
-    private func visitorPrimaryRow(isFollowing: Bool, isRequested: Bool) -> some View {
+    private func visitorPrimaryRow(isFollowing: Bool, isRequested: Bool, isPrivate: Bool) -> some View {
         HStack(spacing: ExperienceSpacing.xs) {
-            ProfileActionChip(
-                title: isFollowing ? "Following" : (isRequested ? "Requested" : "Follow"),
-                style: (isFollowing || isRequested) ? .outline : .filled,
-                size: .regular,
-                accessibilityIdentifier: isFollowing
-                    ? "profile.followingButton"
-                    : (isRequested ? "profile.requestedButton" : "profile.follow"),
-                expands: true,
-                action: onFollow
-            )
             ProfileActionChip(
                 title: isMessaging ? "Opening…" : "Message",
                 style: .outline,
@@ -82,7 +98,24 @@ struct ProfileActionRow: View {
                 expands: true,
                 action: onMessage
             )
+            ProfileActionChip(
+                title: followTitle(isFollowing: isFollowing, isRequested: isRequested, isPrivate: isPrivate),
+                style: (isFollowing || isRequested) ? .outline : .filled,
+                size: .regular,
+                accessibilityIdentifier: isFollowing
+                    ? "profile.followingButton"
+                    : (isRequested ? "profile.requestedButton" : "profile.follow"),
+                expands: true,
+                action: onFollow
+            )
         }
+    }
+
+    private func followTitle(isFollowing: Bool, isRequested: Bool, isPrivate: Bool) -> String {
+        if isFollowing { return "Following" }
+        if isRequested { return "Requested" }
+        if isPrivate { return "Request to Follow" }
+        return "Follow"
     }
 
     private func actionChip(

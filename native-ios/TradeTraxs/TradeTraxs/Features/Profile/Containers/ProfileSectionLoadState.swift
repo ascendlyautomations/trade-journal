@@ -5,6 +5,7 @@ enum ProfileSectionLoadState: Equatable, Sendable {
     case idle
     case loading
     case empty
+    case contentLocked
     case loaded(itemCount: Int)
     case failed(message: String)
 

@@ -100,10 +100,14 @@ export function useProfileStatistics({
     const useBootstrapOverview =
       bootstrapOverviewStats != null && summaryTrades.length === 0
 
+    const publicHeaderStatsOnly =
+      !canViewTrades && bootstrapOverviewStats != null
+
     const statsVisible =
       canViewTrades && analyticsTradesReady && !analyticsTradesLoading
     const overviewStatsVisible =
-      canViewTrades && (summaryReady || useBootstrapOverview)
+      (canViewTrades && (summaryReady || useBootstrapOverview)) ||
+      publicHeaderStatsOnly
     const totalTrades = canViewTrades ? analyticsTrades.length : 0
     const wins = canViewTrades
       ? analyticsTrades.filter((trade) => Number(trade.pnl) > 0).length
@@ -143,20 +147,23 @@ export function useProfileStatistics({
     const currentEquity =
       equityData.length > 0 ? equityData[equityData.length - 1].equity : 0
 
+    const overviewUsesBootstrap =
+      useBootstrapOverview || publicHeaderStatsOnly
+
     const overviewTotalTrades = overviewStatsVisible
-      ? useBootstrapOverview
+      ? overviewUsesBootstrap && bootstrapOverviewStats
         ? bootstrapOverviewStats.totalTrades
         : profileOverviewTrades.length
       : 0
     const overviewWins = overviewStatsVisible
-      ? useBootstrapOverview
+      ? overviewUsesBootstrap && bootstrapOverviewStats
         ? bootstrapOverviewStats.wins
         : profileOverviewTrades.filter(
             (trade) => (Number(trade.pnl) || 0) > 0
           ).length
       : 0
     const overviewWinRate = overviewStatsVisible
-      ? useBootstrapOverview
+      ? overviewUsesBootstrap && bootstrapOverviewStats
         ? computeProfileOverviewWinRate(bootstrapOverviewStats)
         : overviewTotalTrades
           ? (overviewWins / overviewTotalTrades) * 100
@@ -187,7 +194,7 @@ export function useProfileStatistics({
           ? fetchedOverviewPayoutTotal
           : achievementPayout
     const overviewProfitFactor = overviewStatsVisible
-      ? useBootstrapOverview
+      ? overviewUsesBootstrap && bootstrapOverviewStats
         ? bootstrapOverviewStats.profitFactor
         : profitFactorFromTrades(profileOverviewTrades)
       : null
@@ -255,6 +262,7 @@ export function useProfileStatistics({
       filteredTrades,
       statsVisible,
       overviewStatsVisible,
+      publicHeaderStatsOnly,
       biggestWin,
       biggestLoss,
       longTrades,

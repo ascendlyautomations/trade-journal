@@ -128,7 +128,9 @@ private struct ContextualTourOverlay: View {
                 return liveHole ?? (coordinator.phase == .measuring ? retainedHole : nil)
             }()
             let hole = holeFrame.map { spotlightHole(around: $0, in: viewport) } ?? .zero
-            let topInset = proxy.safeAreaInsets.top + ExperienceSpacing.sm
+            let topInset = proxy.safeAreaInsets.top
+                + ExperienceSpacing.sm
+                + ContextualTourGeometry.measurementTopInset(for: target)
             let bottomInset = bottomChrome(safeBottom: proxy.safeAreaInsets.bottom)
             let showsChrome = coordinator.showsOverlay
             let showsExplanationCard = coordinator.showsExplanationCard

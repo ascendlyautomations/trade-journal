@@ -16,6 +16,7 @@ struct RoomBroadcastStudioChatPane: View {
     @Environment(\.themeColors) private var colors
     @FocusState private var composerFocused: Bool
     @State private var internalReplyTarget: BroadcastChatMessageItem?
+    @State private var chatReactionPickerMessageID: String?
 
     private var replyTarget: Binding<BroadcastChatMessageItem?> {
         replyTargetBinding ?? $internalReplyTarget
@@ -28,14 +29,28 @@ struct RoomBroadcastStudioChatPane: View {
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    VStack(alignment: .leading, spacing: BroadcastChatRowLayout.listRowSpacing) {
                         ForEach(coordinator.chatMessages) { msg in
                             RoomBroadcastChatRow(
                                 message: msg,
                                 imagePipeline: imagePipeline,
                                 coordinator: coordinator,
                                 isHighlighted: coordinator.highlightedBroadcastChatMessageID == msg.id,
-                                onReply: { beginReply(to: msg) }
+                                viewerUserID: userId,
+                                onReply: { beginReply(to: msg) },
+                                onOpenReactionPicker: {
+                                    chatReactionPickerMessageID = msg.id
+                                },
+                                onToggleReaction: { emoji in
+                                    guard let userId else { return }
+                                    Task {
+                                        _ = await coordinator.toggleBroadcastChatReaction(
+                                            messageID: msg.id,
+                                            userId: userId,
+                                            emoji: emoji
+                                        )
+                                    }
+                                }
                             )
                             .id(msg.id)
                         }
@@ -85,6 +100,27 @@ struct RoomBroadcastStudioChatPane: View {
                 useViewerKeyboardChrome: useViewerKeyboardChrome,
                 composerFocus: $composerFocused
             )
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { chatReactionPickerMessageID != nil },
+                set: { if !$0 { chatReactionPickerMessageID = nil } }
+            )
+        ) {
+            if let messageID = chatReactionPickerMessageID, let userId {
+                UnicodeEmojiPickerSheet { emoji in
+                    chatReactionPickerMessageID = nil
+                    Task {
+                        _ = await coordinator.toggleBroadcastChatReaction(
+                            messageID: messageID,
+                            userId: userId,
+                            emoji: emoji
+                        )
+                    }
+                }
+            } else {
+                UnicodeEmojiPickerSheet { _ in chatReactionPickerMessageID = nil }
+            }
         }
     }
 
@@ -358,7 +394,7 @@ struct RoomBroadcastChatComposer: View {
                 ownedBy: viewerID,
                 accountID: nil,
                 page: PageRequest(limit: 40),
-                publicOnly: true
+                publicOnly: false
             )
             tradePickerTrades = BroadcastChatAttachmentPolicy.eligibleTradesForSharing(page.items)
         } catch {
@@ -425,10 +461,6 @@ struct RoomBroadcastChatComposer: View {
 
     private func sendTrade(_ trade: Trade) async {
         guard let userId else { return }
-        guard trade.visibility == .public else {
-            coordinator.setBroadcastChatComposerError("Only public trades can be shared in livestream chat.")
-            return
-        }
         guard !isSendingChat else { return }
         isSendingChat = true
         defer { isSendingChat = false }

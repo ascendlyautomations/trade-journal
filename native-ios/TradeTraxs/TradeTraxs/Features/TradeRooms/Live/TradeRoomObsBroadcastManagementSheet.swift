@@ -9,8 +9,19 @@ struct TradeRoomObsBroadcastManagementSheet: View {
     let chatUserId: String?
     let chatDisplayName: String
     @State private var streamTitleDraft: String = ""
+    @State private var configurationInstructionsExpanded = false
+    @State private var showsEndStreamConfirmation = false
+    @State private var inlineCopyFeedback: ObsCredentialCopyFeedback?
+    @State private var inlineCopyHideTask: Task<Void, Never>?
+
+    private enum ObsCredentialCopyFeedback: Equatable {
+        case rtmpURL
+        case streamKey
+    }
     @Environment(\.dismiss) private var dismiss
-  @Environment(\.themeColors) private var colors
+    @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -32,6 +43,7 @@ struct TradeRoomObsBroadcastManagementSheet: View {
         .task(id: roomID.rawValue) {
             controller.startPrivateObsSessionEnsureIfNeeded(roomID: roomID)
             await controller.ensurePrivateObsSession(roomID: roomID)
+            controller.ensureObsEncoderPolling(roomID: roomID)
         }
         .task(id: liveHostWatchTaskID) {
             guard controller.phase == .livePublic else { return }
@@ -59,8 +71,16 @@ struct TradeRoomObsBroadcastManagementSheet: View {
         } else {
             controller.acknowledgeManagementSheetDismissed()
         }
-        broadcastCoordinator.setObsManageStreamPresented(false)
+        broadcastCoordinator.dismissObsManageStreamPreservingBroadcast()
         dismiss()
+    }
+
+    private func cancelPreparingObs() {
+        Task {
+            await controller.cancelObsPreparation(roomID: roomID)
+            broadcastCoordinator.setObsManageStreamPresented(false)
+            dismiss()
+        }
     }
 
     private var preparingShell: some View {
@@ -68,49 +88,117 @@ struct TradeRoomObsBroadcastManagementSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                     if showsObsInitializingPlaceholder {
-                        initializingSection
+                        streamSetupCard { initializingSection }
                     } else {
                         switch controller.phase {
                         case .livePublic:
-                            goingLiveSection
+                            streamSetupCard { goingLiveSection }
                         case .preparing:
                             preparingSection
                         case .idle:
                             if controller.foreignHostPreparing {
-                                foreignHostSection
+                                streamSetupCard { foreignHostSection }
                             } else {
-                                idleSection
+                                streamSetupCard { idleSection }
                             }
                         }
                     }
 
                     if let err = controller.errorMessage, !err.isEmpty, !showsObsInitializingPlaceholder {
-                        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                            Text(err)
-                                .font(.system(.footnote, design: .rounded))
-                                .foregroundStyle(colors.error)
-                            Button("Try again") {
-                                controller.retryPrivateObsSessionEnsure(roomID: roomID)
+                        streamSetupCard {
+                            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                                Text(err)
+                                    .font(.system(.footnote, design: .rounded))
+                                    .foregroundStyle(colors.error)
+                                Button("Try again") {
+                                    controller.retryPrivateObsSessionEnsure(roomID: roomID)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(colors.accent)
+                                .disabled(controller.isBusy)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(colors.accent)
-                            .disabled(controller.isBusy)
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(ExperienceSpacing.md)
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.sm)
+                .padding(.bottom, showsPreparingBottomActions ? ExperienceSpacing.lg : ExperienceSpacing.xl)
             }
-            .background(colors.primaryBackground)
+            .experienceScreenBackground(usesGroupedFillInLightMode: true)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if showsPreparingBottomActions {
+                    preparingObsBottomActionsFooter
+                }
+            }
             .navigationTitle(obsNavigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(controller.phase == .preparing ? "Cancel" : "Close") {
-                        closeSheet()
+                        if controller.phase == .preparing {
+                            cancelPreparingObs()
+                        } else {
+                            closeSheet()
+                        }
                     }
                 }
             }
+            .broadcastObsConnectedOverlay(
+                isPresented: controller.showsObsConnectedPrompt,
+                onStartStream: {
+                    Task { await controller.confirmObsConnectedStartStream(roomID: roomID) }
+                },
+                onNotYet: { controller.dismissObsConnectedPrompt() }
+            )
+            .confirmationDialog(
+                "End Stream?",
+                isPresented: $showsEndStreamConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("End Stream", role: .destructive) {
+                    Task {
+                        await controller.endStream(roomID: roomID)
+                        dismiss()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Are you sure you want to end this stream?")
+            }
+        }
+    }
+
+    private var showsPreparingBottomActions: Bool {
+        controller.phase == .preparing && !showsObsInitializingPlaceholder
+    }
+
+    private var preparingObsPageBackground: Color {
+        if colorScheme == .light {
+            return colors.groupedBackground
+        }
+        return colors.primaryBackground
+    }
+
+    private var preparingObsBottomActionsFooter: some View {
+        VStack(spacing: 0) {
+            TradeRoomObsBroadcastBottomActions(
+                showsGoLive: true,
+                goLiveEnabled: controller.streamReadyForGoLive,
+                endStreamEnabled: !controller.isBusy && controller.broadcastSessionId != nil,
+                onGoLive: {
+                    Task { await controller.publishToRoom(roomID: roomID) }
+                },
+                onEndStream: { showsEndStreamConfirmation = true },
+                embedsBarBackground: false
+            )
+            .padding(.top, ExperienceSpacing.xs)
+        }
+        .frame(maxWidth: .infinity)
+        .safeAreaPadding(.bottom, ExperienceSpacing.xs)
+        .background {
+            preparingObsPageBackground
+                .ignoresSafeArea(edges: .bottom)
         }
     }
 
@@ -181,114 +269,205 @@ struct TradeRoomObsBroadcastManagementSheet: View {
 
     private var preparingSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            streamTitleEditor
+            streamSetupSection(title: "Stream title") {
+                streamTitleEditor
+            }
 
-            Text("Private setup, stream is not visible to the room until you tap Go live to room.")
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundStyle(colors.textSecondary)
+            streamSetupSection(title: "Setup") {
+                Text("Private setup, stream is not visible to the room until you tap Go live to room.")
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            obsInstructions
+                configurationInstructionsDisclosure
+            }
 
-            if let url = controller.rtmpURL, !url.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Server (RTMP URL)")
-                        .font(.system(.caption2, design: .rounded).weight(.semibold))
-                        .foregroundStyle(colors.textSecondary)
-                    Text(url)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(colors.textPrimary)
-                        .textSelection(.enabled)
-                    Button("Copy URL") {
-                        controller.copyRTMPURL()
+            streamSetupSection(title: "OBS credentials") {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                    if let url = controller.rtmpURL, !url.isEmpty {
+                        rtmpCredentialBlock(url: url)
+                        obsCredentialDivider
                     }
-                    .buttonStyle(.bordered)
+                    streamKeyRow
                 }
             }
 
-            streamKeyRow
-
-            statusRow
-
-            if let track = broadcastCoordinator.obsHostPreviewVideoTrack {
-                Text("Preview")
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(colors.textSecondary)
-                LiveKitBroadcastVideoView(track: track)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+            streamSetupSection(title: "Connection") {
+                statusRow
             }
 
+            if let track = broadcastCoordinator.obsHostPreviewVideoTrack {
+                streamSetupSection(title: "Preview") {
+                    LiveKitBroadcastVideoView(track: track)
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                }
+            }
+
+        }
+    }
+
+    private var configurationInstructionsDisclosure: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Button {
+                ExperienceHaptics.play(.selection)
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    configurationInstructionsExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: ExperienceSpacing.sm) {
+                    Text("Configuration instructions")
+                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                    Spacer(minLength: 0)
+                    Image(systemName: configurationInstructionsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colors.tertiaryText)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.experiencePlain)
+            .accessibilityLabel("Configuration instructions")
+            .accessibilityValue(configurationInstructionsExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint("Double tap to \(configurationInstructionsExpanded ? "collapse" : "expand")")
+
+            if configurationInstructionsExpanded {
+                obsInstructions
+            }
+        }
+        .padding(ExperienceSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tradingRulesNestedGroup()
+    }
+
+    private var obsCredentialDivider: some View {
+        Rectangle()
+            .fill(colors.border.opacity(0.45))
+            .frame(height: ExperienceBorder.hairline)
+    }
+
+    private func rtmpCredentialBlock(url: String) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text("Server (RTMP URL)")
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+                .foregroundStyle(colors.textSecondary)
+            Text(url)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(colors.textPrimary)
+                .textSelection(.enabled)
+                .padding(ExperienceSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .tradingRulesNestedGroup()
             HStack(spacing: ExperienceSpacing.sm) {
+                Button("Copy URL") {
+                    if controller.copyRTMPURL(showsConfirmationToast: false) {
+                        showInlineCopyFeedback(.rtmpURL)
+                    }
+                }
+                .buttonStyle(.bordered)
+                if inlineCopyFeedback == .rtmpURL {
+                    obsInlineCopiedLabel
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func streamSetupSection<Content: View>(
+        title: String?,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if let title, !title.isEmpty {
+                Text(title)
+                    .experienceStyle(.headline, color: colors.primaryText)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                content()
+            }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .experienceTradingRulesCard(prominence: .standard)
+        }
+    }
+
+    private func streamSetupCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            content()
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .experienceTradingRulesCard(prominence: .standard)
+    }
+
+    private var streamKeyRow: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("Stream key")
+                .font(.system(.caption2, design: .rounded).weight(.semibold))
+                .foregroundStyle(colors.textSecondary)
+
+            if let key = controller.streamKey, !key.isEmpty {
+                Group {
+                    if controller.streamKeyRevealed {
+                        Text(key)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(colors.textPrimary)
+                            .textSelection(.enabled)
+                    } else {
+                        Text(String(repeating: "•", count: min(key.count, 32)))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(colors.textSecondary)
+                    }
+                }
+                .padding(ExperienceSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .tradingRulesNestedGroup()
+
+                HStack(spacing: ExperienceSpacing.sm) {
+                    Button(controller.streamKeyRevealed ? "Hide" : "Show") {
+                        controller.streamKeyRevealed.toggle()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Copy Stream Key") {
+                        if controller.copyStreamKey(showsConfirmationToast: false) {
+                            showInlineCopyFeedback(.streamKey)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!controller.streamKeyRevealed)
+
+                    if inlineCopyFeedback == .streamKey {
+                        obsInlineCopiedLabel
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                Button("Regenerate stream key") {
+                    Task { await controller.regenerateStreamKey(roomID: roomID) }
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .disabled(controller.isBusy)
+            } else {
+                Text("Credentials missing, use Regenerate stream key after revoking.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Button("Regenerate stream key") {
                     Task { await controller.regenerateStreamKey(roomID: roomID) }
                 }
                 .buttonStyle(.bordered)
                 .disabled(controller.isBusy)
             }
-
-            Button("Go live to room") {
-                Task { await controller.publishToRoom(roomID: roomID) }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(colors.accent)
-            .disabled(
-                !TradeRoomObsGoLivePolicy.canGoLiveToRoom(
-                    isPreparingObs: true,
-                    isBusy: controller.isBusy,
-                    encoderConnected: controller.encoderConnected
-                )
-            )
-
-            Button("End stream", role: .destructive) {
-                Task {
-                    await controller.endStream(roomID: roomID)
-                    dismiss()
-                }
-            }
-            .disabled(controller.isBusy)
-        }
-    }
-
-    private var streamKeyRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Stream key")
-                .font(.system(.caption2, design: .rounded).weight(.semibold))
-                .foregroundStyle(colors.textSecondary)
-            if let key = controller.streamKey, !key.isEmpty {
-                if controller.streamKeyRevealed {
-                    Text(key)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(colors.textPrimary)
-                        .textSelection(.enabled)
-                } else {
-                    Text(String(repeating: "•", count: min(key.count, 32)))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(colors.textSecondary)
-                }
-                HStack {
-                    Button(controller.streamKeyRevealed ? "Hide" : "Show") {
-                        controller.streamKeyRevealed.toggle()
-                    }
-                    .buttonStyle(.bordered)
-                    Button("Copy") {
-                        controller.copyStreamKey()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!controller.streamKeyRevealed)
-                }
-            } else {
-                Text("Credentials missing, use Regenerate stream key after revoking.")
-                    .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(colors.textSecondary)
-            }
         }
     }
 
     private var statusRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Connection")
-                .font(.system(.caption2, design: .rounded).weight(.semibold))
-                .foregroundStyle(colors.textSecondary)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text("Host in LiveKit: \(controller.hostLiveKitConnected ? "Connected" : "…")")
                 .font(.system(.caption, design: .rounded))
             Text("OBS encoder: \(controller.encoderConnected ? "Connected" : "Waiting…")")
@@ -303,11 +482,9 @@ struct TradeRoomObsBroadcastManagementSheet: View {
 
     private var streamTitleEditor: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("Stream title")
-                .font(.system(.caption, design: .rounded).weight(.semibold))
-                .foregroundStyle(colors.textSecondary)
             TextField("e.g. Trading NY Session, NQ Futures", text: $streamTitleDraft)
                 .textInputAutocapitalization(.sentences)
+                .tradingRulesInsetControl()
                 .onAppear {
                     streamTitleDraft = controller.streamTitle ?? streamTitleDraft
                 }
@@ -330,19 +507,44 @@ struct TradeRoomObsBroadcastManagementSheet: View {
         }
     }
 
-    private var obsInstructions: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Configure OBS")
-                .font(.system(.subheadline, design: .rounded).weight(.semibold))
-            Text(
-                """
-                In OBS: Settings → Stream. Set Service to Custom… . Paste the server URL and stream key, then click Start Streaming in OBS.
-                """
-            )
-            .font(.system(.footnote, design: .rounded))
-            .foregroundStyle(colors.textSecondary)
+    private var obsInlineCopiedLabel: some View {
+        HStack(spacing: ExperienceSpacing.xxs) {
+            Text("Copied")
+                .font(.caption.weight(.semibold))
+            Image(systemName: "checkmark")
+                .font(.caption2.weight(.bold))
         }
-        .padding(ExperienceSpacing.sm)
-        .background(colors.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .foregroundStyle(colors.profit)
+        .accessibilityLabel("Copied")
+    }
+
+    private func showInlineCopyFeedback(_ kind: ObsCredentialCopyFeedback) {
+        inlineCopyHideTask?.cancel()
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+            inlineCopyFeedback = kind
+        }
+        inlineCopyHideTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                    if inlineCopyFeedback == kind {
+                        inlineCopyFeedback = nil
+                    }
+                }
+            }
+        }
+    }
+
+    private var obsInstructions: some View {
+        Text(
+            """
+            In OBS: Settings → Stream. Set Service to Custom… . Paste the server URL and stream key, then click Start Streaming in OBS.
+            """
+        )
+        .font(.system(.footnote, design: .rounded))
+        .foregroundStyle(colors.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

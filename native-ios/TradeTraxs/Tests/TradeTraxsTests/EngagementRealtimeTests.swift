@@ -178,6 +178,7 @@ private final class RealtimeStubInteractionRepository: InteractionRepository, @u
     func addComment(
         body: String,
         parentID: CommentID?,
+        sharedTradeID: TradeID?,
         on target: InteractionTarget
     ) async throws -> InteractionComment {
         throw AppError.unknown(message: "stub")

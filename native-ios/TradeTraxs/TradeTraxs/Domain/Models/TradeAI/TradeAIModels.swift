@@ -119,6 +119,8 @@ nonisolated struct TradeAIAnalyzeResponse: Sendable {
     var reply: String
     /// False for HTTP/API failures shown in the thread but not saved as analyses.
     var shouldPersist: Bool = true
+    /// BFF failure `code` when analysis did not succeed (`nil` on success).
+    var backendCode: String? = nil
 }
 
 /// Parsed coach sections for premium Trade AI rendering.

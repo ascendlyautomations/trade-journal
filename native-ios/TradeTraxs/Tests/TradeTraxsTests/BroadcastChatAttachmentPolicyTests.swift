@@ -39,6 +39,23 @@ private struct StubObjectStorage: ObjectStorageProviding {
 }
 
 final class BroadcastChatAttachmentPolicyTests: XCTestCase {
+    func testEligibleTradesForSharingIncludesPublicAndPrivate() {
+        let owner = ProfileID("user-share-test")
+        var publicTrade = TradeShareFixtures.sampleTrades(ownerID: owner).first!
+        publicTrade.visibility = .public
+        var privateTrade = publicTrade
+        privateTrade.id = TradeID(UUID().uuidString)
+        privateTrade.visibility = .private
+
+        let eligible = BroadcastChatAttachmentPolicy.eligibleTradesForSharing([
+            publicTrade,
+            privateTrade,
+        ])
+        XCTAssertEqual(eligible.count, 2)
+        XCTAssertTrue(eligible.contains { $0.id == publicTrade.id })
+        XCTAssertTrue(eligible.contains { $0.id == privateTrade.id })
+    }
+
     func testResolvesStoragePathToHTTPSPublicURL() {
         let storage = StubObjectStorage(supabaseRoot: URL(string: "https://example.supabase.co")!)
         let path = "user-id/opt/123.jpg"

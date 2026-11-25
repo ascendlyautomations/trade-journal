@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import {
-  MESSAGE_REACTIONS,
   aggregateRoomMessageReactions,
-  type MessageReactionEmoji,
   type MessageReactionRow,
 } from "@/lib/roomMessageReactions"
+import MessageReactionQuickRow from "@/app/components/messages/MessageReactionQuickRow.tsx"
+import UnicodeEmojiPickerOverlay from "@/app/components/messages/UnicodeEmojiPickerOverlay.tsx"
 
 export type MessageReactionChipsProps = {
   reactions: MessageReactionRow[] | null | undefined
@@ -14,10 +14,11 @@ export type MessageReactionChipsProps = {
   /** When false, chips render as static labels (spectators). */
   interactive?: boolean
   isOutgoing?: boolean
-  onToggle?: (emoji: MessageReactionEmoji) => void
+  onToggle?: (emoji: string) => void
   /** Compact 😊 trigger; omit when reactions are menu-only. */
   showPickerTrigger?: boolean
   className?: string
+  theme?: "light" | "dark"
 }
 
 function chipClass(reactedByViewer: boolean, isOutgoing: boolean, interactive: boolean) {
@@ -50,31 +51,14 @@ export default function MessageReactionChips({
   onToggle,
   showPickerTrigger = true,
   className = "",
+  theme = "dark",
 }: MessageReactionChipsProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const pickerRef = useRef<HTMLDivElement | null>(null)
   const summaries = aggregateRoomMessageReactions(reactions, viewerUserId)
   const canPick =
     interactive && Boolean(viewerUserId) && typeof onToggle === "function"
 
-  useEffect(() => {
-    if (!pickerOpen) return
-
-    const onPointerDown = (event: MouseEvent | TouchEvent) => {
-      if (!pickerRef.current?.contains(event.target as Node)) {
-        setPickerOpen(false)
-      }
-    }
-
-    document.addEventListener("mousedown", onPointerDown)
-    document.addEventListener("touchstart", onPointerDown)
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown)
-      document.removeEventListener("touchstart", onPointerDown)
-    }
-  }, [pickerOpen])
-
-  const handleToggle = (emoji: MessageReactionEmoji) => {
+  const handleToggle = (emoji: string) => {
     if (!canPick) return
     onToggle?.(emoji)
     setPickerOpen(false)
@@ -83,69 +67,57 @@ export default function MessageReactionChips({
   if (summaries.length === 0 && !canPick) return null
   if (summaries.length === 0 && !showPickerTrigger) return null
 
+  const quickButton =
+    "flex h-8 w-8 items-center justify-center rounded-full text-base active:bg-white/10 hover:bg-white/10"
+
   return (
-    <div className={`flex flex-wrap items-center gap-1.5 ${className}`.trim()}>
-      {summaries.map(({ emoji, count, reactedByViewer }) =>
-        canPick ? (
-          <button
-            key={emoji}
-            type="button"
-            onClick={() => handleToggle(emoji)}
-            className={chipClass(reactedByViewer, isOutgoing, true)}
-            aria-label={`${emoji} ${count}${reactedByViewer ? ", you reacted" : ""}`}
-          >
-            <span aria-hidden>{emoji}</span>
-            <span>{count}</span>
-          </button>
-        ) : (
-          <span
-            key={emoji}
-            className={chipClass(reactedByViewer, isOutgoing, false)}
-            aria-label={`${emoji} ${count}`}
-          >
-            <span aria-hidden>{emoji}</span>
-            <span>{count}</span>
-          </span>
-        )
-      )}
-
-      {canPick && showPickerTrigger ? (
-        <div ref={pickerRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setPickerOpen((open) => !open)}
-            className={
-              "rounded px-1 py-0.5 text-xs text-gray-400 transition hover:bg-white/10 hover:text-gray-200 " +
-              (isOutgoing ? "text-white/70 hover:text-white" : "")
-            }
-            aria-label="React"
-            aria-expanded={pickerOpen}
-          >
-            <span aria-hidden>😊</span>
-            <span className="sr-only">React</span>
-          </button>
-
-          {pickerOpen ? (
-            <div
-              className="absolute bottom-full left-0 z-30 mb-1 flex gap-0.5 rounded-lg border border-white/10 bg-card/95 p-1 shadow-lg backdrop-blur-md"
-              role="menu"
+    <>
+      <div className={`flex flex-wrap items-center gap-1.5 ${className}`.trim()}>
+        {summaries.map(({ emoji, count, reactedByViewer }) =>
+          canPick ? (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => handleToggle(emoji)}
+              className={chipClass(reactedByViewer, isOutgoing, true)}
+              aria-label={`${emoji} ${count}${reactedByViewer ? ", you reacted" : ""}`}
             >
-              {MESSAGE_REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => handleToggle(emoji)}
-                  className="rounded-md px-2 py-1 text-base hover:bg-white/10"
-                  aria-label={`React with ${emoji}`}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+              <span aria-hidden>{emoji}</span>
+              <span>{count}</span>
+            </button>
+          ) : (
+            <span
+              key={emoji}
+              className={chipClass(reactedByViewer, isOutgoing, false)}
+              aria-label={`${emoji} ${count}`}
+            >
+              <span aria-hidden>{emoji}</span>
+              <span>{count}</span>
+            </span>
+          )
+        )}
+
+        {canPick && showPickerTrigger ? (
+          <MessageReactionQuickRow
+            onQuickPick={handleToggle}
+            onOpenFullPicker={() => setPickerOpen(true)}
+            buttonClassName={
+              quickButton +
+              (isOutgoing ? " text-white/85" : " text-gray-400")
+            }
+            plusClassName="text-base font-bold"
+          />
+        ) : null}
+      </div>
+
+      {canPick ? (
+        <UnicodeEmojiPickerOverlay
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onPick={handleToggle}
+          theme={theme}
+        />
       ) : null}
-    </div>
+    </>
   )
 }

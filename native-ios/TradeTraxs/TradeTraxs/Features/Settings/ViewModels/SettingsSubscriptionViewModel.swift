@@ -90,6 +90,15 @@ final class SettingsSubscriptionViewModel {
         SubscriptionPresentationPolicy.showsAppleManageSubscription(for: status)
     }
 
+    var showsLifetimeGrantedAppreciationMessage: Bool {
+        guard let status else { return false }
+        let sessionProfile = SessionBootstrapStore.shared.last?.data.session_profile
+        return SubscriptionPresentationPolicy.showsLifetimeGrantedAppreciation(
+            status: status,
+            sessionProfile: sessionProfile
+        )
+    }
+
     var membershipSummaryFooter: String {
         guard let status else {
             return "Your plan details appear here when you're signed in."

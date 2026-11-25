@@ -37,6 +37,7 @@ enum BroadcastProgramVideoPresentation {
         hostConnected: Bool?,
         primaryMediaPublisherConnected: Bool?,
         broadcastSourceIsObs: Bool,
+        hasSubscribedProgramVideo: Bool,
         videoWasDisplayedBefore: Bool
     ) -> BroadcastProgramVideoPlaceholderPresentation? {
         guard showsProgramVideoSurface else { return nil }
@@ -47,7 +48,12 @@ enum BroadcastProgramVideoPresentation {
             return preparingPresentation
         }
 
-        if hostConnected == false {
+        if shouldShowWaitingForBroadcaster(
+            broadcastSourceIsObs: broadcastSourceIsObs,
+            hostConnected: hostConnected,
+            primaryMediaPublisherConnected: primaryMediaPublisherConnected,
+            hasSubscribedProgramVideo: hasSubscribedProgramVideo
+        ) {
             return BroadcastProgramVideoPlaceholderPresentation(
                 title: "Waiting for broadcaster…",
                 showsSpinner: true,
@@ -55,7 +61,7 @@ enum BroadcastProgramVideoPresentation {
             )
         }
 
-        if broadcastSourceIsObs, primaryMediaPublisherConnected == false {
+        if broadcastSourceIsObs, primaryMediaPublisherConnected == false, !hasSubscribedProgramVideo {
             return preparingPresentation
         }
 
@@ -75,4 +81,23 @@ enum BroadcastProgramVideoPresentation {
         showsSpinner: true,
         accessibilityLabel: "Preparing stream"
     )
+
+    /// OBS program video uses the ``tt-obs-*`` ingress participant; the human host may be absent from LiveKit while the encoder is live.
+    static func shouldShowWaitingForBroadcaster(
+        broadcastSourceIsObs: Bool,
+        hostConnected: Bool?,
+        primaryMediaPublisherConnected: Bool?,
+        hasSubscribedProgramVideo: Bool
+    ) -> Bool {
+        if hasSubscribedProgramVideo { return false }
+        if broadcastSourceIsObs {
+            if primaryMediaPublisherConnected == true { return false }
+            if hostConnected == true { return false }
+            if hostConnected == false, primaryMediaPublisherConnected == false {
+                return true
+            }
+            return false
+        }
+        return hostConnected == false
+    }
 }

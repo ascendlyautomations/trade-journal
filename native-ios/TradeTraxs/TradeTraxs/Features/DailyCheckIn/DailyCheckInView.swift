@@ -7,6 +7,9 @@ struct DailyCheckInView: View {
 
     @Environment(\.themeColors) private var colors
 
+    private let sectionCardRadius = ExperienceRadius.md
+    private let sectionCardPadding = ExperienceSpacing.sm
+
     init(data: DataEnvironment, onClose: @escaping () -> Void, onOpenHistory: (() -> Void)? = nil) {
         _viewModel = State(
             initialValue: DailyCheckInViewModel(
@@ -28,7 +31,7 @@ struct DailyCheckInView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 sleepSection
                 morningSection
                 mentalStateSection
@@ -36,7 +39,7 @@ struct DailyCheckInView: View {
 
                 if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
-                        .experienceStyle(.footnote, color: colors.loss)
+                        .experienceStyle(.caption, color: colors.loss)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
@@ -56,18 +59,19 @@ struct DailyCheckInView: View {
                                 .tint(colors.onAccent)
                         } else {
                             Text("Save Check-In")
-                                .fontWeight(.semibold)
+                                .font(ExperienceTypography.subheadline.weight(.semibold))
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 49)
+                    .frame(minHeight: ExperienceSpacing.minTouchTarget)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(colors.accent)
                 .disabled(viewModel.isSaving)
                 .accessibilityIdentifier("dailyCheckIn.save")
             }
-            .padding(ExperienceSpacing.md)
+            .padding(.horizontal, ExperienceSpacing.sm)
+            .padding(.vertical, ExperienceSpacing.md)
         }
         .scrollDismissesKeyboard(.interactively)
         .background(colors.groupedBackground.ignoresSafeArea())
@@ -87,18 +91,20 @@ struct DailyCheckInView: View {
     }
 
     private var sleepSection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             sectionLabel("Sleep")
 
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 Text("Hours of Sleep")
-                    .font(ExperienceTypography.subheadline.weight(.semibold))
+                    .font(ExperienceTypography.footnote.weight(.semibold))
                     .foregroundStyle(colors.primaryText)
                 HStack(spacing: ExperienceSpacing.sm) {
                     TextField("7.5", text: sleepHoursBinding.numericInput(.unsignedDecimal(maxFractionDigits: 1)))
+                        .font(ExperienceTypography.subheadline)
                         .keyboardType(.decimalPad)
                         .padding(.horizontal, ExperienceSpacing.sm)
-                        .padding(.vertical, ExperienceSpacing.xs)
+                        .padding(.vertical, ExperienceSpacing.xxs)
+                        .frame(minHeight: ExperienceSpacing.minTouchTarget, alignment: .center)
                         .background(
                             colors.fillSecondary,
                             in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
@@ -109,7 +115,7 @@ struct DailyCheckInView: View {
                         )
                         .accessibilityIdentifier("dailyCheckIn.sleepHours")
                     Text("hours")
-                        .experienceStyle(.body, color: colors.secondaryText)
+                        .experienceStyle(.callout, color: colors.secondaryText)
                 }
             }
 
@@ -117,79 +123,75 @@ struct DailyCheckInView: View {
                 title: "Sleep Quality",
                 value: $viewModel.draft.sleepQuality,
                 lowLabel: "Poor",
-                highLabel: "Great"
+                highLabel: "Great",
+                density: .compact
             )
             .accessibilityIdentifier("dailyCheckIn.sleepQuality")
         }
-        .padding(ExperienceSpacing.md)
-        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
-        .overlay(
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        )
+        .padding(sectionCardPadding)
+        .experienceDashboardCard(cornerRadius: sectionCardRadius)
     }
 
     private var morningSection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             sectionLabel("Morning")
             CompactRatingSelector(
                 title: "How's your morning?",
                 value: $viewModel.draft.morningRating,
                 lowLabel: "Rough",
-                highLabel: "Great"
+                highLabel: "Great",
+                density: .compact
             )
             .accessibilityIdentifier("dailyCheckIn.morning")
         }
-        .padding(ExperienceSpacing.md)
-        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
-        .overlay(
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        )
+        .padding(sectionCardPadding)
+        .experienceDashboardCard(cornerRadius: sectionCardRadius)
     }
 
     private var mentalStateSection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             sectionLabel("Mental State")
-            CompactRatingSelector(
-                title: "Stress",
-                value: $viewModel.draft.stressLevel,
-                lowLabel: "Calm",
-                highLabel: "Very Stressed"
-            )
-            .accessibilityIdentifier("dailyCheckIn.stress")
-            CompactRatingSelector(
-                title: "Energy",
-                value: $viewModel.draft.energyLevel,
-                lowLabel: "Low",
-                highLabel: "High"
-            )
-            .accessibilityIdentifier("dailyCheckIn.energy")
-            CompactRatingSelector(
-                title: "Focus",
-                value: $viewModel.draft.focusLevel,
-                lowLabel: "Scattered",
-                highLabel: "Sharp"
-            )
-            .accessibilityIdentifier("dailyCheckIn.focus")
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                CompactRatingSelector(
+                    title: "Stress",
+                    value: $viewModel.draft.stressLevel,
+                    lowLabel: "Calm",
+                    highLabel: "Very Stressed",
+                    density: .compact
+                )
+                .accessibilityIdentifier("dailyCheckIn.stress")
+                CompactRatingSelector(
+                    title: "Energy",
+                    value: $viewModel.draft.energyLevel,
+                    lowLabel: "Low",
+                    highLabel: "High",
+                    density: .compact
+                )
+                .accessibilityIdentifier("dailyCheckIn.energy")
+                CompactRatingSelector(
+                    title: "Focus",
+                    value: $viewModel.draft.focusLevel,
+                    lowLabel: "Scattered",
+                    highLabel: "Sharp",
+                    density: .compact
+                )
+                .accessibilityIdentifier("dailyCheckIn.focus")
+            }
         }
-        .padding(ExperienceSpacing.md)
-        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
-        .overlay(
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        )
+        .padding(sectionCardPadding)
+        .experienceDashboardCard(cornerRadius: sectionCardRadius)
     }
 
     private var notesSection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             sectionLabel("Notes")
             Text("Anything affecting your trading today?")
-                .experienceStyle(.footnote, color: colors.secondaryText)
+                .experienceStyle(.caption, color: colors.secondaryText)
             TextEditor(text: $viewModel.draft.notes)
-                .frame(minHeight: 72, maxHeight: 120)
+                .font(ExperienceTypography.subheadline)
+                .frame(minHeight: 64, maxHeight: 104)
                 .scrollContentBackground(.hidden)
-                .padding(ExperienceSpacing.sm)
+                .padding(ExperienceSpacing.xs)
                 .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
                 .accessibilityIdentifier("dailyCheckIn.notes")
                 .experienceTextInputProbe(
@@ -199,17 +201,14 @@ struct DailyCheckInView: View {
                     isFocused: false
                 )
         }
-        .padding(ExperienceSpacing.md)
-        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
-        .overlay(
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        )
+        .padding(sectionCardPadding)
+        .experienceDashboardCard(cornerRadius: sectionCardRadius)
     }
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .experienceStyle(.headline, color: colors.primaryText)
+            .font(ExperienceTypography.subheadline.weight(.semibold))
+            .foregroundStyle(colors.primaryText)
             .accessibilityAddTraits(.isHeader)
     }
 

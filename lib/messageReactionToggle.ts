@@ -1,8 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type {
-  MessageReactionEmoji,
-  MessageReactionRow,
-} from "@/lib/roomMessageReactions"
+import type { MessageReactionRow } from "@/lib/roomMessageReactions"
+import { normalizeMessageReaction } from "@/lib/messageReactionValidation"
 
 export type MessageReactionPatch = (
   messageId: string,
@@ -13,7 +11,7 @@ export type MessageReactionPatch = (
 type ToggleMessageReactionBase = {
   supabase: SupabaseClient
   messageId: string
-  reaction: MessageReactionEmoji
+  reaction: string
   viewerUserId: string
   findViewerReactions: () => MessageReactionRow[]
   patch: MessageReactionPatch
@@ -36,7 +34,8 @@ export type ToggleMessageReactionInput =
   | ToggleRoomMessageReactionInput
 
 /**
- * Optimistic add / remove / replace — matches native MessageReactionToggleCoordinator.
+ * Optimistic toggle — one reaction per user per message.
+ * Same emoji removes; a different emoji replaces the prior reaction.
  */
 export async function toggleMessageReaction(
   input: ToggleMessageReactionInput
@@ -52,13 +51,17 @@ export async function toggleMessageReaction(
     onError,
   } = input
 
-  const busyKey = `${messageId}::${reaction}`
+  const emoji = normalizeMessageReaction(reaction)
+  if (!emoji) return
+
+  const busyKey = messageId
   if (busyKeys.has(busyKey)) return
   busyKeys.add(busyKey)
 
   const viewerRows = findViewerReactions()
-  const existingSame = viewerRows.find((row) => row.reaction === reaction)
-  const priorViewerRows = viewerRows
+  const existingSame = viewerRows.find(
+    (row) => normalizeMessageReaction(row.reaction) === emoji
+  )
 
   try {
     if (existingSame) {
@@ -73,28 +76,17 @@ export async function toggleMessageReaction(
       return
     }
 
-    for (const row of priorViewerRows) {
+    for (const row of viewerRows) {
       patch(messageId, row, "delete")
     }
 
     const optimistic: MessageReactionRow = {
-      id: `optimistic-${messageId}-${reaction}`,
+      id: `optimistic-${messageId}-${emoji}`,
       message_id: messageId,
       user_id: viewerUserId,
-      reaction,
+      reaction: emoji,
     }
     patch(messageId, optimistic, "insert")
-
-    for (const row of priorViewerRows) {
-      if (row.id.startsWith("optimistic-")) continue
-      const { error: deleteError } = await supabase
-        .from(
-          input.surface === "dm" ? "message_reactions" : "room_message_reactions"
-        )
-        .delete()
-        .eq("id", row.id)
-      if (deleteError) throw deleteError
-    }
 
     if (input.surface === "dm") {
       const { data, error } = await supabase
@@ -102,7 +94,7 @@ export async function toggleMessageReaction(
         .insert({
           message_id: messageId,
           user_id: viewerUserId,
-          reaction,
+          reaction: emoji,
           conversation_id: input.conversationId,
         })
         .select("id, message_id, user_id, reaction, created_at")
@@ -120,7 +112,7 @@ export async function toggleMessageReaction(
       .insert({
         message_id: messageId,
         user_id: viewerUserId,
-        reaction,
+        reaction: emoji,
         room_id: input.roomId,
       })
       .select("id, message_id, user_id, reaction, created_at")
@@ -137,19 +129,19 @@ export async function toggleMessageReaction(
     if (existingSame) {
       patch(messageId, existingSame, "insert")
     } else {
+      for (const row of viewerRows) {
+        patch(messageId, row, "insert")
+      }
       patch(
         messageId,
         {
-          id: `optimistic-${messageId}-${reaction}`,
+          id: `optimistic-${messageId}-${emoji}`,
           message_id: messageId,
           user_id: viewerUserId,
-          reaction,
+          reaction: emoji,
         },
         "delete"
       )
-      for (const row of priorViewerRows) {
-        patch(messageId, row, "insert")
-      }
     }
     onError?.("Could not update reaction. Please try again.")
   } finally {

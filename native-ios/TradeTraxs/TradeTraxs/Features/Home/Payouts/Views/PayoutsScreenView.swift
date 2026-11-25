@@ -101,17 +101,18 @@ struct PayoutsScreenView: View {
             defer { WithdrawalsHydrationPriorityGate.setScreenActive(false) }
             await hydrateWithdrawalsScreen()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .propFirmPayoutAssignmentsDidChange)) { _ in
+            Task { await reloadPayoutAssignmentsForList() }
+        }
         .accessibilityIdentifier("withdrawals.home")
     }
 
     private var content: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 expensesButton
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.top, ExperienceSpacing.sm)
-                totalSection
-                    .padding(.horizontal, ExperienceSpacing.md)
 
                 PayoutEquityCurveView(
                     points: equityCurvePoints,
@@ -178,36 +179,17 @@ struct PayoutsScreenView: View {
         .accessibilityIdentifier("withdrawals.propFirmExpenses")
     }
 
-    private var totalSection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text("Total Withdrawals")
-                .experienceStyle(.subheadline, color: colors.secondaryText)
-                .contextualTourTarget(.payoutsHistory)
-            Text(ProfileDisplay.formatMoney(totalWithdrawals))
-                .font(.system(.title2, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(colors.primaryText)
-                .accessibilityIdentifier("withdrawals.total")
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
     private func historySection(title: String, items: [PayoutHistoryItem]) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text(title)
                 .experienceStyle(.headline, color: colors.primaryText)
                 .padding(.horizontal, ExperienceSpacing.md)
 
-            VStack(spacing: 0) {
+            VStack(spacing: ExperienceSpacing.sm) {
                 ForEach(items) { item in
                     withdrawalRowLink(item: item, account: accountsByID[item.accountID])
-                    if item.id != items.last?.id {
-                        Divider()
-                            .padding(.leading, ExperienceSpacing.md)
-                    }
                 }
             }
-            .modifier(ReportDetailInsetSurface(cornerRadius: ExperienceRadius.md))
             .padding(.horizontal, ExperienceSpacing.md)
         }
     }
@@ -219,9 +201,7 @@ struct PayoutsScreenView: View {
             account: account,
             showsPostedAsAchievement: withdrawalAchievementLinks.linkedAchievementID(for: item) != nil
         )
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.vertical, ExperienceSpacing.xxs)
-        .background(colors.backgroundPrimary)
+        .experienceGroupedPanel(cornerRadius: ExperienceRadius.lg, prominence: .standard)
 
         if data != nil, navigationCoordinator != nil {
             Button {
@@ -365,5 +345,14 @@ struct PayoutsScreenView: View {
             detail: "total=\(totalWithdrawals) ledgerRows=\(withdrawalsHistory.ledgerEntryCount()) achievementExtras=\(withdrawalsHistory.achievementPayouts.count)"
         )
         #endif
+    }
+
+    /// Keeps shared prop-firm labels in sync after payout detail edits (amounts unchanged).
+    private func reloadPayoutAssignmentsForList() async {
+        guard let data, let userID = await data.session.currentUserID else { return }
+        let repository = PropFirmExpenseRepository(supabase: data.supabase)
+        if let names = try? await repository.payoutAssignments(userID: ProfileID(userID.rawValue)) {
+            PropFirmPayoutAssignmentStore.shared.replace(names)
+        }
     }
 }

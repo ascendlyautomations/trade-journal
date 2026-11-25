@@ -27,12 +27,14 @@ struct RoomBroadcastChatTypingMiniPlayer: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Color.black
-            BroadcastStreamZoomableVideoView(
-                track: coordinator.videoTrackForExpandedViewer,
-                isFullscreen: false,
+            LiveKitBroadcastVideoView(
+                track: coordinator.viewerPresentation == .mini
+                    ? coordinator.videoTrackForMiniPlayer
+                    : coordinator.videoTrackForExpandedViewer,
+                trackRevision: coordinator.programVideoTrackRevision,
                 onFirstFrame: { coordinator.markProgramVideoFrameRendered() }
             )
-            .id(coordinator.programVideoTrackRevision)
+            .id(coordinator.programVideoRendererIdentity)
             .opacity(coordinator.hasDisplayableProgramVideo ? 1 : 0)
 
             if let placeholder = coordinator.programVideoPlaceholder {
@@ -53,8 +55,9 @@ struct RoomBroadcastChatTypingMiniPlayer: View {
         .accessibilityLabel("Live stream playing")
         .animation(
             reduceMotion ? nil : .snappy(duration: 0.28),
-            value: coordinator.programVideoTrackRevision
+            value: coordinator.programVideoRendererIdentity
         )
+        .onAppear { coordinator.adoptProgramVideoSurface(.cornerChat) }
     }
 }
 

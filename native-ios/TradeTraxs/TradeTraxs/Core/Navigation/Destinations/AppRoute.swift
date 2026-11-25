@@ -15,6 +15,10 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case propFirmPayouts(TradingAccountID)
     case analyst
     case backtest
+    /// Backtest-only month calendar (TraxsPro).
+    case backtestCalendar
+    /// Backtest trading day (`YYYY-MM-DD`) from Backtest Calendar.
+    case backtestTradingDay(String)
     case achievements
     case achievementDetail(AchievementID)
     case streaks
@@ -34,6 +38,10 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case tradingRulesRuleDetail(String)
     /// Violations for one Eastern trading day (`YYYY-MM-DD`).
     case tradingRulesDayDetail(String)
+    /// Weekly / monthly compliance trend charts for the active analytics scope.
+    case tradingRulesTrends
+    /// All violation history groups for the active analytics scope.
+    case tradingRulesViolationHistory
     /// Trading Scorecard Phase 1 (plan-adherence composite + category breakdown).
     case tradingScorecard
     /// Owner-only psychology coach (AI explains deterministic facts).
@@ -90,6 +98,8 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case tradingRulesAnalytics
     case tradingRulesRuleDetail(String)
     case tradingRulesDayDetail(String)
+    case tradingRulesTrends
+    case tradingRulesViolationHistory
 }
 
 /// Messages tab push hierarchy (DMs + Trade Rooms opened from inbox).
@@ -115,6 +125,8 @@ enum MessagesRoute: Hashable, Codable, Sendable {
     case tradingRulesAnalytics
     case tradingRulesRuleDetail(String)
     case tradingRulesDayDetail(String)
+    case tradingRulesTrends
+    case tradingRulesViolationHistory
 }
 
 /// Profile (You) tab push hierarchy.
@@ -147,6 +159,8 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case tradingRulesAnalytics
     case tradingRulesRuleDetail(String)
     case tradingRulesDayDetail(String)
+    case tradingRulesTrends
+    case tradingRulesViolationHistory
 }
 
 /// Settings navigation hierarchy (Instagram / Apple Settings style).

@@ -13,6 +13,8 @@ struct RoomConversationView: View {
     @State private var userReleasedInitialPin = false
     @State private var threadScrollViewportHeight: CGFloat = 0
     @State private var actionMenuMessageID: MessageID?
+    @State private var showsUnicodeEmojiPicker = false
+    @State private var emojiPickerMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
@@ -129,6 +131,15 @@ struct RoomConversationView: View {
     @ViewBuilder
     private func conversationWithPresentationSheets<Content: View>(_ content: Content) -> some View {
         content
+            .fullScreenCover(isPresented: $showsUnicodeEmojiPicker) {
+                UnicodeEmojiPickerSheet { emoji in
+                    if let messageID = emojiPickerMessageID {
+                        Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
+                    }
+                    showsUnicodeEmojiPicker = false
+                    emojiPickerMessageID = nil
+                }
+            }
             .sheet(isPresented: $showsInviteShareSheet) {
                 if let room = viewModel.room,
                    let inviteURL = RoomInfoViewModel.inviteURL(slug: room.slug, roomID: room.id) {
@@ -651,7 +662,7 @@ struct RoomConversationView: View {
     }
 
     private func copyInviteLink(for room: TradeRoom) {
-        UIPasteboard.general.string = RoomInfoViewModel.inviteLink(slug: room.slug, roomID: room.id)
+        _ = ExperienceClipboard.copy(RoomInfoViewModel.inviteLink(slug: room.slug, roomID: room.id))
         ExperienceHaptics.play(.selection)
     }
 
@@ -865,6 +876,13 @@ struct RoomConversationView: View {
                         },
                         onSelectEmoji: { emoji in
                             Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
+                        },
+                        onBrowseEmojis: {
+                            emojiPickerMessageID = messageID
+                            actionMenuMessageID = nil
+                            DispatchQueue.main.async {
+                                showsUnicodeEmojiPicker = true
+                            }
                         },
                         onDismiss: { actionMenuMessageID = nil }
                     )

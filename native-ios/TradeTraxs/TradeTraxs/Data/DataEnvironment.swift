@@ -1091,6 +1091,8 @@ private struct DemoNotificationRepository: NotificationRepository {
 
     func markRead(id: NotificationID) async throws { _ = id }
     func markRead(ids: [NotificationID]) async throws -> Int { ids.count }
+    func markUnread(id: NotificationID) async throws { _ = id }
+    func markUnread(ids: [NotificationID]) async throws -> Int { ids.count }
     func markMessageNotificationsRead() async throws -> Int { 0 }
     func markRoomNotificationsRead(roomID: RoomID, slug: String?) async throws -> Int {
         _ = (roomID, slug)

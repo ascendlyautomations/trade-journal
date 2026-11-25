@@ -1,6 +1,8 @@
 import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { isLiveKitConfigured } from "@/lib/livekit/config.ts"
 import { deleteLiveKitIngress } from "@/lib/livekit/liveKitIngressService.ts"
+import { releaseObsIngressCreationLease } from "@/lib/livekit/tradeRoomBroadcastObsIngressLease.ts"
+import { logObsIngressLifecycle } from "@/lib/livekit/tradeRoomBroadcastIngressTelemetry.ts"
 import { resolveTradeRoomBroadcastControlAccess } from "@/lib/livekit/tradeRoomBroadcastAccess.ts"
 import {
   clearObsIngressMetadata,
@@ -82,8 +84,31 @@ export async function POST(req: Request) {
 
   const ingressId = active.livekitIngressId?.trim() || ""
   if (ingressId) {
-    await deleteLiveKitIngress(ingressId)
+    const del = await deleteLiveKitIngress(ingressId)
+    if (del.ok) {
+      logObsIngressLifecycle("delete_ingress", {
+        roomId: parsed.roomId,
+        sessionId: parsed.sessionId,
+        ingressId,
+        extra: { context: "revoke" },
+      })
+    } else {
+      logObsIngressLifecycle("delete_ingress_failed", {
+        roomId: parsed.roomId,
+        sessionId: parsed.sessionId,
+        ingressId,
+        error: del.error,
+        extra: { context: "revoke" },
+      })
+    }
   }
+
+  await releaseObsIngressCreationLease(supabaseServiceRole, {
+    roomId: parsed.roomId,
+    sessionId: parsed.sessionId,
+    broadcasterUserId: user.id,
+    leaseToken: null,
+  })
 
   const cleared = await clearObsIngressMetadata(supabaseServiceRole, {
     roomId: parsed.roomId,

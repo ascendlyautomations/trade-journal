@@ -535,6 +535,7 @@ private struct FeedBlockStubInteractionRepository: InteractionRepository {
     func addComment(
         body: String,
         parentID: CommentID?,
+        sharedTradeID: TradeID?,
         on target: InteractionTarget
     ) async throws -> InteractionComment {
         InteractionComment(
@@ -543,6 +544,7 @@ private struct FeedBlockStubInteractionRepository: InteractionRepository {
             authorProfileID: FeedFixtures.viewerID,
             authorUsername: nil,
             body: body,
+            sharedTradeID: sharedTradeID,
             parentCommentID: parentID,
             createdAt: .now,
             isPinned: false

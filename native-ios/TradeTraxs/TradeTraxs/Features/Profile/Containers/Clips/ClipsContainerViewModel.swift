@@ -64,6 +64,12 @@ final class ClipsContainerViewModel {
         if snapshot.didBootstrap || snapshot.phase == .loaded {
             isScreenOwned = true
         }
+        if snapshot.isContentLocked {
+            items = []
+            hasLoaded = true
+            state = .contentLocked
+            return
+        }
         awaitingScreenBootstrap = ProfileSectionInitialLoad.awaitingScreenBootstrap(
             isScreenOwned: isScreenOwned,
             snapshot: snapshot,

@@ -51,26 +51,21 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         }
         let publicStarted = CFAbsoluteTimeGetCurrent()
         #endif
-        let dto: TradeDTO.Trade = try await supabase.database.selectOne(
-            TradeDTO.Trade.self,
-            from: TradeDTO.tradesPublicReadTable,
-            query: [
-                SupabaseQuery.select(TradeDTO.publicSocialSelect),
-                SupabaseQuery.eq("id", id.rawValue),
-            ]
-        )
-        #if DEBUG
-        let publicElapsedMs = Int((CFAbsoluteTimeGetCurrent() - publicStarted) * 1000)
-        await MainActor.run {
-            SharedTradeOpenDiagnostics.repositoryFetchFinished(
-                tradeID: id,
-                step: "trades_public_read",
-                outcome: "success",
-                elapsedMs: publicElapsedMs
-            )
+        if let dto = try await fetchNonOwnerSocialTradeDTO(id: id.rawValue) {
+            #if DEBUG
+            let publicElapsedMs = Int((CFAbsoluteTimeGetCurrent() - publicStarted) * 1000)
+            await MainActor.run {
+                SharedTradeOpenDiagnostics.repositoryFetchFinished(
+                    tradeID: id,
+                    step: "trades_public_read",
+                    outcome: "success",
+                    elapsedMs: publicElapsedMs
+                )
+            }
+            #endif
+            return try TradeMapper.mapToDomain(dto)
         }
-        #endif
-        return try TradeMapper.mapToDomain(dto)
+        throw AppError.domain(.notFound(entity: TradeDTO.tradesTable, id: id.rawValue))
     }
 
     func trades(ids: [TradeID]) async throws -> [Trade] {
@@ -81,16 +76,15 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         let ownedRows = try await fetchOwnerTradeDTOs(ids: unique)
         items.append(contentsOf: Self.mapTradesSkippingFailures(ownedRows))
         let ownedIds = Set(ownedRows.compactMap(\.id))
-        let remaining = unique.filter { !ownedIds.contains($0) }
+        var remaining = unique.filter { !ownedIds.contains($0) }
         for chunk in remaining.chunked(into: 80) {
-            let rows: [TradeDTO.Trade] = try await supabase.database.select(
-                TradeDTO.Trade.self,
-                from: TradeDTO.tradesPublicReadTable,
-                query: [
-                    SupabaseQuery.select(TradeDTO.publicSocialSelect),
-                    SupabaseQuery.isIn("id", chunk),
-                ]
-            )
+            let rows = try await fetchPublicReadTradeDTOs(ids: chunk)
+            items.append(contentsOf: Self.mapTradesSkippingFailures(rows))
+            let found = Set(rows.compactMap(\.id))
+            remaining.removeAll { found.contains($0) }
+        }
+        for chunk in remaining.chunked(into: 80) {
+            let rows = try await fetchMessageScopedTradeDTOs(ids: chunk)
             items.append(contentsOf: Self.mapTradesSkippingFailures(rows))
         }
         return items
@@ -242,6 +236,69 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             parametersJSON: try JSONEncoder().encode(Params(p_trade_id: id))
         )
         return try Self.decodeOwnerTradeDTO(from: data)
+    }
+
+    /// Public trades first, then message-scoped private shares via `trades` RLS.
+    private func fetchNonOwnerSocialTradeDTO(id: String) async throws -> TradeDTO.Trade? {
+        if let row = try await fetchPublicReadTradeDTO(id: id) {
+            return row
+        }
+        #if DEBUG
+        await MainActor.run {
+            SharedTradeOpenDiagnostics.repositoryFetchStarted(
+                tradeID: TradeID(id),
+                step: "trades_message_scoped"
+            )
+        }
+        let scopedStarted = CFAbsoluteTimeGetCurrent()
+        #endif
+        let scoped = try await fetchMessageScopedTradeDTO(id: id)
+        #if DEBUG
+        let scopedElapsedMs = Int((CFAbsoluteTimeGetCurrent() - scopedStarted) * 1000)
+        await MainActor.run {
+            SharedTradeOpenDiagnostics.repositoryFetchFinished(
+                tradeID: TradeID(id),
+                step: "trades_message_scoped",
+                outcome: scoped == nil ? "miss" : "success",
+                elapsedMs: scopedElapsedMs
+            )
+        }
+        #endif
+        return scoped
+    }
+
+    private func fetchPublicReadTradeDTO(id: String) async throws -> TradeDTO.Trade? {
+        let rows = try await fetchPublicReadTradeDTOs(ids: [id])
+        return rows.first
+    }
+
+    private func fetchPublicReadTradeDTOs(ids: [String]) async throws -> [TradeDTO.Trade] {
+        guard !ids.isEmpty else { return [] }
+        return try await supabase.database.select(
+            TradeDTO.Trade.self,
+            from: TradeDTO.tradesPublicReadTable,
+            query: [
+                SupabaseQuery.select(TradeDTO.publicSocialSelect),
+                SupabaseQuery.isIn("id", ids),
+            ]
+        )
+    }
+
+    private func fetchMessageScopedTradeDTO(id: String) async throws -> TradeDTO.Trade? {
+        let rows = try await fetchMessageScopedTradeDTOs(ids: [id])
+        return rows.first
+    }
+
+    private func fetchMessageScopedTradeDTOs(ids: [String]) async throws -> [TradeDTO.Trade] {
+        guard !ids.isEmpty else { return [] }
+        return try await supabase.database.select(
+            TradeDTO.Trade.self,
+            from: TradeDTO.tradesTable,
+            query: [
+                SupabaseQuery.select(TradeDTO.socialScopedSelect),
+                SupabaseQuery.isIn("id", ids),
+            ]
+        )
     }
 
     private func fetchOwnerTradeDTOs(ids: [String]) async throws -> [TradeDTO.Trade] {
@@ -1058,20 +1115,27 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         customPublicStatus: String?
     ) async throws -> TradingAccount {
         let trimmedStatus = customPublicStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedStatus = (trimmedStatus?.isEmpty == false) ? trimmedStatus : nil
         let body = TradeDTO.AccountSettingsBody(
             show_in_account_dropdowns: showInAccountDropdowns,
-            custom_public_status: (trimmedStatus?.isEmpty == false) ? trimmedStatus : nil
+            custom_public_status: resolvedStatus
         )
         let row: TradeDTO.Account = try await supabase.database.update(
             body,
             table: "accounts",
             query: [
+                SupabaseQuery.select(Self.accountsSelect),
                 SupabaseQuery.eq("id", id.rawValue),
                 SupabaseQuery.eq("user_id", ownerID.rawValue),
             ],
             returning: TradeDTO.Account.self
         )
-        return try TradingAccountMapper.mapToDomain(row)
+        RepositoryRequestFlight.shared.invalidate(prefix: "trades.accounts:\(ownerID.rawValue)")
+        let mapped = try TradingAccountMapper.mapToDomain(row)
+        return mapped.applyingAccountInsightsSettings(
+            showInAccountDropdowns: showInAccountDropdowns,
+            customPublicStatus: resolvedStatus
+        )
     }
 
     /// Columns the owner can read back. Limits `return=representation` to this list.

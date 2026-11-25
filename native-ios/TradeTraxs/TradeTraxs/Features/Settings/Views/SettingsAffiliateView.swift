@@ -1,10 +1,7 @@
 import SwiftUI
-import UIKit
 
 struct SettingsAffiliateView: View {
     @State private var viewModel: SettingsAffiliateViewModel
-    @State private var didCopyCode = false
-
     @Environment(\.themeColors) private var colors
 
     init(data: DataEnvironment) {
@@ -42,13 +39,12 @@ struct SettingsAffiliateView: View {
                     .experienceDashboardListRow()
                 if let code = viewModel.referral?.code, !code.isEmpty {
                     Button {
-                        UIPasteboard.general.string = code
-                        didCopyCode = true
+                        guard ExperienceClipboard.copy(code) else { return }
                         ExperienceHaptics.play(.success)
                     } label: {
                         SettingsPrimaryActionLabel(
-                            title: didCopyCode ? "Copied" : "Copy Referral Code",
-                            systemImage: didCopyCode ? "checkmark" : "doc.on.doc"
+                            title: "Copy Referral Code",
+                            systemImage: "doc.on.doc"
                         )
                     }
                     .buttonStyle(.experiencePlain)

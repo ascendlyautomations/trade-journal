@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct DemoExperienceLeaveButton: View {
+struct GuestModeLeaveButton: View {
     @Environment(\.themeColors) private var colors
     @Bindable private var launchController = AppLaunchController.shared
 
@@ -9,7 +9,7 @@ struct DemoExperienceLeaveButton: View {
             ExperienceHaptics.play(.selection)
             launchController.exitDemoExplore()
         } label: {
-            Text("Leave Demo")
+            Text("Exit Guest Mode")
                 .font(ExperienceTypography.footnote.weight(.semibold))
                 .foregroundStyle(colors.accent)
                 .padding(.horizontal, ExperienceSpacing.md)
@@ -22,23 +22,23 @@ struct DemoExperienceLeaveButton: View {
                 .experienceTouchTarget()
         }
         .buttonStyle(.experiencePlain)
-        .accessibilityLabel("Leave Demo")
+        .accessibilityLabel("Exit Guest Mode")
         .accessibilityHint("Returns to sign in")
-        .accessibilityIdentifier("demo.leave")
+        .accessibilityIdentifier("guest.leave")
     }
 }
 
-/// Centers the existing Leave Demo control just above the tab bar.
-struct DemoExperienceLeaveButtonPlacement: View {
+/// Centers the Exit Guest Mode control just above the tab bar.
+struct GuestModeLeaveButtonPlacement: View {
     var body: some View {
-        DemoExperienceLeaveButton()
+        GuestModeLeaveButton()
             .padding(.top, ExperienceSpacing.xxs)
             .padding(.bottom, ExperienceSpacing.sm)
             .frame(maxWidth: .infinity)
     }
 }
 
-struct DemoExperienceShellModifier: ViewModifier {
+struct GuestModeShellModifier: ViewModifier {
     @Bindable private var launchController = AppLaunchController.shared
 
     func body(content: Content) -> some View {
@@ -62,6 +62,9 @@ struct DemoExperienceShellModifier: ViewModifier {
 
 extension View {
     func demoExperienceShellChrome() -> some View {
-        modifier(DemoExperienceShellModifier())
+        modifier(GuestModeShellModifier())
     }
 }
+
+typealias DemoExperienceLeaveButton = GuestModeLeaveButton
+typealias DemoExperienceLeaveButtonPlacement = GuestModeLeaveButtonPlacement

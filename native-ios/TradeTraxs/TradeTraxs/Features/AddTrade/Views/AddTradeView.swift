@@ -587,10 +587,10 @@ struct AddTradeView: View {
             }
 
             Section {
-                DatePicker("Entry", selection: $viewModel.entryAt)
+                AddTradeFormWheelDatePicker(title: "Entry", selection: $viewModel.entryAt)
                     .listRowInsets(AddTradeFormLayout.rowInsets)
                 if viewModel.includeExitTime {
-                    DatePicker("Exit", selection: $viewModel.exitAt)
+                    AddTradeFormWheelDatePicker(title: "Exit", selection: $viewModel.exitAt)
                         .listRowInsets(AddTradeFormLayout.rowInsets)
                     Button("Remove exit time", role: .destructive) {
                         viewModel.removeExitTime()

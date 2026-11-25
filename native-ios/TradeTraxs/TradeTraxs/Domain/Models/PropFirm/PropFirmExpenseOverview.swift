@@ -45,7 +45,7 @@ nonisolated enum PropFirmYearOverviewBuilder {
     static let unassignedKey = "__unassigned__"
     static let unassignedLabel = "Unassigned"
     static let defaultPercent: Decimal = 25
-    static let presets: [Decimal] = [15, 20, 25, 30]
+    static let presets: [Decimal] = [20, 25, 30]
 
     private static let monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 

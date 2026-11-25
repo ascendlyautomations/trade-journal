@@ -441,7 +441,7 @@ final class ProfileExperienceTests: XCTestCase {
         )
         XCTAssertEqual(
             viewModel.actionMode,
-            .visitor(isFollowing: store.isFollowing, isRequested: store.isRequested, showsTradeRoom: false)
+            .visitor(isFollowing: store.isFollowing, isRequested: store.isRequested, showsTradeRoom: false, isPrivate: false)
         )
     }
 
@@ -472,7 +472,7 @@ final class ProfileExperienceTests: XCTestCase {
         )
         XCTAssertEqual(
             viewModel.actionMode,
-            .visitor(isFollowing: store.isFollowing, isRequested: store.isRequested, showsTradeRoom: true)
+            .visitor(isFollowing: store.isFollowing, isRequested: store.isRequested, showsTradeRoom: true, isPrivate: false)
         )
     }
 
@@ -532,7 +532,7 @@ final class ProfileExperienceTests: XCTestCase {
         }
     }
 
-    func testFollowListRemoveFollowerOptimisticAfterConfirm() async {
+    func testFollowListRemoveFollowerAfterServerSuccess() async {
         let environment = CompositionRoot.bootstrapAppEnvironment()
         let owner = ProfileID("dev.follow-list")
         let viewModel = FollowListViewModel(
@@ -551,13 +551,21 @@ final class ProfileExperienceTests: XCTestCase {
         guard case .loaded = viewModel.phase else {
             return XCTFail("Expected loaded follow list")
         }
-        guard let victim = viewModel.items.first else {
-            return XCTFail("Expected at least one follower")
+        guard viewModel.items.count >= 2 else {
+            return XCTFail("Expected at least two followers for repeated removal")
         }
-        let beforeCount = viewModel.items.count
-        await viewModel.confirmRemove(victim)
-        XCTAssertEqual(viewModel.items.count, beforeCount - 1)
-        XCTAssertFalse(viewModel.items.contains { $0.id == victim.id })
+        let firstVictim = viewModel.items[0]
+        let secondVictim = viewModel.items[1]
+        let startCount = viewModel.items.count
+
+        await viewModel.confirmRemove(firstVictim)
+        XCTAssertEqual(viewModel.items.count, startCount - 1)
+        XCTAssertFalse(viewModel.items.contains { $0.id == firstVictim.id })
+        XCTAssertNil(viewModel.removeFollowerErrorMessage)
+
+        await viewModel.confirmRemove(secondVictim)
+        XCTAssertEqual(viewModel.items.count, startCount - 2)
+        XCTAssertFalse(viewModel.items.contains { $0.id == secondVictim.id })
         XCTAssertNil(viewModel.removeFollowerErrorMessage)
     }
 

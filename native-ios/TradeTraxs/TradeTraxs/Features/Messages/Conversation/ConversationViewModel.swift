@@ -113,6 +113,7 @@ final class ConversationViewModel {
     private var suppressedMessageIDs: Set<MessageID> = []
     private var reactionBusyKeys: Set<String> = []
     private var outboundSharedContentObserver: NSObjectProtocol?
+    private var sharedContentDeletionHandlerToken: UUID?
     private var sharedContentHydrationTask: Task<Void, Never>?
     private var sharedContentHydrationBacklog: [Message] = []
     private var scrollAnchorTask: Task<Void, Never>?
@@ -572,6 +573,7 @@ final class ConversationViewModel {
         captureScrollRestorationOnClose()
         VoiceMessagePlaybackController.shared.stopAll()
         stopOutboundSharedContentObserver()
+        stopSharedContentDeletionObserver()
         realtimeTask?.cancel()
         realtimeTask = nil
         isConversationRealtimeActive = false
@@ -771,8 +773,11 @@ final class ConversationViewModel {
     }
 
     func isSharedContentUnavailable(_ message: Message) -> Bool {
-        guard let reference = message.sharedContent else { return false }
-        return unavailableSharedContentKeys.contains(reference.stableKey)
+        SharedContentMessageReconciliation.unavailableKeys(
+            for: message,
+            unavailableKeys: unavailableSharedContentKeys,
+            sharedPosts: sharedPosts
+        )
     }
 
     private func isSharedContentPresentationResolved(_ message: Message) -> Bool {
@@ -1400,6 +1405,7 @@ final class ConversationViewModel {
                 phase = .loaded
             }
             startOutboundSharedContentObserver()
+            startSharedContentDeletionObserver()
             applyNavigationIntentIfNeeded()
         } catch ConversationThreadBootstrapLoader.LoaderError.rpcUnavailable {
             do {
@@ -1408,6 +1414,7 @@ final class ConversationViewModel {
                 phase = .loaded
                 startRealtime()
                 startOutboundSharedContentObserver()
+                startSharedContentDeletionObserver()
             } catch {
                 await markConversationSeenIfNeeded()
                 phase = .failed(ConversationThreadSupport.message(for: error))
@@ -2463,6 +2470,56 @@ final class ConversationViewModel {
         }
     }
 
+    private func startSharedContentDeletionObserver() {
+        stopSharedContentDeletionObserver()
+        sharedContentDeletionHandlerToken = MessagingSharedContentDeletionCoordinator.shared.addHandler {
+            [weak self] keys in
+            self?.handleSharedContentDeletionSignal(keys)
+        }
+    }
+
+    private func stopSharedContentDeletionObserver() {
+        if let sharedContentDeletionHandlerToken {
+            MessagingSharedContentDeletionCoordinator.shared.removeHandler(sharedContentDeletionHandlerToken)
+            self.sharedContentDeletionHandlerToken = nil
+        }
+    }
+
+    private func handleSharedContentDeletionSignal(_ keys: Set<String>) {
+        var merged = keys
+        if merged.isEmpty,
+           let achievementID = MessagingSharedContentDeletionCoordinator.shared.latestDeletedAchievementID
+        {
+            merged = SharedContentMessageReconciliation.supplementaryUnavailableKeys(
+                afterAchievementDeleted: achievementID,
+                messages: messages,
+                sharedAchievements: sharedAchievements,
+                detailCache: detailCache
+            )
+        }
+        reconcileUnavailableSharedContent(keys: merged)
+    }
+
+    private func reconcileUnavailableSharedContent(keys: Set<String>) {
+        if !keys.isEmpty {
+            unavailableSharedContentKeys.formUnion(keys)
+        }
+        guard !unavailableSharedContentKeys.isEmpty else { return }
+        let applied = SharedContentMessageReconciliation.apply(
+            to: messages,
+            unavailableKeys: unavailableSharedContentKeys,
+            sharedPosts: sharedPosts
+        )
+        guard applied.didChange else { return }
+        for id in applied.removedIDs {
+            suppressedMessageIDs.insert(id)
+            sendStates.removeValue(forKey: id)
+        }
+        messages = applied.messages
+        syncThreadSessionCache(context: "sharedContent.unavailable")
+        refreshInboxPreviewAfterDelete()
+    }
+
     private func startOutboundSharedContentObserver() {
         stopOutboundSharedContentObserver()
         outboundSharedContentObserver = NotificationCenter.default.addObserver(
@@ -2503,6 +2560,7 @@ final class ConversationViewModel {
     private func hydrateSharedContent(from messages: [Message]) {
         guard !messages.isEmpty else { return }
         primeSharedContentFromCaches(messages: messages)
+        reconcileUnavailableSharedContent(keys: [])
         enqueueSharedContentNetworkHydration(messages: messages)
     }
 
@@ -2572,6 +2630,7 @@ final class ConversationViewModel {
         sharedAchievements = hydrated.sharedAchievements
         unavailableSharedContentKeys = hydrated.unavailableSharedContentKeys
         persistSharedContentNetworkResults(hydrated, messages: messages, context: context)
+        reconcileUnavailableSharedContent(keys: hydrated.unavailableSharedContentKeys)
     }
 
     private func persistSharedContentNetworkResults(

@@ -62,7 +62,10 @@ struct LeaderboardScreenView: View {
                 category: viewModel.category,
                 onAudience: { viewModel.setAudience($0) },
                 onTimeframe: { viewModel.setTimeframe($0) },
-                onCategory: { viewModel.setCategory($0) }
+                onCategory: { viewModel.setCategory($0) },
+                showCurveToggle: viewModel.canShowCurveToggle,
+                isCurveMode: viewModel.displayMode == .curve,
+                onToggleCurve: { viewModel.toggleDisplayMode() }
             )
             if let message = viewModel.timeframeFallbackMessage {
                 Text(message)
@@ -85,30 +88,87 @@ struct LeaderboardScreenView: View {
                 if viewModel.rows.isEmpty {
                     loadingContent
                 } else {
-                    rankingsScroll
+                    primaryRankingsScroll
                 }
             case .failed(let message):
                 if viewModel.rows.isEmpty {
                     errorContent(message: message)
                 } else {
-                    rankingsScroll
+                    primaryRankingsScroll
                 }
             case .loaded:
                 if viewModel.showsEmpty {
                     emptyContent
                 } else {
-                    rankingsScroll
+                    primaryRankingsScroll
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private var rankingsScroll: some View {
+    @ViewBuilder
+    private var primaryRankingsScroll: some View {
+        if viewModel.displayMode == .curve {
+            curveRankingsScroll
+        } else {
+            standardRankingsScroll
+        }
+    }
+
+    private var standardRankingsScroll: some View {
+        rankingsScrollContent(
+            rows: viewModel.listRows,
+            showsPodium: true
+        )
+    }
+
+    private var curveRankingsScroll: some View {
+        rankingsScrollContent(
+            rows: viewModel.rows,
+            showsPodium: false,
+            header: { curveHeader() }
+        )
+    }
+
+    @ViewBuilder
+    private func curveHeader() -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+            switch viewModel.curvePhase {
+            case .idle, .loading:
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 120)
+            case .failed(let message):
+                Text(message)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
+            case .loaded:
+                LeaderboardCurveChartView(
+                    points: viewModel.curvePoints,
+                    category: viewModel.category,
+                    metricFormat: viewModel.curveMetricFormat
+                )
+            }
+
+            Text("Top Traders")
+                .experienceStyle(.headline, color: colors.primaryText)
+                .padding(.horizontal, ExperienceSpacing.md)
+                .accessibilityIdentifier("leaderboard.curve.topTraders")
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+    }
+
+    private func rankingsScrollContent<Header: View>(
+        rows: [LeaderboardRow],
+        showsPodium: Bool,
+        @ViewBuilder header: () -> Header = { EmptyView() }
+    ) -> some View {
         VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                    if !viewModel.podium.isEmpty {
+                    header()
+
+                    if showsPodium, !viewModel.podium.isEmpty {
                         LeaderboardPodiumView(
                             podium: viewModel.podium,
                             profileFor: { viewModel.resolvedProfile(for: $0) },
@@ -119,7 +179,7 @@ struct LeaderboardScreenView: View {
                         )
                     }
 
-                    ForEach(viewModel.listRows) { row in
+                    ForEach(rows) { row in
                         LeaderboardRowView(
                             row: row,
                             profile: viewModel.resolvedProfile(for: row.profileID),
@@ -133,7 +193,7 @@ struct LeaderboardScreenView: View {
                             Task { await viewModel.loadMoreIfNeeded(currentID: row.profileID) }
                         }
 
-                        if row.profileID != viewModel.listRows.last?.profileID {
+                        if row.profileID != rows.last?.profileID {
                             Divider()
                                 .padding(.leading, 32 + 44 + ExperienceSpacing.sm * 2 + ExperienceSpacing.md)
                                 .opacity(0.35)

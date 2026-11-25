@@ -74,7 +74,7 @@ final class TradeRoomObsBroadcastController {
             await broadcastCoordinator.refreshStatus(roomID: roomID)
             syncObsHostBarSession()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = obsUserFacingError(error)
         }
     }
 
@@ -94,6 +94,10 @@ final class TradeRoomObsBroadcastController {
     private var obsCredentialsFlightSessionId: String?
     private var obsCredentialsFlight: Task<Void, Never>?
 
+    /// OBS encoder became ready for this prep session, prompt shown or user chose Not Yet.
+    private var obsConnectedPromptHandledSessionIds: Set<String> = []
+    var showsObsConnectedPrompt = false
+
     func configure(viewerUserId: String?, transport: SupabaseTransport?) {
         self.viewerUserId = viewerUserId
         if let transport {
@@ -105,14 +109,15 @@ final class TradeRoomObsBroadcastController {
 
     /// Sheet closed without ending the broadcast, keep session phase for Manage Stream reopen.
     func acknowledgeManagementSheetDismissed() {
-        obsPollTask?.cancel()
-        obsPollTask = nil
         errorMessage = nil
         if phase == .livePublic {
+            obsPollTask?.cancel()
+            obsPollTask = nil
             streamKey = nil
             streamKeyRevealed = false
             rtmpURL = nil
         }
+        // Preparing: keep encoder polling so OBS connect + Go live stay in sync while the sheet is dismissed.
     }
 
     func resetForDismiss() {
@@ -137,8 +142,27 @@ final class TradeRoomObsBroadcastController {
         obsCredentialsFlight?.cancel()
         obsCredentialsFlight = nil
         obsCredentialsFlightSessionId = nil
+        obsConnectedPromptHandledSessionIds.removeAll()
+        showsObsConnectedPrompt = false
         syncObsHostBarSession()
         Task { await broadcastCoordinator.disconnectObsHostPreview() }
+    }
+
+    func dismissObsConnectedPrompt() {
+        showsObsConnectedPrompt = false
+    }
+
+    func confirmObsConnectedStartStream(roomID: RoomID) async {
+        showsObsConnectedPrompt = false
+        await publishToRoom(roomID: roomID)
+    }
+
+    var streamReadyForGoLive: Bool {
+        TradeRoomObsGoLivePolicy.canGoLiveToRoom(
+            isPreparingObs: phase == .preparing,
+            isBusy: isBusy,
+            encoderConnected: encoderConnected
+        )
     }
 
     func noteHostContext(roomID: RoomID, roomTitle: String?) {
@@ -216,12 +240,13 @@ final class TradeRoomObsBroadcastController {
            !sessionId.isEmpty,
            broadcasterUserId == viewerUserId,
            !foreignHostPreparing,
-           broadcastCoordinator.obsHostPreviewConnectionState == .connected,
            rtmpURL != nil,
            streamKey != nil
         {
-            startObsPolling(roomID: roomID, sessionId: sessionId)
-            return
+            ensureObsEncoderPolling(roomID: roomID)
+            if broadcastCoordinator.obsHostPreviewConnectionState == .connected {
+                return
+            }
         }
 
         if let ensurePrivateObsSessionRoomID,
@@ -249,10 +274,39 @@ final class TradeRoomObsBroadcastController {
 
     /// User-initiated retry after a failed or idle setup state.
     func retryPrivateObsSessionEnsure(roomID: RoomID) {
+        if isObsDuplicateIngressErrorState {
+            guard !isBusy else { return }
+            errorMessage = nil
+            TradeRoomObsBroadcastDiagnostics.log("ensure.retry.regenerate", roomID: roomID)
+            Task { await regenerateStreamKey(roomID: roomID) }
+            return
+        }
         cancelInFlightPrivateObsSessionEnsure()
         errorMessage = nil
         startPrivateObsSessionEnsureIfNeeded(roomID: roomID)
         TradeRoomObsBroadcastDiagnostics.log("ensure.retry", roomID: roomID)
+    }
+
+    /// Prep session has ingress but local credentials are missing, or server reported duplicate ingress.
+    private var isObsDuplicateIngressErrorState: Bool {
+        guard phase == .preparing,
+              let sessionId = broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !sessionId.isEmpty
+        else { return false }
+
+        let missingLocalCredentials = rtmpURL == nil || streamKey == nil
+        guard missingLocalCredentials else { return false }
+
+        if let err = errorMessage?.lowercased(), !err.isEmpty {
+            if err.contains("credentials already exist") { return true }
+            if err.contains("regenerate stream key") { return true }
+            if err.contains("already has obs ingress") { return true }
+            if err.contains("already generated") { return true }
+            if err.contains("stream key already") { return true }
+        }
+
+        let ingress = serverIngressId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !ingress.isEmpty
     }
 
     private func cancelInFlightPrivateObsSessionEnsure() {
@@ -260,6 +314,8 @@ final class TradeRoomObsBroadcastController {
         ensurePrivateObsSessionTask = nil
         ensurePrivateObsSessionRoomID = nil
         ensurePrivateObsSessionGeneration &+= 1
+        isBusy = false
+        isEnsuringPrivateObsSession = false
     }
 
     private func shouldPreserveObsHostPreviewDuringStatusReconcile(roomID: RoomID) -> Bool {
@@ -379,12 +435,23 @@ final class TradeRoomObsBroadcastController {
                     let programId =
                         start.primaryMediaPublisherIdentity?.trimmingCharacters(in: .whitespacesAndNewlines)
                         ?? status.primaryMediaPublisherIdentity?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    try await broadcastCoordinator.connectObsHostPreview(
-                        token: start,
-                        programPublisherIdentity: programId
-                    )
+                    do {
+                        try await broadcastCoordinator.connectObsHostPreview(
+                            token: start,
+                            programPublisherIdentity: programId
+                        )
+                    } catch {
+                        if !isCooperativeCancellation(error) {
+                            TradeRoomObsBroadcastDiagnostics.log(
+                                "ensure.previewConnectFailed",
+                                roomID: roomID,
+                                sessionId: sid,
+                                detail: error.localizedDescription
+                            )
+                        }
+                    }
                 }
-                startObsPolling(roomID: roomID, sessionId: sid)
+                ensureObsEncoderPolling(roomID: roomID)
                 return
             }
 
@@ -421,17 +488,28 @@ final class TradeRoomObsBroadcastController {
                 sessionId: sessionId
             )
             #endif
-            try await broadcastCoordinator.connectObsHostPreview(
-                token: start,
-                programPublisherIdentity: programId
-            )
+            do {
+                try await broadcastCoordinator.connectObsHostPreview(
+                    token: start,
+                    programPublisherIdentity: programId
+                )
+            } catch {
+                if !isCooperativeCancellation(error) {
+                    TradeRoomObsBroadcastDiagnostics.log(
+                        "ensure.previewConnectFailed",
+                        roomID: roomID,
+                        sessionId: sessionId,
+                        detail: error.localizedDescription
+                    )
+                }
+            }
             await loadCredentialsIfNeeded(
                 roomID: roomID,
                 sessionId: sessionId,
                 status: nil,
                 ingressFromStart: nil
             )
-            startObsPolling(roomID: roomID, sessionId: sessionId)
+            ensureObsEncoderPolling(roomID: roomID)
         } catch {
             guard generation == ensurePrivateObsSessionGeneration else { return }
             if isCooperativeCancellation(error) {
@@ -449,14 +527,14 @@ final class TradeRoomObsBroadcastController {
         }
     }
 
-    func copyRTMPURL() {
-        guard let u = rtmpURL?.trimmingCharacters(in: .whitespacesAndNewlines), !u.isEmpty else { return }
-        UIPasteboard.general.string = u
+    @discardableResult
+    func copyRTMPURL(showsConfirmationToast: Bool = true) -> Bool {
+        ExperienceClipboard.copy(rtmpURL, showsConfirmationToast: showsConfirmationToast)
     }
 
-    func copyStreamKey() {
-        guard let k = streamKey?.trimmingCharacters(in: .whitespacesAndNewlines), !k.isEmpty else { return }
-        UIPasteboard.general.string = k
+    @discardableResult
+    func copyStreamKey(showsConfirmationToast: Bool = true) -> Bool {
+        ExperienceClipboard.copy(streamKey, showsConfirmationToast: showsConfirmationToast)
     }
 
     func publishToRoom(roomID: RoomID) async {
@@ -478,7 +556,29 @@ final class TradeRoomObsBroadcastController {
             let status = try await client.fetchStatus(roomID: roomID, reconcile: true, lite: false)
             await applyStatus(status, roomID: roomID)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = obsUserFacingError(error)
+        }
+    }
+
+    func cancelObsPreparation(roomID: RoomID) async {
+        guard let client else { return }
+        if broadcastSessionId == nil {
+            await refreshFromServer(roomID: roomID)
+        }
+        guard let sessionId = broadcastSessionId, phase == .preparing else {
+            resetForDismiss()
+            return
+        }
+        errorMessage = nil
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            try await client.cancelObsPreparation(roomID: roomID, sessionId: sessionId)
+            await broadcastCoordinator.disconnectObsHostPreview()
+            await broadcastCoordinator.refreshStatus(roomID: roomID)
+            resetForDismiss()
+        } catch {
+            errorMessage = obsUserFacingError(error)
         }
     }
 
@@ -502,7 +602,7 @@ final class TradeRoomObsBroadcastController {
             await broadcastCoordinator.refreshStatus(roomID: roomID)
             resetForDismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = obsUserFacingError(error)
         }
     }
 
@@ -516,7 +616,7 @@ final class TradeRoomObsBroadcastController {
             await fetchCredentials(roomID: roomID, sessionId: sessionId)
             streamKeyRevealed = false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = obsUserFacingError(error)
         }
     }
 
@@ -570,6 +670,7 @@ final class TradeRoomObsBroadcastController {
         }
 
         if publicDiscoverableLive || vis == "public" {
+            showsObsConnectedPrompt = false
             broadcastSessionId = sessionId
             phase = .livePublic
             rtmpURL = nil
@@ -611,6 +712,7 @@ final class TradeRoomObsBroadcastController {
         if isObs, vis == "preparing" {
             broadcastSessionId = sessionId
             phase = .preparing
+            applyObsPresenceFromStatus(status)
         } else {
             phase = .idle
             syncObsHostBarSession()
@@ -693,12 +795,56 @@ final class TradeRoomObsBroadcastController {
         }
     }
 
+    /// Mirrors web `setBroadcastRoomStatusPollDemand` obs-prep: poll full room broadcast status for presence.
+    func ensureObsEncoderPolling(roomID: RoomID) {
+        guard phase == .preparing,
+              !foreignHostPreparing,
+              let viewerUserId,
+              !viewerUserId.isEmpty,
+              let sessionId = broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !sessionId.isEmpty,
+              broadcasterUserId == viewerUserId
+        else { return }
+        startObsPolling(roomID: roomID, sessionId: sessionId)
+    }
+
+    private func applyObsPresenceFromStatus(_ status: LiveKitBroadcastStatusResponse) {
+        if let snap = status.ingressStatusSnapshot?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !snap.isEmpty
+        {
+            ingressStatusLabel = snap
+        }
+        if let primary = status.primaryMediaPublisherConnected {
+            encoderConnected = primary
+        }
+        if let host = status.hostConnected {
+            hostLiveKitConnected = host
+        }
+        noteObsConnectedPromptIfNeeded()
+    }
+
+    /// Presents the OBS Connected dialog once per prep session when ingress reports encoder readiness.
+    private func noteObsConnectedPromptIfNeeded() {
+        guard phase == .preparing,
+              encoderConnected,
+              let sessionId = broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !sessionId.isEmpty,
+              !obsConnectedPromptHandledSessionIds.contains(sessionId)
+        else { return }
+        obsConnectedPromptHandledSessionIds.insert(sessionId)
+        showsObsConnectedPrompt = true
+    }
+
     private func startObsPolling(roomID: RoomID, sessionId: String) {
         obsPollTask?.cancel()
         obsPollTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                await self.pollObsOnce(roomID: roomID, sessionId: sessionId)
+                let activeSessionId = await MainActor.run {
+                    self.broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                        ?? sessionId
+                }
+                await self.pollObsOnce(roomID: roomID, sessionId: activeSessionId)
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }
@@ -707,11 +853,34 @@ final class TradeRoomObsBroadcastController {
     private func pollObsOnce(roomID: RoomID, sessionId: String) async {
         guard let client else { return }
         do {
-            let o = try await client.fetchObsStatus(roomID: roomID, sessionId: sessionId)
+            let status = try await client.fetchStatus(roomID: roomID, reconcile: false, lite: false)
             await MainActor.run {
-                self.ingressStatusLabel = o.ingressStatusSnapshot
-                self.encoderConnected = o.primaryMediaPublisherConnected == true
-                self.hostLiveKitConnected = o.hostConnected == true
+                if let sid = status.broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !sid.isEmpty
+                {
+                    self.broadcastSessionId = sid
+                }
+                self.applyObsPresenceFromStatus(status)
+            }
+            let activeSid = await MainActor.run {
+                self.broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    ?? status.broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                    ?? sessionId
+            }
+            if let o = try? await client.fetchObsStatus(roomID: roomID, sessionId: activeSid) {
+                await MainActor.run {
+                    if let snap = o.ingressStatusSnapshot?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !snap.isEmpty
+                    {
+                        self.ingressStatusLabel = snap
+                    }
+                    if o.primaryMediaPublisherConnected == true {
+                        self.encoderConnected = true
+                    }
+                    if o.hostConnected == true {
+                        self.hostLiveKitConnected = true
+                    }
+                }
             }
         } catch {
             guard !isCooperativeCancellation(error) else { return }
@@ -732,49 +901,15 @@ final class TradeRoomObsBroadcastController {
     }
 
     private func obsUserFacingError(_ error: Error) -> String {
-        if let app = error as? AppError {
-            switch app {
-            case .cancelled:
-                return "Setup was interrupted. Close this sheet and tap Start Stream again."
-            case .unknown(let message):
-                return message
-            case .transport(let network):
-                return obsUserFacingNetworkError(network)
-            case .authentication:
-                return "Sign in again to manage streams."
-            case .notImplemented(let feature):
-                return "Not implemented: \(feature)"
-            }
+        if let app = error as? AppError, case .cancelled = app {
+            return "Setup was interrupted. Close this sheet and tap Start Stream again."
         }
-        if let net = error as? NetworkError {
-            return obsUserFacingNetworkError(net)
+        if let net = error as? NetworkError, case .cancelled = net {
+            return "Setup was interrupted. Close this sheet and tap Start Stream again."
         }
-        return error.localizedDescription
+        return UserFacingError.message(for: error)
     }
 
-    private func obsUserFacingNetworkError(_ error: NetworkError) -> String {
-        switch error {
-        case .cancelled:
-            return "Setup was interrupted. Close this sheet and tap Start Stream again."
-        case .unauthorized, .forbidden:
-            return "Sign in again to manage streams."
-        case .validation(_, let message):
-            return message
-        case .server(let code, let message):
-            if let message, !message.isEmpty { return message }
-            return "Server error (HTTP \(code))."
-        case .connectivity:
-            return "You're offline. Check your connection and try again."
-        case .timeout:
-            return "The request timed out. Try again."
-        case .rateLimited:
-            return "Too many requests. Wait a moment and try again."
-        case .decoding(let message):
-            return "Invalid server response. \(message)"
-        case .unknown(let message):
-            return message
-        }
-    }
 }
 
 private extension String {

@@ -86,6 +86,8 @@ nonisolated struct InteractionComment: Hashable, Codable, Sendable, Identifiable
     /// Avatar storage URL / public path from the same comments list join (no N+1 profile fetch).
     var authorAvatarURL: String? = nil
     var body: String
+    /// Optional trade attachment embedded in the comment.
+    var sharedTradeID: TradeID? = nil
     var parentCommentID: CommentID?
     var createdAt: Date
     /// Architecture-ready, pin UI ships later.

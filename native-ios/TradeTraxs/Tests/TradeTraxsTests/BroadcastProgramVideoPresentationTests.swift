@@ -12,6 +12,7 @@ final class BroadcastProgramVideoPresentationTests: XCTestCase {
             hostConnected: true,
             primaryMediaPublisherConnected: true,
             broadcastSourceIsObs: false,
+            hasSubscribedProgramVideo: true,
             videoWasDisplayedBefore: false
         )
         XCTAssertNil(result)
@@ -27,6 +28,7 @@ final class BroadcastProgramVideoPresentationTests: XCTestCase {
             hostConnected: true,
             primaryMediaPublisherConnected: nil,
             broadcastSourceIsObs: false,
+            hasSubscribedProgramVideo: false,
             videoWasDisplayedBefore: false
         )
         XCTAssertEqual(result?.title, "Preparing Stream...")
@@ -43,6 +45,7 @@ final class BroadcastProgramVideoPresentationTests: XCTestCase {
             hostConnected: true,
             primaryMediaPublisherConnected: true,
             broadcastSourceIsObs: false,
+            hasSubscribedProgramVideo: false,
             videoWasDisplayedBefore: true
         )
         XCTAssertEqual(result?.title, "Waiting for video…")
@@ -58,6 +61,39 @@ final class BroadcastProgramVideoPresentationTests: XCTestCase {
             hostConnected: false,
             primaryMediaPublisherConnected: false,
             broadcastSourceIsObs: false,
+            hasSubscribedProgramVideo: false,
+            videoWasDisplayedBefore: false
+        )
+        XCTAssertEqual(result?.title, "Waiting for broadcaster…")
+    }
+
+    func testObsIngressConnectedDoesNotWaitForHumanHost() {
+        let result = BroadcastProgramVideoPresentation.resolvePlaceholder(
+            showsProgramVideoSurface: true,
+            isLive: true,
+            hasDisplayableVideo: false,
+            connection: .connected,
+            isJoining: false,
+            hostConnected: false,
+            primaryMediaPublisherConnected: true,
+            broadcastSourceIsObs: true,
+            hasSubscribedProgramVideo: true,
+            videoWasDisplayedBefore: false
+        )
+        XCTAssertEqual(result?.title, "Preparing Stream...")
+    }
+
+    func testObsWaitsWhenNeitherHostNorIngressConnected() {
+        let result = BroadcastProgramVideoPresentation.resolvePlaceholder(
+            showsProgramVideoSurface: true,
+            isLive: true,
+            hasDisplayableVideo: false,
+            connection: .connected,
+            isJoining: false,
+            hostConnected: false,
+            primaryMediaPublisherConnected: false,
+            broadcastSourceIsObs: true,
+            hasSubscribedProgramVideo: false,
             videoWasDisplayedBefore: false
         )
         XCTAssertEqual(result?.title, "Waiting for broadcaster…")

@@ -36,15 +36,15 @@ struct SettingsHomeView: View {
                         launchController.exitDemoExplore()
                     } label: {
                         SettingsNavigationRow(
-                            title: "Exit Demo",
+                            title: "Exit Guest Mode",
                             systemImage: "arrow.backward.circle",
                             isDestructive: true
                         )
                     }
                     .buttonStyle(.experiencePlain)
-                    .accessibilityIdentifier("settings.exitDemo")
+                    .accessibilityIdentifier("settings.exitGuestMode")
                 } header: {
-                    Text("Demo Mode")
+                    Text("Guest Mode")
                 }
             }
 
@@ -205,16 +205,35 @@ struct SettingsHomeView: View {
             showsAdminEntry = SessionBootstrapStore.shared.isPlatformAdmin
             await refreshMonetizationConfigurationForSettings()
         }
-        .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
-            guard let target else { return }
-            if reduceMotion {
-                tourProxy.scrollTo(target, anchor: .center)
-            } else {
-                withAnimation(ExperienceMotion.navigation) {
-                    tourProxy.scrollTo(target, anchor: .center)
-                }
-            }
+        .onAppear {
+            scrollSettingsTourIfNeeded(using: tourProxy)
         }
+        .onChange(of: ContextualTourCoordinator.shared.scrollGeneration) { _, _ in
+            scrollSettingsTourIfNeeded(using: tourProxy)
+        }
+        }
+    }
+
+    private func scrollSettingsTourIfNeeded(using proxy: ScrollViewProxy) {
+        let coordinator = ContextualTourCoordinator.shared
+        guard coordinator.phase == .measuring || coordinator.phase == .presenting else { return }
+        guard let target = coordinator.scrollTarget else { return }
+        switch target {
+        case .settingsAppearance, .settingsTradingRules:
+            break
+        default:
+            return
+        }
+        let anchor = ContextualTourGeometry.scrollAnchor(for: target)
+        let scroll = {
+            proxy.scrollTo(target, anchor: anchor)
+        }
+        if reduceMotion {
+            scroll()
+        } else {
+            withAnimation(ExperienceMotion.navigation) {
+                scroll()
+            }
         }
     }
 

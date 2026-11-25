@@ -138,10 +138,41 @@ struct ClipDetailView: View {
 
     @ViewBuilder
     private var content: some View {
+        Group {
+            if let reel = viewModel.reel {
+                CommentsDetailChrome(
+                    target: .reel(reel.id),
+                    contentOwnerUserID: reel.authorProfileID.rawValue,
+                    data: data
+                ) { commentsVM, currentUserID, _ in
+                    clipScroll(
+                        reel: reel,
+                        commentsVM: commentsVM,
+                        currentUserID: currentUserID
+                    )
+                }
+            }
+        }
+        .overlay {
+            if viewModel.isDeleting {
+                ProgressView("Deleting…")
+                    .padding(ExperienceSpacing.lg)
+                    .experienceFloatingPanelBackground(
+                        in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func clipScroll(
+        reel: Reel,
+        commentsVM: CommentsViewModel,
+        currentUserID: ProfileID?
+    ) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if let reel = viewModel.reel {
                         DetailIdentityHeader(
                             initials: viewModel.authorInitials,
                             avatar: viewModel.authorAvatar,
@@ -177,27 +208,32 @@ struct ClipDetailView: View {
                                 LikeFeedbackOverlay(isVisible: showLikeHeart, reduceMotion: reduceMotion)
                             }
 
-                        clipBody(reel, scrollProxy: proxy)
+                        clipBody(
+                            reel,
+                            scrollProxy: proxy,
+                            commentsVM: commentsVM,
+                            currentUserID: currentUserID
+                        )
                             .padding(.horizontal, ExperienceSpacing.lg)
                             .padding(.top, ExperienceSpacing.md)
                             .padding(.bottom, ExperienceSpacing.xl)
-                    }
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-        }
-        .overlay {
-            if viewModel.isDeleting {
-                ProgressView("Deleting…")
-                    .padding(ExperienceSpacing.lg)
-                    .experienceFloatingPanelBackground(
-                        in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                    )
-            }
+            .commentThreadScrollSupport(
+                viewModel: commentsVM,
+                scrollProxy: proxy,
+                reduceMotion: reduceMotion
+            )
         }
     }
 
-    private func clipBody(_ reel: Reel, scrollProxy: ScrollViewProxy) -> some View {
+    private func clipBody(
+        _ reel: Reel,
+        scrollProxy: ScrollViewProxy,
+        commentsVM: CommentsViewModel,
+        currentUserID: ProfileID?
+    ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
             VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                 EngagementBar(
@@ -241,11 +277,11 @@ struct ClipDetailView: View {
             }
 
             CommentsSectionView(
-                target: .reel(reel.id),
-                contentOwnerUserID: reel.authorProfileID.rawValue,
-                data: data
+                viewModel: commentsVM,
+                currentUserID: currentUserID,
+                imagePipeline: data.imagePipeline
             )
-                .id(Self.commentsAnchorID)
+            .id(Self.commentsAnchorID)
         }
     }
 

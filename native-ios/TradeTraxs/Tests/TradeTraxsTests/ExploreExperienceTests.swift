@@ -470,6 +470,37 @@ final class ExploreExperienceTests: XCTestCase {
         XCTAssertEqual(navigationStore.paths.feed.last, .room(room.id))
     }
 
+    func testSearchFollowToggleUsesProfileRepository() async throws {
+        let sessionStore = ExploreSessionStore.shared
+        sessionStore.invalidate()
+        let profiles = ExploreStubProfileRepository()
+        let cache = DetailPresentationCache()
+        let navigationStore = NavigationStore()
+        navigationStore.sessionPhase = .authenticated
+        let coordinator = NavigationCoordinator(store: navigationStore)
+        let viewModel = ExploreViewModel(
+            explore: ExploreStubRepository(),
+            search: ExploreStubSearchRepository(),
+            profiles: profiles,
+            rooms: ExploreStubRoomRepository(),
+            session: ExploreStubSession(userID: ExploreFixtures.viewerID.rawValue),
+            detailCache: cache,
+            navigationCoordinator: coordinator,
+            store: sessionStore
+        )
+        viewModel.searchText = "nick"
+        viewModel.searchChanged()
+        await waitFor { !viewModel.searchPeople.isEmpty }
+        let trader = try XCTUnwrap(viewModel.searchPeople.first)
+        XCTAssertFalse(viewModel.isFollowing(trader))
+        viewModel.toggleSearchFollow(trader)
+        await waitFor { viewModel.isFollowing(trader) }
+        XCTAssertEqual(profiles.followCalls, 1)
+        viewModel.toggleSearchFollow(trader)
+        await waitFor { !viewModel.isFollowing(trader) }
+        XCTAssertEqual(profiles.unfollowCalls, 1)
+    }
+
     func testFollowToggleUsesProfileRepository() async throws {
         let sessionStore = ExploreSessionStore.shared
         sessionStore.invalidate()

@@ -134,9 +134,11 @@ struct ProfileTradeCard: View {
                                 tradeSummaryColumn
 
                                 if let note = summary.notePreview, !note.isEmpty {
-                                    Text(note)
-                                        .experienceStyle(.footnote, color: colors.secondaryText)
-                                        .lineLimit(2)
+                                    ExperienceExpandableText(
+                                        text: note,
+                                        typography: .footnote,
+                                        textColor: colors.secondaryText
+                                    )
                                 }
                             }
                         }
@@ -145,9 +147,11 @@ struct ProfileTradeCard: View {
                             tradeSummaryColumn
 
                             if let note = summary.notePreview, !note.isEmpty {
-                                Text(note)
-                                    .experienceStyle(.footnote, color: colors.secondaryText)
-                                    .lineLimit(2)
+                                ExperienceExpandableText(
+                                    text: note,
+                                    typography: .footnote,
+                                    textColor: colors.secondaryText
+                                )
                             }
                         }
                     }
@@ -234,9 +238,11 @@ struct ProfileTradeCard: View {
                 Text(TradeDisplay.sideTitle(summary.side))
                     .experienceStyle(.caption, color: colors.secondaryText)
                 if let note = summary.notePreview, !note.isEmpty {
-                    Text(note)
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                        .lineLimit(3)
+                    ExperienceExpandableText(
+                        text: note,
+                        typography: .footnote,
+                        textColor: colors.secondaryText
+                    )
                 }
             }
             .padding()

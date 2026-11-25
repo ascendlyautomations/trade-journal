@@ -8,7 +8,7 @@ private struct ProfileSectionPlaceholderFillModifier: ViewModifier {
         switch state {
         case .loaded:
             content
-        case .idle, .loading, .empty, .failed:
+        case .idle, .loading, .empty, .contentLocked, .failed:
             content.experienceScrollEmbeddedSectionFill()
         }
     }
@@ -32,6 +32,9 @@ struct ProfileSectionContainerChrome<Content: View>: View {
             switch state {
             case .idle, .loading:
                 loadingBody
+            case .contentLocked:
+                ProfilePrivateContentMessage()
+                    .padding(.top, ExperienceSpacing.lg)
             case .empty:
                 ProfileSectionEmptyState.profileSection(
                     icon: emptyIcon(for: section),

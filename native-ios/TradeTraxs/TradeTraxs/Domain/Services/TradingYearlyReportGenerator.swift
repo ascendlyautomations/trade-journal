@@ -38,31 +38,9 @@ nonisolated enum TradingYearlyReportGenerator {
             now: now
         )
 
-        let daily = computeDailyPnl(scopedTrades, calendar: calendar)
-        let bestDay = pickExtremeDay(daily, mode: .best, calendar: calendar)
-        let worstDay = pickExtremeDay(daily, mode: .worst, calendar: calendar)
-        let sameDay = bestDay.label != nil && bestDay.label == worstDay.label
-        let winningDays = daily.values.filter { $0 > 0 }.count
-        let losingDays = daily.values.filter { $0 < 0 }.count
-
-        let metrics = TradingYearlyReportMetrics(
-            netPnl: summary.netPnL,
-            tradeCount: summary.tradeCount,
-            winRate: summary.winRate,
-            profitFactor: summary.profitFactor,
-            averageWinner: summary.avgWin,
-            averageLoser: summary.avgLoss,
-            averageRR: summary.averageRR,
-            expectancy: summary.expectancy,
-            bestTrade: summary.bestTrade,
-            worstTrade: summary.biggestLoss,
-            bestDayLabel: sameDay ? nil : bestDay.label,
-            bestDayPnl: sameDay ? nil : bestDay.pnl,
-            worstDayLabel: sameDay ? nil : worstDay.label,
-            worstDayPnl: sameDay ? nil : worstDay.pnl,
-            maxDrawdown: summary.maxDrawdown,
-            winningDays: winningDays,
-            losingDays: losingDays
+        let metrics = TradingReportGeneratorMetricsBridge.buildMetrics(
+            from: scopedTrades,
+            includeSessionExtremes: true
         )
 
         let monthRows = buildMonthRows(
@@ -138,7 +116,10 @@ nonisolated enum TradingYearlyReportGenerator {
             interval: interval,
             now: now
         )
-        let metrics = TradingReportGeneratorMetricsBridge.buildMetrics(from: scopedTrades, calendar: calendar)
+        let metrics = TradingReportGeneratorMetricsBridge.buildMetrics(
+            from: scopedTrades,
+            includeSessionExtremes: true
+        )
 
         return TradingReport(
             periodKey: .monthlyThis,
@@ -218,14 +199,14 @@ nonisolated enum TradingYearlyReportGenerator {
     // MARK: - Narrative
 
     private static func buildExecutiveSummary(
-        metrics: TradingYearlyReportMetrics,
+        metrics: TradingReportMetrics,
         year: Int
     ) -> String {
-        if metrics.tradeCount == 0 {
+        if metrics.tradesTaken == 0 {
             return "No trades matched your filters during \(year)."
         }
-        guard metrics.winRate != nil else {
-            return "\(year) has \(NumberDisplay.integer(metrics.tradeCount)) trades, but none have a P&L yet."
+        guard metrics.knownResultCount > 0 else {
+            return "\(year) has \(NumberDisplay.integer(metrics.tradesTaken)) trades, but none have a P&L yet."
         }
 
         let tone: String = {
@@ -234,12 +215,15 @@ nonisolated enum TradingYearlyReportGenerator {
             return "flat"
         }()
 
-        let winRateText: String = {
-            guard let winRate = metrics.winRate else { return "no closed trades" }
-            return "\(NumberDisplay.percent(winRate * 100, minimumFractionDigits: 1, maximumFractionDigits: 1)) win rate"
-        }()
+        let winRateText = NumberDisplay.percent(
+            metrics.winRate,
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        ) + " win rate"
 
-        return "\(year) was a \(tone) year with \(NumberDisplay.integer(metrics.tradeCount)) trades and \(formatMoney(metrics.netPnl)) net P&L. You finished with \(winRateText) across \(NumberDisplay.integer(metrics.winningDays)) winning days and \(NumberDisplay.integer(metrics.losingDays)) losing days."
+        let winningDays = metrics.winningDays ?? 0
+        let losingDays = metrics.losingDays ?? 0
+        return "\(year) was a \(tone) year with \(NumberDisplay.integer(metrics.tradesTaken)) trades and \(formatPnl(metrics.netPnl)) net P&L. You finished with \(winRateText) across \(NumberDisplay.integer(winningDays)) winning days and \(NumberDisplay.integer(losingDays)) losing days."
     }
 
     private static func buildMonthExecutiveSummary(
@@ -372,62 +356,134 @@ nonisolated enum TradingYearlyReportGenerator {
     }
 }
 
-/// Bridges scoped trades into ``TradingReportMetrics`` for month drill-down reuse.
+/// Bridges scoped trades into ``TradingReportMetrics`` (weekly, monthly, yearly, custom).
 nonisolated enum TradingReportGeneratorMetricsBridge {
-    static func buildMetrics(from trades: [Trade], calendar: Calendar = .current) -> TradingReportMetrics {
-        let totalTrades = trades.count
-        let priced = trades.compactMap { $0.realizedPnL?.amount }
-        let wins = priced.filter { $0 > 0 }.count
-        let winRate = priced.isEmpty ? 0 : (Double(wins) / Double(priced.count)) * 100
-        let totalPnL = priced.reduce(Decimal(0), +)
+    static func buildMetrics(
+        from trades: [Trade],
+        includeSessionExtremes: Bool = false
+    ) -> TradingReportMetrics {
+        let pricedAmounts = trades.compactMap { $0.realizedPnL?.amount }
+        let pricedDoubles = pricedAmounts.map { NSDecimalNumber(decimal: $0).doubleValue }
+        let wins = pricedDoubles.filter { $0 > 0 }
+        let losses = pricedDoubles.filter { $0 < 0 }
+        let winRate = pricedDoubles.isEmpty ? 0 : (Double(wins.count) / Double(pricedDoubles.count)) * 100
+        let totalPnL = pricedDoubles.reduce(0, +)
+
+        let avgWinner: Double? = {
+            guard !wins.isEmpty else { return nil }
+            return wins.reduce(0, +) / Double(wins.count)
+        }()
+        let avgLoser: Double? = {
+            guard !losses.isEmpty else { return nil }
+            return losses.reduce(0, +) / Double(losses.count)
+        }()
+        let lossRate = pricedDoubles.isEmpty ? 0 : Double(losses.count) / Double(pricedDoubles.count)
+        let winRateFrac = pricedDoubles.isEmpty ? 0 : Double(wins.count) / Double(pricedDoubles.count)
+        let expectancy: Double? = {
+            guard !pricedDoubles.isEmpty else { return nil }
+            return winRateFrac * (avgWinner ?? 0) + lossRate * (avgLoser ?? 0)
+        }()
+
         let daily = computeDailyPnl(trades)
-        let bestDay = pickExtremeDay(daily, mode: .best, calendar: calendar)
-        let worstDay = pickExtremeDay(daily, mode: .worst, calendar: calendar)
+        let bestDay = pickExtremeDay(daily, mode: .best)
+        let worstDay = pickExtremeDay(daily, mode: .worst)
         let sameDay = bestDay.label != nil && bestDay.label == worstDay.label
+        let winningDays = daily.isEmpty ? nil : daily.values.filter { $0 > 0 }.count
+        let losingDays = daily.isEmpty ? nil : daily.values.filter { $0 < 0 }.count
+
+        let bestSession: (label: String?, pnl: Double?)
+        let worstSession: (label: String?, pnl: Double?)
+        if includeSessionExtremes {
+            let sessions = computeSessionPnl(trades)
+            bestSession = pickExtremeSession(sessions, mode: .best)
+            worstSession = pickExtremeSession(sessions, mode: .worst)
+        } else {
+            bestSession = (nil, nil)
+            worstSession = (nil, nil)
+        }
 
         return TradingReportMetrics(
-            netPnl: NSDecimalNumber(decimal: totalPnL).doubleValue,
+            netPnl: totalPnL,
             winRate: winRate,
-            knownResultCount: trades.compactMap { $0.realizedPnL?.amount }.count,
-            averageRr: averageRr(trades),
-            profitFactor: computeProfitFactor(trades),
-            tradesTaken: totalTrades,
+            knownResultCount: pricedDoubles.count,
+            averageRr: averageTargetRr(trades),
+            averageReachedRr: averageReachedRr(trades),
+            profitFactor: computeProfitFactor(pricedDoubles),
+            tradesTaken: trades.count,
+            averageWinner: avgWinner,
+            averageLoser: avgLoser,
+            expectancy: expectancy,
+            bestTrade: wins.max(),
+            worstTrade: losses.min(),
+            maxDrawdown: maxDrawdownAmount(trades),
             bestDayLabel: sameDay ? nil : bestDay.label,
-            bestDayPnl: sameDay ? nil : bestDay.pnl.map { NSDecimalNumber(decimal: $0).doubleValue },
+            bestDayPnl: sameDay ? nil : bestDay.pnl,
             worstDayLabel: sameDay ? nil : worstDay.label,
-            worstDayPnl: sameDay ? nil : worstDay.pnl.map { NSDecimalNumber(decimal: $0).doubleValue },
-            bestSessionLabel: nil,
-            bestSessionPnl: nil,
-            worstSessionLabel: nil,
-            worstSessionPnl: nil,
+            worstDayPnl: sameDay ? nil : worstDay.pnl,
+            winningDays: winningDays,
+            losingDays: losingDays,
+            bestSessionLabel: bestSession.label,
+            bestSessionPnl: bestSession.pnl,
+            worstSessionLabel: worstSession.label,
+            worstSessionPnl: worstSession.pnl,
             mostTradedSymbol: mostTradedTicker(trades),
             averageHoldTimeSeconds: averageHoldSeconds(trades)
         )
     }
 
-    private static func averageRr(_ trades: [Trade]) -> Double? {
-        let values = trades.compactMap { trade -> Double? in
-            guard let rr = trade.riskReward else { return nil }
-            return NSDecimalNumber(decimal: rr).doubleValue
-        }
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
+    private static func knownPnl(_ trade: Trade) -> Double? {
+        guard let amount = trade.realizedPnL?.amount else { return nil }
+        return NSDecimalNumber(decimal: amount).doubleValue
     }
 
-    private static func computeProfitFactor(_ trades: [Trade]) -> Double? {
-        let values = trades.compactMap { $0.realizedPnL?.amount }
-        let grossProfit = values.filter { $0 > 0 }.reduce(Decimal(0), +)
-        let grossLoss = values.filter { $0 < 0 }.reduce(Decimal(0)) { $0 + abs($1) }
+    private static func averageTargetRr(_ trades: [Trade]) -> Double? {
+        guard let average = TradePointsAndRealizedRr.averageTargetedRr(trades: trades) else { return nil }
+        return NSDecimalNumber(decimal: average).doubleValue
+    }
+
+    private static func averageReachedRr(_ trades: [Trade]) -> Double? {
+        guard let average = TradePointsAndRealizedRr.averageMaxRrReached(trades: trades) else { return nil }
+        return NSDecimalNumber(decimal: average).doubleValue
+    }
+
+    private static func computeProfitFactor(_ priced: [Double]) -> Double? {
+        let grossProfit = priced.filter { $0 > 0 }.reduce(0, +)
+        let grossLoss = priced.filter { $0 < 0 }.reduce(0) { $0 + abs($1) }
         guard grossLoss > 0 else { return nil }
-        return NSDecimalNumber(decimal: grossProfit / grossLoss).doubleValue
+        return grossProfit / grossLoss
     }
 
-    private static func computeDailyPnl(_ trades: [Trade]) -> [String: Decimal] {
-        var map: [String: Decimal] = [:]
+    private static func maxDrawdownAmount(_ trades: [Trade]) -> Double? {
+        let chronological = trades.sorted {
+            ($0.exitAt ?? $0.entryAt) < ($1.exitAt ?? $1.entryAt)
+        }
+        var running: Decimal = 0
+        var peak: Decimal = 0
+        var maxDD: Decimal = 0
+        var hasPriced = false
+        for trade in chronological {
+            guard let amount = trade.realizedPnL?.amount else { continue }
+            hasPriced = true
+            running += amount
+            if running > peak { peak = running }
+            let drawdown = peak - running
+            if drawdown > maxDD { maxDD = drawdown }
+        }
+        guard hasPriced else { return nil }
+        return NSDecimalNumber(decimal: maxDD).doubleValue
+    }
+
+    private struct PricedBucket {
+        var pnl: Double = 0
+        var count: Int = 0
+    }
+
+    private static func computeDailyPnl(_ trades: [Trade]) -> [String: Double] {
+        var map: [String: Double] = [:]
         for trade in trades {
             let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
-            guard !key.isEmpty, let amount = trade.realizedPnL?.amount else { continue }
-            map[key, default: 0] += amount
+            guard !key.isEmpty, let value = knownPnl(trade) else { continue }
+            map[key, default: 0] += value
         }
         return map
     }
@@ -435,32 +491,106 @@ nonisolated enum TradingReportGeneratorMetricsBridge {
     private enum ExtremeMode { case best, worst }
 
     private static func pickExtremeDay(
-        _ daily: [String: Decimal],
-        mode: ExtremeMode,
-        calendar: Calendar
-    ) -> (label: String?, pnl: Decimal?) {
+        _ daily: [String: Double],
+        mode: ExtremeMode
+    ) -> (label: String?, pnl: Double?) {
         guard daily.count >= 2 else { return (nil, nil) }
         let eligible = daily.filter { mode == .best ? $0.value > 0 : $0.value < 0 }
-        let picked: (key: String, pnl: Decimal)? = {
-            switch mode {
-            case .best: return eligible.max(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
-            case .worst: return eligible.min(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
-            }
-        }()
-        guard let picked else { return (nil, nil) }
-        let opposite = daily.values.contains { mode == .best ? $0 < picked.pnl : $0 > picked.pnl }
+        guard let picked = (mode == .best
+            ? eligible.max(by: { $0.value < $1.value })
+            : eligible.min(by: { $0.value < $1.value }))
+        else { return (nil, nil) }
+        let opposite = daily.values.contains { mode == .best ? $0 < picked.value : $0 > picked.value }
         guard opposite else { return (nil, nil) }
         let calendar = TradingReportPeriods.eastern
         let formatter = DateFormatter()
         formatter.locale = .current
         formatter.timeZone = calendar.timeZone
         formatter.setLocalizedDateFormatFromTemplate("EEEMMMd")
-        if let parts = picked.key.split(separator: "-").compactMap({ Int($0) }) as [Int]?,
-           parts.count == 3,
-           let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12)) {
-            return (formatter.string(from: date), picked.pnl)
+        if let date = dayKeyDate(picked.key, calendar: calendar) {
+            return (formatter.string(from: date), picked.value)
         }
-        return (picked.key, picked.pnl)
+        return (picked.key, picked.value)
+    }
+
+    private static func dayKeyDate(_ key: String, calendar: Calendar) -> Date? {
+        let parts = key.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: parts[0],
+            month: parts[1],
+            day: parts[2],
+            hour: 12
+        ))
+    }
+
+    private static func computeSessionPnl(_ trades: [Trade]) -> [String: PricedBucket] {
+        var map: [String: PricedBucket] = [:]
+        for trade in trades {
+            guard let bucket = macroSessionBucket(for: trade) else { continue }
+            guard let value = knownPnl(trade) else { continue }
+            var row = map[bucket] ?? PricedBucket()
+            row.pnl += value
+            row.count += 1
+            map[bucket] = row
+        }
+        return map
+    }
+
+    private static func pickExtremeSession(
+        _ sessions: [String: PricedBucket],
+        mode: ExtremeMode
+    ) -> (label: String?, pnl: Double?) {
+        let rows = sessions.filter { $0.value.count >= 1 }
+        guard !rows.isEmpty else { return (nil, nil) }
+
+        if rows.count == 1 {
+            guard mode == .best, let only = rows.first else { return (nil, nil) }
+            return (macroSessionDisplayTitle(only.key), only.value.pnl)
+        }
+
+        guard let picked = (mode == .best
+            ? rows.max(by: { $0.value.pnl < $1.value.pnl })
+            : rows.min(by: { $0.value.pnl < $1.value.pnl }))
+        else { return (nil, nil) }
+
+        if mode == .worst {
+            let bestKey = rows.max(by: { $0.value.pnl < $1.value.pnl })?.key
+            if bestKey == picked.key { return (nil, nil) }
+        }
+
+        return (macroSessionDisplayTitle(picked.key), picked.value.pnl)
+    }
+
+    private static func macroSessionBucket(for trade: Trade) -> String? {
+        let fine = normalizeSessionBucket(trade.sessionLabel)
+            ?? TradingSessionLabel.session(from: trade.entryAt)
+        guard let fine else { return nil }
+        return rollupMacroSessionKey(fine)
+    }
+
+    private static func rollupMacroSessionKey(_ fine: String) -> String {
+        switch fine {
+        case "NY AM", "NY Lunch", "NY PM", "After":
+            return "NY"
+        default:
+            return fine
+        }
+    }
+
+    private static func macroSessionDisplayTitle(_ key: String) -> String {
+        switch key {
+        case "NY": return "New York"
+        case "London": return "London"
+        case "Asia": return "Asia"
+        default: return TradingSessionCatalog.displayTitle(for: key)
+        }
+    }
+
+    private static func normalizeSessionBucket(_ raw: String?) -> String? {
+        TradingSessionLabel.canonicalLabel(fromStored: raw)
     }
 
     private static func mostTradedTicker(_ trades: [Trade]) -> String? {

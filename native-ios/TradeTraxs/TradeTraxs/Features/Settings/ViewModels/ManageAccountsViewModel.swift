@@ -28,7 +28,6 @@ final class ManageAccountsViewModel {
 
     var propFirmFilter: ManageAccountsFiltering.PropFirmFilter = .all
     var modeFilter: ManageAccountsFiltering.ModeFilter = .all
-    var sort: ManageAccountsFiltering.Sort = .accountName
 
     init(
         trades: any TradeRepository,
@@ -45,7 +44,7 @@ final class ManageAccountsViewModel {
             to: accounts,
             propFirm: propFirmFilter,
             mode: modeFilter,
-            sort: sort
+            sort: .accountName
         )
     }
 
@@ -78,12 +77,6 @@ final class ManageAccountsViewModel {
     func setModeFilter(_ filter: ManageAccountsFiltering.ModeFilter) {
         guard modeFilter != filter else { return }
         modeFilter = filter
-        ExperienceHaptics.play(.selection)
-    }
-
-    func setSort(_ sort: ManageAccountsFiltering.Sort) {
-        guard self.sort != sort else { return }
-        self.sort = sort
         ExperienceHaptics.play(.selection)
     }
 
@@ -312,6 +305,7 @@ final class ManageAccountsViewModel {
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache, kind: .rest)
             AccountMutationStore.shared.noteAccountsChanged(allAccounts: accounts, viewerID: viewerID)
             syncAccountDisplayDraftFromAccounts()
+            formError = nil
             ExperienceHaptics.play(.success)
             return true
         } catch {

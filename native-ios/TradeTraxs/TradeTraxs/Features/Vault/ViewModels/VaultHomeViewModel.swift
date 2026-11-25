@@ -61,7 +61,7 @@ final class VaultHomeViewModel {
     }
 
     private func applyCachedHome(_ cached: VaultStore.HomeSnapshot, renderStarted: CFAbsoluteTime, store: VaultStore) {
-        items = cached.items
+        items = applyContentFilter(cached.items)
         folders = cached.folders
         nextCursor = cached.nextCursor
         phase = .loaded
@@ -91,7 +91,7 @@ final class VaultHomeViewModel {
             )
             let loadedFolders = try await folderLoad
             let loaded = try await page
-            items = loaded.items
+            items = applyContentFilter(loaded.items)
             folders = loadedFolders
             nextCursor = loaded.nextCursor
             phase = .loaded
@@ -120,7 +120,7 @@ final class VaultHomeViewModel {
     }
 
     func selectFilter(_ filter: VaultContentFilter) {
-        guard self.filter != filter || selectedFolderID != nil else { return }
+        guard self.filter != filter else { return }
         self.filter = filter
         selectedFolderID = nil
         items = []
@@ -129,10 +129,17 @@ final class VaultHomeViewModel {
     }
 
     func selectFolder(_ folder: VaultFolder?) {
-        selectedFolderID = folder?.id
+        let nextID = folder?.id
+        guard selectedFolderID != nextID else { return }
+        selectedFolderID = nextID
         items = []
         nextCursor = nil
         phase = .loading
+    }
+
+    private func applyContentFilter(_ raw: [VaultItem]) -> [VaultItem] {
+        guard filter != .all else { return raw }
+        return raw.filter { filter.matches($0.ref.contentType) }
     }
 
     func loadMoreIfNeeded(currentID: VaultItemID) async {
@@ -148,7 +155,8 @@ final class VaultHomeViewModel {
                 limit: 30
             )
             let existing = Set(items.map(\.id))
-            items.append(contentsOf: page.items.filter { !existing.contains($0.id) })
+            let merged = items + page.items.filter { !existing.contains($0.id) }
+            items = applyContentFilter(merged)
             self.nextCursor = page.nextCursor
         } catch {
             // Keep visible items; pagination can retry on pull-to-refresh.

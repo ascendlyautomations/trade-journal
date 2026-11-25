@@ -44,8 +44,6 @@ final class SuggestedTradersViewModel {
     private var loadGeneration = 0
     private var inFlightFollow: Set<ProfileID> = []
 
-    var pendingUnfollow: ExploreTraderSuggestion?
-
     init(
         explore: any ExploreRepository,
         search: any SearchRepository,
@@ -87,12 +85,7 @@ final class SuggestedTradersViewModel {
             base = store.suggestedTraders
         }
         let unblocked = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(base)
-        return ExploreSuggestedTradersSelection.discoverableAvatarFirst(
-            unblocked,
-            viewerID: viewerID,
-            followingIDs: store.viewerFollowingIDs,
-            profile: { resolvedProfile(for: $0) }
-        )
+        return ExploreTraderRanking.preservingOrderPreferringProfilePictures(unblocked) { resolvedProfile(for: $0) }
     }
 
     var displayedTraders: [ExploreTraderSuggestion] {
@@ -270,18 +263,7 @@ final class SuggestedTradersViewModel {
             return
         }
         guard !inFlightFollow.contains(trader.id) else { return }
-        if isFollowing(trader) {
-            ExperienceHaptics.play(.warning)
-            pendingUnfollow = trader
-            return
-        }
-        performFollowChange(trader, currentlyFollowing: false)
-    }
-
-    func confirmUnfollow() {
-        guard let trader = pendingUnfollow else { return }
-        pendingUnfollow = nil
-        performFollowChange(trader, currentlyFollowing: true)
+        performFollowChange(trader, currentlyFollowing: isFollowing(trader))
     }
 
     func openTrader(_ trader: ExploreTraderSuggestion) {
@@ -368,15 +350,9 @@ final class SuggestedTradersViewModel {
         let presentation = preservingPresentation(hydrated)
         for trader in presentation { detailCache.seed(trader.profile) }
 
-        let followingRows = await loadFollowingSuggestions()
-        let merged = ExploreFollowingSupport.mergeDiscoverableFirst(
-            discoverable: presentation,
-            following: followingRows
-        )
-
         let following = store.viewerFollowingIDs
         store.applyBootstrap(
-            traders: merged,
+            traders: presentation,
             rooms: store.popularRooms,
             following: following,
             tradersNextCursor: page.nextCursor,
@@ -479,14 +455,12 @@ final class SuggestedTradersViewModel {
             profiles: profiles
         )
         store.updateFollowing(following)
-        let followingRows = await loadFollowingSuggestions()
-        let discoverable = store.suggestedTraders.filter { !following.contains($0.id) }
-        let merged = ExploreFollowingSupport.mergeDiscoverableFirst(
-            discoverable: discoverable,
-            following: followingRows
-        )
-        store.replaceTraders(merged)
-        for trader in merged { detailCache.seed(trader.profile) }
+        let trimmed = store.suggestedTraders.filter { trader in
+            trader.id != viewerID && !following.contains(trader.id)
+        }
+        if trimmed.map(\.id) != store.suggestedTraders.map(\.id) {
+            store.replaceTraders(trimmed)
+        }
     }
 
     private func loadFollowingSuggestions() async -> [ExploreTraderSuggestion] {

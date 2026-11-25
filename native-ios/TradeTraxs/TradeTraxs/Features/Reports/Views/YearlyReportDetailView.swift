@@ -37,7 +37,12 @@ struct YearlyReportDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle(viewModel.title)
+        .modifier(
+            ReportDetailPerformanceNavigationChrome(
+                periodLabel: viewModel.navigationPeriodLabel,
+                fallbackTitle: viewModel.title
+            )
+        )
         .toolbar(.hidden, for: .tabBar)
         .task { await viewModel.bootstrapIfNeeded() }
         .onOwnerAccountMutation { viewModel.handleAccountMutation(detailCache: nil) }
@@ -52,8 +57,14 @@ struct YearlyReportDetailView: View {
                     .padding(.top, ExperienceSpacing.xs)
 
                 if let report = viewModel.report {
-                    yearlyHeader(report: report)
-                        .padding(.horizontal, ExperienceSpacing.md)
+                    if !report.executiveSummary.isEmpty {
+                        Text(report.executiveSummary)
+                            .experienceStyle(.footnote, color: colors.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, ExperienceSpacing.md)
+                            .padding(.top, ExperienceSpacing.xs)
+                            .accessibilityIdentifier("reports.yearly.executiveSummary")
+                    }
 
                     YearlyReportSummaryMetricsView(metrics: report.metrics)
                         .padding(.horizontal, ExperienceSpacing.md)
@@ -79,25 +90,6 @@ struct YearlyReportDetailView: View {
             .padding(.bottom, ExperienceSpacing.xxxl)
         }
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-    }
-
-    private func yearlyHeader(report: TradingYearlyReport) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Yearly Performance Report")
-                .experienceStyle(.caption2, color: colors.accent)
-                .textCase(.uppercase)
-                .tracking(0.6)
-
-            Text(report.dateRangeLabel)
-                .experienceStyle(.subheadline, color: colors.secondaryText)
-
-            Text(report.executiveSummary)
-                .experienceStyle(.footnote, color: colors.tertiaryText)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(ExperienceSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .modifier(YearlyReportHeroSurface())
     }
 
     private var loadingContent: some View {
@@ -185,126 +177,21 @@ struct YearlyReportFilterBar: View {
 }
 
 struct YearlyReportSummaryMetricsView: View {
-    let metrics: TradingYearlyReportMetrics
+    let metrics: TradingReportMetrics
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Year Summary")
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text("Key Metrics")
                 .experienceStyle(.headline, color: colors.primaryText)
 
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-                    GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-                ],
-                spacing: ExperienceSpacing.sm
-            ) {
-                metricCell("Net P&L", formatMoney(metrics.netPnl), tone: pnlTone(metrics.netPnl))
-                metricCell("Total Trades", NumberDisplay.integer(metrics.tradeCount))
-                metricCell("Win Rate", formatWinRate(metrics.winRate))
-                metricCell("Profit Factor", formatOptionalDecimal(metrics.profitFactor))
-                metricCell("Average Winner", formatOptionalMoney(metrics.averageWinner))
-                metricCell("Average Loser", formatOptionalMoney(metrics.averageLoser))
-                metricCell("Average RR", formatOptionalDecimal(metrics.averageRR))
-                metricCell("Expectancy", formatOptionalMoney(metrics.expectancy))
-                metricCell("Best Trade", formatOptionalMoney(metrics.bestTrade))
-                metricCell("Worst Trade", formatOptionalMoney(metrics.worstTrade))
-                labelAndPnLMetricCell(
-                    "Best Day",
-                    dayLabel: metrics.bestDayLabel,
-                    pnl: metrics.bestDayPnl
-                )
-                labelAndPnLMetricCell(
-                    "Worst Day",
-                    dayLabel: metrics.worstDayLabel,
-                    pnl: metrics.worstDayPnl
-                )
-                metricCell("Max Drawdown", formatMoney(metrics.maxDrawdown))
-                metricCell("Winning Days", "\(metrics.winningDays)")
-                metricCell("Losing Days", "\(metrics.losingDays)")
-            }
+            ReportKeyMetricsGrid(metrics: metrics)
         }
-        .padding(ExperienceSpacing.lg)
+        .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(ReportDetailSectionSurface())
         .accessibilityIdentifier("reports.yearly.summary")
-    }
-
-    private func labelAndPnLMetricCell(_ title: String, dayLabel: String?, pnl: Decimal?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-                .tracking(0.4)
-            if let dayLabel, let pnl {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(dayLabel)
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        .foregroundStyle(colors.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Text(formatMoney(pnl))
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                        .foregroundStyle(pnlTone(pnl))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-            } else {
-                Text("–")
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                    .foregroundStyle(colors.primaryText)
-            }
-        }
-        .padding(ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.backgroundSecondary.opacity(0.65), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.sm,
-            style: .continuous
-        ))
-    }
-
-    private func metricCell(_ label: String, _ value: String, tone: Color? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased())
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-                .tracking(0.4)
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(tone ?? colors.primaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-        }
-        .padding(ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.backgroundSecondary.opacity(0.65), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.sm,
-            style: .continuous
-        ))
-    }
-
-    private func pnlTone(_ value: Decimal) -> Color {
-        if value > 0 { return colors.profit }
-        if value < 0 { return colors.loss }
-        return colors.primaryText
-    }
-
-    private func formatMoney(_ value: Decimal) -> String {
-        NumberDisplay.currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
-    }
-
-    private func formatOptionalMoney(_ value: Decimal?) -> String {
-        NumberDisplay.money(value)
-    }
-
-    private func formatOptionalDecimal(_ value: Decimal?) -> String {
-        guard let value else { return "–" }
-        return NumberDisplay.ratio(value, fractionDigits: 2)
-    }
-
-    private func formatWinRate(_ value: Decimal?) -> String {
-        guard let value else { return "–" }
-        return NumberDisplay.percent(value * 100, minimumFractionDigits: 1, maximumFractionDigits: 1)
     }
 }
 

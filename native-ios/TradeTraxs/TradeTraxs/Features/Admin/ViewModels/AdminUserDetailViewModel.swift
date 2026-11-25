@@ -52,7 +52,7 @@ final class AdminUserDetailViewModel {
         do {
             activity = try await repository.fetchActivityCounts(targetUserID: user.id)
         } catch {
-            activityError = error.localizedDescription
+            activityError = UserFacingError.message(for: error)
             activity = nil
         }
         isLoadingActivity = false
@@ -94,7 +94,7 @@ final class AdminUserDetailViewModel {
             user.bannedAt = Date()
             return true
         } catch {
-            moderationMessage = error.localizedDescription
+            moderationMessage = UserFacingError.message(for: error)
             return false
         }
     }
@@ -116,7 +116,7 @@ final class AdminUserDetailViewModel {
             user.isHiddenFromCommunity = hidden
             return true
         } catch {
-            moderationMessage = error.localizedDescription
+            moderationMessage = UserFacingError.message(for: error)
             return false
         }
     }
@@ -137,7 +137,7 @@ final class AdminUserDetailViewModel {
             banReason = ""
             return true
         } catch {
-            moderationMessage = error.localizedDescription
+            moderationMessage = UserFacingError.message(for: error)
             return false
         }
     }
@@ -158,7 +158,7 @@ final class AdminUserDetailViewModel {
             deleteError = localized(failure)
             return false
         } catch {
-            deleteError = error.localizedDescription
+            deleteError = UserFacingError.message(for: error)
             return false
         }
     }
@@ -174,6 +174,6 @@ final class AdminUserDetailViewModel {
             case .server(_, _, let message): return message
             }
         }
-        return error.localizedDescription
+        return UserFacingError.message(for: error)
     }
 }

@@ -13,8 +13,6 @@ struct SettingsAboutView: View {
             Section {
                 SettingsInfoRow(title: "App", value: "TradeTraxs")
                 SettingsInfoRow(title: "Version", value: version)
-            } footer: {
-                Text("You’re using the TradeTraxs iOS app.")
             }
 
             Section("Legal") {

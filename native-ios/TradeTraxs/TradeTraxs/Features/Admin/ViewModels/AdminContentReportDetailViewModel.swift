@@ -70,7 +70,7 @@ final class AdminContentReportDetailViewModel {
             snapshot.row.reviewedBy = reviewerID
             return true
         } catch {
-            statusMessage = error.localizedDescription
+            statusMessage = UserFacingError.message(for: error)
             return false
         }
     }
@@ -97,7 +97,7 @@ final class AdminContentReportDetailViewModel {
             refreshReportedUserBanned(true, reason: reason)
             return true
         } catch {
-            moderationMessage = error.localizedDescription
+            moderationMessage = UserFacingError.message(for: error)
             return false
         }
     }
@@ -116,7 +116,7 @@ final class AdminContentReportDetailViewModel {
             banReason = ContentReportDisplay.suggestedBanReason(row: snapshot.row)
             return true
         } catch {
-            moderationMessage = error.localizedDescription
+            moderationMessage = UserFacingError.message(for: error)
             return false
         }
     }

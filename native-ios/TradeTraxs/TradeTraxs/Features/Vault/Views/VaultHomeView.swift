@@ -9,7 +9,11 @@ struct VaultHomeView: View {
     @State private var folderPendingRename: VaultFolder?
     @State private var renameFolderName = ""
     @State private var folderRenameError: String?
+    @State private var foldersExpanded = false
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let folderPreviewCount = 5
 
     init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
@@ -122,20 +126,27 @@ struct VaultHomeView: View {
     }
 
     private func filterChip(_ filter: VaultContentFilter) -> some View {
-        let selected = viewModel.filter == filter && viewModel.selectedFolderID == nil
+        let selected = viewModel.filter == filter
         return Button {
             viewModel.selectFilter(filter)
         } label: {
             Text(filterLabel(filter))
-                .experienceStyle(.caption, color: selected ? colors.textInverse : colors.primaryText)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .foregroundStyle(selected ? colors.onAccent : colors.primaryText)
                 .padding(.horizontal, ExperienceSpacing.sm)
                 .padding(.vertical, ExperienceSpacing.xs)
                 .background {
-                    Capsule(style: .continuous)
-                        .fill(selected ? colors.accent : colors.fillPrimary)
+                    if selected {
+                        RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                            .fill(colors.accent)
+                    }
                 }
+                .modifier(VaultFilterChipChrome(isSelected: selected))
         }
         .buttonStyle(.experiencePlain)
+        .accessibilityIdentifier("vault.filter.\(filter.rawValue)")
     }
 
     private func filterLabel(_ filter: VaultContentFilter) -> String {
@@ -157,7 +168,7 @@ struct VaultHomeView: View {
                 Text("Create folders to organize saved content.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             } else {
-                ForEach(viewModel.folders) { folder in
+                ForEach(visibleFolders) { folder in
                     Button {
                         viewModel.selectFolder(
                             viewModel.selectedFolderID == folder.id ? nil : folder
@@ -188,6 +199,27 @@ struct VaultHomeView: View {
                         }
                     }
                 }
+
+                if viewModel.folders.count > Self.folderPreviewCount {
+                    Button {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                            foldersExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: ExperienceSpacing.xxs) {
+                            Text(foldersExpanded ? "Show Less" : "Show More")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(colors.secondaryText)
+                            Image(systemName: foldersExpanded ? "chevron.up" : "chevron.down")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(colors.tertiaryText)
+                        }
+                        .padding(.vertical, ExperienceSpacing.xxs)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("vault.folders.expand")
+                }
             }
 
             Button {
@@ -202,6 +234,13 @@ struct VaultHomeView: View {
             }
             .buttonStyle(.experiencePlain)
         }
+    }
+
+    private var visibleFolders: [VaultFolder] {
+        if foldersExpanded || viewModel.folders.count <= Self.folderPreviewCount {
+            return viewModel.folders
+        }
+        return Array(viewModel.folders.prefix(Self.folderPreviewCount))
     }
 
     @ViewBuilder
@@ -243,6 +282,18 @@ struct VaultHomeView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct VaultFilterChipChrome: ViewModifier {
+    var isSelected: Bool
+
+    func body(content: Content) -> some View {
+        if isSelected {
+            content
+        } else {
+            content.experienceFilterChipRect(cornerRadius: ExperienceRadius.sm)
         }
     }
 }

@@ -8,6 +8,9 @@ struct LeaderboardFiltersView: View {
     let onAudience: (LeaderboardAudience) -> Void
     let onTimeframe: (LeaderboardTimeframe) -> Void
     let onCategory: (LeaderboardCategory) -> Void
+    var showCurveToggle: Bool = false
+    var isCurveMode: Bool = false
+    var onToggleCurve: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
 
@@ -29,35 +32,60 @@ struct LeaderboardFiltersView: View {
             }
             .accessibilityIdentifier("leaderboard.timeframe")
 
-            Menu {
-                ForEach(LeaderboardCategory.allCases, id: \.self) { option in
-                    Button {
-                        onCategory(option)
-                    } label: {
-                        if option == category {
-                            Label(option.title, systemImage: "checkmark")
-                        } else {
-                            Text(option.title)
+            HStack(spacing: ExperienceSpacing.sm) {
+                Menu {
+                    ForEach(LeaderboardCategory.allCases, id: \.self) { option in
+                        Button {
+                            onCategory(option)
+                        } label: {
+                            if option == category {
+                                Label(option.title, systemImage: "checkmark")
+                            } else {
+                                Text(option.title)
+                            }
                         }
                     }
+                } label: {
+                    HStack(spacing: ExperienceSpacing.sm) {
+                        Text(category.title)
+                            .experienceStyle(.body, color: colors.primaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(colors.secondaryText)
+                    }
+                    .padding(.horizontal, ExperienceSpacing.sm)
+                    .padding(.vertical, ExperienceSpacing.sm)
+                    .experienceFilterChipRect()
+                    .experienceControlHitTarget()
                 }
-            } label: {
-                HStack(spacing: ExperienceSpacing.sm) {
-                    Text(category.title)
-                        .experienceStyle(.body, color: colors.primaryText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(colors.secondaryText)
+                .accessibilityIdentifier("leaderboard.category")
+                .accessibilityLabel("Category")
+                .accessibilityValue(category.title)
+
+                if showCurveToggle {
+                    Button {
+                        onToggleCurve?()
+                    } label: {
+                        Image(systemName: isCurveMode ? "list.number" : "chart.xyaxis.line")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(isCurveMode ? colors.onAccent : colors.primaryText)
+                            .frame(width: 40, height: 40)
+                            .background {
+                                if isCurveMode {
+                                    RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                                        .fill(colors.accent)
+                                } else {
+                                    Color.clear
+                                }
+                            }
+                            .experienceFilterChipRect()
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .accessibilityIdentifier("leaderboard.curve.toggle")
+                    .accessibilityLabel(isCurveMode ? "Show rankings list" : "Show curve chart")
                 }
-                .padding(.horizontal, ExperienceSpacing.sm)
-                .padding(.vertical, ExperienceSpacing.sm)
-                .experienceFilterChipRect()
-                .experienceControlHitTarget()
             }
-            .accessibilityIdentifier("leaderboard.category")
-            .accessibilityLabel("Category")
-            .accessibilityValue(category.title)
         }
         .padding(.horizontal, ExperienceSpacing.md)
     }

@@ -4,8 +4,8 @@ struct SettingsSubscriptionView: View {
     @State private var viewModel: SettingsSubscriptionViewModel
     @State private var showsIncludedDetails = false
     @State private var showsTraxProBenefits = false
-
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
 
     init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
@@ -39,23 +39,29 @@ struct SettingsSubscriptionView: View {
                 }
             }
 
-            currentPlanSection
-            disclosuresSection
+            unifiedCurrentPlanSection
 
             if viewModel.showsManageSubscription {
                 manageSection
             }
 
             if viewModel.showsApplePurchaseSection {
-                choosePlanSection
-                purchaseActionsSection
+                unifiedChoosePlanSection
             }
 
             subscriptionFooterSection
         }
-        .listSectionSpacing(ExperienceSpacing.xxs)
+        .listSectionSpacing(0)
+        .contentMargins(.top, SettingsPlanPageLayout.exteriorVerticalGap, for: .scrollContent)
         .environment(\.defaultMinListHeaderHeight, 0)
         .experienceInsetGroupedListStyle(pageBackground: true)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if showsPersistentFreePlanUpgradeFooter {
+                freePlanPersistentUpgradeFooter
+                    .padding(.top, ExperienceSpacing.xxs)
+                    .background(colors.groupedBackground)
+            }
+        }
         .experienceNavigationTitle("Plan")
         .overlay {
             if viewModel.isLoading, viewModel.status == nil {
@@ -77,20 +83,64 @@ struct SettingsSubscriptionView: View {
         .accessibilityIdentifier("settings.subscription")
     }
 
-    // MARK: - Current plan
+    // MARK: - Current plan (unified card)
 
-    private var currentPlanSection: some View {
+    private var unifiedCurrentPlanSection: some View {
         Section {
-            currentPlanCard
+            unifiedCurrentPlanCard
                 .listRowInsets(settingsPlanCardInsets)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
-        } header: {
-            sectionHeading(MonetizationPlanCopy.settingsCurrentPlanTitle)
         }
     }
 
-    private var currentPlanCard: some View {
+    private var unifiedCurrentPlanCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHeading(MonetizationPlanCopy.settingsCurrentPlanTitle)
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.md)
+                .padding(.bottom, ExperienceSpacing.xs)
+
+            currentPlanSummaryBlock
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.bottom, ExperienceSpacing.md)
+
+            if viewModel.status != nil {
+                settingsPlanInternalDivider
+
+                planBenefitDisclosureRow(
+                    title: includedDisclosureTitle,
+                    isExpanded: showsIncludedDetails,
+                    accessibilityID: "settings.subscription.included"
+                ) {
+                    showsIncludedDetails.toggle()
+                } content: {
+                    includedDetails
+                }
+
+                if viewModel.showsFreePlanDetails {
+                    settingsPlanInternalDivider
+
+                    planBenefitDisclosureRow(
+                        title: MonetizationPlanCopy.settingsTraxProUnlockTitle,
+                        isExpanded: showsTraxProBenefits,
+                        accessibilityID: "settings.subscription.traxproBenefits"
+                    ) {
+                        showsTraxProBenefits.toggle()
+                    } content: {
+                        MonetizationPlanPresentation.PlanFeatureSummaryList(
+                            highlights: MonetizationPlanCopy.traxProUnlockHighlights
+                        )
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(SettingsPlanCardSurface(cornerRadii: .all(ExperienceRadius.md)))
+        .accessibilityElement(children: .contain)
+    }
+
+    private var currentPlanSummaryBlock: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
                 Text(viewModel.planTitle)
@@ -111,6 +161,11 @@ struct SettingsSubscriptionView: View {
                 Text(renewal)
                     .experienceStyle(.caption, color: colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
+            } else if viewModel.showsLifetimeGrantedAppreciationMessage {
+                Text(MonetizationPlanCopy.lifetimeGrantedTraxProAppreciation)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("settings.subscription.lifetimeAppreciation")
             } else if viewModel.showsFreePlanDetails {
                 Text(MonetizationPlanCopy.freePlanShortDescription)
                     .experienceStyle(.caption, color: colors.secondaryText)
@@ -121,9 +176,6 @@ struct SettingsSubscriptionView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(ExperienceSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
         .accessibilityElement(children: .combine)
     }
 
@@ -186,40 +238,7 @@ struct SettingsSubscriptionView: View {
         return "What's Included"
     }
 
-    // MARK: - Benefits
-
-    @ViewBuilder
-    private var disclosuresSection: some View {
-        if viewModel.status != nil {
-            Section {
-                planBenefitDisclosureCard(
-                    title: includedDisclosureTitle,
-                    isExpanded: showsIncludedDetails,
-                    accessibilityID: "settings.subscription.included"
-                ) {
-                    showsIncludedDetails.toggle()
-                } content: {
-                    includedDetails
-                }
-
-                if viewModel.showsFreePlanDetails {
-                    planBenefitDisclosureCard(
-                        title: MonetizationPlanCopy.settingsTraxProUnlockTitle,
-                        isExpanded: showsTraxProBenefits,
-                        accessibilityID: "settings.subscription.traxproBenefits"
-                    ) {
-                        showsTraxProBenefits.toggle()
-                    } content: {
-                        MonetizationPlanPresentation.PlanFeatureSummaryList(
-                            highlights: MonetizationPlanCopy.traxProUnlockHighlights
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private func planBenefitDisclosureCard<Content: View>(
+    private func planBenefitDisclosureRow<Content: View>(
         title: String,
         isExpanded: Bool,
         accessibilityID: String,
@@ -233,12 +252,9 @@ struct SettingsSubscriptionView: View {
             onToggle: toggle,
             content: content
         )
-        .padding(ExperienceSpacing.md)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
-        .listRowInsets(settingsPlanCardInsets)
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
     }
 
     @ViewBuilder
@@ -258,50 +274,25 @@ struct SettingsSubscriptionView: View {
         }
     }
 
-    // MARK: - Subscription products
+    // MARK: - Choose plan (unified card)
+
+    private var showsPersistentFreePlanUpgradeFooter: Bool {
+        viewModel.showsFreePlanDetails && viewModel.showsApplePurchaseSection
+    }
+
+    private var unifiedChoosePlanSection: some View {
+        Section {
+            unifiedChoosePlanCard
+                .listRowInsets(settingsPlanCardInsets)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+    }
 
     @ViewBuilder
-    private var choosePlanSection: some View {
-        Section {
-            switch viewModel.productsState {
-            case .idle, .loading:
-                HStack(spacing: ExperienceSpacing.sm) {
-                    ProgressView()
-                    Text("Loading plans…")
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                }
-                .padding(ExperienceSpacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
-                .listRowInsets(settingsPlanCardInsets)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            case .failed:
-                SettingsInlineError(message: "Couldn't load App Store plans right now.") {
-                    viewModel.retryLoadProducts()
-                }
-                .listRowInsets(settingsPlanCardInsets)
-                .listRowBackground(Color.clear)
-            case .loaded(let products):
-                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    ForEach(products) { product in
-                        MonetizationPlanPresentation.SubscriptionPlanOptionRow(
-                            product: product,
-                            isSelected: viewModel.selectedProduct?.id == product.id,
-                            accessibilityIdentifier: "settings.subscription.product.\(product.id)"
-                        ) {
-                            viewModel.selectProduct(product.id)
-                        }
-                    }
-                }
-                .padding(ExperienceSpacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
-                .listRowInsets(settingsPlanCardInsets)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-        } header: {
+    private var unifiedChoosePlanCard: some View {
+        let connectsFooter = showsPersistentFreePlanUpgradeFooter
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 Text(MonetizationPlanCopy.settingsChoosePlanTitle)
                     .experienceStyle(.subheadline, color: colors.primaryText)
@@ -309,41 +300,25 @@ struct SettingsSubscriptionView: View {
                 if viewModel.showsFreePlanDetails {
                     Text(viewModel.upgradeHeroTitle)
                         .experienceStyle(.caption, color: colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .textCase(nil)
-            .padding(.bottom, ExperienceSpacing.xxs)
-        }
-    }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.md)
+            .padding(.bottom, ExperienceSpacing.sm)
 
-    @ViewBuilder
-    private var purchaseActionsSection: some View {
-        if case .loaded = viewModel.productsState {
-            Section {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                        MonetizationPlanPresentation.SettingsPlanPrimaryUpgradeButton(
-                            title: viewModel.subscribeButtonTitle,
-                            isLoading: viewModel.actionState == .purchasing
-                                || viewModel.actionState == .synchronizing,
-                            isDisabled: viewModel.isPrimaryActionDisabled,
-                            accessibilityIdentifier: "settings.subscription.subscribe"
-                        ) {
-                            Task { await viewModel.purchaseSelectedPlan() }
-                        }
+            settingsPlanInternalDivider
 
-                        if viewModel.showsRedeemOfferCode {
-                            Divider()
-                                .overlay(colors.separator.opacity(0.35))
+            choosePlanProductsBlock
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.sm)
 
-                            MonetizationPlanPresentation.SettingsPlanSecondaryActionButton(
-                                title: MonetizationPlanCopy.redeemAppleOfferCodeButtonTitle,
-                                isDisabled: subscriptionFooterActionsDisabled,
-                                accessibilityIdentifier: "settings.subscription.redeemOfferCode"
-                            ) {
-                                Task { await viewModel.redeemOfferCode() }
-                            }
-                        }
+            if case .loaded = viewModel.productsState {
+                settingsPlanInternalDivider
+
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    if !showsPersistentFreePlanUpgradeFooter {
+                        freePlanUpgradeActionButtons
                     }
 
                     if let footnote = viewModel.upgradePostTrialFootnote {
@@ -357,13 +332,48 @@ struct SettingsSubscriptionView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("settings.subscription.autoRenew")
                 }
-                .padding(ExperienceSpacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
-                .listRowInsets(settingsPlanCardInsets)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.sm)
+                .padding(.bottom, connectsFooter ? ExperienceSpacing.xs : 0)
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(
+            SettingsPlanCardSurface(
+                cornerRadii: connectsFooter
+                    ? .connectedToStickyFooter
+                    : .all(ExperienceRadius.md)
+            )
+        )
+    }
+
+    @ViewBuilder
+    private var choosePlanProductsBlock: some View {
+        switch viewModel.productsState {
+        case .idle, .loading:
+            HStack(spacing: ExperienceSpacing.sm) {
+                ProgressView()
+                Text("Loading plans…")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .failed:
+            SettingsInlineError(message: "Couldn't load App Store plans right now.") {
+                viewModel.retryLoadProducts()
+            }
+        case .loaded(let products):
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                ForEach(products) { product in
+                    MonetizationPlanPresentation.SubscriptionPlanOptionRow(
+                        product: product,
+                        isSelected: viewModel.selectedProduct?.id == product.id,
+                        accessibilityIdentifier: "settings.subscription.product.\(product.id)"
+                    ) {
+                        viewModel.selectProduct(product.id)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -449,6 +459,165 @@ struct SettingsSubscriptionView: View {
     }
 
     private var settingsPlanCardInsets: EdgeInsets {
-        SettingsListLayout.groupedCardRowInsets
+        SettingsPlanPageLayout.cardRowInsets
+    }
+
+    private var freePlanUpgradeActionButtons: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            MonetizationPlanPresentation.SettingsPlanPrimaryUpgradeButton(
+                title: viewModel.subscribeButtonTitle,
+                isLoading: viewModel.actionState == .purchasing
+                    || viewModel.actionState == .synchronizing,
+                isDisabled: viewModel.isPrimaryActionDisabled,
+                accessibilityIdentifier: "settings.subscription.subscribe"
+            ) {
+                Task { await viewModel.purchaseSelectedPlan() }
+            }
+
+            if viewModel.showsRedeemOfferCode {
+                Divider()
+                    .overlay(colors.separator.opacity(0.35))
+
+                MonetizationPlanPresentation.SettingsPlanSecondaryActionButton(
+                    title: MonetizationPlanCopy.redeemAppleOfferCodeButtonTitle,
+                    isDisabled: subscriptionFooterActionsDisabled,
+                    accessibilityIdentifier: "settings.subscription.redeemOfferCode"
+                ) {
+                    Task { await viewModel.redeemOfferCode() }
+                }
+            }
+        }
+    }
+
+    private var freePlanPersistentUpgradeFooter: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                settingsPlanInternalDivider
+                freePlanUpgradeActionButtons
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.sm)
+            .padding(.bottom, ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, settingsPlanListHorizontalInset)
+        .modifier(SettingsPlanCardSurface(cornerRadii: .stickyFooter))
+        .accessibilityIdentifier("settings.subscription.persistentFooter")
+    }
+
+    private var settingsPlanInternalDivider: some View {
+        Rectangle()
+            .fill(colors.separator.opacity(colorScheme == .light ? 0.35 : 0.45))
+            .frame(height: ExperienceBorder.hairline)
+    }
+
+    /// Aligns sticky footer edges with inset-grouped list cards.
+    private var settingsPlanListHorizontalInset: CGFloat {
+        ExperienceSpacing.lg
+    }
+}
+
+// MARK: - Plan page list spacing (header ↔ cards ↔ cards)
+
+private enum SettingsPlanPageLayout {
+    /// Matches the gap from the nav title to the first card and between stacked plan cards.
+    static let exteriorVerticalGap = ExperienceSpacing.xxs
+
+    static var cardRowInsets: EdgeInsets {
+        EdgeInsets(
+            top: exteriorVerticalGap,
+            leading: 0,
+            bottom: exteriorVerticalGap,
+            trailing: 0
+        )
+    }
+}
+
+// MARK: - Plan card chrome
+
+private struct SettingsPlanCardCornerRadii: Equatable {
+    var topLeading: CGFloat
+    var topTrailing: CGFloat
+    var bottomLeading: CGFloat
+    var bottomTrailing: CGFloat
+
+    static func all(_ radius: CGFloat) -> Self {
+        Self(topLeading: radius, topTrailing: radius, bottomLeading: radius, bottomTrailing: radius)
+    }
+
+    static var connectedToStickyFooter: Self {
+        Self(
+            topLeading: ExperienceRadius.md,
+            topTrailing: ExperienceRadius.md,
+            bottomLeading: 0,
+            bottomTrailing: 0
+        )
+    }
+
+    static var stickyFooter: Self {
+        Self(topLeading: 0, topTrailing: 0, bottomLeading: ExperienceRadius.md, bottomTrailing: ExperienceRadius.md)
+    }
+
+    var asRectangleCornerRadii: RectangleCornerRadii {
+        RectangleCornerRadii(
+            topLeading: topLeading,
+            bottomLeading: bottomLeading,
+            bottomTrailing: bottomTrailing,
+            topTrailing: topTrailing
+        )
+    }
+}
+
+private struct SettingsPlanCardSurface: ViewModifier {
+    var cornerRadii: SettingsPlanCardCornerRadii
+
+    @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.background {
+            let shape = UnevenRoundedRectangle(
+                cornerRadii: cornerRadii.asRectangleCornerRadii,
+                style: .continuous
+            )
+            shape
+                .fill(colors.surfacePrimary)
+                .overlay {
+                    shape.strokeBorder(
+                        borderColor,
+                        lineWidth: ExperienceBorder.hairline
+                    )
+                }
+                .shadow(
+                    color: shadowColor,
+                    radius: shadowRadius,
+                    x: 0,
+                    y: shadowY
+                )
+        }
+    }
+
+    private var borderColor: Color {
+        if colorScheme == .light {
+            return colors.border.opacity(ExperienceDashboardSurface.LightChrome.borderOpacity)
+        }
+        return colors.border.opacity(ExperienceDashboardSurface.DarkChrome.borderOpacity)
+    }
+
+    private var shadowColor: Color {
+        guard colorScheme == .light, cornerRadii.bottomLeading > 0 else { return .clear }
+        return colors.surfaceOverlay.opacity(ExperienceDashboardSurface.LightChrome.shadowOpacity)
+    }
+
+    private var shadowRadius: CGFloat {
+        colorScheme == .light && cornerRadii.bottomLeading > 0
+            ? ExperienceDashboardSurface.LightChrome.shadowRadius
+            : 0
+    }
+
+    private var shadowY: CGFloat {
+        colorScheme == .light && cornerRadii.bottomLeading > 0
+            ? ExperienceDashboardSurface.LightChrome.shadowY
+            : 0
     }
 }

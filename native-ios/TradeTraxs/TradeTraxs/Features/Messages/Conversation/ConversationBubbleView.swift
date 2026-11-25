@@ -36,19 +36,11 @@ struct ConversationBubbleView: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: ConversationBubbleLayout.avatarToContentSpacing) {
-            if isSelectionMode {
-                selectionCheckbox
-            }
+        Group {
             if item.isOutgoing {
-                Spacer(minLength: ConversationBubbleLayout.oppositeGutterMin)
-                bubbleColumn(alignment: .trailing)
-                    .frame(maxWidth: contentColumnMaxWidth, alignment: .trailing)
+                outgoingMessageRow
             } else {
-                avatarSlot
-                bubbleColumn(alignment: .leading)
-                    .frame(maxWidth: contentColumnMaxWidth, alignment: .leading)
-                Spacer(minLength: 0)
+                incomingMessageRow
             }
         }
         .frame(maxWidth: .infinity, alignment: item.isOutgoing ? .trailing : .leading)
@@ -66,6 +58,78 @@ struct ConversationBubbleView: View {
             ExperienceHaptics.play(.impactLight)
             onLongPressForActionMenu?()
         }
+    }
+
+    private var outgoingMessageRow: some View {
+        HStack(alignment: .bottom, spacing: ConversationBubbleLayout.avatarToContentSpacing) {
+            if isSelectionMode {
+                selectionCheckbox
+            }
+            Spacer(minLength: ConversationBubbleLayout.oppositeGutterMin)
+            outgoingMessageColumn
+        }
+    }
+
+    private var incomingMessageRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if item.showsAuthorName {
+                incomingAuthorNameRow
+            }
+            HStack(alignment: .bottom, spacing: ConversationBubbleLayout.avatarToContentSpacing) {
+                if isSelectionMode {
+                    selectionCheckbox
+                }
+                avatarSlot
+                incomingBubbleColumn
+                Spacer(minLength: 0)
+            }
+            if item.showsTimestamp || item.sendState != .sent {
+                timestampRow
+                    .padding(.top, MessageReactionLayout.timestampTopGap)
+                    .padding(.leading, incomingTimestampLeadingInset)
+            }
+        }
+    }
+
+    private var outgoingMessageColumn: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            messageBodyStack(alignment: .trailing)
+            if item.showsTimestamp || item.sendState != .sent {
+                timestampRow
+                    .padding(.top, MessageReactionLayout.timestampTopGap)
+            }
+        }
+    }
+
+    private var incomingBubbleColumn: some View {
+        messageBodyStack(alignment: .leading)
+    }
+
+    private var incomingAuthorNameRow: some View {
+        HStack(spacing: ExperienceSpacing.xxs) {
+            Text(ConversationThreadSupport.senderDisplayName(for: resolvedAuthor))
+                .font(.system(.caption, design: .default).weight(.semibold))
+                .foregroundStyle(colors.secondaryText)
+                .lineLimit(1)
+            if item.showsOwnerBadge || item.showsModeratorBadge || !item.authorTags.isEmpty {
+                RoomMemberTagChipsView(
+                    tags: item.authorTags,
+                    showsOwnerBadge: item.showsOwnerBadge,
+                    showsModeratorBadge: item.showsModeratorBadge,
+                    limit: 3
+                )
+            }
+        }
+        .padding(.leading, incomingTimestampLeadingInset)
+        .padding(.bottom, ExperienceSpacing.xxs)
+    }
+
+    private var incomingTimestampLeadingInset: CGFloat {
+        var inset = ConversationBubbleLayout.avatarColumnWidth + ConversationBubbleLayout.avatarToContentSpacing
+        if isSelectionMode {
+            inset += 28 + ConversationBubbleLayout.avatarToContentSpacing
+        }
+        return inset
     }
 
     private var showsActionMenu: Bool {
@@ -118,51 +182,52 @@ struct ConversationBubbleView: View {
         )
     }
 
-    private func bubbleColumn(alignment: HorizontalAlignment) -> some View {
-        let hasReactionStrip = !reactionSummaries.isEmpty
-        return VStack(alignment: alignment, spacing: 0) {
-            if item.showsAuthorName, !item.isOutgoing {
-                HStack(spacing: ExperienceSpacing.xxs) {
-                    Text(ConversationThreadSupport.senderDisplayName(for: resolvedAuthor))
-                        .font(.system(.caption, design: .default).weight(.semibold))
-                        .foregroundStyle(colors.secondaryText)
-                        .lineLimit(1)
-                    if item.showsOwnerBadge || item.showsModeratorBadge || !item.authorTags.isEmpty {
-                        RoomMemberTagChipsView(
-                            tags: item.authorTags,
-                            showsOwnerBadge: item.showsOwnerBadge,
-                            showsModeratorBadge: item.showsModeratorBadge,
-                            limit: 3
-                        )
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, ExperienceSpacing.xxs)
-            }
+    private var bubbleFrameAlignment: Alignment {
+        item.isOutgoing ? .trailing : .leading
+    }
+
+    private func messageBodyStack(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 0) {
             replyReferenceBlock
                 .padding(.bottom, replyParentPresentation == nil ? 0 : ExperienceSpacing.xxs)
+                .frame(maxWidth: contentColumnMaxWidth, alignment: bubbleFrameAlignment)
+            bubbleWithReactions
+        }
+        .frame(maxWidth: contentColumnMaxWidth, alignment: bubbleFrameAlignment)
+    }
+
+    /// Intrinsic bubble width only — never the thread content column (DMs + Trade Rooms).
+    private var bubbleWithReactions: some View {
+        VStack(alignment: .leading, spacing: 0) {
             bubbleContent
                 .fixedSize(horizontal: false, vertical: true)
-            messageReactionAttachment
-            if item.showsTimestamp || item.sendState != .sent {
-                timestampRow
-                    .padding(.top, hasReactionStrip ? ExperienceSpacing.xxs : 4)
-            }
+            messageReactionRowInFlow
         }
-        .padding(.bottom, hasReactionStrip ? MessageReactionLayout.reservedSpaceBelowBubble : 0)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder
-    private var messageReactionAttachment: some View {
+    private var messageReactionRowInFlow: some View {
         if let configuration = reactionConfiguration, !reactionSummaries.isEmpty {
-            MessageReactionBubbleAttachment(
-                configuration: configuration,
-                isOutgoing: item.isOutgoing,
-                columnMaxWidth: contentColumnMaxWidth
-            )
-            .offset(y: -MessageReactionLayout.pillBubbleEdgeOverlap)
-            .padding(.top, MessageReactionLayout.pillVerticalOffset)
-            .zIndex(1)
+            HStack(spacing: 0) {
+                if item.isOutgoing {
+                    MessageReactionBubbleAttachment(
+                        configuration: configuration,
+                        isOutgoing: true
+                    )
+                    .padding(.leading, MessageReactionLayout.chipHorizontalInset)
+                    Spacer(minLength: 0)
+                } else {
+                    Spacer(minLength: 0)
+                    MessageReactionBubbleAttachment(
+                        configuration: configuration,
+                        isOutgoing: false
+                    )
+                    .padding(.trailing, MessageReactionLayout.chipHorizontalInset)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, -MessageReactionLayout.pillOverlapIntoBubble)
         }
     }
 
@@ -198,7 +263,8 @@ struct ConversationBubbleView: View {
     private var bubbleContent: some View {
         Group {
             if item.message.kind == .tradeShare,
-               let tradeID = SharedContentMessageSupport.primaryTradeID(for: item.message)
+               let tradeID = SharedContentMessageSupport.primaryTradeID(for: item.message),
+               !isSharedContentUnavailable
             {
                 tradeShareBubble(tradeID: tradeID)
             } else if item.message.kind == .feedPostShare || item.message.kind == .profilePostShare {
@@ -455,7 +521,11 @@ struct ConversationBubbleView: View {
         sharedContentBubble {
             if isSharedContentUnavailable {
                 SharedContentUnavailableCard(title: "Shared a post", isOutgoing: item.isOutgoing, includesBackground: false)
-            } else if let post = sharedPost, let tradeID = post.linkedTradeID, item.message.kind == .feedPostShare {
+            } else if let post = sharedPost,
+                      let tradeID = post.linkedTradeID,
+                      item.message.kind == .feedPostShare,
+                      sharedTrade != nil
+            {
                 SharedTradeMessageCard(
                     trade: sharedTrade,
                     tradeID: tradeID,

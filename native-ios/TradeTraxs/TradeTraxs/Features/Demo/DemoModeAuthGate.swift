@@ -19,7 +19,7 @@ struct DemoModeAuthGateModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .confirmationDialog(
-                "Create an account to use this feature.",
+                "Sign in or create an account to use this feature.",
                 isPresented: $presenter.isPresented,
                 titleVisibility: .visible
             ) {

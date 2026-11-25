@@ -47,11 +47,27 @@ import {
   type BroadcastChatMessage,
   type BroadcastChatReplyReference,
 } from "./tradeRoomBroadcastChat.ts"
+import { registerBroadcastChatTradeShare } from "./tradeRoomBroadcastChatTradeShare.ts"
 import {
   publishBroadcastHandState,
   registerBroadcastHandHandlers,
   type BroadcastHandState,
 } from "./tradeRoomBroadcastHand.ts"
+import {
+  clearBroadcastReactionSendState,
+  publishBroadcastReaction,
+  registerBroadcastReactionHandlers,
+  type BroadcastFloatingReaction,
+} from "./tradeRoomBroadcastReaction.ts"
+import {
+  applyBroadcastChatReactionEvent,
+  clearBroadcastChatReactionSendState,
+  publishBroadcastChatReaction,
+  registerBroadcastChatReactionHandlers,
+  viewerReactionRowsForToggle,
+  type BroadcastChatReactionRow,
+} from "./tradeRoomBroadcastChatReaction.ts"
+import { normalizeMessageReaction } from "@/lib/messageReactionValidation.ts"
 import {
   cleanupBroadcastVideoAttachments,
   countBroadcastAudience,
@@ -207,6 +223,8 @@ export type BroadcastStoreSnapshot = {
   broadcasterMicMuted: boolean
   broadcasterMicWarning: string | null
   chatMessages: BroadcastChatMessage[]
+  chatMessageReactions: BroadcastChatReactionRow[]
+  floatingReactions: BroadcastFloatingReaction[]
   generalVoiceOverlapWarning: string | null
   broadcasterPreviewError: string | null
   studioPresentation: BroadcastStudioPresentation
@@ -321,10 +339,14 @@ let isInConversation = false
 let broadcasterMicMuted = false
 let broadcasterMicWarning: string | null = null
 let chatMessages: BroadcastChatMessage[] = []
+let chatMessageReactions: BroadcastChatReactionRow[] = []
+let floatingReactions: BroadcastFloatingReaction[] = []
 let generalVoiceOverlapWarning: string | null = null
 let videoCleanup: (() => void) | null = null
 let audioCleanup: (() => void) | null = null
 let chatCleanup: (() => void) | null = null
+let chatReactionCleanup: (() => void) | null = null
+let reactionCleanup: (() => void) | null = null
 let handCleanup: (() => void) | null = null
 let localPreviewCleanup: (() => void) | null = null
 let studioPresentation: BroadcastStudioPresentation = "hidden"
@@ -524,6 +546,8 @@ function buildSnapshot(): BroadcastStoreSnapshot {
     broadcasterMicMuted,
     broadcasterMicWarning,
     chatMessages,
+    chatMessageReactions,
+    floatingReactions,
     generalVoiceOverlapWarning,
     broadcasterPreviewError,
     studioPresentation,
@@ -573,7 +597,11 @@ function emit() {
 function resetChatForNewSession(sessionId: string | null) {
   if (sessionId === currentSessionId) return
   chatMessages = []
+  chatMessageReactions = []
+  floatingReactions = []
   clearBroadcastChatState()
+  clearBroadcastChatReactionSendState()
+  clearBroadcastReactionSendState()
 }
 
 function syncAudienceCount(activeRoom: Room, broadcasterId: string) {
@@ -923,6 +951,19 @@ function registerChat(activeRoom: Room) {
   chatCleanup?.()
   chatCleanup = registerBroadcastChatHandlers(activeRoom, (message) => {
     chatMessages = trimBroadcastChatMessages([...chatMessages, message])
+    emit()
+  })
+  chatReactionCleanup?.()
+  chatReactionCleanup = registerBroadcastChatReactionHandlers(activeRoom, (event) => {
+    chatMessageReactions = applyBroadcastChatReactionEvent(
+      chatMessageReactions,
+      event
+    )
+    emit()
+  })
+  reactionCleanup?.()
+  reactionCleanup = registerBroadcastReactionHandlers(activeRoom, (reaction) => {
+    floatingReactions = [...floatingReactions.slice(-48), reaction]
     emit()
   })
 }
@@ -1726,6 +1767,14 @@ async function teardownBroadcastRoom(options?: {
   conversationMicStateCleanup = null
   chatCleanup?.()
   chatCleanup = null
+  chatReactionCleanup?.()
+  chatReactionCleanup = null
+  reactionCleanup?.()
+  reactionCleanup = null
+  chatMessageReactions = []
+  floatingReactions = []
+  clearBroadcastChatReactionSendState()
+  clearBroadcastReactionSendState()
   handCleanup?.()
   handCleanup = null
   interactivePollOwners.delete("viewer-session")
@@ -1757,7 +1806,9 @@ async function teardownBroadcastRoom(options?: {
   generalVoiceOverlapWarning = null
   localViewerCount = 0
   chatMessages = []
+  chatMessageReactions = []
   clearBroadcastChatState()
+  clearBroadcastChatReactionSendState()
   clearBroadcastChatProfileCache()
   currentSessionId = null
   publisherCaptureDegraded = false
@@ -2075,6 +2126,85 @@ export async function refreshTradeRoomBroadcastStatus(
   emit()
 }
 
+export async function sendTradeRoomBroadcastReaction(options: {
+  userId: string
+  emoji: string
+  originX?: number
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!broadcastRoom) {
+    return { ok: false, error: "Not connected to the stream." }
+  }
+  const result = await publishBroadcastReaction(broadcastRoom, options)
+  if (result.ok) {
+    const emoji =
+      normalizeMessageReaction(options.emoji) ?? options.emoji
+    const selfReaction: BroadcastFloatingReaction = {
+      id: `${options.userId}-${Date.now()}-${emoji}`,
+      emoji,
+      userId: options.userId,
+      sentAt: Date.now(),
+      originX:
+        options.originX != null && options.originX >= 0 && options.originX <= 1
+          ? options.originX
+          : Math.random() * 0.6 + 0.2,
+    }
+    floatingReactions = [...floatingReactions.slice(-48), selfReaction]
+    emit()
+  }
+  return result
+}
+
+export function getBroadcastChatReactionsForMessage(
+  messageId: string
+): BroadcastChatReactionRow[] {
+  return chatMessageReactions.filter((row) => row.messageId === messageId)
+}
+
+export async function toggleTradeRoomBroadcastChatReaction(options: {
+  userId: string
+  messageId: string
+  emoji: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!broadcastRoom) {
+    return { ok: false, error: "Not connected to the stream." }
+  }
+  const messageId = options.messageId.trim()
+  const normalized = normalizeMessageReaction(options.emoji)
+  if (!normalized) return { ok: false, error: "Pick a valid emoji." }
+
+  const viewerRows = viewerReactionRowsForToggle(
+    chatMessageReactions,
+    messageId,
+    options.userId
+  )
+  const existingSame = viewerRows.find((row) => row.emoji === normalized)
+  const nextEmoji = existingSame ? null : normalized
+
+  const previous = chatMessageReactions
+  const optimisticAt = Date.now()
+  chatMessageReactions = applyBroadcastChatReactionEvent(chatMessageReactions, {
+    messageId,
+    userId: options.userId,
+    emoji: nextEmoji,
+    updatedAt: optimisticAt,
+  })
+  emit()
+
+  const result = await publishBroadcastChatReaction(broadcastRoom, {
+    messageId,
+    userId: options.userId,
+    emoji: nextEmoji,
+  })
+
+  if (!result.ok) {
+    chatMessageReactions = previous
+    emit()
+    return result
+  }
+
+  return { ok: true }
+}
+
 export async function sendTradeRoomBroadcastChatMessage(options: {
   userId: string
   displayName: string
@@ -2105,6 +2235,13 @@ export async function sendTradeRoomBroadcastChatMessage(options: {
       replyTo: options.replyTo ?? null,
     }
     chatMessages = trimBroadcastChatMessages([...chatMessages, selfMsg])
+    if (selfMsg.tradeId && currentSessionId) {
+      void registerBroadcastChatTradeShare({
+        broadcastSessionId: currentSessionId,
+        tradeId: selfMsg.tradeId,
+        chatMessageId: selfMsg.id,
+      })
+    }
     emit()
   }
   return result
@@ -2346,19 +2483,28 @@ export async function ensureObsIngressCredentials(options: {
           return { ok: false, message: OBS_CREDENTIALS_LOST_MESSAGE }
         }
 
-        const res = await fetch("/api/livekit/broadcast/obs/credentials", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            roomId: options.roomId,
-            sessionId: options.sessionId,
-          }),
-        })
+        const fetchCredentials = async () => {
+          return fetch("/api/livekit/broadcast/obs/credentials", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              roomId: options.roomId,
+              sessionId: options.sessionId,
+            }),
+          })
+        }
+
+        let res = await fetchCredentials()
+        if (res.status === 423 && !options.forceRecreate) {
+          await new Promise((resolve) => setTimeout(resolve, 1200))
+          res = await fetchCredentials()
+        }
         const payload = (await res.json().catch(() => ({}))) as {
           error?: string
+          code?: string
           rtmpUrl?: string
           streamKey?: string
           primaryMediaPublisherIdentity?: string
@@ -2366,6 +2512,14 @@ export async function ensureObsIngressCredentials(options: {
           ingressStatusSnapshot?: string
         }
         if (!res.ok) {
+          if (res.status === 423 && !options.forceRecreate) {
+            const busyMsg =
+              payload.error ||
+              "OBS credentials are being created in another window. Wait a moment and try again."
+            obsCredentialsError = busyMsg
+            emit()
+            return { ok: false, message: busyMsg }
+          }
           if (res.status === 409 && !options.forceRecreate) {
             obsHasIngressCredentials = false
             obsRtmpUrlMemory = null
@@ -2900,6 +3054,10 @@ export async function startTradeRoomBroadcast(options: {
       broadcasterRemoteSpeakerAudioCleanup = null
       chatCleanup?.()
       chatCleanup = null
+      reactionCleanup?.()
+      reactionCleanup = null
+      floatingReactions = []
+      clearBroadcastReactionSendState()
       handCleanup?.()
       handCleanup = null
       connectionState = ConnectionState.Disconnected

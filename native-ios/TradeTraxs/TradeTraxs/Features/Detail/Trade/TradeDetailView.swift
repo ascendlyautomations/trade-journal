@@ -144,8 +144,12 @@ struct TradeDetailView: View {
             SharedContentShareSheet(
                 target: presentation.target,
                 data: data,
-                tradeOwnerShareAccess: presentation.ownerAccess,
-                onTradeVisibilityUpdated: { viewModel.applyUpdated($0) },
+                tradeOwnerShareAccess: experience == .journal && viewModel.isOwner
+                    ? presentation.ownerAccess
+                    : nil,
+                onTradeVisibilityUpdated: experience == .journal && viewModel.isOwner
+                    ? { viewModel.applyUpdated($0) }
+                    : nil,
                 onClose: { journalSharePresentation = nil }
             )
         }
@@ -203,39 +207,22 @@ struct TradeDetailView: View {
 
     @ViewBuilder
     private var content: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: Self.sectionSpacing) {
-                    if let trade = viewModel.trade {
-                        if showsSocialIdentityHeader {
-                            identityHeader(trade)
-                        }
-
-                        VStack(alignment: .leading, spacing: Self.sectionSpacing) {
-                            if experience == .journal {
-                                journalTradeContent(trade)
-                            } else {
-                                socialTradeContent(trade, scrollProxy: proxy)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+        Group {
+            if experience == .social, let trade = viewModel.trade {
+                CommentsDetailChrome(
+                    target: socialEngagementTarget(for: trade.id),
+                    contentOwnerUserID: trade.ownerProfileID.rawValue,
+                    data: data
+                ) { commentsVM, currentUserID, _ in
+                    socialDetailScroll(
+                        trade: trade,
+                        commentsVM: commentsVM,
+                        currentUserID: currentUserID
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.top, ExperienceSpacing.xs)
-                .padding(.bottom, ExperienceSpacing.lg)
+            } else {
+                journalDetailScroll()
             }
-            .scrollDismissesKeyboard(.interactively)
-            .detailCommentsScrollOnOpen(
-                intent: .trade(viewModel.tradeID),
-                anchorID: Self.commentsAnchorID,
-                isContentReady: viewModel.trade != nil && experience == .social,
-                contentRevealed: contentRevealed,
-                detailCache: data.detailCache,
-                scrollProxy: proxy,
-                reduceMotion: reduceMotion
-            )
         }
         .overlay {
             if viewModel.isDeleting {
@@ -328,6 +315,10 @@ struct TradeDetailView: View {
 
     private func presentJournalShare(for trade: Trade) {
         guard experience == .journal, viewModel.isOwner else { return }
+        presentShare(for: trade)
+    }
+
+    private func presentShare(for trade: Trade) {
         ExperienceHaptics.play(.selection)
         journalSharePresentation = JournalTradeShareSupport.presentation(for: trade)
     }
@@ -367,13 +358,17 @@ struct TradeDetailView: View {
 
     @ViewBuilder
     private func journalTradeContent(_ trade: Trade) -> some View {
-        TradeDetailCompactHeader(
-            trade: trade,
-            accountLine: viewModel.accountSummaryLine
-        )
+        TradeDetailGroupedSurface {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                TradeDetailCompactHeader(
+                    trade: trade,
+                    accountLine: viewModel.accountSummaryLine
+                )
+                TradeDetailQuickStatsContent(trade: trade)
+                    .accessibilityIdentifier("detail.trade.quickStats")
+            }
+        }
         .accessibilityIdentifier("detail.trade.headline")
-
-        TradeDetailQuickStatsSection(trade: trade)
 
         TradeDetailJournalSection(
             trade: trade,
@@ -389,37 +384,126 @@ struct TradeDetailView: View {
             )
         }
 
-        if let cohort = viewModel.ownerAnalytics?.cohort {
-            TradeDetailComparisonSection(
+        switch journalPremiumInsightsPresentation {
+        case .unrestricted:
+            if let analytics = viewModel.ownerAnalytics,
+               let bundle = analytics.cohortBundle
+            {
+                TradeDetailComparisonSection(
+                    trade: trade,
+                    bundle: bundle,
+                    filterContext: analytics.comparisonFilterContext,
+                    quickInsight: analytics.quickInsight
+                )
+            }
+
+            if let tickerHistory = viewModel.ownerAnalytics?.tickerHistory {
+                TradeDetailTickerHistorySection(history: tickerHistory)
+            }
+
+            if let tradeAI {
+                TradeAISectionView(viewModel: tradeAI)
+            }
+        case .lockedPreview, .verifyingEntitlement:
+            TradeDetailTraxProUpsellSection(
+                presentation: journalPremiumInsightsPresentation,
                 trade: trade,
-                cohort: cohort,
-                quickInsight: viewModel.ownerAnalytics?.quickInsight
+                profileID: journalViewerProfileID,
+                onRetryEntitlementVerification: {
+                    Task { await TraxProEntitlementRefreshAction.refresh(data: data) }
+                }
             )
-        }
-
-        if let tickerHistory = viewModel.ownerAnalytics?.tickerHistory {
-            TradeDetailTickerHistorySection(history: tickerHistory)
-        }
-
-        if let tradeAI {
-            TradeAISectionView(viewModel: tradeAI)
         }
     }
 
-    private var restrictsPremiumTradeAI: Bool {
+    private var journalViewerProfileID: ProfileID? {
+        SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+    }
+
+    private var journalPremiumInsightsPresentation: ProPremiumFeaturePresentation {
         _ = entitlementGateRevision
-        guard experience == .journal else { return false }
-        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
-        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
+        guard experience == .journal else { return .unrestricted }
+        return ProMonetizationPolicy.premiumFeaturePresentation(
             demoModeActive: ExploreModeSupport.isActive,
-            profileID: profileID
+            profileID: journalViewerProfileID
         )
+    }
+
+    private var restrictsPremiumTradeAI: Bool {
+        journalPremiumInsightsPresentation != .unrestricted
+    }
+
+    @ViewBuilder
+    private func journalDetailScroll() -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Self.sectionSpacing) {
+                if let trade = viewModel.trade {
+                    if showsSocialIdentityHeader {
+                        identityHeader(trade)
+                    }
+                    journalTradeContent(trade)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.xs)
+            .padding(.bottom, ExperienceSpacing.lg)
+        }
+    }
+
+    @ViewBuilder
+    private func socialDetailScroll(
+        trade: Trade,
+        commentsVM: CommentsViewModel,
+        currentUserID: ProfileID?
+    ) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Self.sectionSpacing) {
+                    if showsSocialIdentityHeader {
+                        identityHeader(trade)
+                    }
+                    socialTradeContent(
+                        trade,
+                        scrollProxy: proxy,
+                        commentsVM: commentsVM,
+                        currentUserID: currentUserID
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.xs)
+                .padding(.bottom, ExperienceSpacing.lg)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .commentThreadScrollSupport(
+                viewModel: commentsVM,
+                scrollProxy: proxy,
+                reduceMotion: reduceMotion
+            )
+            .detailCommentsScrollOnOpen(
+                intent: .trade(viewModel.tradeID),
+                anchorID: Self.commentsAnchorID,
+                isContentReady: true,
+                contentRevealed: contentRevealed,
+                detailCache: data.detailCache,
+                scrollProxy: proxy,
+                reduceMotion: reduceMotion
+            )
+        }
     }
 
     // MARK: - Social (public)
 
     @ViewBuilder
-    private func socialTradeContent(_ trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
+    private func socialTradeContent(
+        _ trade: Trade,
+        scrollProxy: ScrollViewProxy,
+        commentsVM: CommentsViewModel,
+        currentUserID: ProfileID?
+    ) -> some View {
         let hasSocialMedia = viewModel.mediaReference != nil || viewModel.visibleLinkedReel != nil
 
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
@@ -451,27 +535,36 @@ struct TradeDetailView: View {
                     .padding(.bottom, ExperienceSpacing.xxs)
             }
 
-            SocialTradeDetailHeader(
-                trade: trade,
-                accountBadge: trade.mode == .copyTraded
-                    ? nil
-                    : TradeDisplay.socialHeaderAccountBadge(for: trade),
-                copyTradeSummary: trade.mode == .copyTraded
-                    ? viewModel.socialCopyTradeModeSummary
-                    : nil
-            )
+            TradeDetailGroupedSurface {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    SocialTradeDetailHeader(
+                        trade: trade,
+                        accountBadge: trade.mode == .copyTraded
+                            ? nil
+                            : TradeDisplay.socialHeaderAccountBadge(for: trade),
+                        copyTradeSummary: trade.mode == .copyTraded
+                            ? viewModel.socialCopyTradeModeSummary
+                            : nil
+                    )
+                    TradeExecutionMetricsTwoRowGrid(
+                        trade: trade,
+                        contentAlignment: .centered,
+                        showsPoints: false,
+                        showsSocialExecutionDates: true
+                    )
+                    .accessibilityIdentifier("detail.trade.socialMetrics")
+                }
+            }
             .accessibilityIdentifier("detail.trade.headline")
 
             if let caption = viewModel.displayPublicCaption {
                 SocialTradePublicCaptionSection(caption: caption)
             }
 
-            SocialTradePublicMetricsSection(trade: trade)
-
             CommentsSectionView(
-                target: socialEngagementTarget(for: trade.id),
-                contentOwnerUserID: trade.ownerProfileID.rawValue,
-                data: data
+                viewModel: commentsVM,
+                currentUserID: currentUserID,
+                imagePipeline: imagePipeline
             )
             .id(Self.commentsAnchorID)
         }
@@ -496,7 +589,7 @@ struct TradeDetailView: View {
                     scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                 }
             },
-            onShareTap: { showsShareSheet = true },
+            onShareTap: { presentShare(for: trade) },
             vaultRef: tradeVaultRef,
             visualStyle: .feedCard
         )
@@ -510,14 +603,4 @@ struct TradeDetailView: View {
         }
         #endif
     }
-}
-
-private struct DetailShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

@@ -586,7 +586,11 @@ final class TradeDetailViewModel {
         do {
             let bootstrap = try await TradeDetailComparisonLoader.loadBootstrap(trade: trade, rpc: rpc)
             rpcPayload = bootstrap.data
-            ownerAnalytics = TradeDetailAnalytics.map(from: bootstrap.data, trade: trade)
+            ownerAnalytics = TradeDetailAnalytics.map(
+                from: bootstrap.data,
+                trade: trade,
+                accountModes: accountModes
+            )
             dataSource = BackendV2Versioning.RPCName.tradeDetailOwnerComparison.rawValue
         } catch {
             rpcError = String(describing: error)

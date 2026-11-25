@@ -43,7 +43,7 @@ final class AdminProductFeedbackViewModel {
             nextOffset = page.rows.count
         } catch {
             snapshots = []
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 
@@ -70,7 +70,7 @@ final class AdminProductFeedbackViewModel {
             hasMore = page.hasMore
             nextOffset += page.rows.count
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 }

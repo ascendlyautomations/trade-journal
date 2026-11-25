@@ -134,6 +134,13 @@ final class TradeAISectionViewModel {
                     TradeAIAnalyzeRequest(context: context, messages: apiMessages)
                 )
                 guard !Task.isCancelled else { return }
+                if response.backendCode == "pro_required" {
+                    if messages.last?.id == userMessage.id {
+                        messages.removeLast()
+                    }
+                    ProUpgradeCoordinator.shared.present(reason: .feature(.aiAnalyst))
+                    return
+                }
                 let assistant = TradeAIMessage(role: .assistant, content: response.reply)
                 messages.append(assistant)
                 if response.shouldPersist {
@@ -164,6 +171,12 @@ final class TradeAISectionViewModel {
             pendingPersistTurn = nil
             persistErrorMessage = nil
         } catch {
+            if let feature = ProGateReasonParser.feature(from: error), feature == .aiAnalyst {
+                ProUpgradeCoordinator.shared.present(reason: .feature(.aiAnalyst))
+                pendingPersistTurn = nil
+                persistErrorMessage = nil
+                return
+            }
             pendingPersistTurn = (user, assistant)
             persistErrorMessage =
                 "Analysis is on screen, but saving to your account failed. Tap Retry Save."

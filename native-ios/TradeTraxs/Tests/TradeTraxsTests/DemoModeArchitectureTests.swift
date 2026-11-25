@@ -261,6 +261,13 @@ private struct UnavailableNotificationRepository: NotificationRepository {
         return 0
     }
 
+    func markUnread(id: NotificationID) async throws { _ = id }
+
+    func markUnread(ids: [NotificationID]) async throws -> Int {
+        _ = ids
+        return 0
+    }
+
     func markMessageNotificationsRead() async throws -> Int { 0 }
 
     func markRoomNotificationsRead(roomID: RoomID, slug: String?) async throws -> Int {

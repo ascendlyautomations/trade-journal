@@ -35,6 +35,15 @@ import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 type AnalyzeTradeApiPayload = {
   reply?: string
   error?: string
+  code?: string
+}
+
+function analyzeTradeRequiresProUpgrade(
+  res: Response,
+  data: AnalyzeTradeApiPayload | null
+) {
+  const code = data?.code?.trim().toLowerCase() ?? ""
+  return res.status === 403 && code === "pro_required"
 }
 
 async function parseAnalyzeTradeResponse(res: Response): Promise<{
@@ -696,6 +705,11 @@ function AnalystPageContent() {
 
       const { ok, data } = await parseAnalyzeTradeResponse(res)
 
+      if (analyzeTradeRequiresProUpgrade(res, data)) {
+        presentFeature("ai_analyst")
+        return
+      }
+
       if (!ok || !data?.reply) {
         const errorMessage = analyzeTradeErrorMessage(
           data,
@@ -757,6 +771,13 @@ function AnalystPageContent() {
     })
 
     const { ok, data } = await parseAnalyzeTradeResponse(res)
+
+    if (analyzeTradeRequiresProUpgrade(res, data)) {
+      setMessages(messages)
+      setLoading(false)
+      presentFeature("ai_analyst")
+      return
+    }
 
     if (!ok || !data?.reply) {
       setMessages([

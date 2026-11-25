@@ -304,13 +304,15 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
     func addComment(
         body: String,
         parentID: CommentID?,
+        sharedTradeID: TradeID?,
         on target: InteractionTarget
     ) async throws -> InteractionComment {
         guard let userID = await session.currentUserID?.rawValue else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        let shared = sharedTradeID?.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty || !(shared?.isEmpty ?? true) else {
             throw AppError.network(.validation(statusCode: nil, message: "Comment cannot be empty"))
         }
 
@@ -322,11 +324,17 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
             var post_id: String?
             var achievement_post_id: String?
             var user_id: String
-            var content: String
+            var content: String?
             var parent_comment_id: String?
+            var shared_trade_id: String?
         }
         let contentID = try await effectiveContentID(for: target)
-        var insert = Body(user_id: userID, content: trimmed, parent_comment_id: parentID?.rawValue)
+        var insert = Body(
+            user_id: userID,
+            content: trimmed.isEmpty ? nil : trimmed,
+            parent_comment_id: parentID?.rawValue,
+            shared_trade_id: shared?.isEmpty == false ? shared : nil
+        )
         switch target.kind {
         case .trade: insert.trade_id = contentID
         case .profilePost: insert.profile_post_id = contentID
@@ -526,7 +534,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
     }
 
     private static func commentSelect(foreignKey: String) -> String {
-        "id,\(foreignKey),user_id,content,parent_comment_id,pinned,created_at,profiles(username,name,avatar_url)"
+        "id,\(foreignKey),user_id,content,parent_comment_id,shared_trade_id,pinned,created_at,profiles(username,name,avatar_url)"
     }
 
     /// Maps a comment row including the embedded author avatar URL from the list join.
@@ -536,6 +544,10 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
     ) -> InteractionComment? {
         guard let id = row.id, let author = row.user_id else { return nil }
         let text = (row.content ?? row.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let sharedTradeID = row.shared_trade_id
+            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .flatMap { $0.isEmpty ? nil : TradeID($0) }
+        guard !text.isEmpty || sharedTradeID != nil else { return nil }
         let avatar = row.profiles?.avatar_url?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = row.profiles?.name?
@@ -548,6 +560,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
             authorDisplayName: (displayName?.isEmpty == false) ? displayName : nil,
             authorAvatarURL: (avatar?.isEmpty == false) ? avatar : nil,
             body: text,
+            sharedTradeID: sharedTradeID,
             parentCommentID: row.parent_comment_id.map { CommentID($0) },
             createdAt: ISO8601.date(from: row.created_at) ?? Date(),
             isPinned: row.pinned ?? false

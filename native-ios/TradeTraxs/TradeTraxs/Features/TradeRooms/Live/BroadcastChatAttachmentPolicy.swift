@@ -5,13 +5,18 @@ enum BroadcastChatAttachmentPolicy {
     static let chatImageMaxWidth: CGFloat = 160
     static let chatImageMaxHeight: CGFloat = 120
     static let chatImagePlaceholderHeight: CGFloat = 90
-    static let chatTradeCardMaxWidth: CGFloat = 200
-    static let chatTradeCardMinHeight: CGFloat = 64
-    static let chatTradeCardMaxHeight: CGFloat = 148
+    static let chatTradeCardMaxWidth: CGFloat = SharedTradePreviewMetrics.maxCardWidth
+    static let chatTradeCardMinHeight: CGFloat = 56
+    static let chatTradeCardMaxHeight: CGFloat = SharedTradePreviewMetrics.screenshotMaxHeight + 96
 
-    /// Trades the viewer may share into a public livestream (privacy parity with profile/DM trade share).
+    /// Inner screenshot width for shared trade cards (card max width minus horizontal padding).
+    static var chatTradeScreenshotLayoutWidth: CGFloat {
+        chatTradeCardMaxWidth - ExperienceSpacing.sm * 2
+    }
+
+    /// Trades the viewer may attach in livestream chat (owner's public and private trades; visibility unchanged).
     static func eligibleTradesForSharing(_ trades: [Trade]) -> [Trade] {
-        trades.filter { $0.visibility == .public }
+        trades
     }
 
     static func isAllowedBroadcastImageURL(_ raw: String) -> Bool {

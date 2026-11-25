@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic"
 import { memo, type ReactNode } from "react"
 import { formatPnlCurrency } from "@/lib/formatMoney"
+import ProfilePrivateTabMessage from "./ProfilePrivateTabMessage"
 
 const ProfileEquityLineChart = dynamic(
   () => import("@/app/components/profile/ProfileEquityLineChart"),
@@ -110,12 +111,7 @@ function ProfileStatisticsTab({
   return (
     <div className="tt-profile-stats space-y-6">
       {!canView ? (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
-          <p className="text-lg text-gray-100">Private Profile</p>
-          <p className="mt-2 text-sm text-gray-400">
-            Follow this user to see their trades and stats.
-          </p>
-        </div>
+        <ProfilePrivateTabMessage />
       ) : loading ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

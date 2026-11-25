@@ -13,6 +13,8 @@ import ReplyActionButton from "@/app/components/replies/ReplyActionButton"
 import { commentElementId } from "@/lib/replyReference"
 import type { CommentLikeMeta } from "@/lib/commentLikes"
 import { canPinComment, isCommentPinned } from "@/lib/pinComment"
+import CommentSharedTradeAttachment from "@/app/components/comments/CommentSharedTradeAttachment"
+import { commentSharedTradeId } from "@/lib/commentSharedTrade"
 
 function commentSyncStatus(
   comment: any
@@ -76,6 +78,7 @@ function FeedCommentItem({
     !isOptimistic &&
     String(currentUserId) === userId
   const showMenu = canPin || canDelete
+  const attachedTradeId = commentSharedTradeId(comment)
 
   return (
     <div
@@ -130,11 +133,19 @@ function FeedCommentItem({
             </div>
           ) : null}
         </div>
-        <CommentContent
-          content={String(comment.content ?? "")}
-          mentionUserIdsByUsername={mentionUserIdsByUsername}
-          stopPropagation={stopPropagation}
-        />
+        {String(comment.content ?? "").trim() ? (
+          <CommentContent
+            content={String(comment.content ?? "")}
+            mentionUserIdsByUsername={mentionUserIdsByUsername}
+            stopPropagation={stopPropagation}
+          />
+        ) : null}
+        {attachedTradeId ? (
+          <CommentSharedTradeAttachment
+            tradeId={attachedTradeId}
+            viewerUserId={currentUserId}
+          />
+        ) : null}
         {syncStatus !== "idle" ? (
           <SyncStatusText
             status={syncStatus}

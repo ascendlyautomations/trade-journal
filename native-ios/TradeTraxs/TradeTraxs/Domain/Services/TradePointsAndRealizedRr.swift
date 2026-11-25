@@ -109,6 +109,19 @@ nonisolated enum TradePointsAndRealizedRr {
         return sum / Decimal(count)
     }
 
+    /// Mean stored max R:R reached; excludes trades without `maxRrReached` (not targeted or realized R:R).
+    static func averageMaxRrReached(trades: [Trade]) -> Decimal? {
+        var sum = Decimal(0)
+        var count = 0
+        for trade in trades {
+            guard let maxRr = trade.maxRrReached else { continue }
+            sum += maxRr
+            count += 1
+        }
+        guard count > 0 else { return nil }
+        return sum / Decimal(count)
+    }
+
     static func computeRealizedRrFromPricesAndPlan(trade: Trade) -> Decimal? {
         guard let pointsTargeted = positivePointsTarget(trade.points),
               let targetedRr = positiveTargetedRr(trade.riskReward),

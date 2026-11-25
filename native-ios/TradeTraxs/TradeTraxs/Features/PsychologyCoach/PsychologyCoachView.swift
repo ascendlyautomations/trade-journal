@@ -61,7 +61,7 @@ final class PsychologyCoachViewModel {
             phase = .idle
         } catch {
             aiReply = nil
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 
@@ -96,7 +96,7 @@ final class PsychologyCoachViewModel {
             }
             phase = .ready
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(UserFacingError.message(for: error))
         }
     }
 }

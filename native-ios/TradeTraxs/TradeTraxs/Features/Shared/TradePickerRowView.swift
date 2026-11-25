@@ -31,6 +31,12 @@ struct TradePickerRowView: View {
                 Text(TradeDisplay.dateTimeText(trade.entryAt))
                     .experienceStyle(.caption2, color: colors.tertiaryText)
                     .lineLimit(1)
+
+                if trade.visibility == .private {
+                    Text("Private")
+                        .experienceStyle(.caption2, color: colors.secondaryText)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

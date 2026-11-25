@@ -5,6 +5,7 @@ struct TradeSharePickerSheet: View {
     let trades: [Trade]
     let imagePipeline: any ImagePipeline
     var isLoading: Bool
+    var title: String = "Send Trade"
     var onSelect: (Trade) -> Void
     var onClose: () -> Void
 
@@ -14,7 +15,7 @@ struct TradeSharePickerSheet: View {
                 trades: trades,
                 imagePipeline: imagePipeline,
                 isLoading: isLoading,
-                title: "Send Trade",
+                title: title,
                 emptyTitle: "No trades to share",
                 emptyMessage: "Log a trade first, then share it here.",
                 onSelect: onSelect,

@@ -16,10 +16,10 @@ nonisolated struct UserFacingError: Sendable, Equatable {
     /// Minimal mapping for foundation. Replace with richer copy tables later.
     static func map(_ error: AppError) -> UserFacingError {
         switch error {
-        case .notImplemented(let feature):
+        case .notImplemented:
             return UserFacingError(
                 title: "Unavailable",
-                message: "\(feature) is not available yet.",
+                message: "This feature isn't available yet.",
                 action: .dismiss
             )
         case .cancelled:
@@ -141,7 +141,36 @@ nonisolated struct UserFacingError: Sendable, Equatable {
         {
             return trimmed
         }
+        if looksLikeInternalDiagnostic(lowered: lowered, original: trimmed) {
+            return "Please try again."
+        }
         return trimmed
+    }
+
+    private static func looksLikeInternalDiagnostic(lowered: String, original: String) -> Bool {
+        if lowered.contains("error domain") || lowered.contains("nserror") { return true }
+        if lowered.contains("supabase") || lowered.contains("postgrest") || lowered.contains("postgresql") {
+            return true
+        }
+        if lowered.contains("rpc_") || lowered.contains("backendv2") { return true }
+        if lowered.contains("row-level security") || lowered.contains("permission denied for") { return true }
+        if lowered.contains("jwt") && !lowered.contains("expired") && original.count > 72 { return true }
+        if lowered.contains("cfnetwork") || lowered.contains("urlsession") || lowered.contains("nw_") {
+            return true
+        }
+        if lowered.contains("stack trace") || lowered.contains("swift/") { return true }
+        if original.range(of: #"\bcode=\d+\b"#, options: .regularExpression) != nil { return true }
+        if original.range(
+            of: #"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil {
+            return true
+        }
+        if lowered.contains("http ") && (lowered.contains("http 4") || lowered.contains("http 5")) {
+            return true
+        }
+        if original.contains("::") && original.contains("(") && original.count > 48 { return true }
+        return false
     }
 
     static func map(_ error: AuthenticationError) -> UserFacingError {

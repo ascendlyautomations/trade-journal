@@ -114,6 +114,7 @@ final class TradeJournalMutationStore {
             )
         }
         SessionNetworkProbe.record(.localMutation, resource: "journal.trade.deleted", detail: id.rawValue)
+        MessagingSharedContentDeletionCoordinator.shared.noteTradeDeleted(id)
         revision += 1
         if let previous {
             AnalyticsLocalMutationRouter.submit(

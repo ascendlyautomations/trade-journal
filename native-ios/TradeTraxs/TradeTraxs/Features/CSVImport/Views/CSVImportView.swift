@@ -142,9 +142,13 @@ nonisolated enum CSVPickedFileReader {
     }
 
     static func read(_ url: URL) -> Result<File, Error> {
+        #if DEBUG
         print("[CSV] picker returned")
+        #endif
         let scoped = url.startAccessingSecurityScopedResource()
+        #if DEBUG
         print("[CSV] access acquired")
+        #endif
         defer {
             if scoped {
                 url.stopAccessingSecurityScopedResource()
@@ -152,7 +156,9 @@ nonisolated enum CSVPickedFileReader {
         }
         do {
             let data = try Data(contentsOf: url)
+            #if DEBUG
             print("[CSV] bytes read count=\(data.count)")
+            #endif
             #if DEBUG
             CSVRawFileDiagnostics.logAfterRead(data: data, url: url, securityScopedAccess: scoped)
             #endif

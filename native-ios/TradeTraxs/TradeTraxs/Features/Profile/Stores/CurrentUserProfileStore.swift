@@ -328,7 +328,7 @@ final class CurrentUserProfileStore {
             if profile == nil {
                 phase = .failed
             }
-            errorMessage = UserFacingError.map(error as? AppError ?? AppError.unknown(message: error.localizedDescription)).message
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 
@@ -547,8 +547,8 @@ enum ProfileDisplay {
     ///
     /// Trades uses ``ProfileStats/publicTradeCount`` exclusively.
     /// Payouts uses ``ProfileStats/payoutTotal`` (public payout achievements aggregate).
-    static func headerMetrics(from stats: ProfileStats?) -> [ProfileHeaderMetric] {
-        [
+    static func headerMetrics(from stats: ProfileStats?, contentLocked: Bool = false) -> [ProfileHeaderMetric] {
+        let metrics = [
             ProfileHeaderMetric(
                 id: "publicTrades",
                 label: "Trades",
@@ -575,6 +575,9 @@ enum ProfileDisplay {
                 value: formatProfitFactor(stats?.profitFactor)
             ),
         ]
+        guard contentLocked else { return metrics }
+        let publicIDs: Set<String> = ["publicTrades", "payouts", "winRate", "profitFactor"]
+        return metrics.filter { publicIDs.contains($0.id) }
     }
 
     static func formatPayoutTotal(_ stats: ProfileStats?) -> String {

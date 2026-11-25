@@ -6,14 +6,19 @@ import SwiftUI
 /// Data shape matches web `ProfileEquityLineChart` via ``ProfileStatisticsMetrics/EquityPoint``.
 struct ProfileEquityCurveView: View {
     let points: [ProfileStatisticsMetrics.EquityPoint]
+    private let horizontalLayout: ProfileEquityCurveChartHorizontalLayout
     private let displaySeries: ProfileEquityCurveDisplaySeries
 
     @Environment(\.themeColors) private var colors
     @State private var selectedTradeIndex: Int?
     @State private var selectedPlotDate: Date?
 
-    init(points: [ProfileStatisticsMetrics.EquityPoint]) {
+    init(
+        points: [ProfileStatisticsMetrics.EquityPoint],
+        horizontalLayout: ProfileEquityCurveChartHorizontalLayout = .standard
+    ) {
         self.points = points
+        self.horizontalLayout = horizontalLayout
         self.displaySeries = ProfileEquityCurveDisplaySeries.build(from: points)
     }
 
@@ -50,11 +55,17 @@ struct ProfileEquityCurveView: View {
     }
 
     private var tradeIndexDomain: ClosedRange<Int> {
-        ProfileEquityCurveChartModel.tradeIndexDomain(for: renderPoints)
+        ProfileEquityCurveChartModel.tradeIndexDomain(
+            for: renderPoints,
+            horizontalLayout: horizontalLayout
+        )
     }
 
     private var timelineDomain: ClosedRange<Date>? {
-        ProfileEquityCurveChartModel.timelineDomain(for: renderPoints)
+        ProfileEquityCurveChartModel.timelineDomain(
+            for: renderPoints,
+            horizontalLayout: horizontalLayout
+        )
     }
 
     private var yDomain: ClosedRange<Double> {
@@ -410,11 +421,13 @@ private struct EquityCurveXAxisModifier: ViewModifier {
                         AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(colors.border.opacity(0.45))
                         if let date = value.as(Date.self) {
-                            AxisValueLabel(anchor: xAxisLabelAnchor(for: date, in: timelineAxisValues)) {
+                            AxisValueLabel {
                                 Text(timelineLabel(date))
                                     .font(.system(.caption2, design: .rounded))
                                     .foregroundStyle(colors.tertiaryText)
+                                    .lineLimit(1)
                                     .fixedSize(horizontal: true, vertical: false)
+                                    .offset(x: xAxisLabelHorizontalOffset(for: date, in: timelineAxisValues))
                             }
                         }
                     }
@@ -431,11 +444,13 @@ private struct EquityCurveXAxisModifier: ViewModifier {
                         AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(colors.border.opacity(0.45))
                         if let index = value.as(Int.self) {
-                            AxisValueLabel(anchor: xAxisLabelAnchor(for: index, in: tradeAxisValues)) {
+                            AxisValueLabel {
                                 Text(tradeLabel(index))
                                     .font(.system(.caption2, design: .rounded))
                                     .foregroundStyle(colors.tertiaryText)
+                                    .lineLimit(1)
                                     .fixedSize(horizontal: true, vertical: false)
+                                    .offset(x: xAxisLabelHorizontalOffset(for: index, in: tradeAxisValues))
                             }
                         }
                     }
@@ -444,18 +459,19 @@ private struct EquityCurveXAxisModifier: ViewModifier {
         }
     }
 
-    private func xAxisLabelAnchor(for date: Date, in values: [Date]) -> UnitPoint {
-        guard let first = values.first, let last = values.last, values.count > 1 else { return .center }
-        if datesMatchForAxisLabel(date, first) { return .leading }
-        if datesMatchForAxisLabel(date, last) { return .trailing }
-        return .center
+    /// Nudges first/last labels inward while keeping every label on the chart’s shared X-axis baseline.
+    private func xAxisLabelHorizontalOffset(for date: Date, in values: [Date]) -> CGFloat {
+        guard let first = values.first, let last = values.last, values.count > 1 else { return 0 }
+        if datesMatchForAxisLabel(date, first) { return 10 }
+        if datesMatchForAxisLabel(date, last) { return -10 }
+        return 0
     }
 
-    private func xAxisLabelAnchor(for index: Int, in values: [Int]) -> UnitPoint {
-        guard let first = values.first, let last = values.last, values.count > 1 else { return .center }
-        if index == first { return .leading }
-        if index == last { return .trailing }
-        return .center
+    private func xAxisLabelHorizontalOffset(for index: Int, in values: [Int]) -> CGFloat {
+        guard let first = values.first, let last = values.last, values.count > 1 else { return 0 }
+        if index == first { return 10 }
+        if index == last { return -10 }
+        return 0
     }
 
     private func datesMatchForAxisLabel(_ lhs: Date, _ rhs: Date) -> Bool {

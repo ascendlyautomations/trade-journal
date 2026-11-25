@@ -40,6 +40,19 @@ struct LeaderboardState: Equatable {
     var lastUpdated: Date?
     var didPlayPodiumEntrance = false
 
+    var displayMode: LeaderboardDisplayMode = .rankings
+
+    enum CurvePhase: Equatable {
+        case idle
+        case loading
+        case loaded
+        case failed(String)
+    }
+
+    var curvePhase: CurvePhase = .idle
+    var curvePoints: [LeaderboardCurveChartPoint] = []
+    var curveMetricFormat: LeaderboardCurveV1.MetricFormat = .currency
+
     var showsEmpty: Bool {
         phase == .loaded && rows.isEmpty
     }

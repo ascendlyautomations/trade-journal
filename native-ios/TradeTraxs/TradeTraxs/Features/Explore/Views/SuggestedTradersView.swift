@@ -62,21 +62,6 @@ struct SuggestedTradersView: View {
         .task {
             viewModel.loadIfNeeded()
         }
-        .confirmationDialog(
-            "Unfollow @\(viewModel.pendingUnfollow?.profile.username ?? "")?",
-            isPresented: Binding(
-                get: { viewModel.pendingUnfollow != nil },
-                set: { if !$0 { viewModel.pendingUnfollow = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Unfollow", role: .destructive) {
-                viewModel.confirmUnfollow()
-            }
-            Button("Cancel", role: .cancel) {
-                viewModel.pendingUnfollow = nil
-            }
-        }
         .accessibilityIdentifier("suggestedTraders.home")
     }
 
@@ -199,7 +184,7 @@ struct SuggestedTradersView: View {
                 .focused($isSearchFocused)
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.vertical, 10)
-                .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+                .experienceFilterSearchField(cornerRadius: ExperienceRadius.sm)
                 .padding(.horizontal, ExperienceSpacing.md)
                 .onChange(of: viewModel.searchText) { _, _ in
                     viewModel.searchChanged()
@@ -253,7 +238,7 @@ struct SuggestedTradersView: View {
                 Label("View Profile", systemImage: "person.crop.circle")
             }
             Button {
-                UIPasteboard.general.string = "@\(trader.profile.username)"
+                _ = ExperienceClipboard.copy("@\(trader.profile.username)")
                 ExperienceHaptics.play(.success)
             } label: {
                 Label("Copy Username", systemImage: "doc.on.doc")

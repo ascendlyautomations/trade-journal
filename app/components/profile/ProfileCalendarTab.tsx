@@ -1,6 +1,7 @@
 "use client"
 
 import Calendar from "@/app/components/Calendar"
+import ProfilePrivateTabMessage from "./ProfilePrivateTabMessage"
 import { memo, type ComponentProps } from "react"
 import type { ProfileTradeRow } from "./profileTypes"
 
@@ -20,12 +21,7 @@ function ProfileCalendarTab({
   return (
     <div className="mt-4">
       {!canView ? (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
-          <p className="text-lg text-gray-100">Private Profile</p>
-          <p className="mt-2 text-sm text-gray-400">
-            Follow this user to see their trades and stats.
-          </p>
-        </div>
+        <ProfilePrivateTabMessage />
       ) : loading ? (
         <div className="h-[420px] animate-pulse rounded-xl border border-white/10 bg-white/5" />
       ) : (

@@ -165,6 +165,10 @@ enum ExternalDestinationIdentity {
             return "screen:analyst"
         case .backtest:
             return "screen:backtest"
+        case .backtestCalendar:
+            return "screen:backtest-calendar"
+        case .backtestTradingDay(let day):
+            return "backtest-trading-day:\(day)"
         case .achievements:
             return "screen:achievements"
         case .streaks:
@@ -183,6 +187,10 @@ enum ExternalDestinationIdentity {
             return "trading-rules-rule:\(ruleID)"
         case .tradingRulesDayDetail(let day):
             return "trading-rules-day:\(day)"
+        case .tradingRulesTrends:
+            return "screen:trading-rules-trends"
+        case .tradingRulesViolationHistory:
+            return "screen:trading-rules-violation-history"
         case .tradingScorecard:
             return "screen:trading-scorecard"
         case .psychologyCoach:
@@ -230,6 +238,10 @@ enum ExternalDestinationIdentity {
             return "trading-rules-rule:\(ruleID)"
         case .tradingRulesDayDetail(let day):
             return "trading-rules-day:\(day)"
+        case .tradingRulesTrends:
+            return "screen:trading-rules-trends"
+        case .tradingRulesViolationHistory:
+            return "screen:trading-rules-violation-history"
         }
     }
 
@@ -263,6 +275,10 @@ enum ExternalDestinationIdentity {
             return "trading-rules-rule:\(ruleID)"
         case .tradingRulesDayDetail(let day):
             return "trading-rules-day:\(day)"
+        case .tradingRulesTrends:
+            return "screen:trading-rules-trends"
+        case .tradingRulesViolationHistory:
+            return "screen:trading-rules-violation-history"
         }
     }
 
@@ -308,6 +324,10 @@ enum ExternalDestinationIdentity {
             return "trading-rules-rule:\(ruleID)"
         case .tradingRulesDayDetail(let day):
             return "trading-rules-day:\(day)"
+        case .tradingRulesTrends:
+            return "screen:trading-rules-trends"
+        case .tradingRulesViolationHistory:
+            return "screen:trading-rules-violation-history"
         }
     }
 

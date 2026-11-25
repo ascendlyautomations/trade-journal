@@ -104,11 +104,28 @@ struct DashboardPreviewContainerView: View {
                 navigationCoordinator: navigationCoordinator,
                 detailCache: data.detailCache
             )
+        case .tradingRulesTrends:
+            TradingRulesComplianceTrendsView()
+        case .tradingRulesViolationHistory:
+            TradingRulesViolationHistoryGroupsView(
+                navigationCoordinator: navigationCoordinator,
+                detailCache: data.detailCache
+            )
         case .tradingScorecard:
             TradingScorecardDetailView(
                 navigationCoordinator: navigationCoordinator,
                 data: data
             )
+        case .checkInHistory:
+            CheckInHistoryView(data: data, navigationCoordinator: navigationCoordinator)
+        case .checkInDay(let dateKey):
+            CheckInDayDetailView(
+                dateKey: dateKey,
+                data: data,
+                navigationCoordinator: navigationCoordinator
+            )
+        case .psychologyCoach:
+            previewUnavailable(message: "Psychology Coach is included with TraxsPro.")
         default:
             previewUnavailable(message: "Exit preview to use other parts of the app.")
         }

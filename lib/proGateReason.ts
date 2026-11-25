@@ -95,6 +95,7 @@ export function proLimitKindFromLegacyCode(code: string): ProLimitKind | null {
 }
 
 const TRAXPRO_FEATURE_EXCEPTIONS: Record<string, ProFeatureKind> = {
+  TRAXPRO_AI_ANALYST_REQUIRED: "ai_analyst",
   TRAXPRO_COPY_TRADING_REQUIRED: "copy_trading",
   TRAXPRO_PREMIUM_ANALYTICS_REQUIRED: "premium_analytics",
   TRAXPRO_PROP_FIRM_REQUIRED: "prop_firm",

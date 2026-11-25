@@ -35,6 +35,7 @@ struct WithdrawalDetailView: View {
     @State private var firmNameFromAccount = false
     @State private var firmStatus: String?
     @State private var isSavingFirm = false
+    @State private var showsFirmPicker = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.dismiss) private var dismiss
@@ -110,12 +111,14 @@ struct WithdrawalDetailView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle(screenTitle)
+        .navigationBarBackButtonHidden(true)
+        .experienceArrowBackToolbarButton(action: dismiss.callAsFunction)
+        .navigationInteractivePopFromLeadingEdgeOnly()
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            if historyItem?.isEditable == true {
+            if showsDetailOverflowMenu {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Edit") { beginEdit() }
-                        .accessibilityIdentifier("withdrawals.detail.edit")
+                    detailOverflowMenu
                 }
             }
         }
@@ -156,16 +159,75 @@ struct WithdrawalDetailView: View {
         .sheet(isPresented: $showsDrawdownDelete) {
             propPayoutDeleteSheet
         }
+        .sheet(isPresented: $showsFirmPicker) {
+            firmPickerSheet
+        }
         .accessibilityIdentifier("withdrawals.detail.\(historyItemID)")
+    }
+
+    private var showsDetailOverflowMenu: Bool {
+        guard let item = historyItem else { return false }
+        if item.isEditable { return true }
+        if item.source == .fundedCycle { return true }
+        return showsPropFirmFeatures(item: item, account: account)
+    }
+
+    private var showsEditAchievementAction: Bool {
+        guard let item = historyItem else { return false }
+        return showsPropFirmFeatures(item: item, account: account)
+    }
+
+    @ViewBuilder
+    private var detailOverflowMenu: some View {
+        Menu {
+            if showsEditAchievementAction {
+                Button("Edit Achievement", systemImage: "building.2") {
+                    prepareFirmPickerDraft()
+                    showsFirmPicker = true
+                }
+                .accessibilityIdentifier("withdrawals.detail.editAchievement")
+            }
+            if historyItem?.isEditable == true {
+                Button("Edit", systemImage: "square.and.pencil") {
+                    beginEdit()
+                }
+                .accessibilityIdentifier("withdrawals.detail.edit")
+                Button("Delete Withdrawal", systemImage: "trash", role: .destructive) {
+                    confirmsDelete = true
+                }
+                .accessibilityIdentifier("withdrawals.detail.delete")
+            } else if historyItem?.source == .fundedCycle {
+                Button("Delete Payout", systemImage: "trash", role: .destructive) {
+                    showsDrawdownDelete = true
+                }
+                .disabled(isDeletingPropPayout)
+                .accessibilityIdentifier("withdrawals.detail.deletePayout")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(
+                    width: ExperienceAccessibility.minTouchTarget,
+                    height: ExperienceAccessibility.minTouchTarget
+                )
+                .contentShape(Rectangle())
+                .experienceControlHitTarget()
+        }
+        .accessibilityLabel("More")
+        .accessibilityIdentifier("withdrawals.detail.overflow")
     }
 
     @ViewBuilder
     private func detailContent(item: PayoutHistoryItem, account: TradingAccount?) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                headerBlock(item: item, account: account)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                summaryCard(item: item, account: account)
                 if let cycle = cycle(for: item) {
-                    cycleFacts(cycle)
+                    payoutDetailsCard(cycle)
+                }
+                if showsPropFirmFeatures(item: item, account: account), resolvedFirmName == nil {
+                    assignPropFirmRow(item: item)
                 }
                 if account != nil, let notes = trimmedNotes(item.note) {
                     notesBlock(notes)
@@ -173,129 +235,221 @@ struct WithdrawalDetailView: View {
                 if let imageURL = trimmedNotes(item.imageURL), let url = URL(string: imageURL) {
                     pictureBlock(url)
                 }
-                if PayoutHistorySupport.isPropPayout(item, account: account)
-                    || item.source == .achievementLive
-                    || item.source == .achievementProp {
-                    firmAssignmentBlock(item: item)
-                }
                 if let account {
                     achievementActionBlock(item: item, account: account)
                 }
-                if item.isEditable {
-                    Button("Delete Withdrawal", role: .destructive) {
-                        confirmsDelete = true
-                    }
-                    .accessibilityIdentifier("withdrawals.detail.delete")
-                } else if item.source == .fundedCycle {
-                    Button("Delete Payout", role: .destructive) {
-                        showsDrawdownDelete = true
-                    }
-                    .disabled(isDeletingPropPayout)
-                    .accessibilityIdentifier("withdrawals.detail.deletePayout")
-                }
             }
             .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.lg)
+            .padding(.vertical, ExperienceSpacing.md)
         }
     }
 
-    private func headerBlock(item: PayoutHistoryItem, account: TradingAccount?) -> some View {
+    private func summaryCard(item: PayoutHistoryItem, account: TradingAccount?) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text(ProfileDisplay.formatMoney(item.amount))
-                .font(.system(.largeTitle, design: .rounded).weight(.semibold).monospacedDigit())
+            Text(formatPayoutMoney(item.amount))
+                .font(.system(.title2, design: .rounded).weight(.semibold).monospacedDigit())
                 .foregroundStyle(colors.primaryText)
 
-            Text(accountLine(account: account, item: item))
-                .experienceStyle(.body, color: colors.secondaryText)
-
-            Text(TradeDisplay.dateText(item.date))
-                .experienceStyle(.subheadline, color: colors.tertiaryText)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                if showsPropFirmFeatures(item: item, account: account), let firm = resolvedFirmName {
+                    propFirmSummaryRow(firmName: firm)
+                }
+                Text(accountTypeLine(account: account, item: item))
+                    .experienceStyle(.subheadline, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(TradeDisplay.dateText(item.date))
+                    .experienceStyle(.caption, color: colors.tertiaryText)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(ExperienceSpacing.md)
+        .experienceDashboardCard(prominence: .standard)
     }
 
-    private func cycleFacts(_ cycle: AccountPayoutCycle) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            if let before = cycle.balanceBeforePayout {
-                factRow("Balance before", DashboardViewModel.money(before))
-            }
-            if let after = cycle.balanceAfterPayout {
-                factRow("Balance after", DashboardViewModel.money(after))
-            }
-            if let behavior = cycle.drawdownBehavior {
-                factRow("Drawdown", behavior.title)
-            }
-            if let number = cycle.cycleNumber {
-                factRow("Cycle", "\(number)")
+    private func propFirmSummaryRow(firmName: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
+            Text("Prop firm")
+                .experienceStyle(.caption, color: colors.tertiaryText)
+            Text(firmName)
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func payoutDetailsCard(_ cycle: AccountPayoutCycle) -> some View {
+        let rows = payoutDetailRows(for: cycle)
+        return VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                detailFactRow(row.label, row.value)
+                if index < rows.count - 1 {
+                    payoutDetailDivider()
+                }
             }
         }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.xs)
+        .experienceDashboardCard(prominence: .standard)
     }
 
-    private func factRow(_ title: String, _ value: String) -> some View {
-        HStack {
+    private func payoutDetailRows(for cycle: AccountPayoutCycle) -> [(label: String, value: String)] {
+        var rows: [(String, String)] = []
+        if let before = cycle.balanceBeforePayout {
+            rows.append(("Balance Before", formatPayoutMoney(before)))
+        }
+        if let after = cycle.balanceAfterPayout {
+            rows.append(("Balance After", formatPayoutMoney(after)))
+        }
+        if let behavior = cycle.drawdownBehavior {
+            rows.append(("Drawdown", behavior.title))
+        }
+        if let number = cycle.cycleNumber {
+            rows.append(("Cycle", "\(number)"))
+        }
+        return rows
+    }
+
+    private func payoutDetailDivider() -> some View {
+        ExperienceDivider()
+    }
+
+    private func detailFactRow(_ title: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
             Text(title)
                 .experienceStyle(.subheadline, color: colors.secondaryText)
             Spacer(minLength: ExperienceSpacing.sm)
             Text(value)
-                .experienceStyle(.subheadline, color: colors.primaryText)
+                .font(.system(.subheadline, design: .rounded).weight(.medium).monospacedDigit())
+                .foregroundStyle(colors.primaryText)
+                .multilineTextAlignment(.trailing)
         }
+        .padding(.vertical, ExperienceSpacing.xs + 2)
     }
 
-    private func firmAssignmentBlock(item: PayoutHistoryItem) -> some View {
-        let current = assignedFirmName ?? linkedFirmName
-        return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Prop firm")
-                .experienceStyle(.headline, color: colors.primaryText)
-            Text(current ?? "Unassigned")
-                .experienceStyle(.body, color: colors.primaryText)
-            if assignedFirmName == nil, linkedFirmName != nil {
-                Text(firmNameFromAccount ? "From the account name" : "From the linked expense")
-                    .experienceStyle(.caption, color: colors.secondaryText)
+    private func assignPropFirmRow(item: PayoutHistoryItem) -> some View {
+        Button {
+            prepareFirmPickerDraft()
+            showsFirmPicker = true
+        } label: {
+            HStack(spacing: ExperienceSpacing.sm) {
+                Text("Assign Prop Firm")
+                    .experienceStyle(.subheadline, color: colors.accent)
+                    .fontWeight(.semibold)
+                Spacer(minLength: ExperienceSpacing.xs)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(colors.tertiaryText)
             }
-            Text("Assigning a firm updates the expense tracker for this payout. The payout amount and account balance stay the same.")
-                .experienceStyle(.caption, color: colors.secondaryText)
-            if !firmSuggestions.isEmpty {
-                Menu {
-                    ForEach(firmSuggestions, id: \.self) { name in
-                        Button(name) { firmDraft = name }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        }
+        .buttonStyle(.experiencePlain)
+        .experienceDashboardCard(prominence: .standard)
+        .accessibilityIdentifier("withdrawals.detail.assignFirm")
+    }
+
+    private var firmPickerSheet: some View {
+        NavigationStack {
+            List {
+                if !firmSuggestions.isEmpty {
+                    Section("Existing firms") {
+                        ForEach(firmSuggestions, id: \.self) { name in
+                            Button {
+                                firmDraft = name
+                            } label: {
+                                HStack {
+                                    Text(name)
+                                        .foregroundStyle(colors.primaryText)
+                                    Spacer(minLength: 0)
+                                    if firmDraft == name {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(colors.accent)
+                                    }
+                                }
+                            }
+                        }
                     }
-                } label: {
-                    Text("Use an existing firm")
-                        .experienceStyle(.subheadline, color: colors.accent)
+                }
+                Section("Firm name") {
+                    TextField("Apex, Topstep", text: $firmDraft)
+                        .textInputAutocapitalization(.words)
+                        .accessibilityLabel("Prop firm name")
+                }
+                if let firmStatus, !firmStatus.isEmpty {
+                    Section {
+                        Text(firmStatus)
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                    }
+                }
+                if assignedFirmName != nil, let item = historyItem {
+                    Section {
+                        Button("Remove assignment", role: .destructive) {
+                            Task {
+                                await clearFirm(for: item)
+                                showsFirmPicker = false
+                            }
+                        }
+                        .disabled(isSavingFirm)
+                    }
                 }
             }
-            TextField("Apex, Topstep", text: $firmDraft)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("Prop firm name")
-            if let firmStatus {
-                Text(firmStatus)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-            }
-            ExperienceButton(
-                title: isSavingFirm ? "Saving…" : "Assign to prop firm",
-                kind: .primary
-            ) {
-                Task { await saveFirm(for: item) }
-            }
-            .disabled(isSavingFirm)
-            .accessibilityIdentifier("withdrawals.detail.assignFirm")
-            if assignedFirmName != nil {
-                Button {
-                    Task { await clearFirm(for: item) }
-                } label: {
-                    Text("Remove assignment")
-                        .experienceStyle(.subheadline, color: colors.secondaryText)
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .experienceScreenBackground()
+            .experienceNavigationTitle("Edit Achievement")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showsFirmPicker = false }
+                        .disabled(isSavingFirm)
                 }
-                .disabled(isSavingFirm)
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSavingFirm ? "Saving…" : "Save") {
+                        guard let item = historyItem else { return }
+                        Task {
+                            if await saveFirm(for: item) {
+                                showsFirmPicker = false
+                            }
+                        }
+                    }
+                    .disabled(
+                        isSavingFirm
+                        || firmDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(ExperienceSpacing.sm)
-        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
+        .experienceSheetChrome(detents: [.medium, .large])
     }
 
-    private func saveFirm(for item: PayoutHistoryItem) async {
-        guard let userID = await data.session.currentUserID else { return }
+    private func prepareFirmPickerDraft() {
+        if firmDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let assigned = assignedFirmName {
+                firmDraft = assigned
+            } else if let linked = linkedFirmName {
+                firmDraft = linked
+            }
+        }
+    }
+
+    private func showsPropFirmFeatures(item: PayoutHistoryItem, account: TradingAccount?) -> Bool {
+        PayoutHistorySupport.isPropPayout(item, account: account)
+            || item.source == .achievementLive
+            || item.source == .achievementProp
+    }
+
+    private var resolvedFirmName: String? {
+        assignedFirmName ?? linkedFirmName
+    }
+
+    private func formatPayoutMoney(_ value: Decimal) -> String {
+        NumberDisplay.currency(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
+    }
+
+    @discardableResult
+    private func saveFirm(for item: PayoutHistoryItem) async -> Bool {
+        guard let userID = await data.session.currentUserID else { return false }
         isSavingFirm = true
         firmStatus = nil
         defer { isSavingFirm = false }
@@ -310,9 +464,11 @@ struct WithdrawalDetailView: View {
             assignedFirmName = saved
             firmDraft = saved
             PropFirmPayoutAssignmentStore.shared.set(name: saved, for: item.id)
-            firmStatus = "Firm saved for this payout."
+            await refreshAfterFirmAssignmentChanged(for: item)
+            return true
         } catch {
             firmStatus = UserFacingError.message(for: error)
+            return false
         }
     }
 
@@ -330,9 +486,15 @@ struct WithdrawalDetailView: View {
             firmDraft = ""
             PropFirmPayoutAssignmentStore.shared.set(name: nil, for: item.id)
             firmStatus = nil
+            await refreshAfterFirmAssignmentChanged(for: item)
         } catch {
             firmStatus = UserFacingError.message(for: error)
         }
+    }
+
+    private func refreshAfterFirmAssignmentChanged(for item: PayoutHistoryItem) async {
+        await loadFirmAssignment(for: item)
+        NotificationCenter.default.post(name: .propFirmPayoutAssignmentsDidChange, object: nil)
     }
 
     private func loadFirmAssignment(for item: PayoutHistoryItem) async {
@@ -369,9 +531,10 @@ struct WithdrawalDetailView: View {
     }
 
     private func pictureBlock(_ url: URL) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text("Picture")
-                .experienceStyle(.headline, color: colors.primaryText)
+                .experienceStyle(.subheadline, color: colors.secondaryText)
+                .fontWeight(.semibold)
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
@@ -386,19 +549,24 @@ struct WithdrawalDetailView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
         }
+        .padding(ExperienceSpacing.md)
+        .experienceDashboardCard(prominence: .standard)
     }
 
     private func notesBlock(_ notes: String) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text("Notes")
-                .experienceStyle(.headline, color: colors.primaryText)
+                .experienceStyle(.subheadline, color: colors.secondaryText)
+                .fontWeight(.semibold)
             Text(notes)
                 .experienceStyle(.body, color: colors.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
         }
+        .padding(ExperienceSpacing.md)
+        .experienceDashboardCard(prominence: .standard)
     }
 
     @ViewBuilder
@@ -426,6 +594,7 @@ struct WithdrawalDetailView: View {
             ExperienceButton(title: "Post as Achievement", kind: .primary) {
                 postAsAchievement(item: item, account: account)
             }
+            .frame(maxWidth: .infinity)
             .accessibilityIdentifier("withdrawals.detail.postAsAchievement")
         }
     }
@@ -438,7 +607,7 @@ struct WithdrawalDetailView: View {
         navigationCoordinator.openComposeAchievement()
     }
 
-    private func accountLine(account: TradingAccount?, item: PayoutHistoryItem) -> String {
+    private func accountTypeLine(account: TradingAccount?, item: PayoutHistoryItem) -> String {
         let kind = PayoutHistorySupport.isPropPayout(item, account: account) ? "Prop payout" : "Live withdrawal"
         guard let account else {
             let title = item.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

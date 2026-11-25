@@ -173,6 +173,7 @@ final class ExploreViewModel {
             guard hydrateTask == nil else { return }
             hydrateTask = Task {
                 defer { hydrateTask = nil }
+                await resolveViewerID()
                 await DiscoveryBlockedPeersObserver.sync(messages: messages, force: false)
                 applyBlockedPeersToVisibleDiscovery()
             }
@@ -180,6 +181,7 @@ final class ExploreViewModel {
         }
         guard bootstrapTask == nil else { return }
         bootstrapTask = Task {
+            await resolveViewerID()
             await bootstrap()
             bootstrapTask = nil
         }
@@ -304,19 +306,36 @@ final class ExploreViewModel {
 
     var pendingUnfollow: ExploreTraderSuggestion?
 
+    /// Search results, optimistic follow/unfollow without confirmation (matches Suggested Traders).
+    func toggleSearchFollow(_ trader: ExploreTraderSuggestion) {
+        Task {
+            await resolveViewerID()
+            guard let viewerID, viewerID != trader.id else { return }
+            if AppLaunchController.shared.isDemoExperienceActive {
+                DemoModeAuthGatePresenter.shared.requireAuthentication()
+                return
+            }
+            guard !inFlightFollow.contains(trader.id) else { return }
+            performFollowChange(trader, currentlyFollowing: isFollowing(trader))
+        }
+    }
+
     func toggleFollow(_ trader: ExploreTraderSuggestion) {
-        guard let viewerID, viewerID != trader.id else { return }
-        if AppLaunchController.shared.isDemoExperienceActive {
-            DemoModeAuthGatePresenter.shared.requireAuthentication()
-            return
+        Task {
+            await resolveViewerID()
+            guard let viewerID, viewerID != trader.id else { return }
+            if AppLaunchController.shared.isDemoExperienceActive {
+                DemoModeAuthGatePresenter.shared.requireAuthentication()
+                return
+            }
+            guard !inFlightFollow.contains(trader.id) else { return }
+            if isFollowing(trader) {
+                ExperienceHaptics.play(.warning)
+                pendingUnfollow = trader
+                return
+            }
+            performFollowChange(trader, currentlyFollowing: false)
         }
-        guard !inFlightFollow.contains(trader.id) else { return }
-        if isFollowing(trader) {
-            ExperienceHaptics.play(.warning)
-            pendingUnfollow = trader
-            return
-        }
-        performFollowChange(trader, currentlyFollowing: false)
     }
 
     func confirmUnfollow() {
@@ -417,20 +436,45 @@ final class ExploreViewModel {
     }
 
     func joinSearchRoom(_ room: ExploreRoomSuggestion) async {
+        await resolveViewerID()
         guard let viewerID else { return }
         let prior = joinState(for: room.id)
         guard TradeRoomJoinPresentation.isInteractive(prior) else { return }
 
+        let inboxStore = MessagesInboxStore.shared
         let result = await joinCoordinator.performJoinAction(
             room: room,
             viewerID: viewerID,
-            rooms: rooms
+            rooms: rooms,
+            inboxStore: inboxStore
         )
 
         if result == .joined {
             patchSearchRoomJoined(room.id)
         } else if result == .requested {
             patchSearchRoomRequested(room.id)
+        }
+    }
+
+    func leaveSearchRoom(_ room: ExploreRoomSuggestion) async {
+        await resolveViewerID()
+        guard let viewerID else { return }
+        guard room.ownerProfileID != viewerID else { return }
+        guard joinState(for: room.id) == .joined else { return }
+        let inboxStore = MessagesInboxStore.shared
+        ExperienceHaptics.play(.warning)
+        do {
+            try await rooms.leave(roomID: room.id, profileID: viewerID)
+            TradeRoomMembershipSync.applyLeft(
+                roomID: room.id,
+                viewerID: viewerID,
+                inboxStore: inboxStore
+            )
+            SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
+            patchSearchRoomLeft(room.id)
+            ExperienceHaptics.play(.success)
+        } catch {
+            ExperienceHaptics.play(.warning)
         }
     }
 
@@ -575,6 +619,7 @@ final class ExploreViewModel {
                 following: applied.followingIDs,
                 tradersNextCursor: applied.tradersNextCursor
             )
+            seedFollowingRelationshipsIfNeeded(applied.followingIDs)
             phase = .loaded
             #if DEBUG
             lastProbe = ExploreLoadProbe.firstUsefulRender(
@@ -677,6 +722,27 @@ final class ExploreViewModel {
         let following = await loadFollowingIDs()
         guard !Task.isCancelled else { return }
         store.updateFollowing(following)
+        if let viewerID {
+            FollowMutationCoordinator.shared.seedViewerFollowingRelationships(
+                ids: following,
+                viewer: viewerID
+            )
+        }
+    }
+
+    private func resolveViewerID() async {
+        if viewerID != nil { return }
+        if let raw = await session.currentUserID?.rawValue {
+            viewerID = ProfileID(raw)
+        }
+    }
+
+    private func seedFollowingRelationshipsIfNeeded(_ following: Set<ProfileID>) {
+        guard let viewerID else { return }
+        FollowMutationCoordinator.shared.seedViewerFollowingRelationships(
+            ids: following,
+            viewer: viewerID
+        )
     }
 
     private func enrichTradersWithActivity() async {
@@ -751,6 +817,7 @@ final class ExploreViewModel {
     }
 
     private func performSearch(query: String, generation: UInt64) async {
+        await resolveViewerID()
         do {
             async let peoplePage = search.search(
                 query: query,
@@ -838,7 +905,7 @@ final class ExploreViewModel {
             store.updateAvatarConfirmedAbsent(searchConfirmedAbsent)
             guard !Task.isCancelled, generation == searchGeneration else { return }
             searchPeople = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(hydratedPeople)
-            searchRooms = roomHits
+            searchRooms = TradeRoomMembershipSync.applyMembershipFlags(to: roomHits)
             searchPhase = .idle
         } catch {
             guard !Task.isCancelled, generation == searchGeneration else { return }
@@ -886,7 +953,19 @@ final class ExploreViewModel {
 
     private func patchSearchRoomJoined(_ roomID: RoomID) {
         guard let index = searchRooms.firstIndex(where: { $0.id == roomID }) else { return }
-        searchRooms[index].isJoined = true
+        var updated = searchRooms[index]
+        updated.isJoined = true
+        updated.isMember = true
+        updated.viewerJoinRequestState = nil
+        searchRooms[index] = TradeRoomMembershipSync.patchExploreRoomSuggestion(updated)
+    }
+
+    private func patchSearchRoomLeft(_ roomID: RoomID) {
+        guard let index = searchRooms.firstIndex(where: { $0.id == roomID }) else { return }
+        var updated = searchRooms[index]
+        updated.isJoined = false
+        updated.isMember = false
+        searchRooms[index] = updated
     }
 
     func applyRoomMetadata(_ room: TradeRoom) {

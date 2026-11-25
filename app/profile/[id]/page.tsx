@@ -1690,6 +1690,13 @@ function ProfilePageContent() {
     async function fetchProfileAchievements() {
       const isOwner =
         currentUserId != null && String(currentUserId) === String(profile.id)
+      if (!isOwner && !canViewTrades) {
+        if (!cancelled) {
+          setAchievements([])
+          setAchievementsReady(true)
+        }
+        return
+      }
       if (isOwner) {
         const cached = getOwnAchievementsSnapshot(profile.id)
         if (cached) {
@@ -1737,6 +1744,7 @@ function ProfilePageContent() {
   }, [
     achievementsReady,
     achievementsRequested,
+    canViewTrades,
     currentUserId,
     profile?.id,
     profileId,
@@ -3899,6 +3907,7 @@ function ProfilePageContent() {
   const {
     sortedTrades,
     overviewStatsVisible,
+    publicHeaderStatsOnly,
     overviewTotalTrades,
     overviewWinRate,
     overviewTotalPnL,
@@ -4365,6 +4374,7 @@ function ProfilePageContent() {
               })()
             }}
             overviewVisible={overviewStatsVisible}
+            overviewPublicHeaderOnly={publicHeaderStatsOnly}
             overviewIsPrivate={profile.is_private === true}
             overviewTotalTrades={overviewTotalTrades}
             overviewPostsCount={overviewPostsCount}
@@ -4378,6 +4388,7 @@ function ProfilePageContent() {
           <div className="min-w-0">
           <ProfileOverviewStats
             visible={overviewStatsVisible}
+            publicHeaderOnly={publicHeaderStatsOnly}
             isPrivate={profile.is_private === true}
             totalTrades={overviewTotalTrades}
             winRate={overviewWinRate}
@@ -4563,6 +4574,7 @@ function ProfilePageContent() {
 
             {activeTab === "achievements" && (
               <ProfileAchievementsTab
+                canView={canViewTrades}
                 ready={achievementsReady}
                 achievements={achievements}
                 profileUserId={String(profile.id)}

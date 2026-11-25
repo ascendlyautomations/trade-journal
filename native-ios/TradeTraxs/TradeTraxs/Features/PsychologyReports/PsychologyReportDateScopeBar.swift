@@ -1,73 +1,74 @@
 import SwiftUI
 
-struct PsychologyReportDateScopeBar: View {
+/// Compact time-scope menu for the psychology report navigation bar.
+struct PsychologyReportDateScopeToolbarMenu: View {
     @Bindable var viewModel: PsychologyReportDetailViewModel
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var chevronColor: Color {
+        colorScheme == .light ? colors.secondaryText : colors.tertiaryText
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ExperienceSpacing.xs) {
-                    ForEach(PsychologyReportTimePreset.allCases) { preset in
-                        presetChip(preset)
-                    }
-                    customChip
-                }
-                .padding(.vertical, ExperienceSpacing.xxs)
-            }
-        }
-        .accessibilityIdentifier("psychologyReport.dateScope")
-    }
-
-  private func presetChip(_ preset: PsychologyReportTimePreset) -> some View {
-        let selected: Bool = {
-            if case .preset(let current) = viewModel.selectedTimeScope {
-                return current == preset
-            }
-            return false
-        }()
-        return Button {
-            viewModel.selectPreset(preset)
-        } label: {
-            Text(preset.menuTitle)
-                .experienceStyle(.footnote, color: selected ? colors.accent : colors.primaryText)
-                .fontWeight(selected ? .semibold : .regular)
-                .padding(.horizontal, ExperienceSpacing.sm)
-                .frame(minHeight: 32)
-                .tradingRulesFilterChip()
-                .overlay {
-                    if selected {
-                        RoundedRectangle(cornerRadius: ExperienceRadius.chip, style: .continuous)
-                            .stroke(colors.accent.opacity(0.5), lineWidth: 1)
+        Menu {
+            ForEach(PsychologyReportTimePreset.allCases) { preset in
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    viewModel.selectPreset(preset)
+                } label: {
+                    if isSelected(preset) {
+                        Label(preset.menuTitle, systemImage: "checkmark")
+                    } else {
+                        Text(preset.menuTitle)
                     }
                 }
-        }
-        .buttonStyle(.experiencePlain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private var customChip: some View {
-        let selected: Bool = {
-            if case .custom = viewModel.selectedTimeScope { return true }
-            return false
-        }()
-        return Button {
-            viewModel.openCustomDateSheet()
+            }
+            Divider()
+            Button {
+                ExperienceHaptics.play(.selection)
+                viewModel.openCustomDateSheet()
+            } label: {
+                if case .custom = viewModel.selectedTimeScope {
+                    Label(customMenuTitle, systemImage: "checkmark")
+                } else {
+                    Text("Custom")
+                }
+            }
         } label: {
             HStack(spacing: 4) {
-                Text(selected ? viewModel.timeScopeMenuTitle : "Custom")
-                    .experienceStyle(.footnote, color: selected ? colors.accent : colors.primaryText)
-                    .fontWeight(selected ? .semibold : .regular)
+                Text(viewModel.timeScopeMenuTitle)
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                    .fontWeight(colorScheme == .light ? .semibold : .regular)
                     .lineLimit(1)
-                ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.tertiaryText)
+                    .minimumScaleFactor(0.85)
+                ExperienceIcon(icon: .chevronDown, size: .xs, color: chevronColor)
+                    .fontWeight(.semibold)
             }
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
-            .tradingRulesFilterChip()
+            .experienceFilterCapsule()
         }
-        .buttonStyle(.experiencePlain)
-        .accessibilityLabel("Custom date range")
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Report date range")
+        .accessibilityValue(viewModel.timeScopeMenuTitle)
+        .accessibilityIdentifier("psychologyReport.dateScope")
+    }
+
+    private var customMenuTitle: String {
+        if case .custom = viewModel.selectedTimeScope {
+            return viewModel.timeScopeMenuTitle
+        }
+        return "Custom"
+    }
+
+    private func isSelected(_ preset: PsychologyReportTimePreset) -> Bool {
+        if case .preset(let current) = viewModel.selectedTimeScope {
+            return current == preset
+        }
+        return false
     }
 }
 

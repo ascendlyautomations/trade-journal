@@ -16,6 +16,7 @@ nonisolated enum LeaderboardBootstrapApplier {
         var win_streak: Int?
         var profit_percent: PostgresFlexibleDouble?
         var consistency: PostgresFlexibleDouble?
+        var payout_total: PostgresFlexibleDouble?
     }
 
     struct Applied: Sendable {
@@ -83,7 +84,8 @@ nonisolated enum LeaderboardBootstrapApplier {
                 expectancy: wire.expectancy?.decimal,
                 winStreak: wire.win_streak ?? 0,
                 profitPercent: wire.profit_percent?.decimal,
-                consistency: wire.consistency?.decimal
+                consistency: wire.consistency?.decimal,
+                payoutTotal: wire.payout_total?.decimal
             )
             entries.append(entry)
         }

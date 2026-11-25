@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+extension Notification.Name {
+    /// Payout prop-firm assignment changed on detail; expense tracker should adopt ``PropFirmPayoutAssignmentStore``.
+    static let propFirmPayoutAssignmentsDidChange = Notification.Name("propFirmPayoutAssignmentsDidChange")
+}
+
 /// In-memory owner labels so the expense tracker sees a firm saved from a payout detail.
 @MainActor
 @Observable

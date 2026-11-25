@@ -111,6 +111,8 @@ private final class StubNotificationRepository: NotificationRepository, @uncheck
     func unreadCount() async throws -> Int { 0 }
     func markRead(id: NotificationID) async throws {}
     func markRead(ids: [NotificationID]) async throws -> Int { 0 }
+    func markUnread(id: NotificationID) async throws {}
+    func markUnread(ids: [NotificationID]) async throws -> Int { 0 }
     func markMessageNotificationsRead() async throws -> Int { 0 }
     func markRoomNotificationsRead(roomID: RoomID, slug: String?) async throws -> Int { 0 }
     func markAllRead() async throws {}

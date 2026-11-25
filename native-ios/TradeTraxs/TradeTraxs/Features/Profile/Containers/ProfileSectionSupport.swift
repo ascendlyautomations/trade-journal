@@ -7,10 +7,7 @@ nonisolated enum ProfileSectionSupport {
     }
 
     static func message(for error: Error) -> String {
-        if let app = error as? AppError {
-            return UserFacingError.map(app).message
-        }
-        return UserFacingError.map(AppError.unknown(message: error.localizedDescription)).message
+        UserFacingError.message(for: error)
     }
 
     /// Reconciles a bootstrap snapshot with an already-loaded section list.

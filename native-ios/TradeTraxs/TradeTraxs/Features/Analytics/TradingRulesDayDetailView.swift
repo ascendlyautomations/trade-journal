@@ -51,6 +51,9 @@ struct TradingRulesDayDetailView: View {
                                 TradingRulesViolationEventRow(
                                     event: event,
                                     onOpenTrade: { tradeID in
+                                        guard TradingRulesAnalyticsPreviewSupport.allowsTradeDetailNavigation(
+                                            tradeID: tradeID
+                                        ) else { return }
                                         navigationCoordinator.pushTradeDetail(tradeID, cache: detailCache)
                                     }
                                 )
@@ -67,6 +70,11 @@ struct TradingRulesDayDetailView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle(dayRow?.displayDate ?? dayKey)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+                TradingRulesAnalyticsSampleDataBanner(compactListSubtitle: true)
+            }
+        }
         .accessibilityIdentifier("tradingRulesAnalytics.dayDetail")
     }
 }

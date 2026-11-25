@@ -28,6 +28,7 @@ import { tradeRoomBroadcastGlobalChromeVisible } from "@/lib/livekit/client/trad
 import { shouldShowBroadcastEnableSound } from "@/lib/livekit/mobileWebLivePolicy.ts"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
+import BroadcastLiveReactionOverlay from "./BroadcastLiveReactionOverlay.tsx"
 
 type Props = {
   accessToken: string | null
@@ -284,6 +285,7 @@ export default function TradeRoomBroadcastViewerStudioChrome({
           <span className="absolute right-2 top-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white/90">
             {broadcast.localViewerCount || broadcast.status.viewerCount || 0} watching
           </span>
+          <BroadcastLiveReactionOverlay reactions={broadcast.floatingReactions} />
         </div>
         {speakInviteBanner ? (
           <div className="border-t border-white/10 bg-zinc-950/95 p-2">{speakInviteBanner}</div>
@@ -389,6 +391,7 @@ export default function TradeRoomBroadcastViewerStudioChrome({
             muted={broadcast.streamListenMuted && !broadcast.isInConversation}
             playsInline
           />
+          <BroadcastLiveReactionOverlay reactions={broadcast.floatingReactions} />
         </>
       }
       sidebar={

@@ -50,6 +50,10 @@ final class CheckInHistoryViewModel: ScreenLifecycle {
 
     private func load(forceNetwork: Bool) async {
         state.phase = .loading
+        if PsychologyAnalyticsPreviewSupport.usesSampleCheckInHistory {
+            await loadSampleCheckInHistory()
+            return
+        }
         do {
             guard let userID = await session.currentUserID else {
                 state.phase = .failed("Sign in to view check-in history.")
@@ -90,8 +94,16 @@ final class CheckInHistoryViewModel: ScreenLifecycle {
             state.didBootstrap = true
             state.phase = .loaded
         } catch {
-            state.phase = .failed(error.localizedDescription)
+            state.phase = .failed(UserFacingError.message(for: error))
         }
+    }
+
+    private func loadSampleCheckInHistory() async {
+        PsychologyAnalyticsPreviewSupport.seedCheckInHistorySessionIfNeeded()
+        let summaries = CheckInHistorySessionStore.shared.summaries
+        state.summaries = summaries
+        state.didBootstrap = true
+        state.phase = summaries.isEmpty ? .loaded : .loaded
     }
 }
 

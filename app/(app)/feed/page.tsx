@@ -2572,14 +2572,19 @@ function FeedPageContent() {
       post: any,
       text: string,
       parentCommentId?: string | null,
-      retryTempId?: string | null
+      retryTempId?: string | null,
+      sharedTradeId?: string | null
     ) => {
       if (guardDemoFeedWrite("comment")) return false
       if (!user) return false
 
       const pid = String(post.id)
       const trimmed = (text || "").trim()
-      if (!trimmed) return false
+      const shared =
+        sharedTradeId != null && String(sharedTradeId).trim() !== ""
+          ? String(sharedTradeId).trim()
+          : null
+      if (!trimmed && !shared) return false
       if (commentSubmittingRef.current.has(pid)) return false
 
       commentSubmittingRef.current.add(pid)
@@ -2605,6 +2610,7 @@ function FeedPageContent() {
           user_id: user.id,
           created_at: new Date().toISOString(),
           parent_comment_id: parentCommentId ?? null,
+          shared_trade_id: shared,
           sync_status: "posting",
           profiles: { username: null, avatar_url: null },
         }
@@ -2621,9 +2627,10 @@ function FeedPageContent() {
         const insertPayload = {
           profile_post_id: pid,
           user_id: user.id,
-          content: trimmed,
+          content: trimmed || null,
           ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
-        } satisfies TableInsert<"profile_post_comments">
+          ...(shared ? { shared_trade_id: shared } : {}),
+        } as TableInsert<"profile_post_comments">
 
         const { data: newRow, error } = await supabase
           .from("profile_post_comments")
@@ -2677,9 +2684,10 @@ function FeedPageContent() {
         const insertPayload = {
           reel_id: pid,
           user_id: user.id,
-          content: trimmed,
+          content: trimmed || null,
           ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
-        } satisfies TableInsert<"reel_comments">
+          ...(shared ? { shared_trade_id: shared } : {}),
+        } as TableInsert<"reel_comments">
 
         const { data: newRow, error } = await supabase
           .from("reel_comments")
@@ -2733,9 +2741,10 @@ function FeedPageContent() {
         const insertPayload = {
           achievement_post_id: pid,
           user_id: user.id,
-          content: trimmed,
+          content: trimmed || null,
           ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
-        } satisfies TableInsert<"achievement_post_comments">
+          ...(shared ? { shared_trade_id: shared } : {}),
+        } as TableInsert<"achievement_post_comments">
 
         const { data: newRow, error } = await supabase
           .from("achievement_post_comments")
@@ -2788,9 +2797,10 @@ function FeedPageContent() {
       const insertPayload = {
         post_id: pid,
         user_id: user.id,
-        content: trimmed,
+        content: trimmed || null,
         ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
-      } satisfies TableInsert<"comments">
+        ...(shared ? { shared_trade_id: shared } : {}),
+      } as TableInsert<"comments">
 
       const { data: newRow, error } = await supabase
         .from("comments")

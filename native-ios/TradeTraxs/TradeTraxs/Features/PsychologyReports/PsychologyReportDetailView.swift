@@ -46,15 +46,8 @@ struct PsychologyReportDetailView: View {
     private func reportScroll(_ report: PsychologyReport) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ReportDetailLayout.sectionSpacing) {
-                if viewModel.supportsDateScope {
-                    PsychologyReportDateScopeBar(viewModel: viewModel)
-                }
-
                 PsychologyReportCoverageCard(report: report)
-                    .padding(
-                        .top,
-                        viewModel.supportsDateScope ? 0 : ReportDetailLayout.headerToFirstSectionSpacing
-                    )
+                    .padding(.top, ReportDetailLayout.headerToFirstSectionSpacing)
 
                 if let insight = PsychologyReportChartPlanner.primaryInsight(for: report) {
                     PsychologyReportPrimaryInsightCard(card: insight)
@@ -92,7 +85,7 @@ struct PsychologyReportDetailView: View {
 }
 
 private struct PsychologyReportNavigationChrome: ViewModifier {
-    let viewModel: PsychologyReportDetailViewModel
+    @Bindable var viewModel: PsychologyReportDetailViewModel
 
     @Environment(\.themeColors) private var colors
 
@@ -100,8 +93,10 @@ private struct PsychologyReportNavigationChrome: ViewModifier {
         content
             .experienceNavigationTitle(viewModel.title)
             .toolbar {
-                if let range = viewModel.dateRangeLabel {
-                    ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if viewModel.supportsDateScope {
+                        PsychologyReportDateScopeToolbarMenu(viewModel: viewModel)
+                    } else if let range = viewModel.dateRangeLabel {
                         Text(range)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(colors.secondaryText)

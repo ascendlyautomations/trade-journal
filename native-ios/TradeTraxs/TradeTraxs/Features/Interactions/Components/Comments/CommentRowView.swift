@@ -5,6 +5,7 @@ struct CommentRowView: View {
     let comment: InteractionComment
     let isOwn: Bool
     let imagePipeline: any ImagePipeline
+    var sharedTrade: Trade? = nil
     let likeSnapshot: CommentLikeSnapshot
     let canLike: Bool
     let isLikeBusy: Bool
@@ -16,6 +17,7 @@ struct CommentRowView: View {
     var onDelete: (() -> Void)?
 
     var onReport: (() -> Void)? = nil
+    var onSharedTradeTap: ((TradeID) -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
@@ -61,9 +63,21 @@ struct CommentRowView: View {
                         .experienceStyle(.caption, color: colors.tertiaryText)
                     Spacer(minLength: 0)
                 }
-                Text(comment.body)
-                    .experienceStyle(.body, color: colors.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !comment.body.isEmpty {
+                    Text(comment.body)
+                        .experienceStyle(.body, color: colors.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let tradeID = comment.sharedTradeID {
+                    CommentSharedTradeCard(
+                        trade: sharedTrade,
+                        tradeID: tradeID,
+                        imagePipeline: imagePipeline,
+                        onTap: { onSharedTradeTap?(tradeID) }
+                    )
+                    .padding(.top, comment.body.isEmpty ? 0 : ExperienceSpacing.xxs)
+                }
 
                 HStack(spacing: ExperienceSpacing.sm) {
                     CommentLikeButton(
@@ -88,7 +102,7 @@ struct CommentRowView: View {
         .contentShape(Rectangle())
         .contextMenu {
             Button {
-                UIPasteboard.general.string = comment.body
+                _ = ExperienceClipboard.copy(comment.body)
                 ExperienceHaptics.play(.success)
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")

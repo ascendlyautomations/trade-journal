@@ -74,7 +74,7 @@ enum ProfileBootstrap: ScreenBootstrap {
                 if BackendV2FeatureFlags.isEnabled(.profile) {
                     state.phase = .failed
                     state.errorMessage = UserFacingError.map(
-                        error as? AppError ?? AppError.unknown(message: error.localizedDescription)
+                        error as? AppError ?? AppError.unknown(message: UserFacingError.message(for: error))
                     ).message
                     return state
                 }
@@ -124,9 +124,7 @@ enum ProfileBootstrap: ScreenBootstrap {
             // Keep prior snapshot.
         } catch {
             state.phase = state.profile == nil ? .failed : state.phase
-            state.errorMessage = UserFacingError.map(
-                error as? AppError ?? AppError.unknown(message: error.localizedDescription)
-            ).message
+            state.errorMessage = UserFacingError.message(for: error)
         }
 
         return state

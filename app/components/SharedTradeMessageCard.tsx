@@ -9,13 +9,8 @@ import {
   formatTradePoints,
 } from "@/lib/formatDisplay"
 import { formatPostedTimestamp } from "@/lib/formatRelativeTime"
-import {
-  PUBLIC_TRADE_SELECT,
-  TRADES_PUBLIC_READ_RELATION,
-  sanitizeTradeForViewer,
-} from "@/lib/publicAccountPrivacy"
-import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
 import { SHARED_TRADE_UNAVAILABLE } from "@/lib/sharedContentNavigation"
+import { resolveSharedTradeRowForViewer } from "@/lib/sharedTradeRead"
 import {
   getCachedSharedTradeEmbed,
   getOrCreateSharedTradeInflight,
@@ -23,7 +18,6 @@ import {
   tradeEmbedCacheKey,
 } from "@/lib/roomSharedContentEmbedCache"
 import { supabase } from "@/lib/supabaseClient"
-import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import ExpandableText from "@/app/components/ui/ExpandableText"
@@ -170,29 +164,11 @@ export default function SharedTradeMessageCard({
     setTrade(null)
 
     const inflight = getOrCreateSharedTradeInflight(cacheKey, async () => {
-      const { data } = await supabase
-        .from(TRADES_PUBLIC_READ_RELATION)
-        .select(PUBLIC_TRADE_SELECT)
-        .eq("id", resolvedTradeId)
-        .maybeSingle()
-        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
-
-      const tradeRow = asJsonObject(data)
-      const isOwner =
-        viewerUserId != null &&
-        tradeRow?.user_id != null &&
-        tradeRow.user_id === viewerUserId
-
-      let resolved = tradeRow
-      if (isOwner) {
-        const full = await rpcTradeOwnerRead(supabase, resolvedTradeId)
-        resolved = asJsonObject(full) ?? tradeRow
-      }
-
-      const sanitized = resolved
-        ? sanitizeTradeForViewer(resolved, { isOwner: !!isOwner })
-        : null
-
+      const sanitized = await resolveSharedTradeRowForViewer(
+        supabase,
+        resolvedTradeId,
+        viewerUserId
+      )
       setCachedSharedTradeEmbed(cacheKey, sanitized, embedViewerKey)
       return sanitized
     })

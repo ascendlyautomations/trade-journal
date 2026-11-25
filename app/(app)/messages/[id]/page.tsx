@@ -203,7 +203,11 @@ import {
 } from "@/lib/backendV2/conversationThreadBootstrapCache"
 import { readConversationThreadHeaderSeed } from "@/lib/backendV2/conversationThreadInboxSeed"
 import { mapThreadBootstrapMessagesToWire } from "@/lib/backendV2/conversationThreadContracts"
-import DmMessageReactions from "@/app/components/messages/DmMessageReactions"
+import DmMessageReactions, {
+  MESSAGE_REACTION_BUBBLE_RESERVE_CLASS,
+  shouldReserveMessageReactionBubbleSpace,
+} from "@/app/components/messages/DmMessageReactions"
+import DmMessageActionReactionRow from "@/app/components/messages/DmMessageActionReactionRow"
 import {
   DmMessageGestureSurface,
   MobileWebDmMessageActionSheet,
@@ -213,7 +217,6 @@ import { toggleMessageReaction } from "@/lib/messageReactionToggle"
 import { handleMessageReactionDoubleClick } from "@/lib/messageReactionDoubleTap"
 import {
   MESSAGE_REACTION_DOUBLE_TAP_EMOJI,
-  MESSAGE_REACTIONS,
   patchRoomMessageReactions,
   type MessageReactionEmoji,
   type MessageReactionRow,
@@ -379,27 +382,10 @@ function DmMessageActionMenu({
           } ${alignRight ? "right-1" : "left-1"}`}
         >
           {canReact && onSelectReaction ? (
-            <div
-              className="flex justify-center gap-0.5 border-b border-white/10 px-2 py-2"
-              role="group"
-              aria-label="React to message"
-            >
-              {MESSAGE_REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onSelectReaction(emoji)
-                    setActiveMenuId(null)
-                  }}
-                  className="rounded-md px-1.5 py-1 text-base hover:bg-white/10"
-                  aria-label={`React with ${emoji}`}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
+            <DmMessageActionReactionRow
+              onSelectReaction={onSelectReaction}
+              onCloseMenu={() => setActiveMenuId(null)}
+            />
           ) : null}
           <button
             type="button"
@@ -444,16 +430,32 @@ type DmBubbleReactionProps = {
   onToggleReaction: (emoji: MessageReactionEmoji) => void
 }
 
+function dmMessageReactionReserveClass(
+  message: { message_reactions?: MessageReactionRow[] | null },
+  userId: string | undefined,
+  canReact: boolean
+) {
+  return shouldReserveMessageReactionBubbleSpace(
+    message.message_reactions,
+    userId,
+    canReact
+  )
+    ? MESSAGE_REACTION_BUBBLE_RESERVE_CLASS
+    : ""
+}
+
 function DmMessageReactionRow({
   message,
   isMe,
   userId,
   canReact,
   onToggleReaction,
+  attachToBubble = false,
 }: {
   message: any
   isMe: boolean
   userId: string | undefined
+  attachToBubble?: boolean
 } & DmBubbleReactionProps) {
   if (message.deleted_for_everyone) return null
   return (
@@ -464,6 +466,7 @@ function DmMessageReactionRow({
       alignEnd={isMe}
       canReact={canReact}
       onToggle={onToggleReaction}
+      attachToBubble={attachToBubble}
     />
   )
 }
@@ -522,7 +525,9 @@ function TradeMessageBubble({
           )
         }
       >
-        <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
+        <div
+          className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible ${dmMessageReactionReserveClass(message, userId, canReact)}`}
+        >
           <DmMessageActionMenu
             message={message}
             isMe={isMe}
@@ -553,15 +558,16 @@ function TradeMessageBubble({
               />
             }
           />
+          <DmMessageReactionRow
+            message={message}
+            isMe={isMe}
+            userId={userId}
+            canReact={canReact}
+            onToggleReaction={onToggleReaction}
+            attachToBubble
+          />
         </div>
       </DmMessageGestureSurface>
-      <DmMessageReactionRow
-        message={message}
-        isMe={isMe}
-        userId={userId}
-        canReact={canReact}
-        onToggleReaction={onToggleReaction}
-      />
     </div>
   )
 }
@@ -814,7 +820,9 @@ function PostMessageBubble({
           )
         }
       >
-        <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
+        <div
+          className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible ${dmMessageReactionReserveClass(message, userId, canReact)}`}
+        >
           <DmMessageActionMenu
             message={message}
             isMe={isMe}
@@ -917,15 +925,16 @@ function PostMessageBubble({
             imageUrl={lightboxImageUrl}
             onClose={() => setLightboxImageUrl(null)}
           />
+          <DmMessageReactionRow
+            message={message}
+            isMe={isMe}
+            userId={userId}
+            canReact={canReact}
+            onToggleReaction={onToggleReaction}
+            attachToBubble
+          />
         </div>
       </DmMessageGestureSurface>
-      <DmMessageReactionRow
-        message={message}
-        isMe={isMe}
-        userId={userId}
-        canReact={canReact}
-        onToggleReaction={onToggleReaction}
-      />
     </div>
   )
 }
@@ -990,7 +999,9 @@ function StoryShareMessageBubble({
           )
         }
       >
-        <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
+        <div
+          className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible ${dmMessageReactionReserveClass(message, userId, canReact)}`}
+        >
           <DmMessageActionMenu
             message={message}
             isMe={isMe}
@@ -1019,15 +1030,16 @@ function StoryShareMessageBubble({
               onMediaLoad={onMediaLoad}
             />
           </div>
+          <DmMessageReactionRow
+            message={message}
+            isMe={isMe}
+            userId={userId}
+            canReact={canReact}
+            onToggleReaction={onToggleReaction}
+            attachToBubble
+          />
         </div>
       </DmMessageGestureSurface>
-      <DmMessageReactionRow
-        message={message}
-        isMe={isMe}
-        userId={userId}
-        canReact={canReact}
-        onToggleReaction={onToggleReaction}
-      />
     </div>
   )
 }
@@ -1085,7 +1097,9 @@ function StoryReplyMessageBubble({
           )
         }
       >
-        <div className="relative group inline-block max-w-[min(100%,18rem)] overflow-visible">
+        <div
+          className={`relative group inline-block max-w-[min(100%,18rem)] overflow-visible ${dmMessageReactionReserveClass(message, userId, canReact)}`}
+        >
           <DmMessageActionMenu
             message={message}
             isMe={isMe}
@@ -1139,15 +1153,16 @@ function StoryReplyMessageBubble({
               </p>
             ) : null}
           </div>
+          <DmMessageReactionRow
+            message={message}
+            isMe={isMe}
+            userId={userId}
+            canReact={canReact}
+            onToggleReaction={onToggleReaction}
+            attachToBubble
+          />
         </div>
       </DmMessageGestureSurface>
-      <DmMessageReactionRow
-        message={message}
-        isMe={isMe}
-        userId={userId}
-        canReact={canReact}
-        onToggleReaction={onToggleReaction}
-      />
     </div>
   )
 }
@@ -4271,7 +4286,9 @@ export default function DMPage() {
                           )
                         }
                       >
-                        <div className="relative group inline-block max-w-[75%] overflow-visible xl:max-w-[32rem]">
+                        <div
+                          className={`relative group inline-block max-w-[75%] overflow-visible xl:max-w-[32rem] ${dmMessageReactionReserveClass(message, user?.id, messageCanReact)}`}
+                        >
                           <DmMessageActionMenu
                             message={message}
                             isMe={isMe}
@@ -4361,15 +4378,16 @@ export default function DMPage() {
                               ) : null}
                             </>
                           </div>
+                          <DmMessageReactionRow
+                            message={message}
+                            isMe={isMe}
+                            userId={user?.id}
+                            canReact={messageCanReact}
+                            onToggleReaction={onToggleReaction}
+                            attachToBubble
+                          />
                         </div>
                       </DmMessageGestureSurface>
-                      <DmMessageReactionRow
-                        message={message}
-                        isMe={isMe}
-                        userId={user?.id}
-                        canReact={messageCanReact}
-                        onToggleReaction={onToggleReaction}
-                      />
                     </div>
                     {isMe && message.send_status === "sending" ? (
                       <SyncStatusText status="sending" />

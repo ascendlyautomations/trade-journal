@@ -8,6 +8,7 @@ struct CommentReplyThreadView: View {
     let imagePipeline: any ImagePipeline
     let onRequestDelete: (InteractionComment) -> Void
     let commentReportAction: (InteractionComment) -> (() -> Void)?
+    var onSharedTradeTap: ((TradeID) -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -33,6 +34,7 @@ struct CommentReplyThreadView: View {
                         comment: reply,
                         isOwn: currentUserID == reply.authorProfileID,
                         imagePipeline: imagePipeline,
+                        sharedTrade: viewModel.sharedTrade(for: reply),
                         likeSnapshot: viewModel.likeSnapshot(for: reply.id),
                         canLike: viewModel.canLikeComments,
                         isLikeBusy: viewModel.isCommentLikeBusy(reply.id),
@@ -46,7 +48,8 @@ struct CommentReplyThreadView: View {
                         onDelete: currentUserID == reply.authorProfileID
                             ? { onRequestDelete(reply) }
                             : nil,
-                        onReport: commentReportAction(reply)
+                        onReport: commentReportAction(reply),
+                        onSharedTradeTap: onSharedTradeTap
                     )
                     .padding(.leading, ExperienceSpacing.xl)
                 }

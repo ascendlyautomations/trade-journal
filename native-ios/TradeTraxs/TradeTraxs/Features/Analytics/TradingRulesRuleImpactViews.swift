@@ -29,6 +29,7 @@ enum TradingRulesRuleImpactFormat {
 
 struct TradingRulesRuleImpactHighlightStrip: View {
     let highlights: [TradingRulesRuleImpact.ComparisonHighlight]
+    var showsTitle: Bool = true
     var onOpenRule: ((TradingRulesComplianceAnalytics.RuleID) -> Void)?
 
     @Environment(\.themeColors) private var colors
@@ -38,9 +39,11 @@ struct TradingRulesRuleImpactHighlightStrip: View {
     var body: some View {
         if !highlights.isEmpty {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text("Largest avg P&L differences")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(colors.primaryText)
+                if showsTitle {
+                    Text("Largest avg P&L differences")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                }
                 Text("Correlation only, not proof that following or violating caused the outcome. Requires 5+ priced trades per side.")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
                 ForEach(Array(highlights.prefix(previewCount))) { item in
@@ -131,7 +134,11 @@ struct TradingRulesRuleImpactCard: View {
 
             if row.followed.priced > 0 || row.violated.priced > 0 {
                 DisclosureGroup(isExpanded: $moreMetricsExpanded) {
-                    moreMetricsGrid
+                    if row.sufficientSample {
+                        moreMetricsGrid
+                    } else {
+                        insufficientCopy
+                    }
                 } label: {
                     Text("More metrics")
                         .font(.caption.weight(.semibold))
@@ -229,15 +236,22 @@ struct TradingRulesRuleImpactCard: View {
 
     @ViewBuilder
     private func followedViolatedText(followed: String, violated: String, followsPerformanceColor: Bool) -> some View {
-        HStack {
-            Text("F \(followed)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(followsPerformanceColor ? performanceColorFromText(followed) : colors.secondaryText)
-            Text("·")
-                .foregroundStyle(colors.tertiaryText)
-            Text("V \(violated)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(followsPerformanceColor ? performanceColorFromText(violated) : colors.secondaryText)
+        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Followed")
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                Text(followed)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(followsPerformanceColor ? performanceColorFromText(followed) : colors.secondaryText)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Violated")
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                Text(violated)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(followsPerformanceColor ? performanceColorFromText(violated) : colors.secondaryText)
+            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -263,7 +277,6 @@ struct TradingRulesRuleImpactDetailSection: View {
     var onOpenTrade: ((TradeID) -> Void)?
 
     @Environment(\.themeColors) private var colors
-    private let tradePreview = 12
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
@@ -274,68 +287,6 @@ struct TradingRulesRuleImpactDetailSection: View {
                 .experienceStyle(.caption2, color: colors.tertiaryText)
 
             TradingRulesRuleImpactCard(row: row, onOpenRule: nil)
-
-            tradeSamplesSection(title: "Trades when followed", samples: row.followed.tradeSamples)
-            tradeSamplesSection(title: "Trades when violated", samples: row.violated.tradeSamples)
         }
-    }
-
-    @ViewBuilder
-    private func tradeSamplesSection(
-        title: String,
-        samples: [TradingRulesRuleImpact.TradeSample]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(colors.primaryText)
-            if samples.isEmpty {
-                Text("No priced trades in this group.")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-            } else {
-                let sorted = samples.sorted { $0.at > $1.at }
-                let preview = Array(sorted.prefix(tradePreview))
-                VStack(spacing: 0) {
-                    ForEach(Array(preview.enumerated()), id: \.element.id) { index, sample in
-                        tradeSampleRow(sample)
-                        if index < preview.count - 1 {
-                            ExperienceDivider()
-                        }
-                    }
-                }
-                if sorted.count > tradePreview {
-                    Text("+ \(sorted.count - tradePreview) more trades")
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func tradeSampleRow(_ sample: TradingRulesRuleImpact.TradeSample) -> some View {
-        let canOpen = onOpenTrade != nil
-        Button {
-            onOpenTrade?(TradeID(sample.tradeID))
-        } label: {
-            HStack {
-                Text(TradingRulesRuleImpactFormat.signedMoney(sample.netPnl))
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(sample.netPnl > 0 ? colors.profit : sample.netPnl < 0 ? colors.loss : colors.secondaryText)
-                if let rr = sample.realizedRr {
-                    Text(String(format: "%.2fR", rr))
-                        .experienceStyle(.caption2, color: colors.secondaryText)
-                }
-                Spacer()
-                if canOpen {
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(colors.tertiaryText)
-                }
-            }
-            .padding(.vertical, ExperienceSpacing.sm)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!canOpen)
     }
 }

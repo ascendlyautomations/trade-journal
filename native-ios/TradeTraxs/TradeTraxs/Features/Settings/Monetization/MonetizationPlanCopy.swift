@@ -24,6 +24,8 @@ nonisolated enum MonetizationPlanCopy {
             return "Preview Dashboard"
         case .tradingRules:
             return "Preview Trading Rules"
+        case .backtestLab:
+            return "Preview Backtest"
         }
     }
     static let previewTraxsProRulesButtonTitle = "Preview TraxsPro Rules"
@@ -33,6 +35,15 @@ nonisolated enum MonetizationPlanCopy {
     static let reportsPreviewSampleDataSubtitle = "Review trading and psychology reports with sample trades."
     static let expenseTrackerPreviewSampleDataSubtitle = "Track prop firm costs and payouts with sample data."
     static let tradingRulesPreviewSampleDataSubtitle = "Explore TraxsPro rule compliance with sample trades."
+    static let backtestLabPreviewSampleDataSubtitle =
+        "Explore backtest calendars, strategy breakdowns, and trade history with sample data."
+    static let backtestLabFeatureGateTitle = "TraxsPro Backtest Lab"
+    static let backtestLabFeatureGateMessage =
+        "Review backtest performance, calendars, and strategy breakdowns with TraxsPro."
+    static let tradingRulesAnalyticsPreviewSampleDataNote =
+        "Example rule checks and trades only — not your actual trading data."
+    static let tradingRulesAnalyticsPreviewListSubtitle =
+        "Sample compliance analytics from the demo journal."
 
     static let reportsFeatureGateTitle = "TraxsPro Reports"
     static let reportsFeatureGateMessage =
@@ -47,6 +58,35 @@ nonisolated enum MonetizationPlanCopy {
     static let dashboardPremiumPreviewMessage =
         "Explore hold time, trading hours, R:R targeting, setup performance, drawdown, psychology insights, and more using realistic sample trades."
 
+    static let tradeDetailPremiumHeadline = "Unlock deeper trade insights"
+    static let tradeDetailPremiumSubtitle =
+        "See how each trade fits your journal with TraxsPro."
+    static let tradeDetailSampleDataBadge = "Sample data"
+    static let tradeDetailPremiumPreviewTitle = "Preview on this trade"
+    static let tradeDetailPremiumPreviewMessage =
+        "Sample analytics below show what TraxsPro unlocks on your trade detail page."
+
+    static let tradeDetailPremiumHighlights: [PaywallHighlight] = [
+        PaywallHighlight(
+            id: "trade_ai",
+            title: "Trade AI",
+            detail: "Coach prompts and custom questions on every trade.",
+            systemImage: "brain.head.profile"
+        ),
+        PaywallHighlight(
+            id: "trade_comparison",
+            title: "Compared to Your Trades",
+            detail: "P&L, R:R, and hold time vs your recent average.",
+            systemImage: "arrow.left.arrow.right"
+        ),
+        PaywallHighlight(
+            id: "ticker_history",
+            title: "Your Ticker History",
+            detail: "Win rate, profit factor, and ticker-specific context.",
+            systemImage: "clock.arrow.circlepath"
+        ),
+    ]
+
     static let dashboardGateHoldTimeMessage =
         "See how hold duration lines up with outcomes across your journal."
     static let dashboardGateTradingHoursMessage =
@@ -59,6 +99,13 @@ nonisolated enum MonetizationPlanCopy {
         "Track how far equity falls from its peak trade by trade."
     static let dashboardGatePsychologyInsightsMessage =
         "Connect check-ins and discipline patterns to performance on your trading days."
+
+    static let psychologyAnalyticsPreviewSampleDataNote =
+        "Example check-ins and trades only — not your actual trading history."
+    static let psychologyAnalyticsFreePreviewHistorySubtitle =
+        "Explore how daily check-ins line up with trades in Check-In History."
+    static let psychologyAnalyticsPreviewHistoryListSubtitle =
+        "Sample check-in days from the demo journal."
 
     /// Per-chart unlock rows for the consolidated dashboard TraxsPro section (Free tier).
     static let dashboardPremiumAnalyticsHighlights: [PaywallHighlight] = [
@@ -103,7 +150,7 @@ nonisolated enum MonetizationPlanCopy {
     static let paywallUnlockTitle = "Unlock TraxsPro"
     static let paywallUnlockSubtitle = "Professional tools built on the journal you already trust."
 
-    static let redeemAppleOfferCodeButtonTitle = "Redeem Apple Offer Code"
+    static let redeemAppleOfferCodeButtonTitle = "Redeem Offer Code"
     static let offerCodeRedemptionPausedFootnote =
         "Offer code redemption opens when App Store subscriptions are enabled."
 
@@ -114,6 +161,8 @@ nonisolated enum MonetizationPlanCopy {
     static let settingsTraxProIncludedTitle = "What's Included in TraxsPro"
     static let settingsChoosePlanTitle = "Choose Your Plan"
     static let settingsCurrentPlanTitle = "Your Current Plan"
+    static let lifetimeGrantedTraxProAppreciation =
+        "Thank you for being an early TradeTraxs user! You've been granted free TraxsPro access for life! 🎉"
     static let freePlanPriceLabel = "$0"
     static let freePlanShortDescription = "Core journaling and community features at no cost."
 

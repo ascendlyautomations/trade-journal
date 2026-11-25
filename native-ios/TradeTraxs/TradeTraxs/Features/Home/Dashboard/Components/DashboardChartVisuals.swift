@@ -731,15 +731,18 @@ private struct HoldHistogramManualChart<Tooltip: View>: View {
     @ViewBuilder let tooltip: (DashboardHistogramBucket) -> Tooltip
 
     private let plotHeight: CGFloat = 132
-    private let leadingAxisWidth: CGFloat = 26
-    private let trailingAxisWidth: CGFloat = 38
+    private let leadingAxisWidth: CGFloat = 32
+    private let trailingAxisWidth: CGFloat = 46
+    private let axisToPlotSpacing: CGFloat = 10
     private let xAxisHeight: CGFloat = 22
+    /// Extra space below the legend so top Y-axis tick labels (centered on y=0) do not crowd the legend row.
+    private let legendToPlotSpacing: CGFloat = ExperienceSpacing.lg
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: legendToPlotSpacing) {
             legend
 
-            HStack(alignment: .top, spacing: 6) {
+            HStack(alignment: .top, spacing: axisToPlotSpacing) {
                 tradeCountAxis
                 plotArea
                     .frame(height: plotHeight)
@@ -747,17 +750,22 @@ private struct HoldHistogramManualChart<Tooltip: View>: View {
             }
 
             xAxisLabels
-                .padding(.leading, leadingAxisWidth + 6)
-                .padding(.trailing, trailingAxisWidth + 6)
+                .padding(.leading, leadingAxisWidth + axisToPlotSpacing)
+                .padding(.trailing, trailingAxisWidth + axisToPlotSpacing)
         }
     }
 
     private var legend: some View {
-        HStack(spacing: ExperienceSpacing.md) {
-            legendSwatch(colors.accent, title: "Trades")
+        HStack(spacing: ExperienceSpacing.lg) {
+            legendSwatch(tradeLegendFill, title: "Trades")
             legendSwatch(nil, title: "Avg P&L", gradient: (colors.profit, colors.loss))
             Spacer(minLength: 0)
         }
+    }
+
+    /// Cyan trade-count bars (`tradeBarFill`).
+    private var tradeLegendFill: Color {
+        colors.accent
     }
 
     private func legendSwatch(
@@ -765,20 +773,20 @@ private struct HoldHistogramManualChart<Tooltip: View>: View {
         title: String,
         gradient: (Color, Color)? = nil
     ) -> some View {
-        HStack(spacing: 5) {
+        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
             if let gradient {
-                HStack(spacing: 2) {
+                HStack(spacing: 3) {
                     RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(gradient.0)
-                        .frame(width: 6, height: 8)
+                        .frame(width: 7, height: 9)
                     RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(gradient.1)
-                        .frame(width: 6, height: 8)
+                        .frame(width: 7, height: 9)
                 }
             } else if let color {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(color)
-                    .frame(width: 8, height: 8)
+                    .frame(width: 8, height: 9)
             }
             Text(title)
                 .experienceStyle(.caption2, color: colors.tertiaryText)
@@ -792,11 +800,14 @@ private struct HoldHistogramManualChart<Tooltip: View>: View {
                     Text("\(tick)")
                         .font(.system(.caption2, design: .rounded).monospacedDigit())
                         .foregroundStyle(colors.tertiaryText)
-                        .position(x: leadingAxisWidth - 2, y: tradeCountY(tick, height: geo.size.height))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .position(x: leadingAxisWidth - 6, y: tradeCountY(tick, height: geo.size.height))
                 }
             }
         }
         .frame(width: leadingAxisWidth, height: plotHeight)
+        .padding(.trailing, 2)
     }
 
     private var pnlAxis: some View {
@@ -808,12 +819,14 @@ private struct HoldHistogramManualChart<Tooltip: View>: View {
                         .foregroundStyle(colors.tertiaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                        .frame(width: trailingAxisWidth, alignment: .leading)
-                        .position(x: trailingAxisWidth / 2, y: pnlMagnitudeY(tick, height: geo.size.height))
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(width: trailingAxisWidth - 4, alignment: .leading)
+                        .position(x: (trailingAxisWidth - 4) / 2 + 2, y: pnlMagnitudeY(tick, height: geo.size.height))
                 }
             }
         }
         .frame(width: trailingAxisWidth, height: plotHeight)
+        .padding(.leading, 2)
     }
 
     private var xAxisLabels: some View {

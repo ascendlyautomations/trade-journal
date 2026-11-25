@@ -36,6 +36,7 @@ nonisolated enum BackendV2Versioning {
         case tradeRoomsHomeBootstrap = "rpc_v1_trade_rooms_home_bootstrap"
         case tradeRoomSearch = "rpc_v1_search_trade_rooms"
         case leaderboard = "rpc_v1_leaderboard_bootstrap"
+        case leaderboardCurve = "rpc_v1_leaderboard_curve"
         case calendar = "rpc_v1_calendar_bootstrap"
         case analyticsDailyRangeBootstrap = "rpc_v1_analytics_daily_range_bootstrap"
         case analyticsCalendarDayTrades = "rpc_v1_analytics_calendar_day_trades"

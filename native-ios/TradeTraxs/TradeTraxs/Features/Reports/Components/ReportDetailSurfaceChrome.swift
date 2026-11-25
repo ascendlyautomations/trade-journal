@@ -85,3 +85,63 @@ struct ReportDetailInsetSurface: ViewModifier {
         }
     }
 }
+
+// MARK: - Key Metrics grid tiles
+
+enum ReportKeyMetricsLayout {
+    static let gridColumnSpacing = ExperienceSpacing.xs
+    static let gridRowSpacing = ExperienceSpacing.xs
+    static let tileCornerRadius = ExperienceRadius.sm
+    static let tileContentPadding = ExperienceSpacing.sm
+    static let tileLabelValueSpacing: CGFloat = 3
+    /// Uniform tile height so paired columns stay aligned in the grid.
+    static let tileHeight: CGFloat = 72
+
+    static var gridColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: gridColumnSpacing),
+            GridItem(.flexible(), spacing: gridColumnSpacing),
+        ]
+    }
+}
+
+/// Nested metric tile inside the white Key Metrics section (light) or report card (dark).
+struct ReportKeyMetricsTileChrome: ViewModifier {
+    var cornerRadius: CGFloat = ReportKeyMetricsLayout.tileCornerRadius
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if colorScheme == .light {
+            content.background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(colors.elevatedSurface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(
+                                colors.border.opacity(0.45),
+                                lineWidth: ExperienceBorder.hairline
+                            )
+                    }
+            }
+        } else {
+            content.experienceDashboardNestedCard(cornerRadius: cornerRadius)
+        }
+    }
+}
+
+extension View {
+    func reportKeyMetricsTile(cornerRadius: CGFloat = ReportKeyMetricsLayout.tileCornerRadius) -> some View {
+        modifier(ReportKeyMetricsTileChrome(cornerRadius: cornerRadius))
+    }
+
+    func reportKeyMetricsTileFrame() -> some View {
+        frame(
+            maxWidth: .infinity,
+            minHeight: ReportKeyMetricsLayout.tileHeight,
+            maxHeight: ReportKeyMetricsLayout.tileHeight,
+            alignment: .topLeading
+        )
+    }
+}

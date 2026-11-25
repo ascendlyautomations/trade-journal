@@ -2,7 +2,7 @@ import CoreGraphics
 
 /// Width helpers for message-thread media (height comes from ``ImageFidelityTrace/displaySize``).
 enum ConversationBubbleMediaLayout {
-    static let sharedCardBubbleMaxWidth: CGFloat = 280
+    static let sharedCardBubbleMaxWidth: CGFloat = SharedTradePreviewMetrics.maxCardWidth
 
     static func sharedCardMaxWidth(contentColumnMax: CGFloat) -> CGFloat {
         min(sharedCardBubbleMaxWidth, contentColumnMax)

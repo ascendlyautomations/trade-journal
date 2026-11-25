@@ -5,6 +5,7 @@ import AchievementCard from "@/app/components/AchievementCard"
 import ProfileAchievementSocialCard from "@/app/components/ProfileAchievementSocialCard"
 import type { FeedLikeMeta } from "@/app/components/feed/FeedPostCard"
 import type { Achievement } from "@/lib/achievements"
+import ProfilePrivateTabMessage from "./ProfilePrivateTabMessage"
 
 type SocialCardComments = ComponentProps<
   typeof ProfileAchievementSocialCard
@@ -13,6 +14,7 @@ type SocialCardComments = ComponentProps<
 const EMPTY_LIKE_META = { count: 0, liked: false } as const
 
 type ProfileAchievementsTabProps = {
+  canView: boolean
   ready: boolean
   achievements: Achievement[]
   profileUserId: string
@@ -32,6 +34,7 @@ type ProfileAchievementsTabProps = {
 }
 
 export default function ProfileAchievementsTab({
+  canView,
   ready,
   achievements,
   profileUserId,
@@ -86,7 +89,9 @@ export default function ProfileAchievementsTab({
 
   return (
     <div className="space-y-4">
-      {!ready ? (
+      {!canView ? (
+        <ProfilePrivateTabMessage />
+      ) : !ready ? (
         <div className="tt-profile-browse-grid tt-profile-achievement-grid grid gap-3 sm:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div

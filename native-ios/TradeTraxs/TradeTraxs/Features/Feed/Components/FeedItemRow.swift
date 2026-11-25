@@ -495,7 +495,6 @@ struct FeedItemRow: View {
             FeedCaptionPreview(
                 text: text,
                 lineLimit: lineLimit,
-                onSeeMore: onOpen,
                 seeMoreAccessibilityIdentifier: isImagePostRow
                     ? "feed.post.seeMore"
                     : "feed.caption.seeMore"

@@ -14,6 +14,8 @@ struct ConversationView: View {
     @State private var threadScrollViewportHeight: CGFloat = 0
     @State private var sharedMediaSheetPresentation: ConversationSharedMediaSheetPresentation?
     @State private var actionMenuMessageID: MessageID?
+    @State private var showsUnicodeEmojiPicker = false
+    @State private var emojiPickerMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator?
@@ -89,6 +91,7 @@ struct ConversationView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .experienceScreenBackground(fillsContentArea: false)
         .experienceNavigationTitle(viewModel.isSelectionMode ? viewModel.selectionToolbarTitle : viewModel.title)
+        .liveVoiceTopSessionChrome()
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -113,6 +116,15 @@ struct ConversationView: View {
                 if !viewModel.isSelectionMode, viewModel.showsDirectMessageActions {
                     conversationActionsMenu
                 }
+            }
+        }
+        .fullScreenCover(isPresented: $showsUnicodeEmojiPicker) {
+            UnicodeEmojiPickerSheet { emoji in
+                if let messageID = emojiPickerMessageID {
+                    Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
+                }
+                showsUnicodeEmojiPicker = false
+                emojiPickerMessageID = nil
             }
         }
         .sheet(item: $sharedMediaSheetPresentation) { presentation in
@@ -460,6 +472,13 @@ struct ConversationView: View {
                         },
                         onSelectEmoji: { emoji in
                             Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
+                        },
+                        onBrowseEmojis: {
+                            emojiPickerMessageID = messageID
+                            actionMenuMessageID = nil
+                            DispatchQueue.main.async {
+                                showsUnicodeEmojiPicker = true
+                            }
                         },
                         onDismiss: { actionMenuMessageID = nil }
                     )

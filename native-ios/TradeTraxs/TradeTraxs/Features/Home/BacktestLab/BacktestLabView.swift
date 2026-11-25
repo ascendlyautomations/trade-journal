@@ -7,25 +7,34 @@ struct BacktestLabView: View {
 
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
+    private let embeddedInTraxsProPreview: Bool
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
+    @Environment(\.traxsProPreviewReadOnly) private var traxsProPreviewReadOnly
 
     init(
         data: DataEnvironment,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        embeddedInTraxsProPreview: Bool = false
     ) {
+        self.embeddedInTraxsProPreview = embeddedInTraxsProPreview
         _viewModel = State(
             initialValue: BacktestLabViewModel(
                 trades: data.trades,
                 session: data.session,
                 detailCache: data.detailCache,
                 tradeDetailRepository: data.tradeDetailRepository,
-                navigationCoordinator: navigationCoordinator
+                navigationCoordinator: navigationCoordinator,
+                loadsTraxsProPreviewSampleOnly: embeddedInTraxsProPreview
             )
         )
         self.imagePipeline = data.imagePipeline
         self.data = data
+    }
+
+    private var isPreviewReadOnly: Bool {
+        embeddedInTraxsProPreview || traxsProPreviewReadOnly
     }
 
     var body: some View {
@@ -42,6 +51,19 @@ struct BacktestLabView: View {
         }
         .experienceScreenBackground(usesGroupedFillInLightMode: true)
         .experienceNavigationTitle("Backtest Lab")
+        .toolbar {
+            if !restrictsBacktestLab, !showsEntitlementVerification {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        viewModel.openCalendar()
+                    } label: {
+                        Image(systemName: "calendar")
+                    }
+                    .accessibilityLabel("Backtest Calendar")
+                    .accessibilityIdentifier("backtest.lab.calendar")
+                }
+            }
+        }
         .toolbar(.hidden, for: .tabBar)
         .refreshable {
             guard !restrictsBacktestLab else { return }
@@ -112,6 +134,7 @@ struct BacktestLabView: View {
     }
 
     private var restrictsBacktestLab: Bool {
+        if embeddedInTraxsProPreview { return false }
         _ = entitlementGateRevision
         return ProMonetizationPolicy.shouldRestrictBacktestLab(
             demoModeActive: ExploreModeSupport.isActive,
@@ -166,15 +189,8 @@ struct BacktestLabView: View {
                     .padding(.top, ExperienceSpacing.xs)
 
                 BacktestLabMetricsGrid(snapshot: viewModel.metrics)
-                    .padding(.top, ExperienceSpacing.xxs)
-
-                winsLossesRow
-                    .padding(.horizontal, ExperienceSpacing.md)
 
                 strategySection
-                    .padding(.horizontal, ExperienceSpacing.md)
-
-                calendarSection
                     .padding(.horizontal, ExperienceSpacing.md)
 
                 tradesSection
@@ -185,26 +201,13 @@ struct BacktestLabView: View {
     }
 
     private var upgradeBlock: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("TraxsPro Backtest Lab")
-                .experienceStyle(.headline, color: colors.primaryText)
-            Text("Review backtest performance, calendars, and strategy breakdowns with TraxsPro.")
-                .experienceStyle(.footnote, color: colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            Button {
-                ExperienceHaptics.play(.selection)
-                ProUpgradeCoordinator.shared.present(reason: .feature(.backtestLab))
-            } label: {
-                Text("Upgrade to TraxsPro")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("backtest.lab.upgrade")
-        }
-        .padding(ExperienceSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .experienceTradingRulesCard(prominence: .featured)
-        .accessibilityIdentifier("backtest.lab.gate")
+        TraxProFeaturePreviewCard(
+            title: MonetizationPlanCopy.backtestLabFeatureGateTitle,
+            message: MonetizationPlanCopy.backtestLabFeatureGateMessage,
+            feature: .backtestLab,
+            previewEntryPoint: .backtestLabGate,
+            accessibilityIdentifier: "backtest.lab.gate"
+        )
     }
 
     private var filterBar: some View {
@@ -288,63 +291,6 @@ struct BacktestLabView: View {
         .frame(minHeight: 32)
         .tradingRulesFilterChip()
         .experienceControlHitTarget()
-    }
-
-    private var winsLossesRow: some View {
-        let snap = viewModel.metrics
-        return HStack(spacing: ExperienceSpacing.sm) {
-            Text("Wins: \(snap.winCount)")
-                .experienceStyle(.footnote, color: colors.profit)
-            Text("·")
-                .experienceStyle(.footnote, color: colors.tertiaryText)
-            Text("Losses: \(snap.lossCount)")
-                .experienceStyle(.footnote, color: colors.loss)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(ExperienceSpacing.md)
-        .experienceTradingRulesCard(prominence: .standard)
-    }
-
-    @ViewBuilder
-    private var calendarSection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            backtestSectionHeader("Backtest Calendar")
-
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            HStack {
-                Button {
-                    viewModel.shiftCalendarMonth(by: -1)
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .buttonStyle(.experiencePlain)
-                Spacer()
-                Text(TradingCalendarDay.monthTitle(
-                    year: viewModel.calendarMonth.year,
-                    month: viewModel.calendarMonth.month
-                ))
-                .experienceStyle(.subheadline, color: colors.primaryText)
-                Spacer()
-                Button {
-                    viewModel.shiftCalendarMonth(by: 1)
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-                .buttonStyle(.experiencePlain)
-            }
-
-            if let month = viewModel.calendarMonthModel {
-                CalendarMonthGrid(month: month, selectedDayKey: nil) { _ in }
-            } else {
-                Text("No backtest activity this month.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, ExperienceSpacing.sm)
-            }
-            }
-            .padding(ExperienceSpacing.md)
-            .experienceTradingRulesCard(prominence: .standard)
-        }
     }
 
     private func backtestSectionHeader(_ title: String) -> some View {
@@ -431,9 +377,9 @@ struct BacktestLabView: View {
                         accountName: viewModel.displayAccountTitle(for: item.accountID),
                         imagePipeline: imagePipeline,
                         onOpen: { viewModel.openTrade(item) },
-                        onShare: { viewModel.shareTrade(item) },
-                        onEdit: { viewModel.editTrade(item) },
-                        onDelete: { viewModel.requestDelete(item) }
+                        onShare: isPreviewReadOnly ? nil : { viewModel.shareTrade(item) },
+                        onEdit: isPreviewReadOnly ? nil : { viewModel.editTrade(item) },
+                        onDelete: isPreviewReadOnly ? nil : { viewModel.requestDelete(item) }
                     )
                 }
             }

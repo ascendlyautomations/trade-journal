@@ -682,6 +682,7 @@ private final class CountingInteractionRepository: InteractionRepository, @unche
     func addComment(
         body: String,
         parentID: CommentID?,
+        sharedTradeID: TradeID?,
         on target: InteractionTarget
     ) async throws -> InteractionComment {
         InteractionComment(
@@ -690,6 +691,7 @@ private final class CountingInteractionRepository: InteractionRepository, @unche
             authorProfileID: ProfileID("user-1"),
             authorUsername: "me",
             body: body,
+            sharedTradeID: sharedTradeID,
             parentCommentID: parentID,
             createdAt: Date(),
             isPinned: false
@@ -778,6 +780,7 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
     func addComment(
         body: String,
         parentID: CommentID?,
+        sharedTradeID: TradeID?,
         on target: InteractionTarget
     ) async throws -> InteractionComment {
         if shouldFailAddComment {
@@ -789,6 +792,7 @@ private final class InMemoryInteractionRepository: InteractionRepository, @unche
             authorProfileID: ProfileID("user-1"),
             authorUsername: "me",
             body: body,
+            sharedTradeID: sharedTradeID,
             parentCommentID: parentID,
             createdAt: Date(),
             isPinned: false

@@ -61,7 +61,7 @@ final class AdminUsersViewModel {
             total = page.total
         } catch {
             guard generation == loadGeneration else { return }
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
             rows = []
             total = 0
         }
@@ -87,7 +87,7 @@ final class AdminUsersViewModel {
             rows.append(contentsOf: page.rows)
             total = max(total, page.total)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
         isLoadingMore = false
     }

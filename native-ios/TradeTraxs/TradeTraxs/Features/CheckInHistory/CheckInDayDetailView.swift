@@ -10,6 +10,7 @@ struct CheckInDayDetailView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.traxsProPreviewReadOnly) private var traxsProPreviewReadOnly
 
     init(dateKey: String, data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         self.dateKey = dateKey
@@ -30,8 +31,26 @@ struct CheckInDayDetailView: View {
         .experienceScreenBackground()
         .experienceNavigationTitle(formattedTitle)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Edit Check-In") { showsEditCheckIn = true }
+            if !traxsProPreviewReadOnly, !PsychologyAnalyticsPreviewSupport.usesSampleCheckInHistory {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Edit Check-In") { showsEditCheckIn = true }
+                }
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if PsychologyAnalyticsPreviewSupport.usesSampleCheckInHistory || traxsProPreviewReadOnly {
+                HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colors.accent)
+                    Text(MonetizationPlanCopy.psychologyAnalyticsPreviewSampleDataNote)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(colors.surfacePrimary)
             }
         }
         .sheet(isPresented: $showsEditCheckIn) {

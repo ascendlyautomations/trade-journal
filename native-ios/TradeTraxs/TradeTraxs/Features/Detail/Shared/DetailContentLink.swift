@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 /// Public web URLs for detail Share / Copy Link (matches ``DeepLinkParser`` paths).
 enum DetailContentLink: Equatable, Sendable {
@@ -38,7 +37,7 @@ enum DetailOverflowActions {
     @MainActor
     static func copyLink(_ link: DetailContentLink) {
         guard let value = link.absoluteString else { return }
-        UIPasteboard.general.string = value
+        guard ExperienceClipboard.copy(value) else { return }
         ExperienceHaptics.play(.success)
     }
 }

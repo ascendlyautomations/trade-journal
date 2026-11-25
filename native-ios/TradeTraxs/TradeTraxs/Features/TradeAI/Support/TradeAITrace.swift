@@ -20,8 +20,17 @@ nonisolated enum TradeAITrace {
         log("analysis.decoded")
     }
 
-    static func analysisFailed(status: Int, byteCount: Int, category: String) {
-        log("analysis.failed status=\(status) bytes=\(byteCount) category=\(category)")
+    static func analysisFailed(
+        status: Int,
+        byteCount: Int,
+        category: String,
+        backendCode: String? = nil
+    ) {
+        if let backendCode, !backendCode.isEmpty {
+            log("analysis.failed status=\(status) bytes=\(byteCount) category=\(category) code=\(backendCode)")
+        } else {
+            log("analysis.failed status=\(status) bytes=\(byteCount) category=\(category)")
+        }
     }
 
     static func persistenceStarted(rowCount: Int, payloadType: String) {

@@ -13,8 +13,6 @@ enum LiveVoiceDeepLinkHandler {
                 await RoomLiveVoiceCoordinator.shared.leave()
             case "/mute":
                 await RoomLiveVoiceCoordinator.shared.toggleMute()
-            case "/hand":
-                await RoomLiveVoiceCoordinator.shared.toggleHandRaised()
             default:
                 break
             }

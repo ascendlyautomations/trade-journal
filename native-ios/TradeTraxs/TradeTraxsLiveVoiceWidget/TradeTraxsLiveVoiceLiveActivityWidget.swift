@@ -153,6 +153,7 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
         let iconSize: CGFloat = compact ? 14 : 16
         let minHeight: CGFloat = compact ? 54 : 58
         HStack(spacing: spacing) {
+            Spacer(minLength: 0)
             controlLink(
                 url: "tradetraxs://live-voice/mute",
                 title: state.isMicrophoneEnabled ? "Mute" : "Unmute",
@@ -160,16 +161,8 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
                 tint: .white,
                 iconSize: iconSize,
                 verticalPad: verticalPad,
-                minHeight: minHeight
-            )
-            controlLink(
-                url: "tradetraxs://live-voice/hand",
-                title: state.isHandRaised ? "Lower" : "Hand",
-                systemImage: "hand.raised.fill",
-                tint: state.isHandRaised ? LiveVoiceActivityColors.connectedGreen : .white,
-                iconSize: iconSize,
-                verticalPad: verticalPad,
-                minHeight: minHeight
+                minHeight: minHeight,
+                maxWidth: compact ? 128 : 148
             )
             controlLink(
                 url: "tradetraxs://live-voice/leave",
@@ -178,8 +171,10 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
                 tint: LiveVoiceActivityColors.leave,
                 iconSize: iconSize,
                 verticalPad: verticalPad,
-                minHeight: minHeight
+                minHeight: minHeight,
+                maxWidth: compact ? 128 : 148
             )
+            Spacer(minLength: 0)
         }
         .font(compact ? .caption2.weight(.semibold) : .caption.weight(.semibold))
     }
@@ -192,7 +187,8 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
         tint: Color,
         iconSize: CGFloat,
         verticalPad: CGFloat,
-        minHeight: CGFloat
+        minHeight: CGFloat,
+        maxWidth: CGFloat = .infinity
     ) -> some View {
         Link(destination: URL(string: url)!) {
             VStack(spacing: 5) {
@@ -203,7 +199,7 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
                     .minimumScaleFactor(0.72)
             }
             .foregroundStyle(tint)
-            .frame(maxWidth: .infinity, minHeight: minHeight)
+            .frame(maxWidth: maxWidth, minHeight: minHeight)
             .padding(.vertical, verticalPad)
             .padding(.horizontal, 6)
             .background(Color.white.opacity(0.08))

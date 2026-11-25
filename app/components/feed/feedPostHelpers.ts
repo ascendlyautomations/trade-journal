@@ -205,9 +205,9 @@ export function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
 export const FEED_COMMENT_CORE_SELECT =
   "id, post_id, user_id, content, created_at, profiles(username, avatar_url)"
 
-/** Feed comments including reply + pin columns. */
+/** Feed comments including reply + pin + trade attachment columns. */
 export const FEED_COMMENTS_SELECT =
-  `${FEED_COMMENT_CORE_SELECT}, parent_comment_id, pinned`
+  `${FEED_COMMENT_CORE_SELECT}, parent_comment_id, pinned, shared_trade_id`
 
 /** Insert return shape — core columns only to avoid PGRST200 / missing-column failures. */
 export const FEED_COMMENT_INSERT_SELECT = FEED_COMMENT_CORE_SELECT
@@ -219,7 +219,11 @@ function isMissingCommentSchemaColumn(error: {
   if (!error) return false
   if (error.code === "PGRST204") return true
   const msg = (error.message ?? "").toLowerCase()
-  return msg.includes("parent_comment_id") || msg.includes("pinned")
+  return (
+    msg.includes("parent_comment_id") ||
+    msg.includes("pinned") ||
+    msg.includes("shared_trade_id")
+  )
 }
 
 /** Select feed comments, falling back when newer columns are absent. */

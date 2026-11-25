@@ -25,8 +25,6 @@ import { storedPlannedDollarRisk } from "@/lib/plannedTradeRisk"
 import { hasStoredRr } from "@/lib/tradeRr"
 import {
   sanitizeTradeForViewer,
-  tradeRelationForViewer,
-  tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
 import { rpcTradeOwnerReadResult } from "@/lib/tradeOwnerRead"
 import { hasStoredTradePoints } from "@/lib/resolveTradePoints"
@@ -158,14 +156,14 @@ export default function TradeDetailPageClient({
               : new Error(ownerRead.message)
         }
       } else {
-        const { data, error } = await supabase
-          .from(tradeRelationForViewer(false))
-          .select(tradeSelectForViewer(false))
-          .eq("id", tradeId)
-          .maybeSingle()
-          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
-        loadError = error
-        tradeRow = asJsonObject(error ? null : data)
+        const { resolveSharedTradeRowForViewer } = await import(
+          "@/lib/sharedTradeRead"
+        )
+        tradeRow = await resolveSharedTradeRowForViewer(
+          supabase,
+          tradeId,
+          sessionUserId
+        )
       }
 
       if (cancelled) return

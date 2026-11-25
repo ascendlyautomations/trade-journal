@@ -2,10 +2,20 @@ import SwiftUI
 
 struct TradingRulesTrendPeriodDetailCard: View {
     let periodTitle: String
+    let periodKind: TradingRulesComplianceTrendAxisFormat.Period
+    let peerKeys: [String]
     let point: TradingRulesComplianceAnalytics.TrendPoint
     let onDismiss: () -> Void
 
     @Environment(\.themeColors) private var colors
+
+    private var periodDisplayLabel: String {
+        TradingRulesComplianceTrendAxisFormat.displayLabel(
+            for: point.key,
+            period: periodKind,
+            peerKeys: peerKeys
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -14,7 +24,7 @@ struct TradingRulesTrendPeriodDetailCard: View {
                     Text(periodTitle)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(colors.primaryText)
-                    Text(point.label)
+                    Text(periodDisplayLabel)
                         .experienceStyle(.caption2, color: colors.secondaryText)
                         .lineLimit(2)
                 }
@@ -36,12 +46,12 @@ struct TradingRulesTrendPeriodDetailCard: View {
                         : point.adherencePercent.map { String(format: "%.1f%%", $0) } ?? "–",
                     tone: colors.profit
                 )
-                metricColumn(title: "Followed", value: "\(point.followed)", tone: colors.profit)
+                metricColumn(title: "Evaluated", value: "\(point.evaluated)", tone: colors.primaryText)
                 metricColumn(title: "Violations", value: "\(point.violations)", tone: colors.loss)
             }
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                Text("Rule checks: \(point.evaluated) evaluated · \(point.unevaluatedChecks) unevaluated")
+                Text("\(point.followed) followed · \(point.unevaluatedChecks) unevaluated checks")
                     .experienceStyle(.caption2, color: colors.secondaryText)
                 Text("\(point.tradeCount) trade\(point.tradeCount == 1 ? "" : "s") in this period")
                     .experienceStyle(.caption2, color: colors.tertiaryText)

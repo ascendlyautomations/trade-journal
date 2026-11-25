@@ -15,6 +15,8 @@ struct TradingRulesComplianceSection: View {
         case compactCollapsible
         /// Free tier, adherence summary for the current scope.
         case freeOverview
+        /// Free sample preview — full interactive analytics layout on demo data.
+        case freeSamplePreview
         /// Dedicated analytics page, score, timeline, trends, and impact always visible.
         case expandedAnalyticsPage
     }
@@ -28,17 +30,18 @@ struct TradingRulesComplianceSection: View {
     var onOpenTrade: ((TradeID) -> Void)? = nil
     var onOpenRule: ((TradingRulesComplianceAnalytics.RuleID) -> Void)? = nil
     var onOpenDay: ((String) -> Void)? = nil
+    var onOpenTrends: (() -> Void)? = nil
+    var onOpenViolationHistory: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var impactExpanded = false
     @State private var timelineExpanded = false
     @State private var trendsExpanded = false
-    @State private var showsAllViolations = false
     @State private var mostBrokenListExpanded = false
     @State private var worstDaysListExpanded = false
     @State private var recurringPatternsListExpanded = false
-    @State private var ruleImpactDetailsExpanded = false
+    @State private var ruleImpactDetailsExpanded = true
 
     private static let violationPreviewCount = 5
     /// Initial row count on the dedicated Trading Rules Analytics page (full data unchanged).
@@ -76,6 +79,10 @@ struct TradingRulesComplianceSection: View {
                 if let analytics {
                     complianceOverviewBlock(analytics, showsDisciplineExtras: false)
                 }
+            case .freeSamplePreview:
+                if let analytics {
+                    expandedAnalyticsContent(analytics)
+                }
             case .expandedAnalyticsPage:
                 if let analytics {
                     expandedAnalyticsContent(analytics)
@@ -105,22 +112,13 @@ struct TradingRulesComplianceSection: View {
 
     @ViewBuilder
     private func expandedAnalyticsContent(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xl) {
-            complianceOverviewBlock(analytics, showsDisciplineExtras: true)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            complianceOverviewBlock(analytics, showsDisciplineExtras: true, showsTrendsChartButton: onOpenTrends != nil)
             actionableInsightsBlock(analytics)
-            complianceTrendsBlock(analytics)
-            violationPatternsSection(analytics)
             ruleImpactSection(analytics)
+            largestPnLDifferencesSection(analytics)
+            recurringPatternsSection(analytics)
             violationsBlock(analytics)
-        }
-        .sheet(isPresented: $showsAllViolations) {
-            TradingRulesViolationsTimelineSheet(
-                violations: analytics.violations,
-                onOpenTrade: { tradeID in
-                    showsAllViolations = false
-                    onOpenTrade?(tradeID)
-                }
-            )
         }
     }
 
@@ -129,7 +127,8 @@ struct TradingRulesComplianceSection: View {
     @ViewBuilder
     private func complianceOverviewBlock(
         _ analytics: TradingRulesComplianceAnalytics.Result,
-        showsDisciplineExtras: Bool = true
+        showsDisciplineExtras: Bool = true,
+        showsTrendsChartButton: Bool = false
     ) -> some View {
         let score = analytics.score
         let progress = analytics.disciplineProgress
@@ -141,27 +140,21 @@ struct TradingRulesComplianceSection: View {
                 infoAccessibilityID: "tradingRulesAnalytics.score.info"
             )
 
-            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                Text(score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "–")
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(colors.primaryText)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+                    Text(score.adherencePercent.map { "\($0, specifier: "%.1f")%" } ?? "–")
+                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(colors.primaryText)
+                    Spacer(minLength: 0)
+                    if showsTrendsChartButton {
+                        complianceTrendsChartButton
+                    }
+                }
 
                 adherenceProgressBar(percent: score.adherencePercent)
 
-                HStack(spacing: ExperienceSpacing.xs) {
-                    statTile(title: "Followed", value: score.followed, tone: colors.profit, showsInfo: false)
-                    statTile(title: "Violations", value: score.violated, tone: score.violated > 0 ? colors.loss : colors.secondaryText, showsInfo: false)
-                    statTile(
-                        title: "Unevaluated",
-                        value: score.unevaluated,
-                        tone: colors.secondaryText,
-                        showsInfo: true,
-                        infoTitle: MetricCopy.unevaluated.title,
-                        infoBody: MetricCopy.unevaluated.body,
-                        infoID: "tradingRulesAnalytics.unevaluated.info"
-                    )
-                }
+                complianceStatTilesRow(score: score)
 
                 if showsDisciplineExtras, !progress.insufficientData {
                     HStack(spacing: ExperienceSpacing.md) {
@@ -181,20 +174,39 @@ struct TradingRulesComplianceSection: View {
                     }
                 }
 
-                if showsDisciplineExtras {
-                    retrospectiveStatusLine(analytics)
-                }
-
                 if score.evaluated == 0, let hint = zeroEvalHint, !hint.isEmpty {
-                    Text(hint)
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                        .lineLimit(3)
+                    ExperienceExpandableText(
+                        text: hint,
+                        typography: .caption2,
+                        textColor: colors.tertiaryText,
+                        moreColor: colors.accent,
+                        collapsedLineLimit: 4,
+                        moreSuffix: " See More",
+                        lessSuffix: " See Less",
+                        accessibilityIdentifier: "tradingRulesAnalytics.zeroEvalHint"
+                    )
                 }
             }
             .padding(ExperienceSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .experienceTradingRulesCard(prominence: .featured)
         }
+    }
+
+    @ViewBuilder
+    private var complianceTrendsChartButton: some View {
+        Button {
+            onOpenTrends?()
+        } label: {
+            Image(systemName: "chart.xyaxis.line")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(colors.primaryText)
+                .frame(width: 40, height: 40)
+                .experienceFilterChipRect()
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityIdentifier("tradingRulesAnalytics.trends.open")
+        .accessibilityLabel("Open compliance trends")
     }
 
     @ViewBuilder
@@ -313,16 +325,27 @@ struct TradingRulesComplianceSection: View {
     }
 
     @ViewBuilder
-    private func violationPatternsSection(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            AnalyticsSectionHeader(
-                title: "Violation patterns",
-                infoTitle: "Violation patterns",
-                infoBody: "Where rules break most often, on which days, and which habits repeat.",
-                infoAccessibilityID: "tradingRulesAnalytics.patterns.info"
-            )
-            expandedViolationPatterns(analytics)
+    private func largestPnLDifferencesSection(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
+        if !analytics.impactHighlights.isEmpty {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                AnalyticsSectionHeader(
+                    title: "Largest avg P&L differences",
+                    infoTitle: MetricCopy.impact.title,
+                    infoBody: MetricCopy.impact.body,
+                    infoAccessibilityID: "tradingRulesAnalytics.largestPnl.info"
+                )
+                TradingRulesRuleImpactHighlightStrip(
+                    highlights: analytics.impactHighlights,
+                    showsTitle: false,
+                    onOpenRule: onOpenRule
+                )
+            }
         }
+    }
+
+    @ViewBuilder
+    private func recurringPatternsSection(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
+        recurringPatternsBlock(analytics.violationPatterns.recurringPatterns)
     }
 
     @ViewBuilder
@@ -333,10 +356,6 @@ struct TradingRulesComplianceSection: View {
                 infoTitle: MetricCopy.impact.title,
                 infoBody: MetricCopy.impact.body,
                 infoAccessibilityID: "tradingRulesAnalytics.impact.info"
-            )
-            TradingRulesRuleImpactHighlightStrip(
-                highlights: analytics.impactHighlights,
-                onOpenRule: onOpenRule
             )
             if ruleImpactDetailsExpanded {
                 ruleImpactExpandedContent(analytics)
@@ -370,21 +389,7 @@ struct TradingRulesComplianceSection: View {
 
                 adherenceProgressBar(percent: score.adherencePercent)
 
-                HStack(spacing: ExperienceSpacing.xs) {
-                    statTile(title: "Followed", value: score.followed, tone: colors.profit, showsInfo: false)
-                    statTile(title: "Violations", value: score.violated, tone: score.violated > 0 ? colors.loss : colors.secondaryText, showsInfo: false)
-                    statTile(
-                        title: "Unevaluated",
-                        value: score.unevaluated,
-                        tone: colors.secondaryText,
-                        showsInfo: true,
-                        infoTitle: MetricCopy.unevaluated.title,
-                        infoBody: MetricCopy.unevaluated.body,
-                        infoID: "tradingRulesAnalytics.unevaluated.info"
-                    )
-                }
-
-                retrospectiveStatusLine(analytics)
+                complianceStatTilesRow(score: score)
 
                 if score.evaluated == 0, let hint = zeroEvalHint, !hint.isEmpty {
                     Text(hint)
@@ -398,26 +403,20 @@ struct TradingRulesComplianceSection: View {
         }
     }
 
-    @ViewBuilder
-    private func retrospectiveStatusLine(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
-        let parts = retrospectiveStatusParts(analytics)
-        if !parts.isEmpty {
-            Text(parts.joined(separator: " · "))
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-                .lineLimit(2)
+    private func complianceStatTilesRow(score: TradingRulesComplianceAnalytics.Score) -> some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.xs) {
+            statTile(title: "Followed", value: score.followed, tone: colors.profit, showsInfo: false)
+            statTile(title: "Violations", value: score.violated, tone: score.violated > 0 ? colors.loss : colors.secondaryText, showsInfo: false)
+            statTile(
+                title: "Unevaluated",
+                value: score.unevaluated,
+                tone: colors.secondaryText,
+                showsInfo: true,
+                infoTitle: MetricCopy.unevaluated.title,
+                infoBody: MetricCopy.unevaluated.body,
+                infoID: "tradingRulesAnalytics.unevaluated.info"
+            )
         }
-    }
-
-    private func retrospectiveStatusParts(_ analytics: TradingRulesComplianceAnalytics.Result) -> [String] {
-        var parts: [String] = []
-        if analytics.retrospectivelyEvaluatedTrades > 0 {
-            let n = analytics.retrospectivelyEvaluatedTrades
-            parts.append("Retroactive: \(n) trade\(n == 1 ? "" : "s") with current rules")
-        }
-        if analytics.usesHistoricalRevisions {
-            parts.append("Saved rule history for later trades")
-        }
-        return parts
     }
 
     @ViewBuilder
@@ -463,15 +462,26 @@ struct TradingRulesComplianceSection: View {
                     )
                 }
             }
+            .frame(maxWidth: .infinity)
+
             Text("\(value)")
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(tone)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, ExperienceSpacing.sm)
-        .padding(.horizontal, ExperienceSpacing.xs)
-        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: ComplianceStatTileMetrics.height,
+            maxHeight: ComplianceStatTileMetrics.height,
+            alignment: .center
+        )
+        .padding(.vertical, ExperienceSpacing.xxs)
+        .padding(.horizontal, ExperienceSpacing.xxs)
+        .modifier(TradingRulesComplianceStatTileChrome(cornerRadius: ExperienceRadius.sm))
+    }
+
+    private enum ComplianceStatTileMetrics {
+        static let height: CGFloat = 48
     }
 
     // MARK: - Violation patterns (expanded page)
@@ -713,40 +723,68 @@ struct TradingRulesComplianceSection: View {
 
     @ViewBuilder
     private func violationsBlock(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
+        let groups = TradingRulesViolationGrouping.ruleGroups(from: analytics.violations)
+        let previewGroups = Array(groups.prefix(Self.violationPreviewCount))
+
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            HStack {
+            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
                 AnalyticsSectionHeader(
                     title: "Violation history",
                     infoTitle: MetricCopy.violations.title,
                     infoBody: MetricCopy.violations.body,
                     infoAccessibilityID: "tradingRulesAnalytics.violations.info"
                 )
-                Spacer(minLength: 0)
-                if analytics.violations.count > Self.violationPreviewCount {
+                if groups.count > Self.violationPreviewCount, onOpenViolationHistory != nil {
                     Button("View all") {
-                        showsAllViolations = true
+                        onOpenViolationHistory?()
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(colors.accent)
                 }
             }
 
-            if analytics.violations.isEmpty {
+            if groups.isEmpty {
                 Text("No violations in this scope.")
                     .experienceStyle(.caption, color: colors.secondaryText)
             } else {
-                let preview = Array(analytics.violations.prefix(Self.violationPreviewCount))
-                VStack(spacing: 0) {
-                    ForEach(Array(preview.enumerated()), id: \.element.id) { index, event in
-                        TradingRulesViolationEventRow(event: event, onOpenTrade: onOpenTrade)
-                        if index < preview.count - 1 {
-                            ExperienceDivider()
-                                .padding(.leading, 36)
-                        }
+                VStack(spacing: ExperienceSpacing.xs) {
+                    ForEach(previewGroups) { group in
+                        violationHistoryGroupRow(group)
                     }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func violationHistoryGroupRow(_ group: TradingRulesViolationGrouping.RuleGroup) -> some View {
+        let tappable = onOpenRule != nil
+        Button {
+            onOpenRule?(group.ruleID)
+        } label: {
+            HStack(spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.ruleLabel)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                        .lineLimit(2)
+                    Text("\(group.violationCount) violation\(group.violationCount == 1 ? "" : "s")")
+                        .experienceStyle(.caption2, color: colors.secondaryText)
+                }
+                Spacer(minLength: 0)
+                if tappable {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(colors.tertiaryText)
+                }
+            }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .experienceTradingRulesCard(prominence: .standard)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!tappable)
     }
 
     @ViewBuilder
@@ -954,60 +992,30 @@ struct TradingRulesComplianceSection: View {
     }
 }
 
-// MARK: - Violations sheet
-
-private struct TradingRulesViolationsTimelineSheet: View {
-    let violations: [TradingRulesComplianceAnalytics.ViolationEvent]
-    let onOpenTrade: (TradeID) -> Void
-
+/// Compliance overview count tiles: white in light mode; nested dashboard surface in dark.
+private struct TradingRulesComplianceStatTileChrome: ViewModifier {
     @Environment(\.themeColors) private var colors
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(violations) { event in
-                    Group {
-                        if let tradeID = event.tradeID {
-                            Button {
-                                dismiss()
-                                onOpenTrade(TradeID(tradeID))
-                            } label: {
-                                violationLabel(event)
-                            }
-                        } else {
-                            violationLabel(event)
-                        }
-                    }
-                    .experienceDashboardListRow()
-                }
-            }
-            .experiencePlainListStyle()
-            .experienceNavigationTitle("All violations")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .experienceAnalyticsSheetChrome()
-    }
+    var cornerRadius: CGFloat
 
-    @ViewBuilder
-    private func violationLabel(_ event: TradingRulesComplianceAnalytics.ViolationEvent) -> some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(colors.loss)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.ruleLabel)
-                    .font(.subheadline.weight(.semibold))
-                Text(event.summary)
-                    .experienceStyle(.caption2, color: colors.secondaryText)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 0)
-            Text(TradingRulesViolationFormat.display.string(from: event.at))
-                .experienceStyle(.caption2, color: colors.tertiaryText)
+    func body(content: Content) -> some View {
+        if colorScheme == .light {
+            content
+                .background(
+                    colors.surfacePrimary,
+                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            colors.border.opacity(ExperienceDashboardSurface.LightChrome.borderOpacity),
+                            lineWidth: ExperienceBorder.hairline
+                        )
+                }
+        } else {
+            content.experienceDashboardNestedCard(cornerRadius: cornerRadius)
         }
     }
 }
+

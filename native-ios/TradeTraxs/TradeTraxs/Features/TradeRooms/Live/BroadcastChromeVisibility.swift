@@ -1,13 +1,14 @@
 import LiveKit
 
 enum BroadcastChromeVisibility {
+    /// OBS hosts use the floating mini-player when minimized; no tab-bar “You're streaming” banner.
     static func shouldShowObsHostBar(
         hasHostBarSession: Bool,
         isLivePublic: Bool,
         isManageSheetPresented: Bool
     ) -> Bool {
-        guard hasHostBarSession, isLivePublic else { return false }
-        return !isManageSheetPresented
+        _ = (hasHostBarSession, isLivePublic, isManageSheetPresented)
+        return false
     }
 
     static func shouldShowBar(

@@ -111,7 +111,7 @@ struct ExploreTraderCard: View {
                 Label("View Profile", systemImage: "person.crop.circle")
             }
             Button {
-                UIPasteboard.general.string = "@\(trader.profile.username)"
+                _ = ExperienceClipboard.copy("@\(trader.profile.username)")
                 ExperienceHaptics.play(.success)
             } label: {
                 Label("Copy Username", systemImage: "doc.on.doc")

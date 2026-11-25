@@ -128,7 +128,12 @@ final class TraxsProPreviewTests: XCTestCase {
         XCTAssertEqual(TraxsProPreviewCatalog.previewFeature(for: .premiumAnalytics), .dashboard)
         XCTAssertTrue(TraxsProPreviewCatalog.supportsInteractivePreview(for: .propFirm))
         XCTAssertEqual(TraxsProPreviewCatalog.previewFeature(for: .propFirm), .expenseTracker)
-        XCTAssertFalse(TraxsProPreviewCatalog.supportsInteractivePreview(for: .backtestLab))
+        XCTAssertTrue(TraxsProPreviewCatalog.supportsInteractivePreview(for: .backtestLab))
+        XCTAssertEqual(TraxsProPreviewCatalog.previewFeature(for: .backtestLab), .backtestLab)
+        XCTAssertEqual(
+            MonetizationPlanCopy.paywallPreviewFeatureTitle(for: .backtestLab),
+            "Preview Backtest"
+        )
     }
 
     func testCoordinatorPreventsDuplicatePresentation() async {
@@ -304,6 +309,57 @@ final class TraxsProPreviewTests: XCTestCase {
         XCTAssertFalse(TraxsProPreviewSession.shared.isAnyPreviewActive)
     }
 
+    func testBacktestLabPreviewUnlocksLabWithoutMixingCanonicalJournal() {
+        let profileID = ProfileID(freeUserID)
+        XCTAssertTrue(
+            ProMonetizationPolicy.shouldRestrictBacktestLab(
+                demoModeActive: false,
+                profileID: profileID
+            )
+        )
+
+        let cache = DetailPresentationCache()
+        TraxsProPreviewSession.shared.beginBacktestLabPreview(detailCache: cache, viewer: profileID)
+        XCTAssertTrue(TraxsProPreviewSession.shared.isBacktestLabPreviewActive)
+        XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID))
+        XCTAssertFalse(
+            ProMonetizationPolicy.shouldRestrictBacktestLab(
+                demoModeActive: false,
+                profileID: profileID
+            )
+        )
+
+        let sampleID = BacktestLabPreviewSampleData.trades(owner: profileID).first?.id
+        if let sampleID {
+            XCTAssertTrue(TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: sampleID))
+            XCTAssertNotNil(cache.trade(id: sampleID))
+        }
+
+        TraxsProPreviewSession.shared.endBacktestLabPreview(detailCache: cache)
+        if let sampleID {
+            XCTAssertNil(cache.trade(id: sampleID))
+        }
+    }
+
+    func testBacktestLabPreviewViewModelUsesSampleStrategiesAndMetrics() async {
+        let viewModel = BacktestLabViewModel(
+            trades: TraxsProPreviewTestsEmptyTradeRepository(),
+            session: TraxsProPreviewTestsStubSession(userID: freeUserID),
+            detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            loadsTraxsProPreviewSampleOnly: true
+        )
+        await viewModel.refresh()
+        XCTAssertEqual(viewModel.phase, .loaded)
+        XCTAssertFalse(viewModel.allTrades.isEmpty)
+        XCTAssertGreaterThanOrEqual(viewModel.strategyBreakdown.count, 3)
+        XCTAssertGreaterThan(viewModel.metrics.tradeCount, 0)
+        XCTAssertTrue(viewModel.strategyOptions.contains("Fair Value Gap"))
+        XCTAssertTrue(viewModel.strategyOptions.contains("Liquidity Sweep"))
+        XCTAssertTrue(viewModel.strategyOptions.contains("Opening Range Breakout"))
+    }
+
     func testPreviewNavigationDoesNotGateOtherProFeatures() {
         let profileID = ProfileID(freeUserID)
         XCTAssertTrue(
@@ -329,6 +385,7 @@ private func resetPreviewSessionForTesting() {
     TraxsProPreviewRuntimeFlag.isReportsPreviewActive = false
     TraxsProPreviewRuntimeFlag.isDashboardPreviewActive = false
     TraxsProPreviewRuntimeFlag.isExpenseTrackerPreviewActive = false
+    TraxsProPreviewRuntimeFlag.isBacktestLabPreviewActive = false
     if TraxsProPreviewSession.shared.isAnyPreviewActive {
         TraxsProPreviewSession.shared.endActivePreview(detailCache: DetailPresentationCache())
     }

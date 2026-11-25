@@ -9,8 +9,6 @@ struct ReelCommentsSheetView: View {
 
     @State private var viewModel: CommentsViewModel
     @State private var currentUserID: ProfileID?
-    @State private var viewerProfile: Profile?
-
     @Environment(\.themeColors) private var colors
 
     init(
@@ -31,7 +29,8 @@ struct ReelCommentsSheetView: View {
                 session: data.session,
                 contentOwnerUserID: contentOwnerUserID,
                 detailCache: data.detailCache,
-                realtimeHub: data.realtimeHub
+                realtimeHub: data.realtimeHub,
+                trades: data.trades
             )
         )
     }
@@ -48,41 +47,43 @@ struct ReelCommentsSheetView: View {
 
             Divider()
 
-            ScrollView {
-                CommentListView(
+            ScrollViewReader { proxy in
+                ScrollView {
+                    CommentListView(
+                        viewModel: viewModel,
+                        currentUserID: currentUserID,
+                        imagePipeline: imagePipeline,
+                        presentation: .sheetScrollContent
+                    )
+                    .padding(.horizontal, ExperienceSpacing.lg)
+                    .padding(.vertical, ExperienceSpacing.sm)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .commentThreadScrollSupport(
                     viewModel: viewModel,
-                    currentUserID: currentUserID,
-                    imagePipeline: imagePipeline,
-                    presentation: .sheetScrollContent
+                    scrollProxy: proxy
+                )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(colors.backgroundPrimary)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                CommentComposerView(
+                    viewModel: viewModel,
+                    imagePipeline: imagePipeline
                 )
                 .padding(.horizontal, ExperienceSpacing.lg)
                 .padding(.vertical, ExperienceSpacing.sm)
+                .background(colors.backgroundPrimary)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-
-            CommentComposerView(
-                viewModel: viewModel,
-                viewerProfile: viewerProfile,
-                imagePipeline: imagePipeline
-            )
-            .padding(.horizontal, ExperienceSpacing.lg)
-            .padding(.vertical, ExperienceSpacing.sm)
-            .background(colors.backgroundPrimary)
         }
-        .background(colors.backgroundPrimary)
         .task {
             viewModel.loadIfNeeded()
             if let id = await data.session.currentUserID {
-                let profileID = ProfileID(id.rawValue)
-                currentUserID = profileID
-                viewerProfile = data.detailCache.profile(id: profileID)
+                currentUserID = ProfileID(id.rawValue)
             }
-        }
-        .refreshable {
-            await viewModel.refresh()
         }
         .onDisappear {
             viewModel.stopCommentRealtime()

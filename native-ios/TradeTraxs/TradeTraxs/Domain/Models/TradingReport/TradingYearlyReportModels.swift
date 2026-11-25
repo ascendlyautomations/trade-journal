@@ -61,26 +61,6 @@ nonisolated struct TradingYearlyMonthMetrics: Hashable, Sendable, Identifiable {
     var id: String { monthRef.reportID.rawValue }
 }
 
-nonisolated struct TradingYearlyReportMetrics: Hashable, Sendable {
-    var netPnl: Decimal
-    var tradeCount: Int
-    var winRate: Decimal?
-    var profitFactor: Decimal?
-    var averageWinner: Decimal?
-    var averageLoser: Decimal?
-    var averageRR: Decimal?
-    var expectancy: Decimal?
-    var bestTrade: Decimal?
-    var worstTrade: Decimal?
-    var bestDayLabel: String?
-    var bestDayPnl: Decimal?
-    var worstDayLabel: String?
-    var worstDayPnl: Decimal?
-    var maxDrawdown: Decimal
-    var winningDays: Int
-    var losingDays: Int
-}
-
 nonisolated struct TradingYearlyMonthRow: Hashable, Sendable, Identifiable {
     var month: Int
     var monthLabel: String
@@ -99,7 +79,7 @@ nonisolated struct TradingYearlyReport: Sendable, Identifiable {
     var periodEndIso: String
     var generatedAt: TimeInterval
     var executiveSummary: String
-    var metrics: TradingYearlyReportMetrics
+    var metrics: TradingReportMetrics
     var monthRows: [TradingYearlyMonthRow]
     var chartSummary: DashboardChartMetrics.Summary
     var monthlyPnLBars: [DashboardBarPoint]

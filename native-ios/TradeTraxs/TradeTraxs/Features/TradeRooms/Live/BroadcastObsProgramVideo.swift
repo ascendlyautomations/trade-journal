@@ -5,6 +5,19 @@ import LiveKit
 enum BroadcastObsProgramVideo {
     static let ingressIdentityPrefix = "tt-obs-"
 
+    /// True for the OBS ingress LiveKit participant (not a TradeTraxs user).
+    static func isIngressPublisherIdentity(
+        _ identity: String,
+        programPublisherIdentity: String? = nil
+    ) -> Bool {
+        let trimmed = identity.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if trimmed.hasPrefix(ingressIdentityPrefix) { return true }
+        let program = programPublisherIdentity?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !program.isEmpty, trimmed == program { return true }
+        return false
+    }
+
     static func programPublisherIdentity(forSessionId sessionId: String) -> String {
         "\(ingressIdentityPrefix)\(sessionId.trimmingCharacters(in: .whitespacesAndNewlines))"
     }
@@ -43,7 +56,7 @@ enum BroadcastObsProgramVideo {
     static func pickProgramVideoTrack(
         programPublisherIdentity: String?,
         from room: Room
-    ) -> VideoTrack? {
+    ) -> (track: VideoTrack, publicationSid: String?)? {
         let programId = programPublisherIdentity?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let programId, !programId.isEmpty,
               let participant = room.remoteParticipants.values.first(where: {
@@ -53,9 +66,11 @@ enum BroadcastObsProgramVideo {
             return nil
         }
 
-        var screenCandidate: (track: VideoTrack, source: Track.Source, sid: Track.Sid?)?
-        var nonCameraCandidate: (track: VideoTrack, source: Track.Source, sid: Track.Sid?)?
-        var cameraCandidate: (track: VideoTrack, source: Track.Source, sid: Track.Sid?)?
+        typealias VideoCandidate = (track: VideoTrack, source: Track.Source, sid: Track.Sid?)
+
+        var screenCandidate: VideoCandidate?
+        var nonCameraCandidate: VideoCandidate?
+        var cameraCandidate: VideoCandidate?
 
         for pub in participant.trackPublications.values {
             guard pub.kind == .video, let track = pub.track as? VideoTrack else { continue }
@@ -83,11 +98,19 @@ enum BroadcastObsProgramVideo {
                 """
             )
             #endif
-            return chosen.track
+            return (chosen.track, chosen.sid?.stringValue)
         }
         #if DEBUG
         print("[TradeTraxs Broadcast] OBS program video none subscribed participant=\(programId)")
         #endif
         return nil
+    }
+
+    /// Legacy convenience — prefer the tuple overload for publication-stable apply.
+    static func pickProgramVideoTrackOnly(
+        programPublisherIdentity: String?,
+        from room: Room
+    ) -> VideoTrack? {
+        pickProgramVideoTrack(programPublisherIdentity: programPublisherIdentity, from: room)?.track
     }
 }

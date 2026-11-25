@@ -1,19 +1,47 @@
 import SwiftUI
 
+enum CompactRatingSelectorDensity {
+    case standard
+    case compact
+}
+
 /// Compact 1–5 selector with optional endpoint labels.
 struct CompactRatingSelector: View {
     let title: String
     @Binding var value: Int
     var lowLabel: String?
     var highLabel: String?
+    var density: CompactRatingSelectorDensity = .standard
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var isCompact: Bool { density == .compact }
+
+    private var titleFont: Font {
+        isCompact
+            ? ExperienceTypography.footnote.weight(.semibold)
+            : ExperienceTypography.subheadline.weight(.semibold)
+    }
+
+    private var valueFont: Font {
+        isCompact
+            ? ExperienceTypography.callout.weight(.semibold)
+            : ExperienceTypography.subheadline.weight(.semibold)
+    }
+
+    private var rowVerticalPadding: CGFloat {
+        isCompact ? ExperienceSpacing.xs : ExperienceSpacing.sm
+    }
+
+    private var stackSpacing: CGFloat {
+        isCompact ? ExperienceSpacing.xxs : ExperienceSpacing.xs
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        VStack(alignment: .leading, spacing: stackSpacing) {
             Text(title)
-                .font(ExperienceTypography.subheadline.weight(.semibold))
+                .font(titleFont)
                 .foregroundStyle(colors.primaryText)
 
             HStack(spacing: ExperienceSpacing.xs) {
@@ -25,9 +53,10 @@ struct CompactRatingSelector: View {
                         }
                     } label: {
                         Text("\(level)")
-                            .font(ExperienceTypography.subheadline.weight(.semibold))
+                            .font(valueFont)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, ExperienceSpacing.sm)
+                            .padding(.vertical, rowVerticalPadding)
+                            .frame(minHeight: ExperienceSpacing.minTouchTarget)
                             .background(
                                 RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
                                     .fill(

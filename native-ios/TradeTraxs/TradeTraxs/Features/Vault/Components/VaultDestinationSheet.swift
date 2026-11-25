@@ -28,7 +28,7 @@ struct VaultDestinationSheet: View {
                     newFolderSection
                 }
             }
-            .navigationTitle(snap.isVaulted ? "Manage in Vault" : "Add to Vault")
+            .navigationTitle(snap.isVaulted ? "Manage in Vault" : "Save to Vault")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -38,6 +38,13 @@ struct VaultDestinationSheet: View {
             .onAppear {
                 store.loadFoldersIfNeeded()
             }
+            .listSectionSpacing(ExperienceSpacing.xxs)
+            .listRowInsets(EdgeInsets(
+                top: ExperienceSpacing.xs,
+                leading: ExperienceSpacing.md,
+                bottom: ExperienceSpacing.xs,
+                trailing: ExperienceSpacing.md
+            ))
             .experienceInsetGroupedListStyle(pageBackground: true)
         }
         .experienceSheetChrome()
@@ -54,8 +61,6 @@ struct VaultDestinationSheet: View {
                 Label("Quick Save", systemImage: "hexagon.fill")
             }
             .disabled(inFlight)
-        } footer: {
-            Text("Saves to your Vault without choosing a folder.")
         }
     }
 
@@ -91,7 +96,7 @@ struct VaultDestinationSheet: View {
     }
 
     private var foldersSection: some View {
-        Section("Folders") {
+        Section("Your Folders") {
             if store.folders.isEmpty {
                 Text("No folders yet")
                     .experienceStyle(.footnote, color: colors.secondaryText)

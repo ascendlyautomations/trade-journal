@@ -5,11 +5,12 @@ import UIKit
 /// LiveKit video in a pinch-zoom scroll view, zoom applies to the view layer, not the track subscription.
 struct BroadcastStreamZoomableVideoView: UIViewRepresentable {
     var track: VideoTrack?
+    var trackRevision: UInt = 0
     var isFullscreen: Bool
     var onFirstFrame: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onFirstFrame: onFirstFrame)
+        Coordinator()
     }
 
     func makeUIView(context: Context) -> ZoomableBroadcastVideoContainer {
@@ -19,45 +20,36 @@ struct BroadcastStreamZoomableVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ZoomableBroadcastVideoContainer, context: Context) {
-        context.coordinator.onFirstFrame = onFirstFrame
-        context.coordinator.bindFrameObserver(to: track)
-        if uiView.videoView.track !== track {
-            uiView.videoView.track = nil
-            uiView.videoView.track = track
-        } else {
-            uiView.videoView.track = track
+        context.coordinator.container = uiView
+        context.coordinator.track = track
+        context.coordinator.trackRevision = trackRevision
+        context.coordinator.attachment.onFirstFrame = onFirstFrame
+        uiView.onDidLayoutVideoView = { [weak coordinator = context.coordinator] in
+            coordinator?.reapplyTrackIfNeeded()
         }
+        context.coordinator.applyTrack()
         uiView.setNeedsLayout()
     }
 
+    static func dismantleUIView(_ uiView: ZoomableBroadcastVideoContainer, coordinator: Coordinator) {
+        coordinator.attachment.detach()
+        uiView.videoView.track = nil
+    }
+
+    @MainActor
     final class Coordinator {
         weak var container: ZoomableBroadcastVideoContainer?
-        var onFirstFrame: (() -> Void)?
-        private let frameObserver = BroadcastProgramVideoFirstFrameObserver()
-        private weak var observedTrack: VideoTrack?
+        var track: VideoTrack?
+        var trackRevision: UInt = 0
+        let attachment = BroadcastProgramVideoViewAttachment()
 
-        init(onFirstFrame: (() -> Void)?) {
-            self.onFirstFrame = onFirstFrame
-            frameObserver.onFirstFrame = { [weak self] in
-                self?.onFirstFrame?()
-            }
+        func applyTrack() {
+            guard let container else { return }
+            attachment.apply(incomingTrack: track, revision: trackRevision, to: container.videoView)
         }
 
-        func bindFrameObserver(to track: VideoTrack?) {
-            if let observedTrack, observedTrack !== track {
-                observedTrack.remove(videoRenderer: frameObserver)
-                self.observedTrack = nil
-            }
-            guard let track, track !== observedTrack else { return }
-            frameObserver.reset()
-            track.add(videoRenderer: frameObserver)
-            observedTrack = track
-        }
-
-        deinit {
-            if let observedTrack {
-                observedTrack.remove(videoRenderer: frameObserver)
-            }
+        func reapplyTrackIfNeeded() {
+            applyTrack()
         }
     }
 }
@@ -65,8 +57,11 @@ struct BroadcastStreamZoomableVideoView: UIViewRepresentable {
 final class ZoomableBroadcastVideoContainer: UIView, UIScrollViewDelegate {
     let scrollView = UIScrollView()
     let videoView = VideoView()
+    /// Fired when the embedded ``VideoView`` gets a non-zero layout (enables adaptive stream + track bind).
+    var onDidLayoutVideoView: (() -> Void)?
 
     private var doubleTapRecognizer: UITapGestureRecognizer?
+    private var lastLayoutSize: CGSize = .zero
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -108,6 +103,19 @@ final class ZoomableBroadcastVideoContainer: UIView, UIScrollViewDelegate {
         videoView.frame = CGRect(origin: .zero, size: size)
         scrollView.contentSize = size
         centerVideoIfNeeded()
+        videoView.setNeedsLayout()
+        videoView.layoutIfNeeded()
+
+        let layoutReady = videoView.bounds.width > 1 && videoView.bounds.height > 1
+        guard layoutReady else { return }
+        let sizeChanged = abs(size.width - lastLayoutSize.width) > 0.5
+            || abs(size.height - lastLayoutSize.height) > 0.5
+        if sizeChanged {
+            lastLayoutSize = size
+            onDidLayoutVideoView?()
+        } else if !videoView.didRenderFirstFrame {
+            onDidLayoutVideoView?()
+        }
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? {

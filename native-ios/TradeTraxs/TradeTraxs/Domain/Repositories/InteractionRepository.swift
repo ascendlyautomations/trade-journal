@@ -18,6 +18,7 @@ nonisolated protocol InteractionRepository: Sendable {
     func addComment(
         body: String,
         parentID: CommentID?,
+        sharedTradeID: TradeID?,
         on target: InteractionTarget
     ) async throws -> InteractionComment
 

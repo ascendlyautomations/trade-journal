@@ -105,6 +105,30 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
         return unique.count
     }
 
+    func markUnread(id: NotificationID) async throws {
+        _ = try await markUnread(ids: [id])
+    }
+
+    func markUnread(ids: [NotificationID]) async throws -> Int {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let unique = Array(Set(ids.map(\.rawValue))).filter { !$0.isEmpty }
+        guard !unique.isEmpty else { return 0 }
+
+        struct Body: Encodable { var read: Bool }
+        try await supabase.database.update(
+            Body(read: false),
+            table: "notifications",
+            query: [
+                SupabaseQuery.eq("user_id", userID.rawValue),
+                URLQueryItem(name: "read", value: "eq.true"),
+                SupabaseQuery.isIn("id", unique),
+            ]
+        )
+        return unique.count
+    }
+
     func markMessageNotificationsRead() async throws -> Int {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))

@@ -58,4 +58,50 @@ nonisolated enum TradeDetailComparisonScope {
         )
         .filter { tickersMatch($0.symbol.ticker, root) }
     }
+
+    static func normalizedSetup(_ raw: String?) -> String? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    static func matchesAccountMode(
+        peer: Trade,
+        current: Trade,
+        accountModes: [TradingAccountID: TradingAccountMode]
+    ) -> Bool {
+        guard let currentAccountID = current.accountID else { return false }
+        guard peer.accountID == currentAccountID else { return false }
+        let currentMode = ProfileStatisticsMetrics.resolveAccountMode(trade: current, accountModes: accountModes)
+        let peerMode = ProfileStatisticsMetrics.resolveAccountMode(trade: peer, accountModes: accountModes)
+        guard let currentMode, let peerMode else { return false }
+        return currentMode == peerMode
+    }
+
+    static func matchesSetup(peer: Trade, current: Trade) -> Bool {
+        guard let setup = normalizedSetup(current.strategy) else { return false }
+        return normalizedSetup(peer.strategy) == setup
+    }
+
+    static func matchesSession(peer: Trade, current: Trade) -> Bool {
+        guard let session = TradingSessionLabel.canonicalLabel(fromStored: current.sessionLabel) else { return false }
+        return TradingSessionLabel.canonicalLabel(fromStored: peer.sessionLabel) == session
+    }
+
+    static func filterPeers(
+        _ peers: [Trade],
+        currentTrade: Trade,
+        filter: TradeDetailAnalytics.ComparisonFilter,
+        accountModes: [TradingAccountID: TradingAccountMode]
+    ) -> [Trade] {
+        switch filter {
+        case .all:
+            return peers
+        case .accountMode:
+            return peers.filter { matchesAccountMode(peer: $0, current: currentTrade, accountModes: accountModes) }
+        case .setup:
+            return peers.filter { matchesSetup(peer: $0, current: currentTrade) }
+        case .session:
+            return peers.filter { matchesSession(peer: $0, current: currentTrade) }
+        }
+    }
 }

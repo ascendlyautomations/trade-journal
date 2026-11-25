@@ -271,13 +271,26 @@ final class ActivityInboxStore {
         return isRoomKind || mentionsRoom
     }
 
-    /// Rolls back a failed optimistic ``markReadLocally``.
+    /// Rolls back a failed optimistic ``markReadLocally`` or applies optimistic mark-unread.
     func markUnreadLocally(id: NotificationID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        guard items[index].isRead else { return }
-        items[index].isRead = false
-        items = items
-        unreadCount += 1
+        _ = markUnreadLocally(ids: [id])
+    }
+
+    @discardableResult
+    func markUnreadLocally(ids: [NotificationID]) -> Int {
+        let targets = Set(ids)
+        guard !targets.isEmpty else { return 0 }
+        var marked = 0
+        var next = items
+        for index in next.indices where targets.contains(next[index].id) && next[index].isRead {
+            next[index].isRead = false
+            marked += 1
+        }
+        guard marked > 0 else { return 0 }
+        items = next
+        unreadCount += marked
+        AppIconBadgeSync.refresh(animated: true)
+        return marked
     }
 
     func markAllReadLocally() {

@@ -14,6 +14,7 @@ struct TradingAnalyticsPreferencesView: View {
     @State private var disciplineExpanded = false
     @State private var sessionsExpanded = false
     @State private var accountOverridesExpanded = false
+    @State private var expandedPlannedTimeField: TradingAnalyticsPreferencesViewModel.DraftField?
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
@@ -138,26 +139,41 @@ struct TradingAnalyticsPreferencesView: View {
     }
 
     private var preferencesScroll: some View {
-        ScrollView {
-            LazyVStack(spacing: ExperienceSpacing.md) {
-                if !embeddedInTraxsProRulesPreview {
-                    tradingRulesAnalyticsLinkCard
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                LazyVStack(spacing: ExperienceSpacing.md) {
+                    if !embeddedInTraxsProRulesPreview {
+                        tradingRulesAnalyticsLinkCard
+                    }
+                    statusMessageBanner
+                    if restrictsPremiumRulesEditing {
+                        freeTierRulesEditor
+                        TradingRulesPremiumLockedSection()
+                    } else {
+                        generalSettingsCategory
+                        riskManagementCategory
+                        tradeExecutionCategory
+                        disciplineCategory
+                        sessionsAndInstrumentsCategory
+                    }
+                    if expandedPlannedTimeField != nil {
+                        Color.clear
+                            .frame(height: TradingRulesPlannedTimePickerLayout.expandedScrollTailClearance)
+                            .accessibilityHidden(true)
+                    }
                 }
-                statusMessageBanner
-                if restrictsPremiumRulesEditing {
-                    freeTierRulesEditor
-                    TradingRulesPremiumLockedSection()
-                } else {
-                    generalSettingsCategory
-                    riskManagementCategory
-                    tradeExecutionCategory
-                    disciplineCategory
-                    sessionsAndInstrumentsCategory
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.xs)
+                .padding(.bottom, ExperienceSpacing.xl)
+            }
+            .onChange(of: expandedPlannedTimeField) { _, field in
+                guard let field else { return }
+                let anchorID = TradingRulesPlannedTimePickerLayout.scrollAnchorID(for: field)
+                let anchor = TradingRulesPlannedTimePickerLayout.scrollRevealAnchor
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                    scrollProxy.scrollTo(anchorID, anchor: anchor)
                 }
             }
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.top, ExperienceSpacing.xs)
-            .padding(.bottom, ExperienceSpacing.xl)
         }
     }
 
@@ -306,13 +322,17 @@ struct TradingAnalyticsPreferencesView: View {
 
     @ViewBuilder
     private var generalBehaviorRows: some View {
-        Toggle(isOn: $viewModel.applyRulesToPastTrades) {
+        HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
             TradingRulesFieldLabel(
                 title: "Apply Rules to Past Trades",
                 info: .applyRulesToPastTrades
             )
+            .tradingRulesSettingsLabelColumn()
+            Toggle("", isOn: $viewModel.applyRulesToPastTrades)
+                .labelsHidden()
+                .tint(colors.accent)
+                .fixedSize()
         }
-        .tint(colors.accent)
         .tradingRulesSettingsRow()
         .accessibilityIdentifier("settings.tradingAnalytics.applyPastTrades")
 
@@ -523,13 +543,17 @@ struct TradingAnalyticsPreferencesView: View {
                     scopeIdentifier: "settings.tradingAnalytics.profitRulesScope"
                 )
                 settingsInlineDivider()
-                Toggle(isOn: $viewModel.stopAfterDailyProfitTarget) {
+                HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
                     TradingRulesFieldLabel(
                         title: "Stop after daily profit target",
                         info: .stopAfterDailyProfitTarget
                     )
+                    .tradingRulesSettingsLabelColumn()
+                    Toggle("", isOn: $viewModel.stopAfterDailyProfitTarget)
+                        .labelsHidden()
+                        .tint(colors.accent)
+                        .fixedSize()
                 }
-                .tint(colors.accent)
                 .tradingRulesSettingsRow()
             }
         }
@@ -606,8 +630,22 @@ struct TradingAnalyticsPreferencesView: View {
                 }
                 settingsInlineDivider()
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                    timeField("Planned start", info: .plannedStart, text: $viewModel.startTime, field: .startTime)
-                    timeField("Planned end", info: .plannedEnd, text: $viewModel.endTime, field: .endTime)
+                    TradingRulesPlannedTimePicker(
+                        title: "Planned start",
+                        info: .plannedStart,
+                        timeText: $viewModel.startTime,
+                        field: .startTime,
+                        expandedField: $expandedPlannedTimeField,
+                        scrollAnchorID: TradingRulesPlannedTimePickerLayout.scrollAnchorID(for: .startTime)
+                    )
+                    TradingRulesPlannedTimePicker(
+                        title: "Planned end",
+                        info: .plannedEnd,
+                        timeText: $viewModel.endTime,
+                        field: .endTime,
+                        expandedField: $expandedPlannedTimeField,
+                        scrollAnchorID: TradingRulesPlannedTimePickerLayout.scrollAnchorID(for: .endTime)
+                    )
                 }
                 .tradingRulesSettingsRow()
             }
@@ -834,13 +872,14 @@ struct TradingAnalyticsPreferencesView: View {
         identifier: String,
         @ViewBuilder menu: () -> MenuContent
     ) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.md) {
+        HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
             TradingRulesFieldLabel(title: title, info: info)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .tradingRulesSettingsLabelColumn()
             Menu(content: menu) {
                 dropdownValueLabel(value: value, isPlaceholder: isPlaceholder)
             }
             .buttonStyle(.experiencePlain)
+            .tradingRulesSettingsValueColumn()
             .accessibilityIdentifier(identifier)
         }
         .tradingRulesSettingsRow()
@@ -873,7 +912,7 @@ struct TradingAnalyticsPreferencesView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(colors.accent)
         }
-        .frame(width: TradingPreferenceFormLayout.valueColumnWidth, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .tradingRulesInsetControl()
     }
 
@@ -913,15 +952,15 @@ struct TradingAnalyticsPreferencesView: View {
         style: NumericInputStyle,
         keyboard: UIKeyboardType = .decimalPad
     ) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.md) {
+        HStack(alignment: .firstTextBaseline, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
             TradingRulesFieldLabel(title: title, info: info)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .tradingRulesSettingsLabelColumn()
             TextField(placeholder, text: text.numericInput(style))
                 .font(.subheadline)
                 .keyboardType(keyboard)
                 .multilineTextAlignment(.trailing)
                 .focused($focusedField, equals: field)
-                .frame(width: TradingPreferenceFormLayout.valueColumnWidth)
+                .tradingRulesSettingsValueColumn()
                 .tradingRulesInsetControl()
         }
         .tradingRulesSettingsRow()
@@ -936,20 +975,20 @@ struct TradingAnalyticsPreferencesView: View {
         style: NumericInputStyle,
         keyboard: UIKeyboardType = .decimalPad
     ) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.md) {
+        HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
             VStack(alignment: .leading, spacing: TradingPreferenceFormLayout.secondaryLineSpacing) {
                 tradingRulesTitleInfoRow(title: title, info: info)
                 Text("Override")
                     .font(.caption)
                     .foregroundStyle(colors.tertiaryText)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .tradingRulesSettingsLabelColumn()
             TextField(placeholder, text: text.numericInput(style))
                 .font(.subheadline)
                 .keyboardType(keyboard)
                 .multilineTextAlignment(.trailing)
                 .focused($focusedField, equals: field)
-                .frame(width: TradingPreferenceFormLayout.valueColumnWidth)
+                .tradingRulesSettingsValueColumn()
                 .tradingRulesInsetControl()
         }
         .tradingRulesSettingsRow()
@@ -966,34 +1005,25 @@ struct TradingAnalyticsPreferencesView: View {
         scope: Binding<TradingRuleScope>,
         scopeIdentifier: String
     ) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.md) {
-            VStack(alignment: .leading, spacing: TradingPreferenceFormLayout.secondaryLineSpacing) {
+        VStack(alignment: .leading, spacing: TradingPreferenceFormLayout.secondaryLineSpacing) {
+            HStack(alignment: .firstTextBaseline, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
                 tradingRulesTitleInfoRow(title: title, info: info)
-                scopeMenuCompact(selection: scope, identifier: scopeIdentifier)
+                    .tradingRulesSettingsLabelColumn()
+                TextField(placeholder, text: text.numericInput(style))
+                    .font(.subheadline)
+                    .keyboardType(keyboard)
+                    .multilineTextAlignment(.trailing)
+                    .focused($focusedField, equals: field)
+                    .tradingRulesSettingsValueColumn()
+                    .tradingRulesInsetControl()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            TextField(placeholder, text: text.numericInput(style))
-                .font(.subheadline)
-                .keyboardType(keyboard)
-                .multilineTextAlignment(.trailing)
-                .focused($focusedField, equals: field)
-                .frame(width: TradingPreferenceFormLayout.valueColumnWidth)
-                .tradingRulesInsetControl()
+            scopeMenuCompact(selection: scope, identifier: scopeIdentifier)
         }
         .tradingRulesSettingsRow()
     }
 
     private func tradingRulesTitleInfoRow(title: String, info: TradingRulesFieldInfo) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
-            Text(title)
-                .font(.subheadline)
-                .foregroundStyle(colors.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .allowsTightening(true)
-            TradingRulesFieldInfoButton(info: info)
-            Spacer(minLength: 0)
-        }
+        TradingRulesFieldLabel(title: title, info: info)
     }
 
     private func scopeMenuCompact(
@@ -1030,39 +1060,6 @@ struct TradingAnalyticsPreferencesView: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private func timeField(
-        _ title: String,
-        info: TradingRulesFieldInfo,
-        text: Binding<String>,
-        field: TradingAnalyticsPreferencesViewModel.DraftField
-    ) -> some View {
-        VStack(alignment: .leading, spacing: TradingPreferenceFormLayout.fieldStackSpacing) {
-            tradingRulesTitleInfoRow(title: title, info: info)
-            TextField("09:30", text: text)
-                .font(.subheadline)
-                .keyboardType(.numbersAndPunctuation)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .multilineTextAlignment(.center)
-                .focused($focusedField, equals: field)
-                .frame(maxWidth: .infinity)
-                .tradingRulesInsetControl()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private enum TradingPreferenceFormLayout {
-    static let fieldStackSpacing: CGFloat = ExperienceSpacing.xs
-    static let secondaryLineSpacing: CGFloat = 3
-    static let valueColumnWidth: CGFloat = 120
-}
-
-private extension View {
-    func tradingRulesSettingsRow() -> some View {
-        padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.xs + 2)
-    }
 }
 
 private struct TradingPreferenceInstrumentPicker: View {

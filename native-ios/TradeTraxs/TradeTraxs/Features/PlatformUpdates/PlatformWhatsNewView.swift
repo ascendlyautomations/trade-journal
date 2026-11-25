@@ -32,23 +32,25 @@ struct PlatformWhatsNewView: View {
                                 .experienceStyle(.caption, color: colors.accent)
                             Text(update.title)
                                 .experienceStyle(.headline, color: colors.primaryText)
-                            if let publishedAt = update.publishedAt,
-                               let date = ISO8601.date(from: publishedAt) {
-                                Text(date.formatted(date: .abbreviated, time: .shortened))
-                                    .experienceStyle(.caption2, color: colors.tertiaryText)
-                            }
                             Text(update.body)
                                 .experienceStyle(.body, color: colors.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                             if let url = URL(string: "https://www.tradetraxs.com\(update.href)") {
-                                Button("Open in TradeTraxs") {
-                                    ExperienceHaptics.play(.selection)
-                                    if let destination = appEnvironment.navigation.deepLinkParser.parse(url: url) {
-                                        appEnvironment.navigation.coordinator.open(destination)
+                                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                                    if let publishedAt = update.publishedAt,
+                                       let date = ISO8601.date(from: publishedAt) {
+                                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                                            .experienceStyle(.caption2, color: colors.tertiaryText)
                                     }
+                                    Button("Open") {
+                                        ExperienceHaptics.play(.selection)
+                                        if let destination = appEnvironment.navigation.deepLinkParser.parse(url: url) {
+                                            appEnvironment.navigation.coordinator.open(destination)
+                                        }
+                                    }
+                                    .font(ExperienceTypography.subheadline.weight(.semibold))
+                                    .foregroundStyle(colors.accent)
                                 }
-                                .font(ExperienceTypography.subheadline.weight(.semibold))
-                                .foregroundStyle(colors.accent)
                                 .padding(.top, ExperienceSpacing.xxs)
                             }
                         }

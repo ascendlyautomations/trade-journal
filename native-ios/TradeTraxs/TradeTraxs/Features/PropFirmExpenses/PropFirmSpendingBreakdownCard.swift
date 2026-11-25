@@ -20,8 +20,16 @@ struct PropFirmSpendingBreakdownCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Spending Breakdown")
-                .experienceStyle(.headline, color: colors.primaryText)
+            HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
+                Text("Spending Breakdown")
+                    .experienceStyle(.headline, color: colors.primaryText)
+                AnalyticsMetricInfoButton(
+                    title: "Spending Breakdown",
+                    bodyText: PropFirmExpenseTrackerSectionInfo.spendingBreakdown,
+                    accessibilityID: "propFirmExpenses.info.spendingBreakdown"
+                )
+                Spacer(minLength: 0)
+            }
 
             Picker("Breakdown", selection: $mode) {
                 ForEach(PropFirmSpendingBreakdownMode.allCases) { item in

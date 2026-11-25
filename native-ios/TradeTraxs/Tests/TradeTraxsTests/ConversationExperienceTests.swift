@@ -380,11 +380,12 @@ final class ConversationExperienceTests: XCTestCase {
             200
         )
         let bubblePadding = ExperienceSpacing.sm + 2
+        let cardWidth = ConversationBubbleMediaLayout.sharedCardBubbleMaxWidth
         let inner = ConversationBubbleMediaLayout.sharedCardInnerWidth(
-            outerMaxWidth: 280,
+            outerMaxWidth: cardWidth,
             bubbleHorizontalPadding: bubblePadding
         )
-        XCTAssertEqual(inner, 280 - (2 * bubblePadding))
+        XCTAssertEqual(inner, cardWidth - (2 * bubblePadding))
         let photoWidth = ConversationBubbleMediaLayout.photoMaxWidth(
             contentColumnMax: 320,
             bubbleMaxWidth: 240

@@ -5,6 +5,9 @@ import UIKit
 struct ExploreHomeView: View {
     @State private var viewModel: ExploreViewModel
     private let imagePipeline: any ImagePipeline
+    @Bindable private var followCoordinator = FollowMutationCoordinator.shared
+    @Bindable private var joinCoordinator = TradeRoomJoinActionCoordinator.shared
+    @Bindable private var membershipStore = TradeRoomMembershipStore.shared
 
     @Environment(\.themeColors) private var colors
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -290,7 +293,9 @@ struct ExploreHomeView: View {
 
     @ViewBuilder
     private var searchContent: some View {
-        let _ = viewModel.followRevision
+        let _ = followCoordinator.revision
+        let _ = joinCoordinator.mutationStates
+        let _ = membershipStore.revision
         if viewModel.searchPhase == .searching && viewModel.searchPeople.isEmpty && viewModel.searchRooms.isEmpty {
             ProgressView("Searching…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -319,19 +324,19 @@ struct ExploreHomeView: View {
                                 isFollowing: viewModel.isFollowing(trader),
                                 showsFollowControl: viewModel.showsFollowControl(for: trader),
                                 onOpen: { viewModel.openTrader(trader) },
-                                onToggleFollow: { viewModel.toggleFollow(trader) }
+                                onToggleFollow: { viewModel.toggleSearchFollow(trader) }
                             )
                             .listRowBackground(colors.backgroundPrimary)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if viewModel.isFollowing(trader) {
                                     Button(role: .destructive) {
-                                        viewModel.toggleFollow(trader)
+                                        viewModel.toggleSearchFollow(trader)
                                     } label: {
                                         Label("Unfollow", systemImage: "person.badge.minus")
                                     }
                                 } else {
                                     Button {
-                                        viewModel.toggleFollow(trader)
+                                        viewModel.toggleSearchFollow(trader)
                                     } label: {
                                         Label("Follow", systemImage: "person.badge.plus")
                                     }
@@ -345,13 +350,13 @@ struct ExploreHomeView: View {
                                     Label("View Profile", systemImage: "person.crop.circle")
                                 }
                                 Button {
-                                    UIPasteboard.general.string = "@\(trader.profile.username)"
+                                    _ = ExperienceClipboard.copy("@\(trader.profile.username)")
                                     ExperienceHaptics.play(.success)
                                 } label: {
                                     Label("Copy Username", systemImage: "doc.on.doc")
                                 }
                                 Button {
-                                    viewModel.toggleFollow(trader)
+                                    viewModel.toggleSearchFollow(trader)
                                 } label: {
                                     Label(
                                         viewModel.isFollowing(trader) ? "Unfollow" : "Follow",
@@ -372,9 +377,11 @@ struct ExploreHomeView: View {
                                 room: room,
                                 joinState: viewModel.joinState(for: room.id),
                                 presentation: .plainList,
+                                allowsTogglingJoinedMembership: true,
                                 imagePipeline: imagePipeline,
                                 onOpen: { viewModel.openRoom(room) },
-                                onJoin: { Task { await viewModel.joinSearchRoom(room) } }
+                                onJoin: { Task { await viewModel.joinSearchRoom(room) } },
+                                onLeaveJoined: { Task { await viewModel.leaveSearchRoom(room) } }
                             )
                             .listRowBackground(colors.backgroundPrimary)
                             .accessibilityIdentifier("explore.search.room.\(room.id.rawValue)")

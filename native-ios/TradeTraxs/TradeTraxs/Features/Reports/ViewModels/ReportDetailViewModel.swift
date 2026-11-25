@@ -86,6 +86,9 @@ final class ReportDetailViewModel: ScreenLifecycle {
     var title: String { state.report?.title ?? periodKey.kind.title }
     var dateRangeLabel: String? { state.report?.dateRangeLabel }
 
+    /// Trailing toolbar label (week range, month name, custom span) after load.
+    var navigationPeriodLabel: String? { dateRangeLabel }
+
     var isWeekly: Bool {
         weekRef != nil || periodKey.kind == .weekly || state.report?.kind == .weekly
     }

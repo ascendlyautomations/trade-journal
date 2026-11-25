@@ -124,6 +124,17 @@ nonisolated struct TradingAccount: Hashable, Codable, Sendable, Identifiable {
     var livePersonalDrawdown: LivePersonalDrawdownStored? = nil
 
     var isPropFirmAccount: Bool { category == .propFirm }
+
+    /// Applies owner insights columns after PATCH when representation rows omit or default fields.
+    func applyingAccountInsightsSettings(
+        showInAccountDropdowns: Bool,
+        customPublicStatus: String?
+    ) -> TradingAccount {
+        var copy = self
+        copy.showInAccountDropdowns = showInAccountDropdowns
+        copy.customPublicStatus = customPublicStatus
+        return copy
+    }
 }
 
 /// Create / edit payload mirroring web `CreateTradingAccountPayload`.

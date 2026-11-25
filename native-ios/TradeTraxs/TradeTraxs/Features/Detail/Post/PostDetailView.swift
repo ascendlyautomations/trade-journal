@@ -52,6 +52,7 @@ struct PostDetailView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Post")
+        .liveVoiceTopSessionChrome()
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
@@ -115,11 +116,42 @@ struct PostDetailView: View {
 
     @ViewBuilder
     private var content: some View {
+        Group {
+            if let post = viewModel.post {
+                CommentsDetailChrome(
+                    target: interactionTarget(for: post),
+                    contentOwnerUserID: post.authorProfileID.rawValue,
+                    data: data
+                ) { commentsVM, currentUserID, _ in
+                    postScroll(
+                        post: post,
+                        commentsVM: commentsVM,
+                        currentUserID: currentUserID
+                    )
+                }
+            }
+        }
+        .overlay {
+            if viewModel.isDeleting {
+                ProgressView("Deleting…")
+                    .padding(ExperienceSpacing.lg)
+                    .experienceFloatingPanelBackground(
+                        in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func postScroll(
+        post: Post,
+        commentsVM: CommentsViewModel,
+        currentUserID: ProfileID?
+    ) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if let post = viewModel.post {
-                        DetailIdentityHeader(
+                    DetailIdentityHeader(
                             initials: viewModel.authorInitials,
                             avatar: viewModel.authorAvatar,
                             displayName: viewModel.authorDisplayName,
@@ -153,39 +185,42 @@ struct PostDetailView: View {
                                 .padding(.top, ExperienceSpacing.xxs)
                         }
 
-                        postBody(post, scrollProxy: proxy, showsMediaEngagement: !post.media.isEmpty)
-                            .padding(.horizontal, ExperienceSpacing.lg)
-                            .padding(.top, post.media.isEmpty ? ExperienceSpacing.sm : ExperienceSpacing.xs)
-                            .padding(.bottom, ExperienceSpacing.xl)
-                    }
+                    postBody(
+                        post,
+                        scrollProxy: proxy,
+                        showsMediaEngagement: !post.media.isEmpty,
+                        commentsVM: commentsVM,
+                        currentUserID: currentUserID
+                    )
+                    .padding(.horizontal, ExperienceSpacing.lg)
+                    .padding(.top, post.media.isEmpty ? ExperienceSpacing.sm : ExperienceSpacing.xs)
+                    .padding(.bottom, ExperienceSpacing.xl)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .commentThreadScrollSupport(
+                viewModel: commentsVM,
+                scrollProxy: proxy,
+                reduceMotion: reduceMotion
+            )
             .detailCommentsScrollOnOpen(
                 intent: .post(viewModel.postID),
                 anchorID: Self.commentsAnchorID,
-                isContentReady: viewModel.post != nil,
+                isContentReady: true,
                 contentRevealed: contentRevealed,
                 detailCache: data.detailCache,
                 scrollProxy: proxy,
                 reduceMotion: reduceMotion
             )
         }
-        .overlay {
-            if viewModel.isDeleting {
-                ProgressView("Deleting…")
-                    .padding(ExperienceSpacing.lg)
-                    .experienceFloatingPanelBackground(
-                        in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                    )
-            }
-        }
     }
 
     private func postBody(
         _ post: Post,
         scrollProxy: ScrollViewProxy,
-        showsMediaEngagement: Bool
+        showsMediaEngagement: Bool,
+        commentsVM: CommentsViewModel,
+        currentUserID: ProfileID?
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             if post.media.isEmpty {
@@ -200,11 +235,11 @@ struct PostDetailView: View {
             }
 
             CommentsSectionView(
-                target: interactionTarget(for: post),
-                contentOwnerUserID: post.authorProfileID.rawValue,
-                data: data
+                viewModel: commentsVM,
+                currentUserID: currentUserID,
+                imagePipeline: imagePipeline
             )
-                .id(Self.commentsAnchorID)
+            .id(Self.commentsAnchorID)
         }
     }
 

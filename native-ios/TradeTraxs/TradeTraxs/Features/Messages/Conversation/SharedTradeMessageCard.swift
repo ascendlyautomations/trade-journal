@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Rich trade-share card for DM and Trade Room bubbles (web trade message card).
+/// Compact trade-share bubble chrome for DM and Trade Room messages.
 struct SharedTradeMessageCard: View {
     let trade: Trade?
     let tradeID: TradeID
@@ -14,38 +14,14 @@ struct SharedTradeMessageCard: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            if let trade {
-                if ProfileCardMediaPresence.tradeMedia(in: trade) != nil {
-                    TradePreviewThumbnail(
-                        trade: trade,
-                        imagePipeline: imagePipeline,
-                        size: .messageHero(),
-                        layoutWidth: mediaLayoutWidth
-                    )
-                }
-
-                sharedTradeHeader
-                sharedTradeHeadline(trade)
-                sharedTradeMetaRow(trade)
-                sharedTradePricesRow(trade)
-                sharedTradeDateRow(trade)
-                if let note = displayNote(for: trade) {
-                    Text(note)
-                        .experienceStyle(.caption, color: secondaryTextColor)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                sharedTradeHeader
-                SharedContentMessageCardLoadingPlaceholder(
-                    label: "Loading trade…",
-                    isOutgoing: isOutgoing,
-                    mediaLayoutWidth: mediaLayoutWidth
-                )
-            }
-        }
+        SharedTradePreviewCard(
+            trade: trade,
+            tradeID: tradeID,
+            imagePipeline: imagePipeline,
+            style: .card(isOutgoing: isOutgoing),
+            mediaLayoutWidth: mediaLayoutWidth,
+            accountProviderName: accountProviderName
+        )
         .padding(.horizontal, includesBackground ? ExperienceSpacing.sm + 2 : 0)
         .padding(.vertical, includesBackground ? ExperienceSpacing.sm : 0)
         .frame(
@@ -60,9 +36,6 @@ struct SharedTradeMessageCard: View {
                     .fill(isOutgoing ? colors.accent : colors.incomingMessageBubble)
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint("Opens trade detail")
         .accessibilityIdentifier("conversation.bubble.trade")
         .onAppear {
             #if DEBUG
@@ -76,160 +49,4 @@ struct SharedTradeMessageCard: View {
             #endif
         }
     }
-
-    private var secondaryTextColor: Color {
-        isOutgoing ? colors.onAccent.opacity(0.88) : colors.secondaryText
-    }
-
-    private var tertiaryTextColor: Color {
-        isOutgoing ? colors.onAccent.opacity(0.78) : colors.tertiaryText
-    }
-
-    private var sharedTradeHeader: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.caption.weight(.semibold))
-            Text("Shared trade")
-                .experienceStyle(.caption, color: tertiaryTextColor)
-        }
-    }
-
-    @ViewBuilder
-    private func sharedTradeHeadline(_ trade: Trade) -> some View {
-        if isOutgoing {
-            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
-                Text(trade.symbol.ticker)
-                    .font(ExperienceTypography.headline)
-                    .foregroundStyle(colors.onAccent)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .layoutPriority(1)
-                Spacer(minLength: ExperienceSpacing.xxs)
-                Text(TradeDisplay.pnlText(trade.realizedPnL))
-                    .font(ExperienceTypography.headline.monospacedDigit())
-                    .foregroundStyle(colors.onAccent)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-            }
-        } else {
-            PublicTradeHeadlineRow(
-                ticker: trade.symbol.ticker,
-                realizedPnL: trade.realizedPnL
-            )
-        }
-    }
-
-    private func sharedTradeMetaRow(_ trade: Trade) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: TradeMetaChipMetrics.spacing) {
-                metaChip(TradeDisplay.sideTitle(trade.side), emphasized: true)
-                if let mode = modeLabel(for: trade) {
-                    metaChip(mode)
-                }
-                if trade.riskReward != nil {
-                    metaChip(TradeDisplay.rrText(trade.riskReward))
-                }
-                metaChip(TradeDisplay.quantityBadgeText(trade.quantity))
-            }
-        }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-    }
-
-    private func sharedTradePricesRow(_ trade: Trade) -> some View {
-        HStack(spacing: ExperienceSpacing.md) {
-            priceColumn(title: "Entry", value: TradeDisplay.priceText(trade.entryPrice))
-            Spacer(minLength: 0)
-            priceColumn(title: "Exit", value: TradeDisplay.priceText(trade.exitPrice))
-        }
-    }
-
-    private func sharedTradeDateRow(_ trade: Trade) -> some View {
-        Text(TradeDisplay.sharedMessageExecutionStamp(for: trade))
-            .experienceStyle(.caption2, color: tertiaryTextColor)
-            .lineLimit(2)
-            .minimumScaleFactor(0.85)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func metaChipBackground(emphasized: Bool) -> Color {
-        if isOutgoing {
-            return colors.onAccent.opacity(emphasized ? 0.14 : 0.08)
-        }
-        return emphasized ? colors.accentMuted : colors.fillTertiary
-    }
-
-    private func metaChip(_ title: String, emphasized: Bool = false) -> some View {
-        Text(title)
-            .experienceStyle(
-                .caption2,
-                color: emphasized ? secondaryTextColor : tertiaryTextColor
-            )
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, TradeMetaChipMetrics.horizontalPadding)
-            .padding(.vertical, TradeMetaChipMetrics.verticalPadding)
-            .background(metaChipBackground(emphasized: emphasized))
-            .clipShape(Capsule())
-    }
-
-    private func priceColumn(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .experienceStyle(.caption2, color: tertiaryTextColor)
-            Text(value)
-                .experienceStyle(.caption, color: secondaryTextColor)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-        }
-    }
-
-    private func modeLabel(for trade: Trade) -> String? {
-        if trade.mode == .copyTraded {
-            return TradeDisplay.tradeModeFallbackTitle(.copyTraded)
-        }
-        if let caption = TradeDisplay.publicPostedAccountCaption(
-            providerName: accountProviderName,
-            accountMode: trade.accountMode,
-            publicAccountBadge: trade.publicAccountBadge
-        ) {
-            return caption
-        }
-        return TradeDisplay.tradeModeFallbackTitle(trade.mode)
-    }
-
-    private func displayNote(for trade: Trade) -> String? {
-        let caption = trade.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let preview = trade.notePreview?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let raw: String?
-        if let caption, !caption.isEmpty {
-            raw = caption
-        } else if let preview, !preview.isEmpty {
-            raw = preview
-        } else {
-            raw = nil
-        }
-        guard let raw else { return nil }
-        guard raw.count > 120 else { return raw }
-        return String(raw.prefix(120)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
-    }
-
-    private var accessibilityLabel: String {
-        guard let trade else {
-            return "Shared trade loading"
-        }
-        var parts = [
-            "Shared trade",
-            trade.symbol.ticker,
-            TradeDisplay.pnlText(trade.realizedPnL),
-            TradeDisplay.sideTitle(trade.side),
-        ]
-        if let mode = modeLabel(for: trade) {
-            parts.append(mode)
-        }
-        parts.append(TradeDisplay.sharedMessageExecutionStamp(for: trade))
-        return parts.joined(separator: ", ")
-    }
 }
-

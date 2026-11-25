@@ -36,6 +36,10 @@ final class TraxsProPreviewCoordinator {
         presentPreview(feature: .tradingRules, entryPoint: entryPoint)
     }
 
+    func presentBacktestLabPreview(entryPoint: TraxsProPreviewEntryPoint) {
+        presentPreview(feature: .backtestLab, entryPoint: entryPoint)
+    }
+
     func presentPreview(feature: TraxsProPreviewFeature, entryPoint: TraxsProPreviewEntryPoint) {
         guard canPresentPreview else { return }
         presentationEntryPoint = entryPoint
@@ -103,6 +107,8 @@ final class TraxsProPreviewCoordinator {
             TraxsProPreviewSession.shared.endExpenseTrackerPreview()
         } else if TraxsProPreviewSession.shared.isTradingRulesPreviewActive {
             TraxsProPreviewSession.shared.endTradingRulesPreview(detailCache: detailCache)
+        } else if TraxsProPreviewSession.shared.isBacktestLabPreviewActive {
+            TraxsProPreviewSession.shared.endBacktestLabPreview(detailCache: detailCache)
         }
         ProductAnalyticsCoordinator.shared.noteTraxsProPreviewExited(
             entryPoint: entryPoint,
@@ -181,6 +187,8 @@ private struct TraxsProPreviewCoverContent: View {
                 PropFirmExpensesPreviewContainerView(data: data, onDismiss: onDismiss)
             case .tradingRules:
                 TradingRulesPreviewContainerView(data: data, onDismiss: onDismiss)
+            case .backtestLab:
+                BacktestLabPreviewContainerView(data: data, onDismiss: onDismiss)
             }
         }
     }

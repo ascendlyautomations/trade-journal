@@ -5,6 +5,7 @@ struct MessageBubbleActionMenu: View {
     let supportedEmojis: [String]
     var selectedEmoji: String? = nil
     let onSelectEmoji: (String) -> Void
+    var onBrowseEmojis: (() -> Void)? = nil
     var onCopy: (() -> Void)?
     var onRetry: (() -> Void)?
     var onDelete: (() -> Void)?
@@ -43,6 +44,22 @@ struct MessageBubbleActionMenu: View {
                         .buttonStyle(.experiencePlain)
                         .accessibilityLabel("React with \(emoji)")
                         .accessibilityIdentifier("message.reaction.menu.\(emoji)")
+                    }
+                    if let onBrowseEmojis {
+                        Button {
+                            onDismiss()
+                            DispatchQueue.main.async {
+                                onBrowseEmojis()
+                            }
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(width: emojiSlot, height: emojiSlot)
+                                .foregroundStyle(colors.accent)
+                        }
+                        .buttonStyle(.experiencePlain)
+                        .accessibilityLabel("More emoji reactions")
+                        .accessibilityIdentifier("message.reaction.menu.more")
                     }
                 }
                 .padding(.horizontal, 4)
@@ -95,7 +112,8 @@ struct MessageBubbleActionMenu: View {
     }
 
     private var emojiRowWidth: CGFloat {
-        CGFloat(supportedEmojis.count) * emojiSlot + 8
+        let extra = onBrowseEmojis == nil ? 0 : emojiSlot
+        return CGFloat(supportedEmojis.count) * emojiSlot + extra + 8
     }
 
     private var showsActionRows: Bool {

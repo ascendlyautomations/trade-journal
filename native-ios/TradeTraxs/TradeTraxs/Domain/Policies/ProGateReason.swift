@@ -235,6 +235,9 @@ nonisolated enum ProGateReasonParser {
         if lowered.contains("traxpro_backtest_lab_required") {
             return .backtestLab
         }
+        if lowered.contains("traxpro_ai_analyst_required") {
+            return .aiAnalyst
+        }
         if lowered.contains("copy trading") || lowered.contains("copy_trading") {
             return .copyTrading
         }

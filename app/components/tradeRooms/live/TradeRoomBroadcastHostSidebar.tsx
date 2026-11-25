@@ -188,6 +188,7 @@ export default function TradeRoomBroadcastHostSidebar({
         <TradeRoomBroadcastLiveChat
           className="h-full min-h-0"
           messages={broadcast.chatMessages}
+          chatMessageReactions={broadcast.chatMessageReactions}
           userId={chat.userId}
           displayName={chat.displayName}
           avatarUrl={chat.avatarUrl}

@@ -1,6 +1,7 @@
 import Foundation
 import LiveKit
 import Observation
+import OSLog
 
 struct RoomBroadcastStatus: Hashable, Sendable {
     /// Discoverable / viewer-accessible live (false during OBS private preparation).
@@ -123,6 +124,11 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var isBusy = false
     private(set) var lastError: String?
     private(set) var chatMessages: [BroadcastChatMessageItem] = []
+    private(set) var chatMessageReactions: [BroadcastChatReactionItem] = []
+    private(set) var floatingReactions: [BroadcastFloatingReaction] = []
+    private var lastLiveReactionSentAt = Date.distantPast
+    private var lastChatMessageReactionSentAt = Date.distantPast
+    private var liveReactionBurstTimestamps: [Date] = []
     /// Scroll + highlight when tapping a reply preview in livestream chat.
     private(set) var broadcastChatScrollRequest: BroadcastChatScrollRequest?
     private(set) var highlightedBroadcastChatMessageID: String?
@@ -131,8 +137,11 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var videoTrack: VideoTrack?
     /// Bumped when the program video track or publication changes so ``VideoView`` rebinds after replaceTrack / program switches.
     private(set) var programVideoTrackRevision: UInt = 0
-    /// First decoded frame received for the current program publication.
+    /// First decoded frame received for the current program publication (any surface).
     private(set) var programVideoHasRenderedFrame = false
+    private(set) var programVideoSurface: BroadcastProgramVideoSurface = .inlineExpanded
+    private(set) var programVideoSurfaceEpoch: UInt = 0
+    private var programVideoRenderedSurfaceEpoch: UInt?
     /// Used to distinguish startup prep from mid-stream video loss (screen share cancel / track drop).
     private var programVideoWasDisplayedBefore = false
     private(set) var localViewerCount = 0
@@ -183,19 +192,39 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         viewerPresentation == .expanded
     }
 
+    var isObsHostLivePublicWatch: Bool {
+        obsHostBarSession != nil && TradeRoomObsBroadcastController.shared.phase == .livePublic
+    }
+
+    /// Viewer sheet must not cover OBS host manage while the host is broadcasting.
+    var suppressesBroadcastViewerSheet: Bool {
+        isObsHostLivePublicWatch
+    }
+
     var showsFloatingMiniPlayer: Bool {
-        viewerPresentation == .mini && watchSession != nil && (isWatching || isBusy)
+        guard viewerPresentation == .mini, !isObsManageStreamPresented else { return false }
+        if isObsHostLivePublicWatch {
+            return obsHostBarSession != nil
+        }
+        return watchSession != nil && (isWatching || isBusy)
+    }
+
+    var showsInlineExpandedProgramVideo: Bool {
+        viewerPresentation == .expanded
     }
 
     /// Full viewer sheet + OBS manage program surface, never attached while mini player holds the track.
     var videoTrackForExpandedViewer: VideoTrack? {
-        guard viewerPresentation == .expanded || isObsManageStreamPresented else { return nil }
+        guard showsInlineExpandedProgramVideo else { return nil }
         return videoTrack
     }
 
     /// Floating in-app mini-player, single renderer while minimized.
     var videoTrackForMiniPlayer: VideoTrack? {
-        viewerPresentation == .mini ? videoTrack : nil
+        guard viewerPresentation == .mini else { return nil }
+        if let videoTrack { return videoTrack }
+        if isObsHostLivePublicWatch { return obsHostPreviewVideoTrack }
+        return nil
     }
 
     /// Legacy alias, use ``videoTrackForExpandedViewer`` or ``videoTrackForMiniPlayer``.
@@ -204,7 +233,14 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     var hasDisplayableProgramVideo: Bool {
-        videoTrack != nil && programVideoHasRenderedFrame
+        guard videoTrack != nil else { return false }
+        if programVideoSurface == .cornerDismissedHold { return false }
+        return programVideoRenderedSurfaceEpoch == programVideoSurfaceEpoch
+    }
+
+    /// Stable ``VideoView`` identity when the track, publication, or visible surface changes.
+    var programVideoRendererIdentity: String {
+        "\(programVideoTrackRevision)-\(programVideoSurfaceEpoch)"
     }
 
     var showsProgramVideoSurface: Bool {
@@ -221,14 +257,24 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             hostConnected: polledStatus.hostConnected,
             primaryMediaPublisherConnected: polledStatus.primaryMediaPublisherConnected,
             broadcastSourceIsObs: broadcastSourceIsObs,
+            hasSubscribedProgramVideo: videoTrack != nil,
             videoWasDisplayedBefore: programVideoWasDisplayedBefore
         )
     }
 
     func markProgramVideoFrameRendered() {
-        guard videoTrack != nil, !programVideoHasRenderedFrame else { return }
+        guard videoTrack != nil else { return }
+        guard programVideoSurface != .cornerDismissedHold else { return }
+        guard programVideoRenderedSurfaceEpoch != programVideoSurfaceEpoch else { return }
+        programVideoRenderedSurfaceEpoch = programVideoSurfaceEpoch
         programVideoHasRenderedFrame = true
         programVideoWasDisplayedBefore = true
+    }
+
+    func adoptProgramVideoSurface(_ surface: BroadcastProgramVideoSurface) {
+        guard programVideoSurface != surface else { return }
+        programVideoSurface = surface
+        programVideoSurfaceEpoch &+= 1
     }
 
     var isObsHostBroadcastBarActive: Bool {
@@ -240,8 +286,8 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     var showsBroadcastChrome: Bool {
-        if isObsHostBroadcastBarActive { return true }
-        if isWatching || showsFloatingMiniPlayer { return false }
+        if isObsHostLivePublicWatch || showsFloatingMiniPlayer { return false }
+        if isWatching { return false }
         return BroadcastChromeVisibility.shouldShowBar(
             isWatching: isWatching,
             connectionState: connectionState,
@@ -289,6 +335,10 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         setObsHostBarSession(roomID: roomID, roomTitle: roomTitle)
         TradeRoomObsBroadcastController.shared.noteHostContext(roomID: roomID, roomTitle: roomTitle)
         isObsManageStreamPresented = true
+        if isWatching {
+            viewerPresentation = .expanded
+        }
+        TradeRoomObsBroadcastController.shared.ensureObsEncoderPolling(roomID: roomID)
         TradeRoomObsBroadcastDiagnostics.log(
             "sheet.present",
             roomID: roomID,
@@ -300,6 +350,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         guard let obsHostBarSession else { return }
         obsManageStreamPresentation = obsHostBarSession
         isObsManageStreamPresented = true
+        if isWatching {
+            viewerPresentation = .expanded
+        }
         TradeRoomObsBroadcastDiagnostics.log(
             "sheet.present",
             roomID: obsHostBarSession.roomID,
@@ -317,6 +370,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 )
             }
             obsManageStreamPresentation = nil
+            if isObsHostLivePublicWatch || isWatching || isBusy {
+                minimizeViewer()
+            }
         }
         isObsManageStreamPresented = presented
     }
@@ -386,6 +442,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     let chatProfileCache = BroadcastChatProfileCache()
     private var tradesRepository: (any TradeRepository)?
     private var detailPresentationCache: DetailPresentationCache?
+    private var supabaseTransport: SupabaseTransport?
 
     private init() {}
 
@@ -484,7 +541,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 )
             }
         } catch {
-            broadcastModerationError = error.localizedDescription
+            broadcastModerationError = UserFacingError.message(for: error)
         }
     }
 
@@ -498,7 +555,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                     accept: false
                 )
             } catch {
-                speakInviteActionError = error.localizedDescription
+                speakInviteActionError = UserFacingError.message(for: error)
             }
         }
         dismissedSpeakInviteSessionIds.insert(notice.sessionId)
@@ -553,7 +610,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 viewerPresentation = .mini
             }
         } catch {
-            speakInviteActionError = error.localizedDescription
+            speakInviteActionError = UserFacingError.message(for: error)
         }
     }
 
@@ -572,6 +629,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         detailCache: DetailPresentationCache? = nil
     ) {
         client = LiveKitBroadcastClient(transport: transport)
+        supabaseTransport = transport
         self.realtimeHub = realtimeHub
         self.accessTokenProvider = accessTokenProvider
         self.tradesRepository = tradesRepository
@@ -619,7 +677,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             minimizeViewer()
         }
         if isObsManageStreamPresented {
-            setObsManageStreamPresented(false)
+            dismissObsManageStreamPreservingBroadcast()
         }
     }
 
@@ -780,7 +838,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     func syncObsHostPreviewVideo(from room: Room) {
-        obsHostPreviewVideoTrack = BroadcastObsProgramVideo.pickProgramVideoTrack(
+        obsHostPreviewVideoTrack = BroadcastObsProgramVideo.pickProgramVideoTrackOnly(
             programPublisherIdentity: obsHostPreviewProgramIdentity,
             from: room
         )
@@ -813,11 +871,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         selectedProgramVideoPublicationSid = nextPubSid
         videoTrack = track
         programVideoHasRenderedFrame = false
+        programVideoRenderedSurfaceEpoch = nil
         programVideoTrackRevision &+= 1
     }
 
     private func resetProgramVideoDisplayState() {
         programVideoHasRenderedFrame = false
+        programVideoRenderedSurfaceEpoch = nil
         programVideoWasDisplayedBefore = false
     }
 
@@ -901,9 +961,11 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             )
             #endif
             let previousVideoSource = polledStatus.videoSource
+            let previousStatus = polledStatus
             if pollRoomID == roomID {
                 if let sid = next.broadcastSessionId, sid != currentSessionId, !isWatching {
                     chatMessages = []
+                    chatMessageReactions = []
                     chatSharedTrades = [:]
                     chatSharedTradeLoadFailures = []
                     broadcastChatComposerError = nil
@@ -933,12 +995,22 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 }
             }
 
-            if isWatching, watchSession?.roomID == roomID,
-               previousVideoSource != next.videoSource,
-               let videoSrc = next.videoSource, !videoSrc.isEmpty
-            {
-                preferredVideoSource = videoSrc
-                if let room {
+            if isWatching, watchSession?.roomID == roomID, let room {
+                let obsPublisherSignalChanged =
+                    broadcastSourceIsObs
+                    && (
+                        previousStatus.primaryMediaPublisherConnected
+                            != next.primaryMediaPublisherConnected
+                            || previousStatus.primaryMediaPublisherIdentity
+                            != next.primaryMediaPublisherIdentity
+                    )
+                if obsPublisherSignalChanged {
+                    syncVideoTrack(from: room)
+                }
+                if previousVideoSource != next.videoSource,
+                   let videoSrc = next.videoSource, !videoSrc.isEmpty
+                {
+                    preferredVideoSource = videoSrc
                     syncVideoTrack(from: room)
                 }
             }
@@ -956,7 +1028,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             }
         } catch {
             if pollRoomID == roomID {
-                statusPollError = error.localizedDescription
+                statusPollError = UserFacingError.message(for: error)
                 #if DEBUG
                 print(
                     """
@@ -1028,7 +1100,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 )
                 await teardown(preserveViewerPresentation: true)
             } else {
-                lastError = error.localizedDescription
+                lastError = UserFacingError.message(for: error)
                 await teardown()
             }
         }
@@ -1049,10 +1121,30 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     func presentViewer() {
         viewerPresentation = .expanded
+        adoptProgramVideoSurface(.inlineExpanded)
+    }
+
+    /// Opens host manage UI when the host is live; otherwise expands the viewer sheet.
+    func presentExpandedLivestreamChrome() {
+        if isObsHostLivePublicWatch {
+            presentObsManageStreamFromBar()
+            viewerPresentation = .expanded
+        } else {
+            presentViewer()
+        }
     }
 
     func minimizeViewer() {
         viewerPresentation = .mini
+        adoptProgramVideoSurface(.floatingMini)
+    }
+
+    /// Dismiss OBS manage without tearing down the host preview / viewer watch session.
+    func dismissObsManageStreamPreservingBroadcast() {
+        if isObsHostLivePublicWatch || isWatching || isBusy {
+            minimizeViewer()
+        }
+        setObsManageStreamPresented(false)
     }
 
     func leaveWatch() async {
@@ -1121,7 +1213,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             }
             isInConversation = true
         } catch {
-            lastError = error.localizedDescription
+            lastError = UserFacingError.message(for: error)
         }
     }
 
@@ -1147,7 +1239,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             isInConversation = false
             isMicrophoneEnabledInStream = false
         } catch {
-            lastError = error.localizedDescription
+            lastError = UserFacingError.message(for: error)
         }
     }
 
@@ -1166,6 +1258,102 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             isMicrophoneEnabledInStream = next
         } catch {
             lastError = "Could not update microphone."
+        }
+    }
+
+    func broadcastChatReactions(for messageID: String) -> [BroadcastChatReactionItem] {
+        chatMessageReactions.filter { $0.messageId == messageID }
+    }
+
+    func toggleBroadcastChatReaction(
+        messageID: String,
+        userId: String,
+        emoji: String
+    ) async -> String? {
+        guard let room else { return "Not connected to the stream." }
+        guard let normalized = MessageReactionValidation.normalize(emoji) else {
+            return "Pick a valid emoji."
+        }
+        let trimmedID = messageID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty else { return "Invalid message." }
+
+        let viewerRows = chatMessageReactions.filter {
+            $0.messageId == trimmedID && $0.userId == userId
+        }
+        let existingSame = viewerRows.first(where: { $0.emoji == normalized })
+        let nextEmoji = existingSame == nil ? normalized : nil
+
+        let now = Date()
+        if now.timeIntervalSince(lastChatMessageReactionSentAt) < TradeRoomBroadcastChatReactionConstants.minInterval {
+            return "Slow down — try again."
+        }
+
+        let previous = chatMessageReactions
+        chatMessageReactions = BroadcastChatReactionSignaling.apply(
+            chatMessageReactions,
+            messageId: trimmedID,
+            userId: userId,
+            emoji: nextEmoji,
+            updatedAt: now
+        )
+
+        do {
+            let data = try BroadcastChatReactionSignaling.encodeOutgoing(
+                messageId: trimmedID,
+                userId: userId,
+                emoji: nextEmoji
+            )
+            try await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(
+                    topic: TradeRoomBroadcastChatReactionConstants.topic,
+                    reliable: true
+                )
+            )
+            lastChatMessageReactionSentAt = now
+            return nil
+        } catch {
+            chatMessageReactions = previous
+            return "Could not update reaction."
+        }
+    }
+
+    func sendLiveReaction(userId: String, emoji: String) async -> String? {
+        guard let room else { return "Not connected to the stream." }
+        guard MessageReactionValidation.normalize(emoji) != nil else {
+            return "Pick a valid emoji."
+        }
+        let now = Date()
+        if now.timeIntervalSince(lastLiveReactionSentAt) < TradeRoomBroadcastReactionConstants.minInterval {
+            return "Slow down — you're sending reactions too fast."
+        }
+        liveReactionBurstTimestamps.removeAll {
+            now.timeIntervalSince($0) > TradeRoomBroadcastReactionConstants.burstWindow
+        }
+        if liveReactionBurstTimestamps.count >= TradeRoomBroadcastReactionConstants.burstMax {
+            return "Too many reactions — try again in a moment."
+        }
+        do {
+            let data = try BroadcastReactionSignaling.encodeOutgoing(
+                userId: userId,
+                emoji: emoji,
+                originX: Double.random(in: 0.2 ... 0.8)
+            )
+            try await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(
+                    topic: TradeRoomBroadcastReactionConstants.topic,
+                    reliable: false
+                )
+            )
+            lastLiveReactionSentAt = now
+            liveReactionBurstTimestamps.append(now)
+            if let reaction = BroadcastReactionSignaling.parseIncoming(data: data, senderIdentity: userId) {
+                appendFloatingReaction(reaction)
+            }
+            return nil
+        } catch {
+            return "Could not send reaction."
         }
     }
 
@@ -1248,6 +1436,14 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             )
             appendChat(local)
             if let sanitizedTrade {
+                let registered = await registerBroadcastChatTradeShareIfNeeded(
+                    tradeID: sanitizedTrade,
+                    chatMessageID: local.id
+                )
+                if !registered {
+                    broadcastChatComposerError =
+                        "Trade was sent, but viewers might not be able to open it. Try sending again."
+                }
                 await hydrateBroadcastChatTrade(id: sanitizedTrade)
             }
             return .sent
@@ -1295,6 +1491,42 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             }
         } catch {
             ids.forEach { markBroadcastChatTradeLoadFailed($0) }
+        }
+    }
+
+    @discardableResult
+    private func registerBroadcastChatTradeShareIfNeeded(
+        tradeID: TradeID,
+        chatMessageID: String
+    ) async -> Bool {
+        let sessionId = resolvedBroadcastSessionId() ?? ""
+        let messageId = chatMessageID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sessionId.isEmpty, !messageId.isEmpty, let supabaseTransport else { return false }
+
+        struct Params: Encodable {
+            var p_broadcast_session_id: String
+            var p_trade_id: String
+            var p_chat_message_id: String
+        }
+
+        do {
+            let database = SupabaseDatabaseClient(transport: supabaseTransport)
+            _ = try await database.rpcData(
+                functionName: "rpc_v1_broadcast_chat_register_trade_share",
+                parametersJSON: try JSONEncoder().encode(
+                    Params(
+                        p_broadcast_session_id: sessionId,
+                        p_trade_id: tradeID.rawValue,
+                        p_chat_message_id: messageId
+                    )
+                )
+            )
+            return true
+        } catch {
+            AppLog.application.error(
+                "Broadcast chat trade share register failed session=\(sessionId, privacy: .public) trade=\(tradeID.rawValue, privacy: .public)"
+            )
+            return false
         }
     }
 
@@ -2012,6 +2244,11 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         programVideoTrackRevision &+= 1
         preferredVideoSource = "screen"
         chatMessages = []
+        chatMessageReactions = []
+        floatingReactions = []
+        lastLiveReactionSentAt = .distantPast
+        lastChatMessageReactionSentAt = .distantPast
+        liveReactionBurstTimestamps = []
         chatSharedTrades = [:]
         chatSharedTradeLoadFailures = []
         broadcastChatComposerError = nil
@@ -2101,6 +2338,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         }
     }
 
+    private func appendFloatingReaction(_ reaction: BroadcastFloatingReaction) {
+        floatingReactions.append(reaction)
+        if floatingReactions.count > 48 {
+            floatingReactions.removeFirst(floatingReactions.count - 48)
+        }
+    }
+
     private func syncViewerCount(from room: Room) {
         guard let broadcasterIdentity else {
             localViewerCount = 0
@@ -2129,6 +2373,12 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         let localIdentity = room.localParticipant.identity?.stringValue ?? ""
 
         func appendParticipant(identity: String, name: String, isLocal: Bool) {
+            if BroadcastObsProgramVideo.isIngressPublisherIdentity(
+                identity,
+                programPublisherIdentity: programPublisherIdentity
+            ) {
+                return
+            }
             let isBroadcaster = identity == broadcasterIdentity
             let micPub = isLocal
                 ? room.localParticipant.audioTracks.first(where: { $0.source == .microphone })
@@ -2142,10 +2392,16 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 if isSpeaker, isOpenVoiceStream || isInConversation { return "Speaker" }
                 return "Viewer"
             }()
+            let cached = chatProfileCache.profile(forUserId: identity)
+            let display = BroadcastRosterPresentation.memberRowLabel(
+                profile: cached,
+                liveKitFallbackName: name,
+                userId: identity
+            )
             items.append(
                 BroadcastRosterParticipant(
                     identity: identity,
-                    displayName: name.isEmpty ? identity : name,
+                    displayName: display,
                     roleLabel: role,
                     isHandRaised: raisedHandIdentities.contains(identity),
                     isLocal: isLocal
@@ -2173,16 +2429,31 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
         }
         rosterParticipants = items
+        let hydrateIds = items.map(\.identity).filter {
+            BroadcastRosterPresentation.shouldListInRoster(
+                identity: $0,
+                programPublisherIdentity: programPublisherIdentity
+            )
+        }
+        if !hydrateIds.isEmpty {
+            Task { await chatProfileCache.hydrate(userIds: hydrateIds) }
+        }
         syncBroadcastLiveActivity()
     }
 
     private func syncVideoTrack(from room: Room) {
         if broadcastSourceIsObs {
-            let track = BroadcastObsProgramVideo.pickProgramVideoTrack(
+            if let picked = BroadcastObsProgramVideo.pickProgramVideoTrack(
                 programPublisherIdentity: programPublisherIdentity,
                 from: room
-            )
-            applyProgramVideoTrack(track)
+            ) {
+                applyProgramVideoTrack(
+                    picked.track,
+                    publicationSid: picked.publicationSid
+                )
+            } else {
+                applyProgramVideoTrack(nil)
+            }
             return
         }
 
@@ -2219,6 +2490,28 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                     return
                 }
                 applyRemoteBroadcastHand(identity: identity, raised: raised)
+                return
+            }
+            if topic == TradeRoomBroadcastReactionConstants.topic {
+                let identity = participant?.identity?.stringValue ?? room.localParticipant.identity?.stringValue ?? ""
+                guard let reaction = BroadcastReactionSignaling.parseIncoming(data: data, senderIdentity: identity) else {
+                    return
+                }
+                appendFloatingReaction(reaction)
+                return
+            }
+            if topic == TradeRoomBroadcastChatReactionConstants.topic {
+                let identity = participant?.identity?.stringValue ?? room.localParticipant.identity?.stringValue ?? ""
+                guard let event = BroadcastChatReactionSignaling.parseIncoming(data: data, senderIdentity: identity) else {
+                    return
+                }
+                chatMessageReactions = BroadcastChatReactionSignaling.apply(
+                    chatMessageReactions,
+                    messageId: event.messageId,
+                    userId: event.userId,
+                    emoji: event.emoji,
+                    updatedAt: event.updatedAt
+                )
                 return
             }
             guard topic == TradeRoomBroadcastChatConstants.topic else { return }
@@ -2281,8 +2574,15 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         didUpdateStreamState streamState: StreamState
     ) {
         Task { @MainActor in
-            guard let room, participant.identity?.stringValue == broadcasterIdentity else { return }
+            guard let room else { return }
             guard trackPublication.kind == .video else { return }
+            let identity = participant.identity?.stringValue ?? ""
+            if broadcastSourceIsObs {
+                let programId = programPublisherIdentity?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !programId.isEmpty, identity == programId else { return }
+            } else {
+                guard identity == broadcasterIdentity else { return }
+            }
             if streamState == .active {
                 syncVideoTrack(from: room)
             }

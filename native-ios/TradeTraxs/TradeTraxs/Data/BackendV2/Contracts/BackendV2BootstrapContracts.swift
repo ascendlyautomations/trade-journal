@@ -683,6 +683,43 @@ nonisolated struct LeaderboardBootstrapV1: Codable, Sendable, Equatable {
     }
 }
 
+nonisolated struct LeaderboardCurveV1: Codable, Sendable, Equatable {
+    var meta: BootstrapMetaV1
+    var data: DataPayload
+
+    nonisolated enum MetricFormat: String, Codable, Sendable, Equatable {
+        case currency
+        case percent
+        case ratio
+    }
+
+    nonisolated struct CurvePoint: Codable, Sendable, Equatable, Identifiable {
+        var day: String
+        var highest: PostgresFlexibleDouble?
+        var lowest: PostgresFlexibleDouble?
+        var you: PostgresFlexibleDouble?
+        var average: PostgresFlexibleDouble?
+        var population_count: Int?
+
+        var id: String { day }
+    }
+
+    nonisolated struct DataPayload: Codable, Sendable, Equatable {
+        var timeframe: String
+        var category: String
+        var audience: String
+        var supported: Bool
+        var metric_format: MetricFormat
+        var highest_profile_id: String?
+        var lowest_profile_id: String?
+        var points: [CurvePoint]
+    }
+
+    func validateContractVersion() throws {
+        try BackendV2Versioning.assertContractVersion(meta.contract_version)
+    }
+}
+
 nonisolated struct ProfileStatisticsBootstrapV1: Codable, Sendable, Equatable {
     var meta: BootstrapMetaV1
     var data: DataPayload

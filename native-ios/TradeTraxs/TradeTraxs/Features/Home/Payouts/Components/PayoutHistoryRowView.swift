@@ -9,29 +9,44 @@ struct PayoutHistoryRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                 Text(amountText)
-                    .font(.system(.body, design: .rounded).weight(.semibold).monospacedDigit())
-                    .foregroundStyle(colors.primaryText)
+                    .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
+                    .foregroundStyle(colors.profit)
+
                 Text(accountContextLine)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .experienceStyle(.subheadline, color: colors.primaryText)
                     .lineLimit(2)
-                HStack(spacing: ExperienceSpacing.xs) {
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: ExperienceSpacing.sm) {
                     Text(TradeDisplay.dateText(item.date))
-                        .experienceStyle(.caption, color: colors.tertiaryText)
-                    if showsPostedAsAchievement {
-                        Text("· Posted")
-                            .experienceStyle(.caption, color: colors.tertiaryText)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                    if let status = statusLabel {
+                        Text(status)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(colors.secondaryText)
+                            .padding(.horizontal, ExperienceSpacing.xs)
+                            .padding(.vertical, 2)
+                            .background {
+                                Capsule(style: .continuous)
+                                    .fill(colors.fillSecondary.opacity(0.85))
+                                    .overlay {
+                                        Capsule(style: .continuous)
+                                            .strokeBorder(colors.border.opacity(0.45), lineWidth: ExperienceBorder.hairline)
+                                    }
+                            }
                     }
                 }
             }
-            Spacer(minLength: ExperienceSpacing.xs)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
             Image(systemName: "chevron.right")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(colors.tertiaryText)
         }
+        .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, ExperienceSpacing.xs)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("withdrawals.history.\(item.id)")
     }
@@ -52,5 +67,21 @@ struct PayoutHistoryRowView: View {
             return mode
         }
         return "\(trimmedName)\(TradingAccountDisplay.ownerDropdownSeparator)\(mode)"
+    }
+
+    private var statusLabel: String? {
+        if showsPostedAsAchievement {
+            return "Posted"
+        }
+        switch item.source {
+        case .fundedCycle:
+            return "Prop payout"
+        case .liveLedger:
+            return "Live"
+        case .otherLedger:
+            return "Recorded"
+        case .achievementProp, .achievementLive:
+            return "Achievement"
+        }
     }
 }

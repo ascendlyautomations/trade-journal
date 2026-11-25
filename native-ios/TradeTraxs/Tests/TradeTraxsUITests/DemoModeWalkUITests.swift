@@ -52,7 +52,7 @@ final class DemoModeWalkUITests: XCTestCase {
         }
 
         XCTAssertTrue(element("dashboard.home").waitForExistence(timeout: 25))
-        XCTAssertTrue(element("demo.leave").waitForExistence(timeout: 8))
+        XCTAssertTrue(element("guest.leave").waitForExistence(timeout: 8))
         assertSurfaceIsUsable("dashboard")
 
         open("dashboard.calendar", expecting: "calendar.home", name: "calendar")
@@ -127,7 +127,7 @@ final class DemoModeWalkUITests: XCTestCase {
             goBack()
         }
 
-        element("demo.leave").tap()
+        element("guest.leave").tap()
         let exploreAgain = element("auth.exploreDemo")
         XCTAssertTrue(exploreAgain.waitForExistence(timeout: 15), "Exit Demo should return to Sign In")
         exploreAgain.tap()

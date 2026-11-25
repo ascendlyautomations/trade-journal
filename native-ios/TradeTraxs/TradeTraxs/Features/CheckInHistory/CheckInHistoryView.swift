@@ -5,6 +5,7 @@ struct CheckInHistoryView: View {
     @State private var contentFilter: CheckInHistoryContentFilter = .all
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.traxsProPreviewReadOnly) private var traxsProPreviewReadOnly
 
     init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
@@ -33,9 +34,33 @@ struct CheckInHistoryView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Check-In History")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if PsychologyAnalyticsPreviewSupport.usesSampleCheckInHistory || traxsProPreviewReadOnly {
+                checkInHistorySampleBanner
+            }
+        }
         .refreshable { await viewModel.refresh() }
         .task { await viewModel.bootstrapIfNeeded() }
         .accessibilityIdentifier("checkInHistory.list")
+    }
+
+    private var checkInHistorySampleBanner: some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(colors.accent)
+            Text(MonetizationPlanCopy.psychologyAnalyticsPreviewHistoryListSubtitle)
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.surfacePrimary)
+        .overlay(alignment: .bottom) {
+            colors.separator.frame(height: ExperienceBorder.hairline)
+        }
+        .accessibilityIdentifier("checkInHistory.sampleBanner")
     }
 
     private var filteredSummaries: [CheckInHistoryDaySummary] {

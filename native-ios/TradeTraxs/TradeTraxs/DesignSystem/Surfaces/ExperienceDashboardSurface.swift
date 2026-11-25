@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// Shared dashboard / analytics / settings card chrome, cool lift in dark mode;
-/// light mode uses elevated fill + hairline border + soft shadow (dark unchanged).
+/// Shared dashboard / analytics / settings card chrome.
+/// Light: elevated fill + hairline border + soft shadow.
+/// Dark: opaque stepped surfaces + matching hairline borders (no flat translucency stack).
 enum ExperienceDashboardSurface {
-    static let cardFillOpacity: CGFloat = 0.35
-
     enum Prominence {
         /// KPI strips, chart insets, insight tiles, performance tiles.
         case standard
@@ -23,6 +22,14 @@ enum ExperienceDashboardSurface {
         static let controlShadowRadius: CGFloat = 6
         static let shadowY: CGFloat = 3
         static let controlShadowY: CGFloat = 2
+    }
+
+    enum DarkChrome {
+        static let borderOpacity: CGFloat = 0.42
+        static let insetBorderOpacity: CGFloat = 0.38
+        static let controlBorderOpacity: CGFloat = 0.48
+        static let featuredBorderOpacity: CGFloat = 0.55
+        static let nestedBorderOpacity: CGFloat = 0.4
     }
 
     static func cornerRadius(_ prominence: Prominence) -> CGFloat {
@@ -47,10 +54,8 @@ private struct ExperienceDashboardCardBackground: ViewModifier {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(cardFill)
                 .overlay {
-                    if colorScheme == .light {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(borderColor, lineWidth: ExperienceBorder.hairline)
-                    }
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: ExperienceBorder.hairline)
                 }
                 .shadow(
                     color: shadowColor,
@@ -63,17 +68,30 @@ private struct ExperienceDashboardCardBackground: ViewModifier {
 
     private var cardFill: Color {
         if colorScheme == .dark {
-            return colors.fillSecondary.opacity(ExperienceDashboardSurface.cardFillOpacity)
+            switch prominence {
+            case .standard:
+                return colors.surfacePrimary
+            case .featured:
+                return colors.backgroundElevated
+            }
         }
         return colors.surfacePrimary
     }
 
     private var borderColor: Color {
+        if colorScheme == .light {
+            switch prominence {
+            case .standard:
+                return colors.border.opacity(ExperienceDashboardSurface.LightChrome.borderOpacity)
+            case .featured:
+                return colors.borderStrong.opacity(ExperienceDashboardSurface.LightChrome.featuredBorderOpacity)
+            }
+        }
         switch prominence {
         case .standard:
-            return colors.border.opacity(ExperienceDashboardSurface.LightChrome.borderOpacity)
+            return colors.border.opacity(ExperienceDashboardSurface.DarkChrome.borderOpacity)
         case .featured:
-            return colors.borderStrong.opacity(ExperienceDashboardSurface.LightChrome.featuredBorderOpacity)
+            return colors.borderStrong.opacity(ExperienceDashboardSurface.DarkChrome.featuredBorderOpacity)
         }
     }
 
@@ -104,22 +122,21 @@ private struct ExperienceDashboardNestedCardBackground: ViewModifier {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(nestedFill)
                 .overlay {
-                    if colorScheme == .light {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(
-                                colors.border.opacity(0.55),
-                                lineWidth: ExperienceBorder.hairline
-                            )
-                    }
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(nestedBorderColor, lineWidth: ExperienceBorder.hairline)
                 }
         }
     }
 
     private var nestedFill: Color {
-        if colorScheme == .dark {
-            return colors.fillSecondary.opacity(ExperienceDashboardSurface.cardFillOpacity)
+        colors.fillPrimary
+    }
+
+    private var nestedBorderColor: Color {
+        if colorScheme == .light {
+            return colors.border.opacity(ExperienceDashboardSurface.LightChrome.insetBorderOpacity)
         }
-        return colors.fillPrimary
+        return colors.border.opacity(ExperienceDashboardSurface.DarkChrome.nestedBorderOpacity)
     }
 }
 
@@ -176,7 +193,7 @@ extension View {
         )
     }
 
-    // MARK: - Filter / dropdown / search controls (light elevated chrome; dark legacy fills)
+    // MARK: - Filter / dropdown / search controls
 
     /// Capsule filter triggers (account, scope, leaderboard chips) on the page canvas.
     func experienceFilterCapsule(elevated: Bool = false) -> some View {
@@ -260,68 +277,67 @@ private struct ExperienceFilterControlChrome: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
-        if colorScheme == .light {
-            content.background { lightBackground }
-        } else {
-            content.background { darkBackground }
-        }
+        content.background { controlBackground }
     }
 
     @ViewBuilder
-    private var lightBackground: some View {
+    private var controlBackground: some View {
         switch shape {
         case .capsule:
-            Capsule().fill(lightFill)
+            Capsule().fill(controlFill)
                 .overlay {
                     Capsule()
-                        .strokeBorder(lightBorder, lineWidth: ExperienceBorder.hairline)
+                        .strokeBorder(controlBorder, lineWidth: ExperienceBorder.hairline)
                 }
                 .modifier(ControlShadowModifier(active: usesControlShadow))
         case .roundedRect(let radius):
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(lightFill)
+                .fill(controlFill)
                 .overlay {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .strokeBorder(lightBorder, lineWidth: ExperienceBorder.hairline)
+                        .strokeBorder(controlBorder, lineWidth: ExperienceBorder.hairline)
                 }
                 .modifier(ControlShadowModifier(active: usesControlShadow))
         case .circle:
-            Circle().fill(lightFill)
+            Circle().fill(controlFill)
                 .overlay {
                     Circle()
-                        .strokeBorder(lightBorder, lineWidth: ExperienceBorder.hairline)
+                        .strokeBorder(controlBorder, lineWidth: ExperienceBorder.hairline)
                 }
         }
     }
 
-    @ViewBuilder
-    private var darkBackground: some View {
-        switch shape {
-        case .capsule:
-            Capsule().fill(colors.fillSecondary)
-        case .roundedRect(let radius):
-            colors.fillSecondary
-                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-        case .circle:
-            Circle().fill(colors.fillSecondary)
+    private var controlFill: Color {
+        if colorScheme == .light {
+            switch role {
+            case .pageTrigger, .sheetRow:
+                return colors.surfacePrimary
+            case .insetField:
+                return colors.fillPrimary
+            }
         }
-    }
-
-    private var lightFill: Color {
         switch role {
         case .pageTrigger, .sheetRow:
-            return colors.surfacePrimary
+            return colors.surfaceSecondary
         case .insetField:
             return colors.fillPrimary
         }
     }
 
-    private var lightBorder: Color {
+    private var controlBorder: Color {
+        if colorScheme == .light {
+            switch role {
+            case .pageTrigger, .sheetRow:
+                return colors.border.opacity(ExperienceDashboardSurface.LightChrome.controlBorderOpacity)
+            case .insetField:
+                return colors.border.opacity(ExperienceDashboardSurface.LightChrome.insetBorderOpacity)
+            }
+        }
         switch role {
         case .pageTrigger, .sheetRow:
-            return colors.border.opacity(ExperienceDashboardSurface.LightChrome.controlBorderOpacity)
+            return colors.border.opacity(ExperienceDashboardSurface.DarkChrome.controlBorderOpacity)
         case .insetField:
-            return colors.border.opacity(ExperienceDashboardSurface.LightChrome.insetBorderOpacity)
+            return colors.border.opacity(ExperienceDashboardSurface.DarkChrome.insetBorderOpacity)
         }
     }
 

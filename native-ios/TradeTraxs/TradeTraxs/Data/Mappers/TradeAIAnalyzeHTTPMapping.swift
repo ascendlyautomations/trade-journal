@@ -9,7 +9,13 @@ nonisolated enum TradeAIAnalyzeHTTPMapping {
         let reply = trimmed(decoded?.reply)
         let result = trimmed(decoded?.result)
         let error = trimmed(decoded?.error)
-        let category = failureCategory(statusCode: statusCode, data: data, decoded: decoded)
+        let backendCode = trimmed(decoded?.code)
+        let category = failureCategory(
+            statusCode: statusCode,
+            data: data,
+            decoded: decoded,
+            backendCode: backendCode
+        )
 
         switch statusCode {
         case 200 ... 299:
@@ -17,37 +23,44 @@ nonisolated enum TradeAIAnalyzeHTTPMapping {
                 TradeAITrace.analysisDecoded()
                 return TradeAIAnalyzeResponse(
                     reply: AIGeneratedTextNormalizer.normalize(text),
-                    shouldPersist: true
+                    shouldPersist: true,
+                    backendCode: nil
                 )
             }
             TradeAITrace.analysisFailed(
                 status: statusCode,
                 byteCount: data.count,
-                category: category
+                category: category,
+                backendCode: backendCode
             )
             return TradeAIAnalyzeResponse(
                 reply: userFacingMessage(
                     statusCode: statusCode,
                     reply: reply,
                     error: error,
+                    backendCode: backendCode,
                     fallback: "No response generated"
                 ),
-                shouldPersist: false
+                shouldPersist: false,
+                backendCode: backendCode
             )
         default:
             TradeAITrace.analysisFailed(
                 status: statusCode,
                 byteCount: data.count,
-                category: category
+                category: category,
+                backendCode: backendCode
             )
             return TradeAIAnalyzeResponse(
                 reply: userFacingMessage(
                     statusCode: statusCode,
                     reply: reply,
                     error: error,
+                    backendCode: backendCode,
                     fallback: "We couldn't complete the analysis. Please try again."
                 ),
-                shouldPersist: false
+                shouldPersist: false,
+                backendCode: backendCode
             )
         }
     }
@@ -55,8 +68,12 @@ nonisolated enum TradeAIAnalyzeHTTPMapping {
     static func failureCategory(
         statusCode: Int,
         data: Data,
-        decoded: AnalyzeTradeBFFResponse?
+        decoded: AnalyzeTradeBFFResponse?,
+        backendCode: String? = nil
     ) -> String {
+        if let backendCode, !backendCode.isEmpty {
+            return backendCode
+        }
         if looksLikeHTML(data) { return "html" }
         if (200 ... 299).contains(statusCode),
            trimmed(decoded?.reply) == nil,
@@ -79,6 +96,7 @@ nonisolated enum TradeAIAnalyzeHTTPMapping {
         statusCode: Int,
         reply: String?,
         error: String?,
+        backendCode: String?,
         fallback: String
     ) -> String {
         if statusCode == 403 {
@@ -91,12 +109,45 @@ nonisolated enum TradeAIAnalyzeHTTPMapping {
             )
         }
 
+        if let code = backendCode,
+           code == "openai_quota_exhausted",
+           let reply,
+           reply.localizedCaseInsensitiveContains("busy right now"),
+           let coded = messageForKnownBackendCode(code)
+        {
+            return AIGeneratedTextNormalizer.normalize(coded)
+        }
+
         if let text = firstUserFacing([reply, error]) {
             return AIGeneratedTextNormalizer.normalize(
                 ProEntitlementResponseSanitizer.sanitizedOrNeutral(text)
             )
         }
+
+        if let code = backendCode, let coded = messageForKnownBackendCode(code) {
+            return AIGeneratedTextNormalizer.normalize(coded)
+        }
         return fallback
+    }
+
+    private static func messageForKnownBackendCode(_ code: String) -> String? {
+        switch code {
+        case "openai_quota_exhausted":
+            return """
+            Trade AI is temporarily unavailable. The analysis service needs to be restored on our side. \
+            Please try again later or contact support if this continues.
+            """
+        case "openai_rate_limited":
+            return "Trade AI is busy right now. Wait a moment and try your analysis again."
+        case "openai_not_configured", "openai_auth_failed":
+            return "Trade AI is temporarily unavailable on the server. Please try again later."
+        case "entitlement_check_failed":
+            return "We couldn't verify your TraxsPro subscription right now. Please try again in a moment."
+        case "pro_required":
+            return nil
+        default:
+            return nil
+        }
     }
 
     private static func firstUserFacing(_ candidates: [String?]) -> String? {
@@ -133,4 +184,5 @@ nonisolated struct AnalyzeTradeBFFResponse: Decodable, Sendable {
     var reply: String?
     var result: String?
     var error: String?
+    var code: String?
 }

@@ -16,6 +16,7 @@ final class BacktestLabViewModel {
     private let detailCache: DetailPresentationCache
     private let tradeDetailRepository: any TradeDetailRepository
     private let navigationCoordinator: NavigationCoordinator
+    let loadsTraxsProPreviewSampleOnly: Bool
 
     private(set) var phase: Phase = .idle
     private(set) var allTrades: [Trade] = []
@@ -28,7 +29,6 @@ final class BacktestLabViewModel {
     var showsCustomTimeSheet = false
     var draftCustomRangeStart: Date?
     var draftCustomRangeEnd: Date?
-    var calendarMonth = CalendarMonthID.current()
     var pendingDelete: TradeOwnerJournalSummary?
     var journalSharePresentation: JournalTradeShareSupport.Presentation?
 
@@ -40,17 +40,23 @@ final class BacktestLabViewModel {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         tradeDetailRepository: any TradeDetailRepository,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        loadsTraxsProPreviewSampleOnly: Bool = false
     ) {
         self.trades = trades
         self.session = session
         self.detailCache = detailCache
         self.tradeDetailRepository = tradeDetailRepository
         self.navigationCoordinator = navigationCoordinator
+        self.loadsTraxsProPreviewSampleOnly = loadsTraxsProPreviewSampleOnly
     }
 
     var strategyOptions: [String] {
         [BacktestLabMetrics.allStrategiesToken] + BacktestLabMetrics.distinctStrategies(in: allTrades)
+    }
+
+    private var backtestModeAccountIDScope: Set<TradingAccountID> {
+        BacktestLabFilters.backtestModeAccountIDs(from: accounts)
     }
 
     var scopedTrades: [Trade] {
@@ -59,7 +65,8 @@ final class BacktestLabViewModel {
             accountFilter: accountFilter,
             strategy: BacktestLabMetrics.allStrategiesToken,
             timeFilter: timeFilter,
-            customInterval: customTimeInterval
+            customInterval: customTimeInterval,
+            backtestModeAccountIDs: backtestModeAccountIDScope
         )
     }
 
@@ -69,7 +76,8 @@ final class BacktestLabViewModel {
             accountFilter: accountFilter,
             strategy: selectedStrategy,
             timeFilter: timeFilter,
-            customInterval: customTimeInterval
+            customInterval: customTimeInterval,
+            backtestModeAccountIDs: backtestModeAccountIDScope
         )
     }
 
@@ -86,15 +94,6 @@ final class BacktestLabViewModel {
             ? scopedTrades
             : filteredTrades
         return BacktestLabMetrics.strategyBreakdown(from: pool)
-    }
-
-    var calendarMonthModel: TradingCalendarMonth? {
-        guard !filteredTrades.isEmpty else { return nil }
-        return BacktestLabCalendarSupport.buildMonth(
-            year: calendarMonth.year,
-            month: calendarMonth.month,
-            trades: filteredTrades
-        )
     }
 
     var strategyMenuTitle: String {
@@ -193,8 +192,19 @@ final class BacktestLabViewModel {
     }
 
     func openManageAccounts() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         ExperienceHaptics.play(.selection)
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
+    }
+
+    func openCalendar() {
+        ExperienceHaptics.play(.selection)
+        BacktestCalendarSessionStore.shared.publish(
+            accountFilter: accountFilter,
+            selectedStrategy: selectedStrategy,
+            backtestModeAccountIDs: backtestModeAccountIDScope
+        )
+        navigationCoordinator.pushHome(.backtestCalendar)
     }
 
     func handleAccountMutation() {
@@ -206,15 +216,11 @@ final class BacktestLabViewModel {
         accounts = loaded
         accountNames = OwnerAccountMutationSync.accountNamesMap(from: loaded)
         OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
-        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(accountFilter, accounts: loaded)
+        let eligible = BacktestLabFilters.eligibleBacktestAccounts(loaded)
+        let sanitized = BacktestLabFilters.sanitizedAccountFilter(accountFilter, eligibleAccounts: eligible)
         if sanitized != accountFilter {
             accountFilter = sanitized
         }
-    }
-
-    func shiftCalendarMonth(by delta: Int) {
-        ExperienceHaptics.play(.selection)
-        calendarMonth = calendarMonth.advancing(by: delta)
     }
 
     func openTrade(_ item: TradeOwnerJournalSummary) {
@@ -227,6 +233,7 @@ final class BacktestLabViewModel {
     }
 
     func editTrade(_ item: TradeOwnerJournalSummary) {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         ExperienceHaptics.play(.selection)
         Task {
             do {
@@ -240,11 +247,13 @@ final class BacktestLabViewModel {
     }
 
     func shareTrade(_ item: TradeOwnerJournalSummary) {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         ExperienceHaptics.play(.selection)
         journalSharePresentation = JournalTradeShareSupport.presentation(for: item.summary)
     }
 
     func requestDelete(_ item: TradeOwnerJournalSummary) {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         ExperienceHaptics.play(.warning)
         TradeDeleteConfirmationPresenter.scheduleConfirmation { [weak self] in
             self?.pendingDelete = item
@@ -306,10 +315,17 @@ final class BacktestLabViewModel {
             }
             let profileID = ProfileID(viewer.rawValue)
             self.profileID = profileID
-            async let backtests = trades.backtestLabTrades(ownedBy: profileID)
-            async let loadedAccounts = trades.accounts(for: profileID)
-            let loaded = try await backtests
-            let accountList = try await loadedAccounts
+            let loaded: [Trade]
+            let accountList: [TradingAccount]
+            if loadsTraxsProPreviewSampleOnly {
+                loaded = BacktestLabPreviewSampleData.trades(owner: profileID)
+                accountList = BacktestLabPreviewSampleData.accounts(owner: profileID)
+            } else {
+                async let backtests = trades.backtestLabTrades(ownedBy: profileID)
+                async let loadedAccounts = trades.accounts(for: profileID)
+                loaded = try await backtests
+                accountList = try await loadedAccounts
+            }
             self.accounts = accountList
             accountNames = Dictionary(uniqueKeysWithValues: accountList.map { ($0.id, $0.name) })
             allTrades = loaded

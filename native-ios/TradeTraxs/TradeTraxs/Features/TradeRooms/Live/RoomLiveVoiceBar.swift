@@ -3,14 +3,13 @@ import SwiftUI
 /// Persistent compact voice chrome, room label, mute, leave.
 struct RoomLiveVoiceBar: View {
     @Bindable var coordinator: RoomLiveVoiceCoordinator
-    @State private var showsParticipants = false
     @State private var showsVoiceControls = false
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
         VStack(spacing: ExperienceSpacing.xs) {
-            HStack(spacing: ExperienceSpacing.sm) {
+            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
                 Button {
                     showsVoiceControls = true
                 } label: {
@@ -18,55 +17,49 @@ struct RoomLiveVoiceBar: View {
                         Text(coordinator.session?.roomTitle ?? "Trade Room")
                             .experienceStyle(.caption, color: colors.primaryText)
                             .lineLimit(1)
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 6, height: 6)
-                        Text(coordinator.voiceConnectionStatusLabel)
-                            .experienceStyle(.caption2, color: colors.secondaryText)
+                            .minimumScaleFactor(0.85)
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(statusColor)
+                                .frame(width: 6, height: 6)
+                            Text(coordinator.voiceConnectionStatusLabel)
+                                .experienceStyle(.caption2, color: colors.secondaryText)
+                                .lineLimit(1)
+                        }
                     }
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.experiencePlain)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
 
-                if coordinator.session?.canPublish == true {
-                    voiceIconButton(
-                        systemName: coordinator.isMicrophoneEnabled ? "mic.fill" : "mic.slash.fill",
-                        foreground: coordinator.isMicrophoneEnabled ? colors.primaryText : colors.error,
-                        label: coordinator.isMicrophoneEnabled ? "Mute" : "Unmute"
-                    ) {
-                        Task { await coordinator.toggleMute() }
+                HStack(spacing: ExperienceSpacing.xs) {
+                    if coordinator.session?.canPublish == true {
+                        voiceIconButton(
+                            systemName: coordinator.isMicrophoneEnabled ? "mic.fill" : "mic.slash.fill",
+                            foreground: coordinator.isMicrophoneEnabled ? colors.primaryText : colors.error,
+                            label: coordinator.isMicrophoneEnabled ? "Mute" : "Unmute"
+                        ) {
+                            Task { await coordinator.toggleMute() }
+                        }
                     }
 
                     voiceIconButton(
-                        systemName: coordinator.isHandRaised ? "hand.raised.fill" : "hand.raised",
-                        foreground: coordinator.isHandRaised ? colors.accent : colors.secondaryText,
-                        label: coordinator.isHandRaised ? "Lower hand" : "Raise hand"
+                        systemName: "person.2.fill",
+                        foreground: colors.secondaryText,
+                        label: "Members"
                     ) {
-                        Task { await coordinator.toggleHandRaised() }
+                        coordinator.showsMembersScreen = true
+                    }
+
+                    voiceIconButton(
+                        systemName: "phone.down.fill",
+                        foreground: colors.error,
+                        label: "Leave Voice"
+                    ) {
+                        Task { await coordinator.leave() }
                     }
                 }
-
-                voiceIconButton(
-                    systemName: "person.2.fill",
-                    foreground: colors.secondaryText,
-                    label: "Participants"
-                ) {
-                    showsParticipants.toggle()
-                }
-
-                voiceIconButton(
-                    systemName: "phone.down.fill",
-                    foreground: colors.error,
-                    label: "Leave Voice"
-                ) {
-                    Task { await coordinator.leave() }
-                }
-            }
-
-            if showsParticipants {
-                RoomLiveVoiceParticipantList(coordinator: coordinator)
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             if let lastError = coordinator.lastError, !lastError.isEmpty {
@@ -83,6 +76,7 @@ struct RoomLiveVoiceBar: View {
                         .foregroundStyle(colors.error)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, ExperienceSpacing.md)

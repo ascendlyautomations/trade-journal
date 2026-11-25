@@ -36,8 +36,7 @@ final class ResetPasswordViewModel {
             errorMessage = UserFacingError.map(auth).message
         } catch {
             ExperienceHaptics.play(.warning)
-            let appError = AppError.unknown(message: error.localizedDescription)
-            errorMessage = UserFacingError.map(appError).message
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 }

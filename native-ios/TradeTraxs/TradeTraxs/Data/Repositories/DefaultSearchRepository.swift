@@ -39,7 +39,6 @@ nonisolated struct DefaultSearchRepository: SearchRepository {
                     value: "(username.ilike.*\(pattern)*,name.ilike.*\(pattern)*)"
                 ),
                 URLQueryItem(name: "username", value: "not.is.null"),
-                URLQueryItem(name: "is_private", value: "neq.true"),
                 URLQueryItem(name: "limit", value: String(page.limit)),
             ]
             if let excludingProfileID {

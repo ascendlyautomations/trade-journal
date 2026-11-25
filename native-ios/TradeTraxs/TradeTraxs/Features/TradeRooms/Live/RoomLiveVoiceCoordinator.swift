@@ -10,7 +10,6 @@ struct LiveVoiceParticipantItem: Identifiable, Hashable, Sendable {
     var isLocal: Bool
     var isSpeaking: Bool
     var isMuted: Bool
-    var isHandRaised: Bool
 }
 
 struct LiveVoiceSessionInfo: Hashable, Sendable {
@@ -41,11 +40,13 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var session: LiveVoiceSessionInfo?
     private(set) var connectionState: ConnectionState = .disconnected
     private(set) var isMicrophoneEnabled = false
-    private(set) var isHandRaised = false
     private(set) var participants: [LiveVoiceParticipantItem] = []
     private(set) var lastError: String?
     private(set) var isJoining = false
     private(set) var isLeaving = false
+    var showsMembersScreen = false
+
+    let chatProfileCache = BroadcastChatProfileCache()
 
     var showsPersistentBar: Bool {
         showsVoiceChrome
@@ -189,15 +190,20 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     private var canPublishCurrent = false
     private var operationGeneration: UInt64 = 0
     private var liveActivityEpoch: UInt64 = 0
-    private var raisedHandIdentities: Set<String> = []
     private var leaveInFlight: Task<Void, Never>?
 
     private init() {
         wireLiveActivityIntentBridge()
     }
 
-    func configure(transport: SupabaseTransport) {
+    func configure(
+        transport: SupabaseTransport,
+        profileLookup: (@Sendable ([ProfileID]) async throws -> [Profile])? = nil
+    ) {
         tokenClient = LiveKitTokenClient(transport: transport)
+        if let profileLookup {
+            chatProfileCache.configure(profileLookup: profileLookup)
+        }
     }
 
     func join(roomID: RoomID, roomTitle: String) async {
@@ -255,9 +261,6 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
                 channelTitle: TradeRoomGeneralVoice.userChannelTitle,
                 canPublish: tokenResponse.canPublish
             )
-            isHandRaised = false
-            raisedHandIdentities = []
-
             try await nextRoom.connect(
                 url: tokenResponse.livekitUrl,
                 token: tokenResponse.token
@@ -296,7 +299,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             syncLiveActivity()
         } catch {
             guard operationGeneration == joinGeneration, !isLeaving else { return }
-            lastError = error.localizedDescription
+            lastError = UserFacingError.message(for: error)
             await teardownRoom(joinedRoom, clearError: false, liveActivityEpoch: liveActivityEpoch)
         }
     }
@@ -341,31 +344,13 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             if isMicrophoneAccessError(error) {
                 downgradeToListenOnly(on: room, error: error)
             } else {
-                lastError = error.localizedDescription
+                lastError = UserFacingError.message(for: error)
             }
         }
     }
 
     func toggleMute() async {
         await setMuted(isMicrophoneEnabled)
-    }
-
-    func toggleHandRaised() async {
-        guard let room, let identity = room.localParticipant.identity?.stringValue else { return }
-        let next = !isHandRaised
-        do {
-            let data = try LiveVoiceHandPayload.encodeHandState(identity: identity, raised: next)
-            try await room.localParticipant.publish(
-                data: data,
-                options: DataPublishOptions(
-                    topic: TradeTraxsLiveVoiceActivityConstants.handSignalTopic,
-                    reliable: true
-                )
-            )
-            applyLocalHandState(identity: identity, raised: next)
-        } catch {
-            lastError = "Could not update raise hand."
-        }
     }
 
     func refreshVoiceChromeAfterForeground() {
@@ -399,8 +384,6 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
                 self.session = nil
                 self.room = nil
                 self.isMicrophoneEnabled = false
-                self.isHandRaised = false
-                self.raisedHandIdentities = []
                 self.canPublishCurrent = false
                 self.participants = []
                 TradeTraxsLiveVoiceLiveActivityManager.shared.end(sessionEpoch: self.liveActivityEpoch)
@@ -421,9 +404,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
 
     nonisolated func room(_: Room, participantDidDisconnect participant: RemoteParticipant) {
         Task { @MainActor in
-            if let id = participant.identity?.stringValue {
-                self.raisedHandIdentities.remove(id)
-            }
+            _ = participant
             self.syncParticipants()
             self.syncLiveActivity()
         }
@@ -433,22 +414,6 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         Task { @MainActor in
             _ = speakers
             self.syncParticipants()
-        }
-    }
-
-    nonisolated func room(
-        _: Room,
-        participant: RemoteParticipant?,
-        didReceiveData data: Data,
-        forTopic topic: String,
-        encryptionType _: EncryptionType
-    ) {
-        guard topic == TradeTraxsLiveVoiceActivityConstants.handSignalTopic else { return }
-        Task { @MainActor in
-            guard case .handState(let identity, let raised) = LiveVoiceHandPayload.decode(from: data) else {
-                return
-            }
-            self.applyRemoteHandState(identity: identity, raised: raised)
         }
     }
 
@@ -485,10 +450,10 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         session = nil
         connectionState = .disconnected
         isMicrophoneEnabled = false
-        isHandRaised = false
-        raisedHandIdentities = []
         canPublishCurrent = false
         participants = []
+        showsMembersScreen = false
+        chatProfileCache.clear()
         if clearError {
             lastError = nil
         }
@@ -567,36 +532,13 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         let micPub = participant.firstAudioPublication
         let muted = micPub?.isMuted == true || !participant.isMicrophoneEnabled()
         let identity = participant.identity?.stringValue ?? UUID().uuidString
-        let hand = isLocal ? isHandRaised : raisedHandIdentities.contains(identity)
         return LiveVoiceParticipantItem(
             identity: identity,
             displayName: participant.name ?? participant.identity?.stringValue ?? "Guest",
             isLocal: isLocal,
             isSpeaking: participant.isSpeaking,
-            isMuted: muted,
-            isHandRaised: hand
+            isMuted: muted
         )
-    }
-
-    private func applyLocalHandState(identity: String, raised: Bool) {
-        isHandRaised = raised
-        if raised {
-            raisedHandIdentities.insert(identity)
-        } else {
-            raisedHandIdentities.remove(identity)
-        }
-        syncParticipants()
-        syncLiveActivity()
-    }
-
-    private func applyRemoteHandState(identity: String, raised: Bool) {
-        if raised {
-            raisedHandIdentities.insert(identity)
-        } else {
-            raisedHandIdentities.remove(identity)
-        }
-        syncParticipants()
-        syncLiveActivity()
     }
 
     private func liveActivityContentState() -> TradeTraxsLiveVoiceActivityAttributes.ContentState {
@@ -614,8 +556,8 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             connectionLabel: label,
             participantCount: participants.count,
             isMicrophoneEnabled: isMicrophoneEnabled,
-            isHandRaised: isHandRaised,
-            raisedHandCount: raisedHandIdentities.count
+            isHandRaised: false,
+            raisedHandCount: 0
         )
     }
 
@@ -640,9 +582,6 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     private func wireLiveActivityIntentBridge() {
         LiveVoiceActivityIntentBridge.toggleMute = {
             await RoomLiveVoiceCoordinator.shared.toggleMute()
-        }
-        LiveVoiceActivityIntentBridge.toggleHand = {
-            await RoomLiveVoiceCoordinator.shared.toggleHandRaised()
         }
         LiveVoiceActivityIntentBridge.leaveVoice = {
             await RoomLiveVoiceCoordinator.shared.leave()

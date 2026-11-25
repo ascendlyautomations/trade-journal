@@ -252,6 +252,14 @@ nonisolated enum BackendV2FlightKeys {
         return "\(BackendV2Versioning.RPCName.leaderboard.rawValue)|\(timeframe)|\(category)|\(audience)|\(limit)|\(c)"
     }
 
+    static func leaderboardCurve(
+        timeframe: String,
+        category: String,
+        audience: String
+    ) -> String {
+        "\(BackendV2Versioning.RPCName.leaderboardCurve.rawValue)|\(timeframe)|\(category)|\(audience)"
+    }
+
     static func profileTab(
         tab: String,
         profileID: String,

@@ -19,7 +19,7 @@ struct RoomBroadcastParticipantsSheet: View {
                         Text("No participants yet")
                             .foregroundStyle(colors.secondaryText)
                     } else {
-                        ForEach(coordinator.rosterParticipants) { participant in
+                        ForEach(filteredRoster) { participant in
                             participantRow(participant)
                         }
                     }
@@ -53,17 +53,31 @@ struct RoomBroadcastParticipantsSheet: View {
         }
     }
 
+    private var filteredRoster: [BroadcastRosterParticipant] {
+        coordinator.rosterParticipants.filter {
+            BroadcastRosterPresentation.shouldListInRoster(
+                identity: $0.identity,
+                programPublisherIdentity: coordinator.polledStatus.primaryMediaPublisherIdentity
+            )
+        }
+    }
+
     private func participantRow(_ participant: BroadcastRosterParticipant) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+        let profile = coordinator.chatProfileCache.profile(forUserId: participant.identity)
+        let rowLabel = BroadcastRosterPresentation.memberRowLabel(
+            profile: profile,
+            liveKitFallbackName: participant.displayName,
+            userId: participant.identity
+        )
+        return HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
             RoomBroadcastProfileIdentityControl(
                 userId: participant.identity,
-                displayName: participant.displayName,
-                username: coordinator.chatProfileCache.profile(forUserId: participant.identity)?.username
-                    ?? participant.identity,
+                displayName: profile?.displayName ?? rowLabel,
+                username: profile?.username ?? rowLabel,
                 avatarDiameter: 36,
                 coordinator: coordinator,
                 imagePipeline: imagePipeline,
-                profile: coordinator.chatProfileCache.profile(forUserId: participant.identity)
+                profile: profile
             )
             .frame(maxWidth: .infinity, alignment: .leading)
 

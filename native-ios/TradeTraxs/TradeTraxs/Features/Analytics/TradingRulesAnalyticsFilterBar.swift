@@ -8,7 +8,7 @@ struct TradingRulesAnalyticsFilterBar: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        HStack(spacing: ExperienceSpacing.xs) {
+        HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
             HStack(spacing: ExperienceSpacing.xs) {
                 accountMenu
                     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -78,7 +78,7 @@ struct TradingRulesAnalyticsFilterBar: View {
             }
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
-            .tradingRulesFilterChip()
+            .experienceFilterCapsule()
             .overlay(alignment: .topTrailing) {
                 if scope.showsTimePeriodFilterIndicator {
                     Circle()
@@ -105,7 +105,7 @@ struct TradingRulesAnalyticsFilterBar: View {
             }
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
-            .tradingRulesFilterChip()
+            .experienceFilterCapsule()
             .overlay(alignment: .topTrailing) {
                 if scope.showsAdvancedFilterIndicator {
                     Circle()
@@ -133,7 +133,7 @@ struct TradingRulesAnalyticsFilterBar: View {
         }
         .padding(.horizontal, ExperienceSpacing.sm)
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 32, alignment: .leading)
-        .tradingRulesFilterChip()
+        .experienceFilterCapsule()
     }
 }
 

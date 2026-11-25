@@ -26,7 +26,7 @@ struct ReportDetailBlocksView: View {
             }
 
         case .metrics(let metrics):
-            sectionCard(title: block.title, accent: colors.primaryText) {
+            keyMetricsSectionCard(title: block.title) {
                 metricsGrid(metrics)
             }
 
@@ -146,116 +146,24 @@ struct ReportDetailBlocksView: View {
         .accessibilityIdentifier("reports.detail.section.\(title.lowercased())")
     }
 
+    private func keyMetricsSectionCard<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text(title)
+                .experienceStyle(.headline, color: colors.primaryText)
+            content()
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(ReportDetailSectionSurface())
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("reports.detail.section.\(title.lowercased())")
+    }
+
     private func metricsGrid(_ metrics: TradingReportMetrics) -> some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-                GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-            ],
-            spacing: ExperienceSpacing.sm
-        ) {
-            metricCell(
-                "Net P&L",
-                metrics.knownResultCount > 0 ? formatPnl(metrics.netPnl) : "–"
-            )
-            metricCell(
-                "Win Rate",
-                metrics.knownResultCount > 0
-                    ? NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1)
-                    : "–"
-            )
-            metricCell(
-                "Average RR",
-                metrics.averageRr.map { formatRR($0) } ?? "–"
-            )
-            metricCell(
-                "Profit Factor",
-                metrics.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "–"
-            )
-            metricCell("Trades Taken", NumberDisplay.integer(metrics.tradesTaken))
-            labelAndPnLMetricCell(
-                "Best Day",
-                dayLabel: metrics.bestDayLabel,
-                pnl: metrics.bestDayPnl
-            )
-            labelAndPnLMetricCell(
-                "Worst Day",
-                dayLabel: metrics.worstDayLabel,
-                pnl: metrics.worstDayPnl
-            )
-            labelAndPnLMetricCell(
-                "Best Session",
-                dayLabel: metrics.bestSessionLabel,
-                pnl: metrics.bestSessionPnl
-            )
-            labelAndPnLMetricCell(
-                "Worst Session",
-                dayLabel: metrics.worstSessionLabel,
-                pnl: metrics.worstSessionPnl
-            )
-            metricCell("Most Traded", metrics.mostTradedSymbol ?? "–")
-            metricCell(
-                "Avg Hold Time",
-                metrics.averageHoldTimeSeconds.map(formatHold) ?? "–"
-            )
-        }
-    }
-
-    private func labelAndPnLMetricCell(_ title: String, dayLabel: String?, pnl: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-                .tracking(0.4)
-            if let dayLabel, let pnl {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(dayLabel)
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        .foregroundStyle(colors.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Text(formatPnl(pnl))
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                        .foregroundStyle(metricPnLTone(pnl))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-            } else {
-                Text("–")
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                    .foregroundStyle(colors.primaryText)
-            }
-        }
-        .padding(ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.backgroundSecondary.opacity(0.65), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.sm,
-            style: .continuous
-        ))
-    }
-
-    private func metricPnLTone(_ pnl: Double) -> Color {
-        if pnl > 0.01 { return colors.profit }
-        if pnl < -0.01 { return colors.loss }
-        return colors.primaryText
-    }
-
-    private func metricCell(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased())
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-                .tracking(0.4)
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(colors.primaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-        }
-        .padding(ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.backgroundSecondary.opacity(0.65), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.sm,
-            style: .continuous
-        ))
+        ReportKeyMetricsGrid(metrics: metrics)
     }
 
     @ViewBuilder
@@ -274,15 +182,4 @@ struct ReportDetailBlocksView: View {
         }
     }
 
-    private func formatPnl(_ value: Double) -> String {
-        NumberDisplay.reportPnL(value)
-    }
-
-    private func formatRR(_ value: Double) -> String {
-        NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 2)
-    }
-
-    private func formatHold(_ seconds: Int) -> String {
-        TradeHoldDuration.formatSeconds(seconds) ?? "–"
-    }
 }

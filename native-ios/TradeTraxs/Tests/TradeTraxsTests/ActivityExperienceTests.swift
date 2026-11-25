@@ -733,6 +733,21 @@ private final class ActivityStubNotificationRepository: NotificationRepository, 
         return count
     }
 
+    func markUnread(id: NotificationID) async throws {
+        _ = try await markUnread(ids: [id])
+    }
+
+    func markUnread(ids: [NotificationID]) async throws -> Int {
+        var count = 0
+        for id in ids {
+            if let index = items.firstIndex(where: { $0.id == id && $0.isRead }) {
+                items[index].isRead = false
+                count += 1
+            }
+        }
+        return count
+    }
+
     func markMessageNotificationsRead() async throws -> Int {
         let targets = items.indices.filter { !items[$0].isRead && items[$0].kind == .message }
         for index in targets {

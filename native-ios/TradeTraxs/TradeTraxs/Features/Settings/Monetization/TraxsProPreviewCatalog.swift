@@ -6,6 +6,7 @@ nonisolated enum TraxsProPreviewFeature: String, Sendable {
     case dashboard
     case expenseTracker
     case tradingRules
+    case backtestLab
 }
 
 nonisolated enum TraxsProPreviewEntryPoint: String, Sendable {
@@ -14,6 +15,7 @@ nonisolated enum TraxsProPreviewEntryPoint: String, Sendable {
     case dashboardUpsell = "dashboard_upsell"
     case expenseTrackerGate = "expense_tracker_gate"
     case tradingRulesGate = "trading_rules_gate"
+    case backtestLabGate = "backtest_lab_gate"
     case proUpgradeSheet = "pro_upgrade_sheet"
     case featurePreviewCard = "feature_preview_card"
     case previewBanner = "preview_banner"
@@ -22,7 +24,7 @@ nonisolated enum TraxsProPreviewEntryPoint: String, Sendable {
 enum TraxsProPreviewCatalog {
     static func supportsInteractivePreview(for feature: ProFeatureKind) -> Bool {
         switch feature {
-        case .tradingReports, .premiumAnalytics, .propFirm:
+        case .tradingReports, .premiumAnalytics, .propFirm, .backtestLab:
             return true
         default:
             return false
@@ -42,6 +44,8 @@ enum TraxsProPreviewCatalog {
             return .dashboard
         case .propFirm:
             return .expenseTracker
+        case .backtestLab:
+            return .backtestLab
         default:
             return nil
         }

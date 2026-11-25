@@ -4,6 +4,10 @@ import {
   parseBroadcastChatPayload,
   BROADCAST_CHAT_MAX_LENGTH,
 } from "./client/tradeRoomBroadcastChat.ts"
+import {
+  applyBroadcastChatReactionEvent,
+  parseBroadcastChatReactionPayload,
+} from "./client/tradeRoomBroadcastChatReaction.ts"
 import { parseBroadcastHandPayload } from "./client/tradeRoomBroadcastHand.ts"
 import {
   normalizeTradeRoomBroadcastVideoSource,
@@ -98,5 +102,68 @@ describe("Trade Room broadcast — live chat", () => {
     assert.ok(msg)
     assert.equal(msg?.replyTo?.messageId, "host-1")
     assert.equal(msg?.replyTo?.displayName, "Host")
+  })
+})
+
+describe("Trade Room broadcast — live chat message reactions", () => {
+  it("rejects spoofed userId", () => {
+    const payload = new TextEncoder().encode(
+      JSON.stringify({
+        type: "chat_reaction",
+        messageId: "m1",
+        userId: "attacker",
+        emoji: "🔥",
+        sentAt: 1,
+      })
+    )
+    assert.equal(parseBroadcastChatReactionPayload(payload, "real-user"), null)
+  })
+
+  it("applies one reaction per user per message", () => {
+    const payload = new TextEncoder().encode(
+      JSON.stringify({
+        type: "chat_reaction",
+        messageId: "m1",
+        userId: "u1",
+        emoji: "🔥",
+        sentAt: 1,
+      })
+    )
+    const event = parseBroadcastChatReactionPayload(payload, "u1")
+    assert.ok(event)
+    let rows = applyBroadcastChatReactionEvent([], event!)
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0]!.emoji, "🔥")
+
+    const replace = parseBroadcastChatReactionPayload(
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: "chat_reaction",
+          messageId: "m1",
+          userId: "u1",
+          emoji: "❤️",
+          sentAt: 2,
+        })
+      ),
+      "u1"
+    )
+    rows = applyBroadcastChatReactionEvent(rows, replace!)
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0]!.emoji, "❤️")
+
+    const cleared = parseBroadcastChatReactionPayload(
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: "chat_reaction",
+          messageId: "m1",
+          userId: "u1",
+          emoji: null,
+          sentAt: 3,
+        })
+      ),
+      "u1"
+    )
+    rows = applyBroadcastChatReactionEvent(rows, cleared!)
+    assert.equal(rows.length, 0)
   })
 })

@@ -80,6 +80,7 @@ final class ContentMutationStore {
         latest = .postDeleted(id)
         latestPostID = id
         revision += 1
+        MessagingSharedContentDeletionCoordinator.shared.notePostDeleted(id)
         pruneVaultReferences([
             VaultContentRef(contentType: .profilePost, contentID: id.rawValue),
             VaultContentRef(contentType: .feedPost, contentID: id.rawValue),
@@ -90,6 +91,7 @@ final class ContentMutationStore {
         latest = .reelDeleted(id)
         latestReelID = id
         revision += 1
+        MessagingSharedContentDeletionCoordinator.shared.noteReelDeleted(id)
         pruneVaultReferences([
             VaultContentRef(contentType: .reel, contentID: id.rawValue),
         ])
@@ -99,6 +101,7 @@ final class ContentMutationStore {
         latest = .achievementDeleted(id)
         latestAchievementID = id
         revision += 1
+        MessagingSharedContentDeletionCoordinator.shared.noteAchievementDeleted(id)
         pruneVaultReferences([
             VaultContentRef(contentType: .achievement, contentID: id.rawValue),
         ])

@@ -16,12 +16,14 @@ struct PayoutEquityCurveView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Payout Equity Curve")
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                    .fontWeight(.semibold)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
                 Spacer(minLength: 0)
-                Text("\(ProfileDisplay.formatMoney(totalWithdrawals)) Total")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .fontWeight(.semibold)
+                Text(ProfileDisplay.formatMoney(totalWithdrawals))
+                    .font(.subheadline.weight(.bold).monospacedDigit())
+                    .foregroundStyle(colors.profit)
+                    .accessibilityIdentifier("withdrawals.total")
+                    .contextualTourTarget(.payoutsHistory)
             }
 
             Group {

@@ -16,6 +16,8 @@ struct TradePreviewThumbnail: View {
         case preview
         /// Message-card hero, full width, capped height
         case messageHero(maxHeight: CGFloat? = nil)
+        /// Shared-trade preview screenshot — aspect-fill, capped height
+        case sharedPreviewHero(maxHeight: CGFloat = 120)
     }
 
     let trade: Trade?
@@ -43,6 +45,17 @@ struct TradePreviewThumbnail: View {
                 maxDisplayHeightOverride: maxHeight,
                 layoutWidth: layoutWidth
             )
+        case .sharedPreviewHero(let maxHeight):
+            let width = layoutWidth ?? SharedTradePreviewMetrics.maxCardWidth
+            TradeImageView(
+                reference: resolvedReference,
+                imagePipeline: imagePipeline,
+                contentMode: .fill,
+                width: width,
+                height: maxHeight
+            )
+            .frame(width: width, height: maxHeight)
+            .clipped()
         }
     }
 

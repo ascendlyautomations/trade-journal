@@ -60,7 +60,7 @@ struct ProfileState: Equatable {
 
     /// Header metrics derived from ``stats`` (same presentation as today).
     var headerMetrics: [ProfileHeaderMetric] {
-        ProfileDisplay.headerMetrics(from: stats)
+        ProfileDisplay.headerMetrics(from: stats, contentLocked: isContentLocked)
     }
 
     var payoutTotal: Decimal? { stats?.payoutTotal }

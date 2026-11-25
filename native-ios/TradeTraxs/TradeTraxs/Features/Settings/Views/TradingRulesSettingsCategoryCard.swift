@@ -20,9 +20,11 @@ struct TradingRulesSettingsCategoryCard<Content: View, ResetMenu: View>: View {
                 ExperienceDivider()
                     .padding(.horizontal, ExperienceSpacing.md)
                 content()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, ExperienceSpacing.xs)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .experienceTradingRulesCard(prominence: .standard)
         .accessibilityElement(children: isExpanded ? .contain : .ignore)
     }

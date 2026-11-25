@@ -132,6 +132,11 @@ struct MainTabShellView: View {
                 coordinator.openExternal(.feed(.profile(profileID)))
             }
             broadcastCoordinator.bindOpenTrade { tradeID in
+                let cache = appEnvironment.data.detailCache
+                if let preview = broadcastCoordinator.chatSharedTrades[tradeID] {
+                    SocialTradeOpenHandoff.stage(preview, for: tradeID)
+                    cache.ensurePresentationSeed(forPreview: preview)
+                }
                 coordinator.openExternal(.feed(.trade(tradeID)))
             }
             FirstTradeDetailCoachmarkStore.shared.configure(
@@ -226,7 +231,8 @@ struct MainTabShellView: View {
         .liveVoiceTabShellLayout(
             showsDemoLeave: showsDemoExperienceChrome,
             broadcastCoordinator: broadcastCoordinator,
-            liveVoiceCoordinator: liveVoiceCoordinator
+            liveVoiceCoordinator: liveVoiceCoordinator,
+            imagePipeline: appEnvironment.data.imagePipeline
         )
     }
 
@@ -320,6 +326,17 @@ struct HomeNavigationStack: View {
             )
         case .backtest:
             BacktestLabView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .backtestCalendar:
+            BacktestCalendarView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .backtestTradingDay(let dayKey):
+            BacktestTradingDayDetailView(
+                dayKey: dayKey,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
@@ -456,6 +473,13 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator,
                 detailCache: appEnvironment.data.detailCache
             )
+        case .tradingRulesTrends:
+            TradingRulesComplianceTrendsView()
+        case .tradingRulesViolationHistory:
+            TradingRulesViolationHistoryGroupsView(
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
         case .tradingScorecard:
             TradingScorecardDetailView(
                 navigationCoordinator: coordinator,
@@ -500,6 +524,8 @@ struct HomeNavigationStack: View {
         case .propFirmPayouts: return "Payouts"
         case .analyst: return "Analyst"
         case .backtest: return "Backtest"
+        case .backtestCalendar: return "Backtest Calendar"
+        case .backtestTradingDay: return "Trading Day"
         case .achievements: return "Achievements"
         case .achievementDetail: return "Achievement"
         case .streaks: return "Streaks"
@@ -511,6 +537,8 @@ struct HomeNavigationStack: View {
         case .tradingRulesAnalytics: return "Trading Rules Analytics"
         case .tradingRulesRuleDetail: return "Rule detail"
         case .tradingRulesDayDetail: return "Trading day"
+        case .tradingRulesTrends: return "Trading Rules Trends"
+        case .tradingRulesViolationHistory: return "Violation history"
         case .tradingScorecard: return DashboardScorecardDisplayCopy.sectionTitle
         case .psychologyCoach: return "Psychology Coach"
         case .checkInHistory: return "Check-In History"
@@ -695,6 +723,13 @@ struct FeedNavigationStack: View {
                 navigationCoordinator: coordinator,
                 detailCache: appEnvironment.data.detailCache
             )
+        case .tradingRulesTrends:
+            TradingRulesComplianceTrendsView()
+        case .tradingRulesViolationHistory:
+            TradingRulesViolationHistoryGroupsView(
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: feedTitle(route),
@@ -728,6 +763,8 @@ struct FeedNavigationStack: View {
         case .tradingRulesAnalytics: return "Trading Rules Analytics"
         case .tradingRulesRuleDetail: return "Rule detail"
         case .tradingRulesDayDetail: return "Trading day"
+        case .tradingRulesTrends: return "Trading Rules Trends"
+        case .tradingRulesViolationHistory: return "Violation history"
         }
     }
 }
@@ -880,6 +917,13 @@ struct MessagesNavigationStack: View {
                 navigationCoordinator: coordinator,
                 detailCache: appEnvironment.data.detailCache
             )
+        case .tradingRulesTrends:
+            TradingRulesComplianceTrendsView()
+        case .tradingRulesViolationHistory:
+            TradingRulesViolationHistoryGroupsView(
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
         }
     }
 
@@ -903,6 +947,8 @@ struct MessagesNavigationStack: View {
         case .tradingRulesAnalytics: return "Trading Rules Analytics"
         case .tradingRulesRuleDetail: return "Rule detail"
         case .tradingRulesDayDetail: return "Trading day"
+        case .tradingRulesTrends: return "Trading Rules Trends"
+        case .tradingRulesViolationHistory: return "Violation history"
         }
     }
 }
@@ -1057,6 +1103,13 @@ struct ProfileNavigationStack: View {
                 navigationCoordinator: coordinator,
                 detailCache: appEnvironment.data.detailCache
             )
+        case .tradingRulesTrends:
+            TradingRulesComplianceTrendsView()
+        case .tradingRulesViolationHistory:
+            TradingRulesViolationHistoryGroupsView(
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
         case .admin(let adminRoute):
             AdminProfileDestinationView.view(
                 route: adminRoute,
@@ -1105,6 +1158,8 @@ struct ProfileNavigationStack: View {
         case .tradingRulesAnalytics: return "Trading Rules Analytics"
         case .tradingRulesRuleDetail: return "Rule detail"
         case .tradingRulesDayDetail: return "Trading day"
+        case .tradingRulesTrends: return "Trading Rules Trends"
+        case .tradingRulesViolationHistory: return "Violation history"
         case .admin: return ""
         case .referrals: return "Referrals"
         case .affiliate: return "Affiliate"
@@ -1507,11 +1562,11 @@ struct PsychologyAnalyticsHomeRouteView: View {
     let data: DataEnvironment
 
     @State private var entitlementGateRevision = 0
-    @State private var didPresentUpgradeGate = false
     @State private var presentationRevision = 0
     @State private var loadOutcome: PsychologyAnalyticsLoadOutcome = .ready
     @State private var isRefreshing = false
     @State private var loadGeneration = 0
+    @State private var freePreviewPresentation: PsychologyAnalyticsPreviewSupport.SamplePresentation?
 
     private var restrictsPremiumPsychologyAndAI: Bool {
         _ = entitlementGateRevision
@@ -1520,6 +1575,13 @@ struct PsychologyAnalyticsHomeRouteView: View {
             demoModeActive: ExploreModeSupport.isActive,
             profileID: profileID
         )
+    }
+
+    /// Signed-in Free users and TraxsPro dashboard preview use sample History only.
+    private var showsPsychologyAnalyticsFreePreview: Bool {
+        _ = entitlementGateRevision
+        if restrictsPremiumPsychologyAndAI { return true }
+        return TraxsProPreviewSession.shared.isDashboardPreviewActive
     }
 
     private var showsEntitlementVerification: Bool {
@@ -1551,10 +1613,21 @@ struct PsychologyAnalyticsHomeRouteView: View {
                 TraxProEntitlementVerificationView(profileID: activeProfileID) {
                     Task { await TraxProEntitlementRefreshAction.refresh(data: data) }
                 }
-            } else if restrictsPremiumPsychologyAndAI {
-                Color.clear
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .experienceScreenBackground()
+            } else if showsPsychologyAnalyticsFreePreview {
+                if let freePreviewPresentation {
+                    PsychologyAnalyticsFreePreviewView(
+                        presentation: freePreviewPresentation,
+                        onOpenCheckInHistory: {
+                            navigationCoordinator.pushHome(.checkInHistory)
+                        },
+                        onOpenDay: { day in
+                            navigationCoordinator.pushHome(.checkInDay(day.dateKey))
+                        }
+                    )
+                } else {
+                    ProgressView("Loading sample analytics…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             } else if let report = PsychologyAnalyticsSessionStore.shared.report,
                       reportMatchesActiveViewer
             {
@@ -1600,21 +1673,30 @@ struct PsychologyAnalyticsHomeRouteView: View {
             }
         }
         .task(id: activeProfileID?.rawValue) {
-            guard !restrictsPremiumPsychologyAndAI, !showsEntitlementVerification else { return }
+            guard !showsPsychologyAnalyticsFreePreview, !showsEntitlementVerification else { return }
             await refreshAnalytics(forceReveal: true)
+        }
+        .task(id: showsPsychologyAnalyticsFreePreview) {
+            guard showsPsychologyAnalyticsFreePreview else {
+                PsychologyAnalyticsPreviewSupport.endEphemeralHistoryPreview()
+                freePreviewPresentation = nil
+                return
+            }
+            PsychologyAnalyticsPreviewSupport.beginEphemeralHistoryPreview()
+            freePreviewPresentation = PsychologyAnalyticsPreviewSupport.resolvedPresentation(
+                fallbackReport: reportMatchesActiveViewer
+                    ? PsychologyAnalyticsSessionStore.shared.report
+                    : nil,
+                fallbackUnlock: PsychologyAnalyticsSessionStore.shared.unlockProgress
+            )
         }
         .task(id: showsEntitlementVerification) {
             if showsEntitlementVerification {
                 await TraxProEntitlementRefreshAction.refresh(data: data)
             }
         }
-        .onAppear { presentUpgradeGateIfNeeded() }
-        .onChange(of: restrictsPremiumPsychologyAndAI) { _, restricted in
-            if restricted {
-                presentUpgradeGateIfNeeded()
-            } else {
-                didPresentUpgradeGate = false
-            }
+        .onDisappear {
+            PsychologyAnalyticsPreviewSupport.endEphemeralHistoryPreview()
         }
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
             entitlementGateRevision += 1
@@ -1661,15 +1743,6 @@ struct PsychologyAnalyticsHomeRouteView: View {
         guard generation == loadGeneration else { return }
         loadOutcome = outcome
         presentationRevision = PsychologyAnalyticsSessionStore.shared.contentRevision
-    }
-
-    private func presentUpgradeGateIfNeeded() {
-        ProUpgradeAutoPresent.presentFeatureGateIfNeeded(
-            isRestricted: restrictsPremiumPsychologyAndAI,
-            didPresent: &didPresentUpgradeGate,
-            feature: .premiumAnalytics,
-            suppressPreview: true
-        )
     }
 }
 

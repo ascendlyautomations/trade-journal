@@ -4,6 +4,8 @@ struct TradingRulesComplianceDetailView: View {
     enum AnalyticsPresentation {
         case fullAnalytics
         case freeTierBasic
+        /// Free tier sample preview — interactive charts and drill-down, demo data only.
+        case freeSamplePreview
     }
 
     @Bindable private var session = TradingRulesComplianceSessionStore.shared
@@ -17,6 +19,10 @@ struct TradingRulesComplianceDetailView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.stackNavigation) private var stackNavigation
+
+    private var allowsInteractiveDrillDown: Bool {
+        presentation == .fullAnalytics || presentation == .freeSamplePreview
+    }
 
     var body: some View {
         Group {
@@ -78,59 +84,75 @@ struct TradingRulesComplianceDetailView: View {
 
     private func scrollContent(result: TradingRulesComplianceAnalytics.Result) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 if presentation == .fullAnalytics {
-                    TradingRulesAnalyticsFilterBar(
-                        scope: scopeController,
-                        onManageAccounts: { navigationCoordinator.pushHome(.settings(.tradingAccounts)) },
-                        onFiltersTap: {
-                            scopeController.prepareDraftScopeFilters()
-                            scopeController.showsFiltersSheet = true
-                        }
-                    )
-                    .padding(ExperienceSpacing.sm)
-                    .experienceTradingRulesCard(prominence: .standard)
+                    analyticsFilterBar
                 } else if !session.scopeLabel.isEmpty {
                     Text(session.scopeLabel)
                         .experienceStyle(.caption, color: colors.secondaryText)
-                        .padding(.horizontal, ExperienceSpacing.xs)
+                        .padding(.horizontal, ExperienceSpacing.md)
                 }
 
-                if session.isProvisionalCompliance {
-                    Text("Preliminary, full trade history is still loading. Numbers may change.")
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                        .padding(ExperienceSpacing.sm)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
-                        .accessibilityIdentifier("tradingRulesAnalytics.provisional")
-                }
+                VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+                    if presentation == .freeSamplePreview
+                        || (presentation == .fullAnalytics && TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome)
+                    {
+                        sampleDataNotice
+                    }
+                    if session.isProvisionalCompliance {
+                        Text("Preliminary, full trade history is still loading. Numbers may change.")
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                            .padding(ExperienceSpacing.sm)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
+                            .accessibilityIdentifier("tradingRulesAnalytics.provisional")
+                    }
 
-                TradingRulesComplianceSection(
-                    analytics: result,
-                    presentation: presentation == .freeTierBasic ? .freeOverview : .expandedAnalyticsPage,
-                    zeroEvalHint: zeroEvalHint(for: result),
-                    personalInsights: session.personalInsights,
-                    activeDateRange: scopeController.dateRange,
-                    usesCustomDateRange: scopeController.customDateInterval != nil,
-                    onOpenTrade: presentation == .fullAnalytics ? { tradeID in
-                        preserveScrollOffset()
-                        navigationCoordinator.pushTradeDetail(tradeID, cache: detailCache)
-                    } : nil,
-                    onOpenRule: presentation == .fullAnalytics ? { rule in
-                        preserveScrollOffset()
-                        navigationCoordinator.pushTradingRulesRuleDetail(rule.rawValue)
-                    } : nil,
-                    onOpenDay: presentation == .fullAnalytics ? { dayKey in
-                        preserveScrollOffset()
-                        navigationCoordinator.pushTradingRulesDayDetail(dayKey)
-                    } : nil
-                )
+                    TradingRulesComplianceSection(
+                        analytics: result,
+                        presentation: sectionPresentation,
+                        zeroEvalHint: zeroEvalHint(for: result),
+                        personalInsights: session.personalInsights,
+                        activeDateRange: scopeController.dateRange,
+                        usesCustomDateRange: scopeController.customDateInterval != nil,
+                        onOpenTrade: allowsInteractiveDrillDown ? { tradeID in
+                            guard allowsSampleTradeNavigation(tradeID) else { return }
+                            preserveScrollOffset()
+                            navigationCoordinator.pushTradeDetail(tradeID, cache: detailCache)
+                        } : nil,
+                        onOpenRule: allowsInteractiveDrillDown ? { rule in
+                            preserveScrollOffset()
+                            navigationCoordinator.pushTradingRulesRuleDetail(rule.rawValue)
+                        } : nil,
+                        onOpenDay: allowsInteractiveDrillDown ? { dayKey in
+                            preserveScrollOffset()
+                            navigationCoordinator.pushTradingRulesDayDetail(dayKey)
+                        } : nil,
+                        onOpenTrends: allowsInteractiveDrillDown ? {
+                            preserveScrollOffset()
+                            navigationCoordinator.pushTradingRulesTrends()
+                        } : nil,
+                        onOpenViolationHistory: allowsInteractiveDrillDown ? {
+                            preserveScrollOffset()
+                            navigationCoordinator.pushTradingRulesViolationHistory()
+                        } : nil
+                    )
 
-                if presentation == .freeTierBasic {
-                    TradingRulesPremiumAnalyticsLockedSection()
+                    if presentation == .freeTierBasic {
+                        TradingRulesPremiumAnalyticsLockedSection()
+                    } else if presentation == .freeSamplePreview {
+                        MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
+                            feature: .premiumAnalytics,
+                            previewFeature: .tradingRules,
+                            previewEntryPoint: .tradingRulesGate,
+                            previewAccessibilityIdentifier: "tradingRulesAnalytics.sample.preview",
+                            unlockAccessibilityIdentifier: "tradingRulesAnalytics.sample.exploreTraxsPro"
+                        )
+                    }
                 }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.bottom, ExperienceSpacing.md)
             }
-            .padding(ExperienceSpacing.md)
         }
         .id(TradingRulesAnalyticsScrollSurfaceIdentity.analyticsList)
         .scrollPosition(scrollAnchor.binding)
@@ -141,8 +163,58 @@ struct TradingRulesComplianceDetailView: View {
         }
     }
 
+    private var sectionPresentation: TradingRulesComplianceSection.Presentation {
+        switch presentation {
+        case .freeTierBasic:
+            return .freeOverview
+        case .freeSamplePreview:
+            return .freeSamplePreview
+        case .fullAnalytics:
+            return .expandedAnalyticsPage
+        }
+    }
+
+    private var sampleDataNotice: some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.accent)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                Text("Sample data preview")
+                    .experienceStyle(.subheadline, color: colors.primaryText)
+                    .fontWeight(.semibold)
+                Text(MonetizationPlanCopy.tradingRulesAnalyticsPreviewSampleDataNote)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .experienceTradingRulesCard(prominence: .standard)
+        .accessibilityIdentifier("tradingRulesAnalytics.sampleDataBanner")
+    }
+
+    private func allowsSampleTradeNavigation(_ tradeID: TradeID) -> Bool {
+        TradingRulesAnalyticsPreviewSupport.allowsTradeDetailNavigation(tradeID: tradeID)
+    }
+
     private func preserveScrollOffset() {
         TradingRulesAnalyticsScrollStore.remember(scrollAnchor.offset)
+    }
+
+    private var analyticsFilterBar: some View {
+        TradingRulesAnalyticsFilterBar(
+            scope: scopeController,
+            onManageAccounts: { navigationCoordinator.pushHome(.settings(.tradingAccounts)) },
+            onFiltersTap: {
+                scopeController.prepareDraftScopeFilters()
+                scopeController.showsFiltersSheet = true
+            }
+        )
+        .padding(.horizontal, ExperienceSpacing.sm)
+        .padding(.top, ExperienceSpacing.xs)
+        .padding(.bottom, ExperienceSpacing.xxs)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func zeroEvalHint(for result: TradingRulesComplianceAnalytics.Result) -> String? {
@@ -158,17 +230,7 @@ struct TradingRulesComplianceDetailView: View {
 
     private var insufficientScopeState: some View {
         VStack(spacing: ExperienceSpacing.md) {
-            TradingRulesAnalyticsFilterBar(
-                scope: scopeController,
-                onManageAccounts: { navigationCoordinator.pushHome(.settings(.tradingAccounts)) },
-                onFiltersTap: {
-                    scopeController.prepareDraftScopeFilters()
-                    scopeController.showsFiltersSheet = true
-                }
-            )
-            .padding(ExperienceSpacing.sm)
-            .experienceTradingRulesCard(prominence: .standard)
-            .padding(.horizontal, ExperienceSpacing.md)
+            analyticsFilterBar
 
             ExperienceEmptyState(
                 icon: .filter,

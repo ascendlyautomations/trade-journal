@@ -4,6 +4,7 @@ import {
   PRO_LIMIT_REACHED_CODE,
   buildProLimitPayload,
   parseProLimitPayload,
+  proGateReasonFromLegacyError,
   proGateSubtitle,
   proLimitKindFromLegacyCode,
 } from "./proGateReason.ts"
@@ -42,5 +43,10 @@ describe("proGateReason", () => {
       proGateSubtitle({ type: "feature", feature: "copy_trading" }),
       /TraxPro/
     )
+  })
+
+  it("maps TRAXPRO_AI_ANALYST_REQUIRED to ai_analyst", () => {
+    const reason = proGateReasonFromLegacyError("TRAXPRO_AI_ANALYST_REQUIRED")
+    assert.deepEqual(reason, { type: "feature", feature: "ai_analyst" })
   })
 })

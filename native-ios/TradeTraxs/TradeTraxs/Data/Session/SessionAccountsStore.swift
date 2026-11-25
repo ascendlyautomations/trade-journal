@@ -223,8 +223,8 @@ final class SessionAccountsStore {
                 var merged = account
                 if merged.accountNumber == nil { merged.accountNumber = prior.accountNumber }
                 if merged.size == nil { merged.size = prior.size }
-                // REST owner snapshot is authoritative for insights toggles; dashboard rows may lag a session refresh.
-                if incomingKind == .dashboard {
+                // REST is authoritative over dashboard bootstrap rows; dashboard-on-dashboard should accept fresher wire values.
+                if existingKind == .rest, incomingKind == .dashboard {
                     merged.showInAccountDropdowns = prior.showInAccountDropdowns
                     merged.customPublicStatus = prior.customPublicStatus
                 }

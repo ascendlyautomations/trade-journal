@@ -129,6 +129,7 @@ enum MonetizationPlanPresentation {
     }
 
     struct ProMarketingFeatureList: View {
+        var highlights: [MonetizationPlanCopy.PaywallHighlight] = MonetizationPlanCopy.paywallHighlights
         var compact: Bool = true
         var showsDividers: Bool = false
 
@@ -136,9 +137,9 @@ enum MonetizationPlanPresentation {
 
         var body: some View {
             VStack(alignment: .leading, spacing: compact ? ExperienceSpacing.xs : ExperienceSpacing.sm) {
-                ForEach(Array(MonetizationPlanCopy.paywallHighlights.enumerated()), id: \.element.id) { index, highlight in
+                ForEach(Array(highlights.enumerated()), id: \.element.id) { index, highlight in
                     PaywallHighlightRow(highlight: highlight, compact: compact)
-                    if showsDividers, index < MonetizationPlanCopy.paywallHighlights.count - 1 {
+                    if showsDividers, index < highlights.count - 1 {
                         Divider()
                             .overlay(colors.separator.opacity(0.35))
                             .padding(.leading, 32)

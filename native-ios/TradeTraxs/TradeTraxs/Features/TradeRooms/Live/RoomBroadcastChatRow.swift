@@ -5,14 +5,29 @@ struct RoomBroadcastChatRow: View {
     let imagePipeline: any ImagePipeline
     @Bindable var coordinator: RoomBroadcastCoordinator
     var isHighlighted: Bool = false
+    var viewerUserID: String? = nil
     var onReply: () -> Void = {}
+    var onOpenReactionPicker: () -> Void = {}
+    var onToggleReaction: (String) -> Void = { _ in }
     @Environment(\.themeColors) private var colors
+
+    private var canReact: Bool {
+        viewerUserID != nil
+    }
+
+    private var messageReactions: [BroadcastChatReactionItem] {
+        coordinator.broadcastChatReactions(for: message.id)
+    }
+
+    private var hasReactions: Bool {
+        !messageReactions.isEmpty
+    }
 
     var body: some View {
         let profile = coordinator.chatProfileCache.profile(forUserId: message.userId)
         let name = profile?.displayName ?? message.displayName
         let username = profile?.username ?? message.displayName
-        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+        HStack(alignment: .top, spacing: ExperienceSpacing.xs) {
             RoomBroadcastChatProfileAvatarButton(
                 userId: message.userId,
                 displayName: name,
@@ -22,7 +37,7 @@ struct RoomBroadcastChatRow: View {
                 profile: profile
             )
 
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            VStack(alignment: .leading, spacing: BroadcastChatRowLayout.bodyBlockSpacing) {
                 HStack(spacing: 6) {
                     RoomBroadcastChatProfileNameButton(
                         userId: message.userId,
@@ -35,32 +50,24 @@ struct RoomBroadcastChatRow: View {
                         .foregroundStyle(colors.tertiaryText)
                 }
 
-                if let reply = message.replyTo {
-                    replyPreviewBanner(reply)
-                }
+                messageBodyStack
 
-                if let imageURL = message.imageURL {
-                    broadcastChatImageAttachment(imageURL)
-                }
-
-                if let tradeID = message.tradeID {
-                    broadcastChatTradeAttachment(tradeID)
-                }
-
-                if !message.text.isEmpty {
-                    Text(message.text)
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundStyle(colors.secondaryText)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                if hasReactions {
+                    BroadcastChatReactionStrip(
+                        messageID: message.id,
+                        reactions: messageReactions,
+                        viewerUserID: viewerUserID,
+                        isEnabled: canReact,
+                        onToggle: onToggleReaction
+                    )
+                    .padding(.top, reactionTopGapAfterBody)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, ExperienceSpacing.xxs)
-        .padding(.vertical, ExperienceSpacing.xxs)
+        .padding(.vertical, BroadcastChatRowLayout.rowVerticalPadding)
         .background(
             RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
                 .fill(isHighlighted ? colors.accent.opacity(0.14) : Color.clear)
@@ -71,8 +78,50 @@ struct RoomBroadcastChatRow: View {
             Button(action: onReply) {
                 Label("Reply", systemImage: "arrowshape.turn.up.left")
             }
+            if canReact {
+                Button(action: onOpenReactionPicker) {
+                    Label("Reaction", systemImage: "face.smiling")
+                }
+            }
         }
         .accessibilityIdentifier("tradeRooms.broadcast.chat.row.\(message.id)")
+    }
+
+    @ViewBuilder
+    private var messageBodyStack: some View {
+        VStack(alignment: .leading, spacing: BroadcastChatRowLayout.bodyBlockSpacing) {
+            if let reply = message.replyTo {
+                replyPreviewBanner(reply)
+            }
+
+            if let imageURL = message.imageURL {
+                broadcastChatImageAttachment(imageURL)
+            }
+
+            if let tradeID = message.tradeID {
+                broadcastChatTradeAttachment(tradeID)
+            }
+
+            if !message.text.isEmpty {
+                Text(message.text)
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(colors.secondaryText)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// 5pt below text/attachments; slightly less when the last block is trade/image (already has visual mass).
+    private var reactionTopGapAfterBody: CGFloat {
+        if !message.text.isEmpty {
+            return BroadcastChatRowLayout.reactionTopGap
+        }
+        if message.tradeID != nil || message.imageURL != nil {
+            return 4
+        }
+        return BroadcastChatRowLayout.reactionTopGap
     }
 
     private func broadcastChatImageAttachment(_ url: String) -> some View {
@@ -117,7 +166,7 @@ struct RoomBroadcastChatRow: View {
         return Button {
             coordinator.scrollToBroadcastChatMessage(id: reply.messageId)
         } label: {
-            HStack(alignment: .top, spacing: ExperienceSpacing.xs) {
+            HStack(alignment: .top, spacing: ExperienceSpacing.xxs) {
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(colors.accent.opacity(0.85))
                     .frame(width: 2)
@@ -133,7 +182,7 @@ struct RoomBroadcastChatRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 1)
         }
         .buttonStyle(.experiencePlain)
         .accessibilityLabel("Reply to \(replyName)")

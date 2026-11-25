@@ -53,7 +53,7 @@ final class AdminBugReportDetailViewModel {
             }
             return true
         } catch {
-            statusMessage = error.localizedDescription
+            statusMessage = UserFacingError.message(for: error)
             return false
         }
     }
@@ -85,7 +85,7 @@ final class AdminBugReportDetailViewModel {
             draftStatus = .resolved
             return true
         } catch {
-            statusMessage = error.localizedDescription
+            statusMessage = UserFacingError.message(for: error)
             return false
         }
     }
@@ -111,7 +111,7 @@ final class AdminBugReportDetailViewModel {
             let byHandle = try await adminUsers.fetchDirectory(query)
             return byHandle.rows.first(where: { $0.id == snapshot.row.userID }) ?? byHandle.rows.first
         } catch {
-            openUserError = error.localizedDescription
+            openUserError = UserFacingError.message(for: error)
             return nil
         }
     }

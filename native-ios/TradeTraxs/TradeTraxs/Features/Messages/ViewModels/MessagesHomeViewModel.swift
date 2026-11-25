@@ -334,9 +334,7 @@ final class MessagesHomeViewModel {
             } else {
                 inboxStore.cancelPendingConversationDelete(id: id)
             }
-            deleteConversationErrorMessage = UserFacingError.map(
-                error as? AppError ?? AppError.unknown(message: error.localizedDescription)
-            ).message
+            deleteConversationErrorMessage = UserFacingError.message(for: error)
             ExperienceHaptics.play(.error)
         }
     }

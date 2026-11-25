@@ -11,10 +11,18 @@ nonisolated enum DemoExperienceSupport {
     static let profileID = ProfileID("demo.explore.trader")
 
     nonisolated(unsafe) private static var exploreLiveCommunityReadsActive = false
+    /// Live showcase JWT (`GuestSessionClient`), not bundled fixtures.
+    nonisolated(unsafe) private static var guestShowcaseSessionActive = false
 
     static func setExploreLiveCommunityReadsActive(_ active: Bool) {
         exploreLiveCommunityReadsActive = active
     }
+
+    static func setGuestShowcaseSessionActive(_ active: Bool) {
+        guestShowcaseSessionActive = active
+    }
+
+    static var isGuestShowcaseSessionActive: Bool { guestShowcaseSessionActive }
 
     /// Profiles whose trading/social data ships in the app bundle (debug `dev.*` + production demo).
     static func usesLocalBundledData(_ id: ProfileID) -> Bool {
@@ -32,6 +40,8 @@ nonisolated enum DemoExperienceSupport {
         exploreLiveCommunityReadsActive && id == profileID
     }
 
-    /// Skip Activity, notifications, and other authenticated viewer services (no Supabase user session).
-    static var skipsAuthenticatedViewerServices: Bool { exploreLiveCommunityReadsActive }
+    /// Skip Activity, notifications, messaging inbox bootstrap, and other private viewer services.
+    static var skipsAuthenticatedViewerServices: Bool {
+        exploreLiveCommunityReadsActive || guestShowcaseSessionActive
+    }
 }

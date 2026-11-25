@@ -16,6 +16,15 @@ const checks = [
     }),
   },
   {
+    name: "obs/cancel-preparation",
+    method: "POST",
+    path: "/api/livekit/broadcast/obs/cancel-preparation",
+    body: JSON.stringify({
+      roomId: "00000000-0000-0000-0000-000000000001",
+      sessionId: "00000000-0000-0000-0000-000000000002",
+    }),
+  },
+  {
     name: "obs/status",
     method: "GET",
     path:

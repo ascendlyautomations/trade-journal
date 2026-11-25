@@ -49,7 +49,12 @@ struct ReportDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .modifier(ReportDetailNavigationChrome(viewModel: viewModel))
+        .modifier(
+            ReportDetailPerformanceNavigationChrome(
+                periodLabel: viewModel.navigationPeriodLabel,
+                fallbackTitle: viewModel.title
+            )
+        )
         .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.bootstrapIfNeeded()
@@ -60,22 +65,16 @@ struct ReportDetailView: View {
     private var detailScroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: ReportDetailLayout.sectionSpacing) {
-                    if let navigationCoordinator {
-                        TradingPreferenceDiscoverySlot(
-                            surface: .analytics,
-                            userID: SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) },
-                            repository: tradingPreferences,
-                            localHasTrade: false,
-                            navigationCoordinator: navigationCoordinator
-                        )
-                        .padding(.horizontal, ExperienceSpacing.md)
-                    }
-                    if !viewModel.isWeekly {
-                        header
-                            .padding(.horizontal, ExperienceSpacing.md)
-                            .padding(.top, ExperienceSpacing.xs)
-                    }
+                if let navigationCoordinator {
+                    TradingPreferenceDiscoverySlot(
+                        surface: .analytics,
+                        userID: SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) },
+                        repository: tradingPreferences,
+                        localHasTrade: false,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ExperienceSpacing.xs)
                 }
 
                 ReportDetailBlocksView(
@@ -83,10 +82,7 @@ struct ReportDetailView: View {
                     bestTrade: viewModel.bestTrade,
                     onOpenBestTrade: { viewModel.openBestTrade() }
                 )
-                .padding(
-                    .top,
-                    viewModel.isWeekly ? ExperienceSpacing.xs : ReportDetailLayout.headerToFirstSectionSpacing
-                )
+                .padding(.top, ExperienceSpacing.xs)
 
                 ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.performanceReport)
                     .padding(.horizontal, ExperienceSpacing.md)
@@ -94,29 +90,6 @@ struct ReportDetailView: View {
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
         }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Intelligence Report")
-                .experienceStyle(.caption2, color: colors.accent)
-                .textCase(.uppercase)
-                .tracking(0.6)
-
-            if let range = viewModel.dateRangeLabel {
-                Text(range)
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
-            }
-
-            if let source = viewModel.report?.summarySource {
-                Text(source == "ai" ? "AI summary" : "Journal insights")
-                    .experienceStyle(.footnote, color: colors.tertiaryText)
-            }
-        }
-        .padding(ExperienceSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .modifier(YearlyReportHeroSurface())
-        .accessibilityIdentifier("reports.detail.header")
     }
 
     private var loadingContent: some View {
@@ -132,31 +105,5 @@ struct ReportDetailView: View {
         }
         .padding(ExperienceSpacing.md)
         .accessibilityIdentifier("reports.detail.skeleton")
-    }
-}
-
-private struct ReportDetailNavigationChrome: ViewModifier {
-    let viewModel: ReportDetailViewModel
-
-    @Environment(\.themeColors) private var colors
-
-    func body(content: Content) -> some View {
-        if viewModel.isWeekly, let range = viewModel.dateRangeLabel {
-            content
-                .navigationTitle("")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Text(range)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(colors.secondaryText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                            .accessibilityAddTraits(.isHeader)
-                    }
-                }
-        } else {
-            content.experienceNavigationTitle(viewModel.title)
-        }
     }
 }

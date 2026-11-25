@@ -284,7 +284,7 @@ struct TradeDetailSectionHeader: View {
 
 // MARK: - Quick stats
 
-struct TradeDetailQuickStatsSection: View {
+struct TradeDetailQuickStatsContent: View {
     let trade: Trade
 
     @Environment(\.themeColors) private var colors
@@ -302,8 +302,7 @@ struct TradeDetailQuickStatsSection: View {
     }
 
     var body: some View {
-        TradeDetailGroupedSurface {
-            VStack(spacing: quickStatsRowSpacing) {
+        VStack(spacing: quickStatsRowSpacing) {
                 TradeDetailCompactStatRow(centered: true, cells: {
                     var cells: [TradeDetailStatCell] = [
                         TradeDetailStatCell(
@@ -376,7 +375,17 @@ struct TradeDetailQuickStatsSection: View {
                         value: TradeDisplay.holdDuration(for: trade) ?? "–"
                     ),
                 ])
-            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct TradeDetailQuickStatsSection: View {
+    let trade: Trade
+
+    var body: some View {
+        TradeDetailGroupedSurface {
+            TradeDetailQuickStatsContent(trade: trade)
         }
         .accessibilityIdentifier("detail.trade.quickStats")
     }
@@ -445,11 +454,28 @@ private struct TradeDetailStatDivider: View {
 
 struct TradeDetailComparisonSection: View {
     let trade: Trade
-    let cohort: TradeDetailAnalytics.CohortComparison
+    let bundle: TradeDetailAnalytics.CohortBundle
+    let filterContext: TradeDetailAnalytics.ComparisonFilterContext
     var quickInsight: TradeDetailAnalytics.QuickInsight?
+
+    @State private var selectedFilter: TradeDetailAnalytics.ComparisonFilter = .all
+    @State private var didApplyInitialFilter = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
+
+    /// Only the cohort for the active filter — never substitute another filter's statistics.
+    private var displayedCohort: TradeDetailAnalytics.CohortComparison? {
+        bundle.cohort(for: selectedFilter)
+    }
+
+    private var initialFilter: TradeDetailAnalytics.ComparisonFilter {
+        if bundle.cohort(for: .all) != nil { return .all }
+        for filter in TradeDetailAnalytics.ComparisonFilter.allCases where bundle.cohort(for: filter) != nil {
+            return filter
+        }
+        return .all
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
@@ -457,44 +483,144 @@ struct TradeDetailComparisonSection: View {
 
             TradeDetailGroupedSurface {
                 VStack(spacing: TradeDetailLayout.groupSpacing) {
-                    comparisonHeaderRow
+                    comparisonFilterRow
 
-                    comparisonRow(
-                        label: "P&L",
-                        thisValue: TradeDisplay.pnlText(trade.realizedPnL),
-                        avgValue: TradeDisplay.pnlText(Money(amount: cohort.avgPnL)),
-                        thisTone: theme.metricColor(
-                            for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
-                        )
-                    )
+                    if let cohort = displayedCohort {
+                        Text("\(cohort.tradeCount) prior trades in this cohort")
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                    if let tradeRR = trade.riskReward, let avgRR = cohort.avgRR {
+                        comparisonHeaderRow
+
                         comparisonRow(
-                            label: "RR",
-                            thisValue: TradeDisplay.compactRRText(tradeRR) ?? "–",
-                            avgValue: TradeDisplay.compactRRText(avgRR) ?? "–"
+                            label: "P&L",
+                            thisValue: TradeDisplay.pnlText(trade.realizedPnL),
+                            avgValue: TradeDisplay.pnlText(Money(amount: cohort.avgPnL)),
+                            thisTone: theme.metricColor(
+                                for: NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+                            )
                         )
-                    }
 
-                    if let tradeHold = TradeDetailAnalytics.holdSeconds(for: trade),
-                       let avgHold = cohort.avgHoldSeconds
-                    {
-                        comparisonRow(
-                            label: "Hold",
-                            thisValue: TradeDisplay.compactHoldDuration(seconds: tradeHold) ?? "–",
-                            avgValue: TradeDisplay.compactHoldDuration(seconds: avgHold) ?? "–"
-                        )
-                    }
+                        if let winRate = cohort.winRate {
+                            comparisonRow(
+                                label: "Win Rate",
+                                thisValue: tradeOutcomeWinText,
+                                avgValue: NumberDisplay.percent(
+                                    NSDecimalNumber(decimal: winRate * 100).doubleValue,
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0
+                                )
+                            )
+                        }
 
-                    if let insightText = primaryInsight {
-                        Text(insightText)
+                        if let tradeRR = TradeDetailAnalytics.resolvedTargetRR(for: trade),
+                           let avgTarget = cohort.avgTargetRR
+                        {
+                            comparisonRow(
+                                label: "Target R:R",
+                                thisValue: TradeDisplay.compactRRText(tradeRR) ?? "–",
+                                avgValue: TradeDisplay.compactRRText(avgTarget) ?? "–"
+                            )
+                        }
+
+                        if let tradeRealized = TradeDetailAnalytics.resolvedRealizedRR(for: trade),
+                           let avgRealized = cohort.avgRealizedRR
+                        {
+                            comparisonRow(
+                                label: "Realized R:R",
+                                thisValue: TradeDisplay.compactRRText(tradeRealized) ?? "–",
+                                avgValue: TradeDisplay.compactRRText(avgRealized) ?? "–"
+                            )
+                        }
+
+                        if let tradeHold = TradeDetailAnalytics.holdSeconds(for: trade),
+                           let avgHold = cohort.avgHoldSeconds
+                        {
+                            comparisonRow(
+                                label: "Hold",
+                                thisValue: TradeDisplay.compactHoldDuration(seconds: tradeHold) ?? "–",
+                                avgValue: TradeDisplay.compactHoldDuration(seconds: avgHold) ?? "–"
+                            )
+                        }
+
+                        if let percentileLine = percentileSummary(for: cohort) {
+                            Text(percentileLine)
+                                .experienceStyle(.caption2, color: colors.tertiaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        if let insightText = primaryInsight(for: cohort) {
+                            Text(insightText)
+                                .experienceStyle(.caption2, color: colors.secondaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    } else {
+                        Text(comparisonEmptyMessage)
                             .experienceStyle(.caption2, color: colors.secondaryText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
         }
+        .onAppear {
+            guard !didApplyInitialFilter else { return }
+            didApplyInitialFilter = true
+            selectedFilter = initialFilter
+        }
         .accessibilityIdentifier("detail.trade.comparison")
+    }
+
+    private var comparisonEmptyMessage: String {
+        guard filterContext.isAvailable(selectedFilter) else {
+            return "This filter isn't available for this trade."
+        }
+        return "Not enough similar trades in this filter yet (need at least \(TradeDetailAnalytics.minCohortTrades))."
+    }
+
+    private var comparisonFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: ExperienceSpacing.xs) {
+                ForEach(TradeDetailAnalytics.ComparisonFilter.allCases) { filter in
+                    ExperienceChip(
+                        title: filter.title,
+                        isSelected: selectedFilter == filter,
+                        compact: true
+                    ) {
+                        selectedFilter = filter
+                    }
+                    .disabled(!filterContext.isAvailable(filter))
+                    .opacity(filterContext.isAvailable(filter) ? 1 : 0.45)
+                }
+            }
+        }
+    }
+
+    private var tradeOutcomeWinText: String {
+        guard let pnl = trade.realizedPnL?.amount else { return "–" }
+        if pnl > 0 { return "Win" }
+        if pnl < 0 { return "Loss" }
+        return "Flat"
+    }
+
+    private func percentileSummary(for cohort: TradeDetailAnalytics.CohortComparison) -> String? {
+        var parts: [String] = []
+        if let percentile = cohort.pnlPercentile {
+            parts.append(
+                "P&L \(NumberDisplay.percent(percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) percentile"
+            )
+        }
+        if let percentile = cohort.targetRRPercentile, TradeDetailAnalytics.resolvedTargetRR(for: trade) != nil {
+            parts.append(
+                "Target R:R \(NumberDisplay.percent(percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) percentile"
+            )
+        }
+        if let percentile = cohort.realizedRRPercentile, TradeDetailAnalytics.resolvedRealizedRR(for: trade) != nil {
+            parts.append(
+                "Realized R:R \(NumberDisplay.percent(percentile, minimumFractionDigits: 0, maximumFractionDigits: 0)) percentile"
+            )
+        }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ")
     }
 
     private var comparisonHeaderRow: some View {
@@ -535,8 +661,8 @@ struct TradeDetailComparisonSection: View {
         }
     }
 
-    private var primaryInsight: String? {
-        if let quickInsight {
+    private func primaryInsight(for cohort: TradeDetailAnalytics.CohortComparison) -> String? {
+        if selectedFilter == .all, let quickInsight {
             return "↑ \(quickInsight.message)"
         }
         return cohort.findings.first.map { "↑ \($0)" }
@@ -573,6 +699,24 @@ struct TradeDetailTickerHistorySection: View {
                         }
                     }
 
+                    if let sideLine = sideComparisonLine {
+                        Text(sideLine)
+                            .experienceStyle(.caption2, color: colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let sessionLine = sessionComparisonLine {
+                        Text(sessionLine)
+                            .experienceStyle(.caption2, color: colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let windowLine = rollingWindowLine {
+                        Text(windowLine)
+                            .experienceStyle(.caption2, color: colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     Text(history.comparisonSentence)
                         .experienceStyle(.caption2, color: colors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -580,6 +724,51 @@ struct TradeDetailTickerHistorySection: View {
             }
         }
         .accessibilityIdentifier("detail.trade.tickerHistory")
+    }
+
+    private var sideComparisonLine: String? {
+        guard let long = history.long, let short = history.short, long.tradeCount >= 1, short.tradeCount >= 1 else {
+            return nil
+        }
+        var parts: [String] = []
+        if let longWin = long.winRate {
+            parts.append(
+                "Long \(NumberDisplay.percent(NSDecimalNumber(decimal: longWin * 100).doubleValue, minimumFractionDigits: 0, maximumFractionDigits: 0)) · \(long.tradeCount) trades"
+            )
+        }
+        if let shortWin = short.winRate {
+            parts.append(
+                "Short \(NumberDisplay.percent(NSDecimalNumber(decimal: shortWin * 100).doubleValue, minimumFractionDigits: 0, maximumFractionDigits: 0)) · \(short.tradeCount) trades"
+            )
+        }
+        guard parts.count == 2 else { return nil }
+        return parts.joined(separator: " · ")
+    }
+
+    private var sessionComparisonLine: String? {
+        let slices = history.sessions.filter { $0.tradeCount >= 2 }.prefix(3)
+        guard !slices.isEmpty else { return nil }
+        return slices.map { slice in
+            let win = slice.winRate.map {
+                NumberDisplay.percent(NSDecimalNumber(decimal: $0 * 100).doubleValue, minimumFractionDigits: 0, maximumFractionDigits: 0)
+            } ?? "–"
+            return "\(slice.session) \(win) WR (\(NumberDisplay.integer(slice.tradeCount)))"
+        }
+        .joined(separator: " · ")
+    }
+
+    private var rollingWindowLine: String? {
+        let windows = [("30d", history.window30d), ("90d", history.window90d)]
+            .compactMap { label, window -> String? in
+                guard let window, window.tradeCount >= 1 else { return nil }
+                let pnl = TradeDisplay.pnlText(Money(amount: window.totalPnL))
+                let win = window.winRate.map {
+                    NumberDisplay.percent(NSDecimalNumber(decimal: $0 * 100).doubleValue, minimumFractionDigits: 0, maximumFractionDigits: 0)
+                } ?? "–"
+                return "Last \(label): \(NumberDisplay.integer(window.tradeCount)) trades · \(win) WR · \(pnl)"
+            }
+        guard !windows.isEmpty else { return nil }
+        return windows.joined(separator: " · ")
     }
 
     private var summaryMetricsLine: String {

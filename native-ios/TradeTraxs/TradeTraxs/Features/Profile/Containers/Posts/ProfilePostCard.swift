@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Horizontal post browse card, thumbnail left, truncated caption right (Clips/Trades style).
 struct ProfilePostCard: View {
@@ -48,7 +47,6 @@ struct ProfilePostCard: View {
                         } metadata: {
                             PostCardTextPreview(
                                 text: caption,
-                                maxHeight: nil,
                                 showsProfilePin: isPinnedToProfile,
                                 dateText: TradeDisplay.dateText(post.createdAt)
                             )
@@ -56,7 +54,6 @@ struct ProfilePostCard: View {
                     } else {
                         PostCardTextPreview(
                             text: caption,
-                            maxHeight: nil,
                             showsProfilePin: isPinnedToProfile,
                             dateText: TradeDisplay.dateText(post.createdAt)
                         )
@@ -130,51 +127,20 @@ struct ProfilePostCard: View {
 
 // MARK: - Truncating preview
 
-/// Caption clipped to the thumbnail height; shows link-styled “See more...” only when truncated.
+/// Caption with inline `...more` when body exceeds two lines.
 private struct PostCardTextPreview: View {
     let text: String
-    let maxHeight: CGFloat?
     let showsProfilePin: Bool
     let dateText: String
 
     @Environment(\.themeColors) private var colors
-    @State private var isTruncated = false
 
     var body: some View {
-        if let maxHeight {
-            thumbnailAlignedPreview(maxHeight: maxHeight)
-        } else {
-            mediaLessPreview
-        }
-    }
-
-    private var mediaLessPreview: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             previewHeader
-            captionWithOptionalPin(lineLimit: 4)
+            captionWithOptionalPin
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-
-    private func thumbnailAlignedPreview(maxHeight: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            previewHeader
-            captionWithOptionalPin(lineLimit: isTruncated ? 3 : nil)
-
-            if isTruncated {
-                Text("See more...")
-                    .font(.footnote.weight(.regular))
-                    .foregroundStyle(Color(uiColor: .link))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: maxHeight, alignment: .topLeading)
-        .clipped()
-        .background(alignment: .top) {
-            measurementProbe
-        }
-        .onPreferenceChange(PostPreviewFullHeightKey.self) { fullHeight in
-            isTruncated = fullHeight > maxHeight + 0.5
-        }
     }
 
     private var previewHeader: some View {
@@ -185,55 +151,18 @@ private struct PostCardTextPreview: View {
         }
     }
 
-    @ViewBuilder
-    private func captionWithOptionalPin(lineLimit: Int?) -> some View {
+    private var captionWithOptionalPin: some View {
         HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
-            Text(text)
-                .experienceStyle(.body, color: colors.primaryText)
-                .multilineTextAlignment(.leading)
-                .lineLimit(lineLimit)
+            ExperienceExpandableText(
+                text: text,
+                typography: .body,
+                textColor: colors.primaryText
+            )
             if showsProfilePin {
                 ProfileContentPinIndicator()
             }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Invisible full-height probe at the same width as the visible text column.
-    private var measurementProbe: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            HStack(spacing: ExperienceSpacing.xs) {
-                Text(dateText)
-                    .experienceStyle(.caption, color: .clear)
-                Spacer(minLength: 0)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
-                Text(text)
-                    .experienceStyle(.body, color: .clear)
-                    .fixedSize(horizontal: false, vertical: true)
-                if showsProfilePin {
-                    Text("📌")
-                        .font(.system(size: 13))
-                        .hidden()
-                }
-            }
-        }
-        .hidden()
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: PostPreviewFullHeightKey.self,
-                    value: geo.size.height
-                )
-            }
-        )
-    }
-}
-
-private struct PostPreviewFullHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }

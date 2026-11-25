@@ -7,6 +7,7 @@ struct TradingRulesRuleDetailView: View {
 
     @Bindable private var session = TradingRulesComplianceSessionStore.shared
     @Environment(\.themeColors) private var colors
+    @State private var showsTradesSheet = false
 
     private var ruleID: TradingRulesComplianceAnalytics.RuleID? {
         TradingRulesComplianceAnalytics.RuleID(rawValue: ruleIDRaw)
@@ -20,6 +21,16 @@ struct TradingRulesRuleDetailView: View {
     private var impactRow: TradingRulesComplianceAnalytics.ImpactRow? {
         guard let ruleID, let result = session.result else { return nil }
         return result.impacts.first { $0.ruleID == ruleID }
+    }
+
+    private var tradeOutcomes: TradingRulesRuleTradeOutcomePresentation.GroupedOutcomes {
+        guard let ruleID, let checks = session.result?.complianceChecks else {
+            return TradingRulesRuleTradeOutcomePresentation.GroupedOutcomes(followed: [], violated: [])
+        }
+        return TradingRulesRuleTradeOutcomePresentation.groupedTradeOutcomes(
+            ruleID: ruleID,
+            checks: checks
+        )
     }
 
     var body: some View {
@@ -38,6 +49,8 @@ struct TradingRulesRuleDetailView: View {
                             TradingRulesRuleImpactDetailSection(
                                 row: impactRow,
                                 onOpenTrade: { tradeID in
+                                    guard TradingRulesAnalyticsPreviewSupport.allowsTradeDetailNavigation(tradeID: tradeID)
+                                    else { return }
                                     navigationCoordinator.pushTradeDetail(tradeID, cache: detailCache)
                                 }
                             )
@@ -70,20 +83,61 @@ struct TradingRulesRuleDetailView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle(snapshot?.ruleLabel ?? "Rule detail")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+                TradingRulesAnalyticsSampleDataBanner(compactListSubtitle: true)
+            }
+        }
         .accessibilityIdentifier("tradingRulesAnalytics.ruleDetail")
+        .sheet(isPresented: $showsTradesSheet) {
+            if let snapshot {
+                TradingRulesRuleTradesSheet(
+                    ruleLabel: snapshot.ruleLabel,
+                    outcomes: tradeOutcomes,
+                    onOpenTrade: { tradeID in
+                        guard TradingRulesAnalyticsPreviewSupport.allowsTradeDetailNavigation(tradeID: tradeID)
+                        else { return }
+                        navigationCoordinator.pushTradeDetail(tradeID, cache: detailCache)
+                    }
+                )
+            }
+        }
     }
 
     @ViewBuilder
     private func statsCard(_ snapshot: TradingRulesViolationPatterns.RuleDrillDownSnapshot) -> some View {
+        let outcomes = tradeOutcomes
+        let insufficient = snapshot.evaluated > 0 && snapshot.evaluated < 3 && outcomes.total == 0
+
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             Text(snapshot.adherencePercent.map { String(format: "%.1f%% compliance", $0) } ?? "–")
                 .font(.title2.weight(.bold).monospacedDigit())
                 .foregroundStyle(colors.primaryText)
 
-            HStack(spacing: ExperienceSpacing.xs) {
-                miniStat(title: "Followed", value: snapshot.followed, tone: colors.profit)
-                miniStat(title: "Violations", value: snapshot.violated, tone: colors.loss)
-                miniStat(title: "Unevaluated", value: snapshot.unevaluated, tone: colors.secondaryText)
+            Text("Trade outcomes")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.primaryText)
+
+            if insufficient {
+                Text("Fewer than 3 evaluated checks in scope—adherence is hidden until more data is available.")
+                    .experienceStyle(.caption, color: colors.tertiaryText)
+            }
+
+            TradingRulesRuleOutcomeBarChart(
+                followedCount: outcomes.followedCount,
+                violatedCount: outcomes.violatedCount
+            )
+
+            if outcomes.total > 0 {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button("View All Trades") {
+                        showsTradesSheet = true
+                    }
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(colors.accent)
+                    .accessibilityIdentifier("tradingRulesAnalytics.ruleDetail.viewAllTrades")
+                }
             }
 
             Text("\(snapshot.evaluated) evaluated checks in scope. Unevaluated checks lack reliable data; not-applicable checks are excluded from adherence.")
@@ -94,45 +148,63 @@ struct TradingRulesRuleDetailView: View {
         .experienceTradingRulesCard(prominence: .standard)
     }
 
-    @ViewBuilder
-    private func miniStat(title: String, value: Int, tone: Color) -> some View {
-        VStack(spacing: 2) {
-            Text(title)
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-            Text("\(value)")
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(tone)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, ExperienceSpacing.sm)
-        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.sm)
-    }
+    private static let dayKeyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "America/New_York")
+        return formatter
+    }()
+
+    private static let dayDisplayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
 
     @ViewBuilder
     private func violationsList(_ violations: [TradingRulesComplianceAnalytics.ViolationEvent]) -> some View {
+        let sections = TradingRulesViolationGrouping.violationsByDayKey(violations)
+
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text("Violations")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(colors.primaryText)
-            if violations.isEmpty {
+            if sections.isEmpty {
                 Text("No violations for this rule in the current scope.")
                     .experienceStyle(.caption, color: colors.secondaryText)
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(violations.enumerated()), id: \.element.id) { index, event in
-                        TradingRulesViolationEventRow(
-                            event: event,
-                            onOpenTrade: { tradeID in
-                                navigationCoordinator.pushTradeDetail(tradeID, cache: detailCache)
+                VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                    ForEach(sections, id: \.dayKey) { section in
+                        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                            Text(dayHeading(for: section.dayKey))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(colors.secondaryText)
+                            VStack(spacing: 0) {
+                                ForEach(Array(section.violations.enumerated()), id: \.element.id) { index, event in
+                                    TradingRulesViolationEventRow(
+                                        event: event,
+                                        onOpenTrade: { tradeID in
+                                            navigationCoordinator.pushTradeDetail(tradeID, cache: detailCache)
+                                        }
+                                    )
+                                    if index < section.violations.count - 1 {
+                                        ExperienceDivider()
+                                            .padding(.leading, 36)
+                                    }
+                                }
                             }
-                        )
-                        if index < violations.count - 1 {
-                            ExperienceDivider()
-                                .padding(.leading, 36)
                         }
                     }
                 }
             }
         }
+    }
+
+    private func dayHeading(for dayKey: String) -> String {
+        if let date = Self.dayKeyFormatter.date(from: dayKey) {
+            return Self.dayDisplayFormatter.string(from: date)
+        }
+        return dayKey
     }
 }

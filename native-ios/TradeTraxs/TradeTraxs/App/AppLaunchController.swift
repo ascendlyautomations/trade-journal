@@ -72,6 +72,7 @@ final class AppLaunchController {
         if isDemoExperienceActive {
             isDemoExperienceActive = false
             DemoExperienceSupport.setExploreLiveCommunityReadsActive(false)
+            DemoExperienceSupport.setGuestShowcaseSessionActive(false)
             preDemoEnvironment = nil
         }
     }
@@ -118,6 +119,7 @@ final class AppLaunchController {
 
     /// Installs a guest token without bootstrapping. Used by guest-session tests.
     func installGuestSessionForTesting(_ issued: GuestSessionIssuance) async {
+        DemoExperienceSupport.setGuestShowcaseSessionActive(true)
         await installGuestSession(issued)
         isDemoExperienceActive = true
     }
@@ -155,6 +157,7 @@ final class AppLaunchController {
 
     private func enterProductionGuest(_ issued: GuestSessionIssuance) async {
         preDemoEnvironment = environment
+        DemoExperienceSupport.setGuestShowcaseSessionActive(true)
         await installGuestSession(issued)
         await completeDeferredBootstrap(retainDeferredContext: true)
         AuthLandingInstallState.shared.recordLoggedOutAuthLandingPresented()
@@ -302,6 +305,7 @@ final class AppLaunchController {
         ExploreModeConversionPromptCoordinator.shared.exploreModeDidExit()
         isDemoExperienceActive = false
         DemoExperienceSupport.setExploreLiveCommunityReadsActive(false)
+        DemoExperienceSupport.setGuestShowcaseSessionActive(false)
         guestEpoch &+= 1
         guestRenewalTask?.cancel()
         guestRenewalTask = nil

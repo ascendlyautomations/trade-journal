@@ -37,6 +37,7 @@ struct LiveVoiceTabShellLayoutModifier: ViewModifier {
     var showsDemoLeave: Bool
     @Bindable var broadcastCoordinator: RoomBroadcastCoordinator
     @Bindable var liveVoiceCoordinator: RoomLiveVoiceCoordinator
+    let imagePipeline: any ImagePipeline
     @Bindable private var sessionMetrics = TradeRoomLiveSessionChromeMetrics.shared
     @Bindable private var tabBarMetrics = MainTabBarLayoutMetrics.shared
 
@@ -50,7 +51,9 @@ struct LiveVoiceTabShellLayoutModifier: ViewModifier {
 
     /// Tab-level inset only when the tab bar is visible; in-room chrome is stacked on the composer instead.
     private var showsTabShellChrome: Bool {
-        showsChrome && !sessionMetrics.roomConversationEmbedsSessionChrome
+        showsChrome
+            && !sessionMetrics.roomConversationEmbedsSessionChrome
+            && !sessionMetrics.topSessionChromeEmbedded
     }
 
     func body(content: Content) -> some View {
@@ -70,10 +73,27 @@ struct LiveVoiceTabShellLayoutModifier: ViewModifier {
                 syncSessionChromeInsetEstimate()
                 tabBarMetrics.refresh()
             }
+            .onChange(of: sessionMetrics.topSessionChromeEmbedded) { _, _ in
+                syncSessionChromeInsetEstimate()
+                tabBarMetrics.refresh()
+            }
             .onAppear {
                 syncSessionChromeInsetEstimate()
                 tabBarMetrics.refresh()
             }
+            .fullScreenCover(isPresented: liveVoiceMembersPresentation) {
+                RoomLiveVoiceMembersView(
+                    coordinator: liveVoiceCoordinator,
+                    imagePipeline: imagePipeline
+                )
+            }
+    }
+
+    private var liveVoiceMembersPresentation: Binding<Bool> {
+        Binding(
+            get: { liveVoiceCoordinator.showsMembersScreen },
+            set: { liveVoiceCoordinator.showsMembersScreen = $0 }
+        )
     }
 
     /// Chrome + tab-bar clearance (bar height only, not home indicator, so it sits flush on the tab strip).
@@ -153,13 +173,15 @@ extension View {
     func liveVoiceTabShellLayout(
         showsDemoLeave: Bool,
         broadcastCoordinator: RoomBroadcastCoordinator,
-        liveVoiceCoordinator: RoomLiveVoiceCoordinator
+        liveVoiceCoordinator: RoomLiveVoiceCoordinator,
+        imagePipeline: any ImagePipeline
     ) -> some View {
         modifier(
             LiveVoiceTabShellLayoutModifier(
                 showsDemoLeave: showsDemoLeave,
                 broadcastCoordinator: broadcastCoordinator,
-                liveVoiceCoordinator: liveVoiceCoordinator
+                liveVoiceCoordinator: liveVoiceCoordinator,
+                imagePipeline: imagePipeline
             )
         )
     }

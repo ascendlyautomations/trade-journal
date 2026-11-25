@@ -2,6 +2,13 @@ import Foundation
 
 /// Calendar aggregation for backtest-only trade pools (main calendar excludes backtest).
 nonisolated enum BacktestLabCalendarSupport {
+    static func trades(for dayKey: String, from trades: [Trade]) -> [Trade] {
+        trades.filter { trade in
+            guard trade.mode == .backtest else { return false }
+            return TradingCalendarDay.key(for: trade) == dayKey
+        }
+    }
+
     static func daySummaries(from trades: [Trade]) -> [String: TradingDaySummary] {
         var buckets: [String: (pnl: Decimal, wins: Int, losses: Int, be: Int, grossProfit: Decimal, grossLoss: Decimal, ids: [TradeID], accounts: Set<TradingAccountID>)] = [:]
 

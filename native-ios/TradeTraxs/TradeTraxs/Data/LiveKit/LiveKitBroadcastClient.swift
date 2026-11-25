@@ -351,6 +351,25 @@ nonisolated struct LiveKitBroadcastClient: Sendable {
         return decoded
     }
 
+    func cancelObsPreparation(roomID: RoomID, sessionId: String) async throws {
+        struct Body: Encodable {
+            var roomId: String
+            var sessionId: String
+        }
+        let body = try JSONEncoder().encode(Body(roomId: roomID.rawValue, sessionId: sessionId))
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/livekit/broadcast/obs/cancel-preparation",
+            method: .post,
+            headers: ["Content-Type": "application/json"],
+            body: body,
+            requiresAuthentication: true
+        )
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw AppError.unknown(message: decodeError(response))
+        }
+    }
+
     func stopBroadcast(roomID: RoomID, sessionId: String) async throws {
         struct Body: Encodable {
             var roomId: String

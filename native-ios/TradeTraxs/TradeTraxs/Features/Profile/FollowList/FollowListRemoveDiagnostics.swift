@@ -19,10 +19,10 @@ enum FollowListRemoveDiagnostics {
         #endif
     }
 
-    static func optimistic(beforeCount: Int, afterCount: Int, followerID: String) {
+    static func listUpdatedAfterSuccess(beforeCount: Int, afterCount: Int, followerID: String) {
         #if DEBUG
         log.info(
-            "optimistic follower=\(followerID, privacy: .public) before=\(beforeCount, privacy: .public) after=\(afterCount, privacy: .public)"
+            "list updated follower=\(followerID, privacy: .public) before=\(beforeCount, privacy: .public) after=\(afterCount, privacy: .public)"
         )
         #endif
     }

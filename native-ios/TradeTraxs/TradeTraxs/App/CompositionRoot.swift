@@ -423,7 +423,12 @@ enum CompositionRoot {
     ) -> AppEnvironment {
         SocialRealtimeRepairExecutor.shared.configure(data: data)
         AudioManager.prepare()
-        RoomLiveVoiceCoordinator.shared.configure(transport: transport)
+        RoomLiveVoiceCoordinator.shared.configure(
+            transport: transport,
+            profileLookup: { ids in
+                try await data.profiles.profiles(ids: ids)
+            }
+        )
         RoomBroadcastCoordinator.shared.configure(
             transport: transport,
             realtimeHub: data.realtimeHub,

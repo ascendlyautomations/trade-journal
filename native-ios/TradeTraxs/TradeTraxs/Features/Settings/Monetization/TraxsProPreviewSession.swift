@@ -7,6 +7,7 @@ nonisolated enum TraxsProPreviewRuntimeFlag {
     nonisolated(unsafe) static var isDashboardPreviewActive = false
     nonisolated(unsafe) static var isExpenseTrackerPreviewActive = false
     nonisolated(unsafe) static var isTradingRulesPreviewActive = false
+    nonisolated(unsafe) static var isBacktestLabPreviewActive = false
 
     static var usesCanonicalJournalSampleData: Bool {
         isReportsPreviewActive || isDashboardPreviewActive || isTradingRulesPreviewActive
@@ -23,6 +24,7 @@ final class TraxsProPreviewSession {
     private(set) var isDashboardPreviewActive = false
     private(set) var isExpenseTrackerPreviewActive = false
     private(set) var isTradingRulesPreviewActive = false
+    private(set) var isBacktestLabPreviewActive = false
     private(set) var activeFeature: TraxsProPreviewFeature?
     private var seededTradeIDs: [TradeID] = []
     private var previewSeededSessionCheckIns = false
@@ -35,6 +37,7 @@ final class TraxsProPreviewSession {
             || isDashboardPreviewActive
             || isExpenseTrackerPreviewActive
             || isTradingRulesPreviewActive
+            || isBacktestLabPreviewActive
     }
 
   /// Seeds demo trades into the detail cache for report / dashboard drill-down. Does not touch ``SessionOwnerTradesStore``.
@@ -75,6 +78,22 @@ final class TraxsProPreviewSession {
     }
 
     /// Trading Rules Analytics preview, canonical trades, accounts, and sample rule preferences.
+    /// Backtest Lab preview uses in-memory backtest trades only (no Supabase or live journal mixing).
+    func beginBacktestLabPreview(detailCache: DetailPresentationCache, viewer: ProfileID) {
+        guard !isAnyPreviewActive else { return }
+        isBacktestLabPreviewActive = true
+        activeFeature = .backtestLab
+        TraxsProPreviewRuntimeFlag.isBacktestLabPreviewActive = true
+        let trades = BacktestLabPreviewSampleData.trades(owner: viewer)
+        seededTradeIDs = trades.map(\.id)
+        BacktestLabPreviewSampleData.seedDetailCache(detailCache, owner: viewer)
+    }
+
+    func endBacktestLabPreview(detailCache: DetailPresentationCache) {
+        guard isBacktestLabPreviewActive else { return }
+        tearDownBacktestLabPreview(detailCache: detailCache)
+    }
+
     func beginTradingRulesPreview(detailCache: DetailPresentationCache, viewer: ProfileID) {
         guard !isAnyPreviewActive else { return }
         isTradingRulesPreviewActive = true
@@ -132,6 +151,10 @@ final class TraxsProPreviewSession {
     }
 
     private func tearDownPreview(detailCache: DetailPresentationCache) {
+        if isBacktestLabPreviewActive {
+            tearDownBacktestLabPreview(detailCache: detailCache)
+            return
+        }
         isReportsPreviewActive = false
         isDashboardPreviewActive = false
         isExpenseTrackerPreviewActive = false
@@ -147,6 +170,18 @@ final class TraxsProPreviewSession {
         }
         seededTradeIDs = []
         clearPreviewSessionCheckInsIfNeeded()
+    }
+
+    private func tearDownBacktestLabPreview(detailCache: DetailPresentationCache) {
+        isBacktestLabPreviewActive = false
+        TraxsProPreviewRuntimeFlag.isBacktestLabPreviewActive = false
+        if activeFeature == .backtestLab {
+            activeFeature = nil
+        }
+        for id in seededTradeIDs {
+            detailCache.removeTrade(id: id)
+        }
+        seededTradeIDs = []
     }
 
     private func refreshRollingJournalForPreview() {
@@ -220,8 +255,15 @@ enum TraxsProPreviewSupport {
 
     static var canMutateJournal: Bool { !isAnyPreviewActive }
 
+    static var isBacktestLabPreviewActive: Bool {
+        TraxsProPreviewSession.shared.isBacktestLabPreviewActive
+    }
+
     static func allowsJournalTradeNavigation(tradeID: TradeID) -> Bool {
         guard isAnyPreviewActive else { return true }
+        if isBacktestLabPreviewActive {
+            return BacktestLabPreviewSampleData.isPreviewTrade(id: tradeID)
+        }
         return JournalSampleDataPolicy.isCanonicalTrade(id: tradeID)
     }
 }

@@ -4,6 +4,8 @@ import { formatDecimal, formatProfitFactor } from "@/lib/formatDisplay"
 
 type MobileWebProfileStatsRowProps = {
   visible: boolean
+  /** Locked private profiles still show the four public header metrics. */
+  publicHeaderOnly?: boolean
   isPrivate: boolean
   totalTrades: number
   postsCount: number | null
@@ -45,6 +47,7 @@ function StatColumn({
 
 export default function MobileWebProfileStatsRow({
   visible,
+  publicHeaderOnly = false,
   isPrivate,
   totalTrades,
   postsCount,
@@ -52,33 +55,37 @@ export default function MobileWebProfileStatsRow({
   payoutTotal,
   profitFactor,
 }: MobileWebProfileStatsRowProps) {
+  const showSummary = visible || publicHeaderOnly
+
   return (
     <div className="px-1">
       <div className="flex items-start py-2">
         <StatColumn
           label="Trades"
-          value={visible ? totalTrades.toLocaleString() : "—"}
+          value={showSummary ? totalTrades.toLocaleString() : "—"}
         />
-        <StatColumn
-          label="Posts"
-          value={postsCount == null ? "—" : postsCount.toLocaleString()}
-        />
+        {!publicHeaderOnly ? (
+          <StatColumn
+            label="Posts"
+            value={postsCount == null ? "—" : postsCount.toLocaleString()}
+          />
+        ) : null}
         <StatColumn
           label="Payouts"
           value={payoutTotal != null ? formatPayout(payoutTotal) : "—"}
         />
         <StatColumn
           label="Win %"
-          value={visible ? `${formatDecimal(winRate)}%` : "—"}
+          value={showSummary ? `${formatDecimal(winRate)}%` : "—"}
         />
         <StatColumn
           label="Profit Factor"
-          value={visible ? formatProfitFactor(profitFactor) : "—"}
+          value={showSummary ? formatProfitFactor(profitFactor) : "—"}
         />
       </div>
-      {!visible && isPrivate ? (
+      {!showSummary && isPrivate ? (
         <p className="pb-1 text-center text-[11px] text-[color:var(--tt-text-muted,#57606a)]">
-          Follow to unlock trading stats in this row.
+          Request to follow to see trading stats in this row.
         </p>
       ) : null}
     </div>

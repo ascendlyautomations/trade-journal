@@ -40,9 +40,10 @@ struct BroadcastFloatingMiniPlayerOverlay: View {
             Color.black
             LiveKitBroadcastVideoView(
                 track: coordinator.videoTrackForMiniPlayer,
+                trackRevision: coordinator.programVideoTrackRevision,
                 onFirstFrame: { coordinator.markProgramVideoFrameRendered() }
             )
-            .id(coordinator.programVideoTrackRevision)
+            .id(coordinator.programVideoRendererIdentity)
             .opacity(coordinator.hasDisplayableProgramVideo ? 1 : 0)
 
             if let placeholder = coordinator.programVideoPlaceholder {
@@ -59,9 +60,10 @@ struct BroadcastFloatingMiniPlayerOverlay: View {
         }
         .shadow(color: Color.black.opacity(0.35), radius: 12, x: 0, y: 6)
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .onAppear { coordinator.adoptProgramVideoSurface(.floatingMini) }
         .onTapGesture {
             ExperienceHaptics.play(.selection)
-            coordinator.presentViewer()
+            coordinator.presentExpandedLivestreamChrome()
         }
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("Live stream")

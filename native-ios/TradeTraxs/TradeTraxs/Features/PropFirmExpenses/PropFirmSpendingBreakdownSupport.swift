@@ -77,3 +77,27 @@ enum PropFirmSpendingBreakdownSupport {
         return abs(hasher.finalize()) % slicePalette.count
     }
 }
+
+/// Popover copy for Expense Tracker section headers (ⓘ).
+nonisolated enum PropFirmExpenseTrackerSectionInfo {
+    static let spendingBreakdown =
+        "See how your recorded expenses are distributed across categories and where you're spending the most."
+
+    static let spendingAnalytics =
+        "Explore your spending trends over time, including changes in expenses and category performance."
+
+    static let taxDeductible =
+        """
+        View expenses that may qualify as tax deductions. Eligibility depends on your business activity and applicable tax rules. These amounts are estimates, not confirmed deductions.
+
+        The estimated total is a bookkeeping figure from recorded prop firm expenses. Consult a tax professional before claiming deductions. Not every recorded expense is guaranteed to qualify as a tax deduction.
+        """
+
+    static let taxReserve =
+        "Set aside a percentage of your recorded income to help prepare for potential taxes. This is a budgeting estimate, not a calculation of your actual tax liability."
+
+    static let exportTaxCSV =
+        """
+        Export your recorded expenses and supported payout information into a CSV file for bookkeeping or review with your tax professional. Exported expenses are not automatically tax-deductible.
+        """
+}

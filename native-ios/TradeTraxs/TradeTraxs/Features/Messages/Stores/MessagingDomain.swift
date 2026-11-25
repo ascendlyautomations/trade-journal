@@ -114,6 +114,11 @@ final class MessagingDomain {
     /// Full inbox bootstrap (Messages home). Concurrent callers share one in-flight task.
     func bootstrapHomeIfNeeded(forceNetwork: Bool = false) async {
         homeScreenVisible = true
+        if ExploreModeSupport.skipsAuthenticatedViewerServices {
+            state.phase = .loaded
+            state.didBootstrap = true
+            return
+        }
         if !forceNetwork, state.didBootstrap, inboxStore.hasLoaded {
             await syncStateFromInbox()
             scheduleSoftRevalidationIfNeeded()
@@ -156,6 +161,10 @@ final class MessagingDomain {
 
     /// Rooms-only bootstrap (Trade Rooms home when inbox not yet loaded).
     func bootstrapRoomsIfNeeded(forceNetwork: Bool = false) async {
+        if ExploreModeSupport.skipsAuthenticatedViewerServices {
+            state.phase = .loaded
+            return
+        }
         if !forceNetwork, inboxStore.hasLoadedRooms {
             await syncStateFromInbox()
             state.phase = .loaded

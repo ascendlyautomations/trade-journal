@@ -59,6 +59,8 @@ nonisolated struct LeaderboardEntry: Hashable, Codable, Sendable, Identifiable {
     var profitPercent: Decimal?
     /// Inverse win concentration, higher means profits are less dominated by one trade (`0...100`).
     var consistency: Decimal?
+    /// Public payout achievement total for the selected window (server rankings).
+    var payoutTotal: Decimal?
 
     init(
         rank: Int,
@@ -72,7 +74,8 @@ nonisolated struct LeaderboardEntry: Hashable, Codable, Sendable, Identifiable {
         expectancy: Decimal? = nil,
         winStreak: Int = 0,
         profitPercent: Decimal? = nil,
-        consistency: Decimal? = nil
+        consistency: Decimal? = nil,
+        payoutTotal: Decimal? = nil
     ) {
         self.rank = rank
         self.profileID = profileID
@@ -86,6 +89,7 @@ nonisolated struct LeaderboardEntry: Hashable, Codable, Sendable, Identifiable {
         self.winStreak = winStreak
         self.profitPercent = profitPercent
         self.consistency = consistency
+        self.payoutTotal = payoutTotal
     }
 }
 

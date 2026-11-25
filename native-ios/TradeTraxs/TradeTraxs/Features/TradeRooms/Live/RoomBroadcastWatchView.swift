@@ -84,6 +84,18 @@ struct RoomBroadcastWatchView: View {
                 isTypingMiniPlayerDismissed = false
             }
         }
+        .onChange(of: usesCornerVideo) { _, corner in
+            syncProgramVideoSurfaceForLayout(cornerVideo: corner, fullscreen: isFullscreen)
+        }
+        .onChange(of: isTypingMiniPlayerDismissed) { _, _ in
+            syncProgramVideoSurfaceForLayout(cornerVideo: usesCornerVideo, fullscreen: isFullscreen)
+        }
+        .onChange(of: isFullscreen) { _, full in
+            syncProgramVideoSurfaceForLayout(cornerVideo: usesCornerVideo, fullscreen: full)
+        }
+        .onAppear {
+            syncProgramVideoSurfaceForLayout(cornerVideo: usesCornerVideo, fullscreen: isFullscreen)
+        }
         .background(colors.primaryBackground)
         .fullScreenCover(isPresented: $isFullscreen) {
             fullscreenPlayer
@@ -202,13 +214,23 @@ struct RoomBroadcastWatchView: View {
         .simultaneousGesture(headerMinimizeDragGesture)
     }
 
-    /// Invisible attachment so LiveKit keeps one renderer when the overlay is swiped away.
     private var cornerVideoDismissedPlaceholder: some View {
-        RoomBroadcastChatTypingMiniPlayer(coordinator: coordinator, size: cornerPlayerSize)
+        Color.clear
             .frame(width: 1, height: 1)
-            .opacity(0.001)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+
+    private func syncProgramVideoSurfaceForLayout(cornerVideo: Bool, fullscreen: Bool) {
+        if fullscreen {
+            coordinator.adoptProgramVideoSurface(.sheetFullscreen)
+        } else if cornerVideo {
+            coordinator.adoptProgramVideoSurface(
+                isTypingMiniPlayerDismissed ? .cornerDismissedHold : .cornerChat
+            )
+        } else {
+            coordinator.adoptProgramVideoSurface(.inlineExpanded)
+        }
     }
 
     private func toggleCornerVideoPin() {
@@ -295,10 +317,11 @@ struct RoomBroadcastWatchView: View {
             Color.black.ignoresSafeArea()
             BroadcastStreamZoomableVideoView(
                 track: coordinator.videoTrackForExpandedViewer,
+                trackRevision: coordinator.programVideoTrackRevision,
                 isFullscreen: true,
                 onFirstFrame: { coordinator.markProgramVideoFrameRendered() }
             )
-            .id(coordinator.programVideoTrackRevision)
+            .id(coordinator.programVideoRendererIdentity)
             .opacity(coordinator.hasDisplayableProgramVideo ? 1 : 0)
             .ignoresSafeArea()
 

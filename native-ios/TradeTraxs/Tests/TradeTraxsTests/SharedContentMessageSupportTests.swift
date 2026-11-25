@@ -33,6 +33,48 @@ final class SharedContentMessageSupportTests: XCTestCase {
         XCTAssertFalse(bundling.hiddenMessageIDs.contains(other.id))
     }
 
+    func testReconciliationRemovesTradeOnlyShare() {
+        let tradeID = TradeID("trade-gone")
+        let share = Message(
+            id: MessageID("share-trade"),
+            conversationID: conversationID,
+            senderProfileID: senderID,
+            kind: .tradeShare,
+            body: nil,
+            attachments: SharedContentMessageSupport.tradeShareAttachments(for: tradeID),
+            replyToMessageID: nil,
+            createdAt: baseDate,
+            isReadByViewer: true,
+            sharedContent: .trade(tradeID)
+        )
+        let keys = SharedContentMessageReconciliation.stableKeys(forDeletedTradeID: tradeID)
+        let applied = SharedContentMessageReconciliation.apply(to: [share], unavailableKeys: keys)
+        XCTAssertTrue(applied.removedIDs.contains(share.id))
+        XCTAssertTrue(applied.messages.isEmpty)
+    }
+
+    func testReconciliationPreservesCaptionWhenStrippingShare() {
+        let postID = PostID("post-gone")
+        let share = Message(
+            id: MessageID("share-post"),
+            conversationID: conversationID,
+            senderProfileID: senderID,
+            kind: .feedPostShare,
+            body: "My commentary",
+            attachments: [],
+            replyToMessageID: nil,
+            createdAt: baseDate,
+            isReadByViewer: true,
+            sharedContent: .feedPost(postID)
+        )
+        let keys = SharedContentMessageReconciliation.stableKeys(forDeletedPostID: postID)
+        let applied = SharedContentMessageReconciliation.apply(to: [share], unavailableKeys: keys)
+        XCTAssertEqual(applied.messages.count, 1)
+        XCTAssertEqual(applied.messages[0].kind, .text)
+        XCTAssertEqual(applied.messages[0].body, "My commentary")
+        XCTAssertNil(applied.messages[0].sharedContent)
+    }
+
     func testShareWithoutCaptionDoesNotReserveSpacing() {
         let share = makeShare(id: "share-1", at: baseDate)
         let item = ConversationBubbleItem(

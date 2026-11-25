@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { resolveStoredRoomImageUrl } from "@/lib/storageOptimizedMedia"
 import { isPublicDiscoveryRoom } from "@/lib/betaHub"
-import { filterRoomsWithPublicOwners } from "@/lib/publicProfileDiscovery"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import {
   getDemoPopularTradeRooms,
@@ -151,9 +150,7 @@ export async function fetchPopularTradeRooms(
     return []
   }
 
-  const publicOwnerRooms = await filterRoomsWithPublicOwners(supabase, rooms ?? [])
-
-  return publicOwnerRooms
+  return (rooms ?? [])
     .filter((room) => isPublicDiscoveryRoom(room))
     .slice(0, capped)
     .map((room) =>
@@ -237,11 +234,7 @@ export async function searchPublicTradeRooms(
   const officialRooms = (officialResult.data ?? []).filter((room) =>
     isPublicDiscoveryRoom(room)
   )
-  const publicOwnerRooms = await filterRoomsWithPublicOwners(
-    supabase,
-    communityResult.data ?? []
-  )
-  const communityRooms = publicOwnerRooms.filter((room) =>
+  const communityRooms = (communityResult.data ?? []).filter((room) =>
     isPublicDiscoveryRoom(room)
   )
 

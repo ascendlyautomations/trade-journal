@@ -221,6 +221,21 @@ final class GuestSessionEntryTests: XCTestCase {
         XCTAssertEqual(launch.environment.authentication.manager.lastEvent, event)
     }
 
+    func testGuestShowcaseSessionSkipsPrivateViewerServices() async throws {
+        let launch = AppLaunchController.shared
+        await launch.installGuestSessionForTesting(
+            GuestSessionIssuance(
+                userID: GuestShowcaseAccount.productionUserID,
+                accessToken: "guest.access.token",
+                expiresAt: Date().addingTimeInterval(3_600)
+            )
+        )
+        XCTAssertTrue(DemoExperienceSupport.skipsAuthenticatedViewerServices)
+        XCTAssertTrue(DemoExperienceSupport.isGuestShowcaseSessionActive)
+        launch.relinquishGuestSessionForAuthenticatedSignIn()
+        XCTAssertFalse(DemoExperienceSupport.skipsAuthenticatedViewerServices)
+    }
+
     func testExpiredGuestTokenReissuesWithoutGoTrueRefresh() async throws {
         let launch = AppLaunchController.shared
         let manager = launch.environment.authentication.manager
@@ -255,7 +270,7 @@ final class GuestSessionEntryTests: XCTestCase {
         XCTAssertTrue(launch.isDemoExperienceActive)
         XCTAssertTrue(launch.guestSessionIsInstalled)
         XCTAssertFalse(launch.guestExploreFailurePresented)
-        XCTAssertFalse(DemoExperienceSupport.skipsAuthenticatedViewerServices)
+        XCTAssertTrue(DemoExperienceSupport.skipsAuthenticatedViewerServices)
         XCTAssertEqual(manager.lastEvent, event)
         XCTAssertEqual(manager.state.isSessionReady, wasReady)
     }

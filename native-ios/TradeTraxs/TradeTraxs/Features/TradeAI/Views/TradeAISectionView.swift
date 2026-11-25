@@ -5,41 +5,29 @@ struct TradeAISectionView: View {
     @Bindable var viewModel: TradeAISectionViewModel
 
     @Environment(\.themeColors) private var colors
-    @State private var entitlementGateRevision = 0
-
-    private var isAnalysisRestricted: Bool {
-        _ = entitlementGateRevision
-        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
-        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
-            demoModeActive: ExploreModeSupport.isActive,
-            profileID: profileID
-        )
-    }
 
     var body: some View {
         TradeDetailGroupedSurface {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 header
 
-                if isAnalysisRestricted {
-                    tradeAIUpgradeBlock
-                } else if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
+                if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
                     ProgressView()
                         .controlSize(.small)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Loading previous analyses")
                 }
 
-                if !isAnalysisRestricted, !viewModel.messages.isEmpty {
+                if !viewModel.messages.isEmpty {
                     messages
                 }
 
-                if !isAnalysisRestricted, let error = viewModel.errorMessage {
+                if let error = viewModel.errorMessage {
                     Text(error)
                         .experienceStyle(.caption, color: colors.error)
                 }
 
-                if !isAnalysisRestricted, let persistError = viewModel.persistErrorMessage {
+                if let persistError = viewModel.persistErrorMessage {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                         Text(persistError)
                             .experienceStyle(.caption, color: colors.secondaryText)
@@ -51,43 +39,17 @@ struct TradeAISectionView: View {
                     }
                 }
 
-                if !isAnalysisRestricted {
-                    analysisSelectorRow
+                analysisSelectorRow
 
-                    customQuestionSection
+                customQuestionSection
 
-                    ComplianceDisclaimerFootnote(
-                        text: ComplianceDisclaimerCopy.tradeAI,
-                        showsTermsLink: true
-                    )
-                }
+                ComplianceDisclaimerFootnote(
+                    text: ComplianceDisclaimerCopy.tradeAI,
+                    showsTermsLink: true
+                )
             }
         }
         .accessibilityIdentifier("detail.trade.ai.section")
-        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
-            entitlementGateRevision += 1
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
-            entitlementGateRevision += 1
-        }
-    }
-
-    private var tradeAIUpgradeBlock: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Trade AI analysis is included with TraxsPro.")
-                .experienceStyle(.footnote, color: colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            Button {
-                ExperienceHaptics.play(.selection)
-                ProUpgradeCoordinator.shared.present(reason: .feature(.aiAnalyst))
-            } label: {
-                Text("Upgrade to TraxsPro")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("detail.trade.ai.upgrade.traxpro")
-        }
-        .accessibilityIdentifier("detail.trade.ai.traxpro.gate")
     }
 
     private var header: some View {

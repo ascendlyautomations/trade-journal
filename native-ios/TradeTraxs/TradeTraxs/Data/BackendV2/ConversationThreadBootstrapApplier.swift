@@ -262,7 +262,7 @@ nonisolated enum ConversationThreadBootstrapApplier {
         guard let id = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
               let reaction = row.reaction?.trimmingCharacters(in: .whitespacesAndNewlines),
               !reaction.isEmpty,
-              MessageReactionSemantics.supportedEmojis.contains(reaction)
+              MessageReactionValidation.isValid(reaction)
         else { return nil }
         let messageRaw = row.message_id?.trimmingCharacters(in: .whitespacesAndNewlines)
         let messageID = messageRaw.flatMap { raw -> MessageID? in

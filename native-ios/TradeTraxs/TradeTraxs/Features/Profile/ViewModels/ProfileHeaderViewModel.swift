@@ -48,13 +48,17 @@ final class ProfileHeaderViewModel {
     var ownedTradeRoom: TradeRoom? { store.ownedTradeRoom }
 
     var actionMode: ProfileActionRow.Mode {
+        if store.isOwner, ExploreModeSupport.isActive {
+            return .guestShowcase
+        }
         if store.isOwner {
             return .owner(hasTradeRoom: store.hasTradeRoom)
         }
         return .visitor(
             isFollowing: store.isFollowing,
             isRequested: store.isRequested,
-            showsTradeRoom: store.canShowVisitorTradeRoomCTA
+            showsTradeRoom: store.canShowVisitorTradeRoomCTA,
+            isPrivate: store.profile?.isPrivate == true
         )
     }
 
@@ -124,6 +128,11 @@ final class ProfileHeaderViewModel {
     func openEditProfile() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.pushProfile(.settings(.profile))
+    }
+
+    func exitGuestToCreateAccount() {
+        ExperienceHaptics.play(.selection)
+        AppLaunchController.shared.exitDemoExplore(authIntent: .createAccount)
     }
 
     func presentShare() {

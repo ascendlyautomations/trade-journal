@@ -25,6 +25,8 @@ import {
   feedContentOwnerUserId,
   type FeedCommentTarget,
 } from "./feedPostHelpers"
+import CommentTradeAttachPicker from "@/app/components/comments/CommentTradeAttachPicker"
+import { canPostCommentWithAttachment } from "@/lib/commentSharedTrade"
 
 type FeedCommentsSectionProps = {
   target: FeedCommentTarget
@@ -36,7 +38,8 @@ type FeedCommentsSectionProps = {
     submitContext: unknown,
     text: string,
     parentCommentId?: string | null,
-    retryTempId?: string | null
+    retryTempId?: string | null,
+    sharedTradeId?: string | null
   ) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
   onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
@@ -82,6 +85,13 @@ function FeedCommentsSection({
   const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
   const [pendingDelete, setPendingDelete] = useState<any>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [pendingSharedTrade, setPendingSharedTrade] = useState<{
+    id: string
+    ticker?: string
+    direction?: string
+    is_public?: boolean | null
+  } | null>(null)
+  const [showTradePicker, setShowTradePicker] = useState(false)
   const commentDraftRef = useRef(commentDraft)
   commentDraftRef.current = commentDraft
 
@@ -99,15 +109,19 @@ function FeedCommentsSection({
     async (submitContext: unknown) => {
       if (commentSubmitting) return
       const text = commentDraftRef.current.trim()
-      if (!text) return
+      const sharedTradeId = pendingSharedTrade?.id ?? null
+      if (!canPostCommentWithAttachment(text, sharedTradeId)) return
       const ok = await onSubmitComment(
         submitContext,
         text,
-        replyTarget?.parentCommentId ?? null
+        replyTarget?.parentCommentId ?? null,
+        null,
+        sharedTradeId
       )
       if (ok) {
         setCommentDraft("")
         setReplyTarget(null)
+        setPendingSharedTrade(null)
         if (draftSyncRef) {
           draftSyncRef.current[contentId] = ""
         }
@@ -119,6 +133,7 @@ function FeedCommentsSection({
       draftSyncRef,
       onSubmitComment,
       replyTarget?.parentCommentId,
+      pendingSharedTrade?.id,
     ]
   )
 
@@ -200,6 +215,9 @@ function FeedCommentsSection({
       onCancelReply={handleCancelReply}
       onCommentChange={handleCommentChange}
       onSubmitComment={handleSubmitComment}
+      pendingSharedTrade={pendingSharedTrade}
+      onAttachTrade={() => setShowTradePicker(true)}
+      onClearAttachedTrade={() => setPendingSharedTrade(null)}
     />
   ) : null
 
@@ -224,6 +242,24 @@ function FeedCommentsSection({
       }
       onRetryComment={handleRetryComment}
       deleteMenuClassName="z-[9100]"
+    />
+  )
+
+  const tradePickerModal = (
+    <CommentTradeAttachPicker
+      open={showTradePicker}
+      userId={user?.id}
+      onClose={() => setShowTradePicker(false)}
+      onSelect={(trade) => {
+        const id = String(trade.id ?? "")
+        if (!id) return
+        setPendingSharedTrade({
+          id,
+          ticker: trade.ticker != null ? String(trade.ticker) : undefined,
+          direction: trade.direction != null ? String(trade.direction) : undefined,
+          is_public: trade.is_public as boolean | null | undefined,
+        })
+      }}
     />
   )
 
@@ -267,6 +303,7 @@ function FeedCommentsSection({
         </div>
         {composer ? <div className="shrink-0 pt-2">{composer}</div> : null}
         {deleteModal}
+        {tradePickerModal}
       </div>
     )
   }
@@ -280,6 +317,7 @@ function FeedCommentsSection({
       {commentList}
       {composer}
       {deleteModal}
+      {tradePickerModal}
     </div>
   )
 }

@@ -113,7 +113,7 @@ nonisolated enum RoomMessageDTOMapper {
         guard let id = dto.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
               let reaction = dto.reaction?.trimmingCharacters(in: .whitespacesAndNewlines),
               !reaction.isEmpty,
-              RoomMessageReactionSemantics.supportedEmojis.contains(reaction)
+              MessageReactionValidation.isValid(reaction)
         else { return nil }
         let messageRaw = dto.message_id?.trimmingCharacters(in: .whitespacesAndNewlines)
         let messageID = messageRaw.flatMap { raw -> RoomMessageID? in

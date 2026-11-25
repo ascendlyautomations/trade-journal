@@ -287,7 +287,6 @@ export default function ExplorePage() {
       .from("profiles")
       .select(PROFILE_FIELDS)
       .not("username", "is", null)
-      .neq("is_private", true)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -392,7 +391,6 @@ export default function ExplorePage() {
         .select(SEARCH_PROFILE_FIELDS)
         .or(`username.ilike.%${term}%,name.ilike.%${term}%`)
         .not("username", "is", null)
-        .neq("is_private", true)
         .limit(12),
       searchPublicTradeRooms(supabase, term, 12),
     ])

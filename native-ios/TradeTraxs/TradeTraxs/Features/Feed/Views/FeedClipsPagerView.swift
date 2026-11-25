@@ -445,7 +445,6 @@ private struct FeedClipsPageView: View {
                     text: caption,
                     lineLimit: FeedCaptionLineLimit.clip,
                     style: .clipsOverlay,
-                    onSeeMore: onOpenDetail,
                     seeMoreAccessibilityIdentifier: "feed.clips.seeMore"
                 )
             }

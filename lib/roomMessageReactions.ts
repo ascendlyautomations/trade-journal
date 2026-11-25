@@ -1,13 +1,22 @@
 /** V1 message reactions — DMs (`message_reactions`) + Trade Rooms (`room_message_reactions`). */
 
-export const ROOM_MESSAGE_REACTIONS = ["❤️", "👍", "🔥", "😂", "‼️"] as const
+import {
+  MESSAGE_REACTION_QUICK_PICKS,
+  isValidMessageReaction,
+  normalizeMessageReaction,
+} from "@/lib/messageReactionValidation"
+
+export const ROOM_MESSAGE_REACTIONS = MESSAGE_REACTION_QUICK_PICKS
 
 export const MESSAGE_REACTIONS = ROOM_MESSAGE_REACTIONS
 
 /** Double-tap adds/removes this reaction (not thumbs-up). */
-export const MESSAGE_REACTION_DOUBLE_TAP_EMOJI = "❤️" as const
+export const MESSAGE_REACTION_DOUBLE_TAP_EMOJI = MESSAGE_REACTION_QUICK_PICKS[0]
 
-export type RoomMessageReactionEmoji = (typeof ROOM_MESSAGE_REACTIONS)[number]
+/** Tail padding so bubble-attached reaction chips do not shift timestamps. */
+export const MESSAGE_REACTION_BUBBLE_RESERVE_CLASS = "pb-5"
+
+export type RoomMessageReactionEmoji = string
 
 export type MessageReactionEmoji = RoomMessageReactionEmoji
 
@@ -23,7 +32,7 @@ export type RoomMessageReactionRow = {
 export type MessageReactionRow = RoomMessageReactionRow
 
 export type RoomMessageReactionSummary = {
-  emoji: RoomMessageReactionEmoji
+  emoji: string
   count: number
   reactedByViewer: boolean
 }
@@ -32,25 +41,36 @@ export function aggregateRoomMessageReactions(
   reactions: RoomMessageReactionRow[] | null | undefined,
   viewerUserId: string | null | undefined
 ): RoomMessageReactionSummary[] {
-  const counts = new Map<RoomMessageReactionEmoji, number>()
-  const viewerSet = new Set<RoomMessageReactionEmoji>()
+  const counts = new Map<string, number>()
+  let viewerEmoji: string | null = null
 
   for (const row of reactions ?? []) {
-    if (!ROOM_MESSAGE_REACTIONS.includes(row.reaction as RoomMessageReactionEmoji)) {
-      continue
-    }
-    const emoji = row.reaction as RoomMessageReactionEmoji
+    const emoji = normalizeMessageReaction(row.reaction)
+    if (!emoji || !isValidMessageReaction(emoji)) continue
     counts.set(emoji, (counts.get(emoji) ?? 0) + 1)
     if (viewerUserId && row.user_id === viewerUserId) {
-      viewerSet.add(emoji)
+      viewerEmoji = emoji
     }
   }
 
-  return ROOM_MESSAGE_REACTIONS.flatMap((emoji) => {
-    const count = counts.get(emoji) ?? 0
-    if (count === 0) return []
-    return [{ emoji, count, reactedByViewer: viewerSet.has(emoji) }]
-  })
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([emoji, count]) => ({
+      emoji,
+      count,
+      reactedByViewer: viewerEmoji === emoji,
+    }))
+}
+
+export function shouldReserveMessageReactionBubbleSpace(
+  reactions: RoomMessageReactionRow[] | null | undefined,
+  viewerUserId: string | null | undefined,
+  canReact: boolean
+): boolean {
+  if (!canReact) {
+    return aggregateRoomMessageReactions(reactions, viewerUserId).length > 0
+  }
+  return true
 }
 
 export function patchRoomMessageReactions(
@@ -60,11 +80,13 @@ export function patchRoomMessageReactions(
 ): RoomMessageReactionRow[] {
   const list = reactions ?? []
   if (mode === "insert") {
+    const emoji = normalizeMessageReaction(next.reaction)
+    if (!emoji) return list
     const withoutViewer = list.filter((row) => row.user_id !== next.user_id)
     if (withoutViewer.some((row) => row.id === next.id)) {
       return withoutViewer
     }
-    return [...withoutViewer, next]
+    return [...withoutViewer, { ...next, reaction: emoji }]
   }
 
   return list.filter((row) => row.id !== next.id)

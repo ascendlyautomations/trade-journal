@@ -1,45 +1,17 @@
 import SwiftUI
 
-/// Detail-screen comments host, lazy loads on appear; content-type injected.
+/// Detail-screen comments list (composer is pinned via ``CommentsDetailChrome`` or reel sheet chrome).
 struct CommentsSectionView: View {
-    @State private var viewModel: CommentsViewModel
-    @State private var currentUserID: ProfileID?
-    private let session: any SessionProviding
-    private let imagePipeline: any ImagePipeline
-
-    init(target: InteractionTarget, contentOwnerUserID: String? = nil, data: DataEnvironment) {
-        _viewModel = State(
-            initialValue: CommentsViewModel(
-                target: target,
-                repository: data.interactions,
-                engagementStore: data.engagementStore,
-                session: data.session,
-                contentOwnerUserID: contentOwnerUserID,
-                detailCache: data.detailCache,
-                realtimeHub: data.realtimeHub
-            )
-        )
-        self.session = data.session
-        self.imagePipeline = data.imagePipeline
-    }
+    @Bindable var viewModel: CommentsViewModel
+    let currentUserID: ProfileID?
+    let imagePipeline: any ImagePipeline
 
     var body: some View {
         CommentListView(
             viewModel: viewModel,
             currentUserID: currentUserID,
-            imagePipeline: imagePipeline
+            imagePipeline: imagePipeline,
+            presentation: .embeddedList
         )
-            .task {
-                viewModel.loadIfNeeded()
-                if let id = await session.currentUserID {
-                    currentUserID = ProfileID(id.rawValue)
-                }
-            }
-            .refreshable {
-                await viewModel.refresh()
-            }
-            .onDisappear {
-                viewModel.stopCommentRealtime()
-            }
     }
 }

@@ -84,7 +84,7 @@ final class StatsContainerViewModel {
         visibilityIdentity = nextVisibility
         if snapshot.isContentLocked {
             canViewContent = false
-            state = .empty
+            state = .contentLocked
             scheduleLockedProfileShadowIfNeeded()
             Task {
                 await ProfileAnalyticsPresentationCoordinator.handleLockedProfile(
@@ -197,7 +197,7 @@ final class StatsContainerViewModel {
 
     private func scheduleAnalyticsLoadIfNeeded(force: Bool = false) {
         guard canViewContent else {
-            state = .empty
+            state = .contentLocked
             return
         }
         if !force, hasLoadedAnalytics { return }

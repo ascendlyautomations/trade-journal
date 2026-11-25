@@ -314,6 +314,7 @@ struct DashboardHomeView: View {
     }
 
     private var showsDashboardFilterBar: Bool {
+        guard !embeddedInTraxsProPreview else { return false }
         switch viewModel.phase {
         case .idle:
             return viewModel.hasLoaded || !viewModel.accounts.isEmpty
@@ -440,30 +441,6 @@ struct DashboardHomeView: View {
 
     @ViewBuilder
     private func traxsProPreviewDashboardSections(summary: DashboardChartMetrics.Summary) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            DashboardEquityHero(
-                summary: viewModel.equityHeroSummary ?? summary,
-                periodTitle: viewModel.dateRange.title,
-                title: viewModel.equityHeroTitle,
-                displayEquity: viewModel.equityHeroDisplayValue,
-                chartPoints: viewModel.equityHeroChartPoints,
-                isChartLoading: false,
-                withdrawalSummary: accountValueWithdrawalSummary,
-                onWithdrawalSummaryTap: viewModel.openWithdrawalsHistory,
-                showsDrawdownSettings: false,
-                onDrawdownSettingsTap: {}
-            )
-
-            DashboardMetricStrip(chips: viewModel.metricChips, layout: .gridTwoByTwo)
-        }
-        .padding(.bottom, ExperienceSpacing.lg)
-
-        DashboardPreviewStatisticsSection(
-            summary: summary,
-            reportMetrics: viewModel.traxsProPreviewScopeMetrics
-        )
-        .padding(.bottom, ExperienceSpacing.xl)
-
         sectionHeader(
             DashboardScorecardDisplayCopy.sectionTitle,
             info: "The ring is the overall score for this filter once the sample is large enough. It blends consistency, risk, discipline, and psychology."
@@ -491,7 +468,7 @@ struct DashboardHomeView: View {
             onBrowseShort: { viewModel.browseShort() },
             onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) },
             premiumChartsPresentation: premiumAnalyticsPresentation,
-            showsStandardCharts: true
+            showsStandardCharts: false
         )
         .padding(.bottom, ExperienceSpacing.xl)
 
@@ -536,13 +513,13 @@ struct DashboardHomeView: View {
                 showsDrawdownSettings: viewModel.canConfigureEquityDrawdownSettings,
                 onDrawdownSettingsTap: viewModel.openEquityDrawdownSettings
             )
+            .contextualTourTarget(.dashboardPerformance)
 
             DashboardMetricStrip(chips: viewModel.metricChips)
 
             performanceCardsGrid
         }
         .padding(.bottom, ExperienceSpacing.lg)
-        .contextualTourTarget(.dashboardPerformance)
 
         if let propStatus = viewModel.propFirmStatus, !restrictsPropFirmMode {
             PropFirmStatusCard(
@@ -657,11 +634,12 @@ struct DashboardHomeView: View {
         .scrollBounceBehavior(.basedOnSize)
         .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
             guard let target else { return }
+            let anchor = ContextualTourGeometry.scrollAnchor(for: target)
             if reduceMotion {
-                proxy.scrollTo(target, anchor: .center)
+                proxy.scrollTo(target, anchor: anchor)
             } else {
                 withAnimation(ExperienceMotion.navigation) {
-                    proxy.scrollTo(target, anchor: .center)
+                    proxy.scrollTo(target, anchor: anchor)
                 }
             }
         }

@@ -14,5 +14,6 @@ struct SocialTradeDetailView: View {
             navigationCoordinator: navigationCoordinator,
             experience: .social
         )
+        .liveVoiceTopSessionChrome()
     }
 }

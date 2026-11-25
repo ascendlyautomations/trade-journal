@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Full-width analytics charts, Phase 2 visuals + Phase 3 interactions.
 ///
-/// Flow: Win/Loss … Symbol Performance (Free) → Hold / Hours / R:R / setup / drawdown (TraxsPro subscribers only).
-/// Free users see standard charts here; premium charts are summarized in ``DashboardTraxProUpsellSection``.
+/// Free: Win/Loss → Sessions → Weekdays → Long/Short → Symbol Performance.
+/// TraxsPro: interleaved premium order (hours/hold/R:R/setup/drawdown); Free block unchanged when gated.
 struct DashboardChartsSection: View {
     let summary: DashboardChartMetrics.Summary
     var onBrowseWins: (() -> Void)?
@@ -29,18 +29,51 @@ struct DashboardChartsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xl) {
-            if showsStandardCharts {
+            if showsTraxsProChartAnalytics {
+                traxsProChartsContent
+            } else if showsStandardCharts {
                 standardChartsContent
             }
-            traxsProExclusiveChartsBlock
-            premiumAdvancedChartsBlock(strategies: summary.strategyHighlights)
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .accessibilityIdentifier("dashboard.charts")
     }
 
+    /// Free tier chart order (unchanged).
     @ViewBuilder
     private var standardChartsContent: some View {
+        winLossBlock
+        tradingSessionsBlock
+        weekdaysBlock
+        longVsShortBlock
+        symbolPerformanceBlock
+    }
+
+    /// TraxsPro production + sample-data preview chart order.
+    @ViewBuilder
+    private var traxsProChartsContent: some View {
+        if showsStandardCharts {
+            winLossBlock
+            tradingSessionsBlock
+            tradingHoursBlock
+            weekdaysBlock
+            holdTimeBlock
+            longVsShortBlock
+            symbolPerformanceBlock
+            rrTargetingBlock
+            setupPerformanceBlock(strategies: summary.strategyHighlights)
+            drawdownBlock
+        } else {
+            holdTimeBlock
+            tradingHoursBlock
+            rrTargetingBlock
+            setupPerformanceBlock(strategies: summary.strategyHighlights)
+            drawdownBlock
+        }
+    }
+
+    @ViewBuilder
+    private var winLossBlock: some View {
         chartBlock(title: "Win / Loss", info: DashboardChartInfo.winLoss) {
             DashboardWinLossRingView(
                 winCount: summary.winCount,
@@ -49,6 +82,10 @@ struct DashboardChartsSection: View {
                 onSelectLosses: onBrowseLosses
             )
         }
+    }
+
+    @ViewBuilder
+    private var tradingSessionsBlock: some View {
         chartBlock(title: "Trading Sessions", info: DashboardChartInfo.tradingSessions) {
             DashboardSessionBarsView(
                 performance: summary.sessionPerformance,
@@ -56,12 +93,20 @@ struct DashboardChartsSection: View {
                 onSelect: onBrowseSession
             )
         }
+    }
+
+    @ViewBuilder
+    private var weekdaysBlock: some View {
         chartBlock(title: "Weekdays", info: DashboardChartInfo.weekdays) {
             DashboardWeekdayHeatmapView(
                 points: summary.weekdayHeatmap,
                 onSelect: onBrowseWeekday
             )
         }
+    }
+
+    @ViewBuilder
+    private var longVsShortBlock: some View {
         chartBlock(title: "Long vs Short", info: DashboardChartInfo.longVsShort) {
             if let comparison = summary.longShortComparison,
                comparison.long != nil || comparison.short != nil {
@@ -81,19 +126,14 @@ struct DashboardChartsSection: View {
                 )
             }
         }
+    }
+
+    @ViewBuilder
+    private var symbolPerformanceBlock: some View {
         if !summary.symbolPerformance.isEmpty {
             chartBlock(title: "Symbol Performance", info: DashboardChartInfo.symbolPerformance) {
                 DashboardSymbolRankedBarsView(rows: summary.symbolPerformance)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var traxsProExclusiveChartsBlock: some View {
-        if showsTraxsProChartAnalytics {
-            holdTimeBlock
-            tradingHoursBlock
-            rrTargetingBlock
         }
     }
 
@@ -137,22 +177,22 @@ struct DashboardChartsSection: View {
     }
 
     @ViewBuilder
-    private func premiumAdvancedChartsBlock(
-        strategies: DashboardStrategyHighlights?
-    ) -> some View {
-        if premiumChartsPresentation == .unrestricted {
-            if let strategies,
-               strategies.best != nil || strategies.worst != nil {
-                chartBlock(title: "Setup Performance", info: DashboardChartInfo.setupPerformance) {
-                    DashboardStrategyHighlightsView(highlights: strategies)
-                }
+    private func setupPerformanceBlock(strategies: DashboardStrategyHighlights?) -> some View {
+        if let strategies,
+           strategies.best != nil || strategies.worst != nil {
+            chartBlock(title: "Setup Performance", info: DashboardChartInfo.setupPerformance) {
+                DashboardStrategyHighlightsView(highlights: strategies)
             }
-            chartBlock(title: "Drawdown", info: DashboardChartInfo.drawdown) {
-                DashboardUnderwaterDrawdownView(
-                    series: summary.drawdownSeries,
-                    maxDrawdown: summary.maxDrawdown
-                )
-            }
+        }
+    }
+
+    @ViewBuilder
+    private var drawdownBlock: some View {
+        chartBlock(title: "Drawdown", info: DashboardChartInfo.drawdown) {
+            DashboardUnderwaterDrawdownView(
+                series: summary.drawdownSeries,
+                maxDrawdown: summary.maxDrawdown
+            )
         }
     }
 

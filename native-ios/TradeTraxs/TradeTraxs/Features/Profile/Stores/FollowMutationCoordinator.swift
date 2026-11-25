@@ -141,7 +141,11 @@ final class FollowMutationCoordinator {
     }
 
     /// Owner removed someone from their Followers list (they→me edge deleted).
-    func applyFollowerRemoved(owner: ProfileID, follower: ProfileID) {
+    func applyFollowerRemoved(
+        owner: ProfileID,
+        follower: ProfileID,
+        publishListRefresh: Bool = true
+    ) {
         _ = RelationshipWriteGeneration.bump(viewerID: owner)
         if var stats = detailCache?.stats(for: owner) {
             stats.followerCount = max(0, stats.followerCount - 1)
@@ -179,7 +183,9 @@ final class FollowMutationCoordinator {
             resource: "follow.edge.removeFollower",
             detail: "\(follower.rawValue)->\(owner.rawValue)"
         )
-        revision += 1
+        if publishListRefresh {
+            revision += 1
+        }
     }
 
     /// Incoming follow request approved, requester now follows the authenticated owner.
@@ -189,7 +195,11 @@ final class FollowMutationCoordinator {
     }
 
     /// Incoming follow request approved, requester now follows owner.
-    func applyIncomingFollowAccepted(owner: ProfileID, requester: ProfileID) {
+    func applyIncomingFollowAccepted(
+        owner: ProfileID,
+        requester: ProfileID,
+        publishListRefresh: Bool = true
+    ) {
         if var stats = detailCache?.stats(for: owner) {
             stats.followerCount = max(0, stats.followerCount + 1)
             detailCache?.seed(stats: stats)
@@ -203,7 +213,9 @@ final class FollowMutationCoordinator {
         }
         syncActiveProfileStats(profileID: owner)
         latest = .followRequestApproved(owner: owner, requester: requester)
-        revision += 1
+        if publishListRefresh {
+            revision += 1
+        }
     }
 
     /// Shared read for any screen, prefer complete following set, then pairwise edge.

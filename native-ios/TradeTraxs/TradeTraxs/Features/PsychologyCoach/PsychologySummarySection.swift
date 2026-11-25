@@ -43,12 +43,12 @@ struct PsychologySummarySection: View {
             }
         }
         .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
         .overlay {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                 .stroke(colors.border, lineWidth: 1)
         }
-        .padding(.horizontal, ExperienceSpacing.md)
         .accessibilityIdentifier("psychologyCoach.summary")
     }
 

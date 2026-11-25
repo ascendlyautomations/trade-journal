@@ -91,6 +91,9 @@ struct PropFirmExpensesView: View {
         }
         .task { await viewModel.load() }
         .onAppear { viewModel.adoptAssignments() }
+        .onReceive(NotificationCenter.default.publisher(for: .propFirmPayoutAssignmentsDidChange)) { _ in
+            viewModel.adoptAssignments()
+        }
         .refreshable { await viewModel.load(force: true) }
         .sheet(isPresented: $showsEditor) {
             PropFirmExpenseEditorSheet(
@@ -353,7 +356,11 @@ struct PropFirmExpensesView: View {
 
     private func taxDeductibleSection(_ overview: PropFirmYearOverview) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            sectionTitle("Potential Tax-Deductible Expenses")
+            sectionTitle(
+                "Potential Tax-Deductible Expenses",
+                infoBody: PropFirmExpenseTrackerSectionInfo.taxDeductible,
+                infoAccessibilityID: "propFirmExpenses.info.taxDeductible"
+            )
                 .padding(.horizontal, ExperienceSpacing.md)
             metric(
                 "Estimated deductible total",
@@ -362,19 +369,16 @@ struct PropFirmExpensesView: View {
                 detail: "Unverified estimate"
             )
             .padding(.horizontal, ExperienceSpacing.md)
-            Text(
-                "This amount is a bookkeeping estimate from recorded prop firm expenses. "
-                    + "Consult a tax professional before claiming deductions, nothing here is guaranteed."
-            )
-            .experienceStyle(.caption, color: colors.secondaryText)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, ExperienceSpacing.md)
         }
     }
 
     private func estimatedTaxReserveSection(_ overview: PropFirmYearOverview) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            sectionTitle("Estimated Tax Reserve")
+            sectionTitle(
+                "Estimated Tax Reserve",
+                infoBody: PropFirmExpenseTrackerSectionInfo.taxReserve,
+                infoAccessibilityID: "propFirmExpenses.info.taxReserve"
+            )
                 .padding(.horizontal, ExperienceSpacing.md)
             reserveCalculator(overview)
                 .padding(.horizontal, ExperienceSpacing.md)
@@ -389,44 +393,30 @@ struct PropFirmExpensesView: View {
                 .foregroundStyle(colors.primaryText)
             Text("Budgeting estimate on positive net payouts after expenses. This is not a tax calculation or your tax liability.")
                 .experienceStyle(.caption, color: colors.secondaryText)
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: ExperienceSpacing.xs) {
-                        ForEach([15, 20, 25, 30], id: \.self) { preset in
-                            let selected = !showsCustomPercent && viewModel.reservePercent == Decimal(preset)
-                            reservePercentChip(
-                                title: "\(preset)%",
-                                selected: selected
-                            ) {
-                                showsCustomPercent = false
-                                Task { await viewModel.setReservePercent(Decimal(preset)) }
-                            }
-                            .id("reservePreset\(preset)")
-                        }
-                        reservePercentChip(
-                            title: "Custom",
-                            selected: showsCustomPercent
-                        ) {
-                            showsCustomPercent = true
-                            if customPercent.isEmpty {
-                                customPercent = PropFirmYearOverviewBuilder.percentLabel(viewModel.reservePercent)
-                            }
-                        }
-                        .id("reserveCustom")
+            HStack(spacing: ExperienceSpacing.xs) {
+                ForEach([20, 25, 30], id: \.self) { preset in
+                    let selected = !showsCustomPercent && viewModel.reservePercent == Decimal(preset)
+                    reservePercentChip(
+                        title: "\(preset)%",
+                        selected: selected
+                    ) {
+                        showsCustomPercent = false
+                        Task { await viewModel.setReservePercent(Decimal(preset)) }
                     }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 4)
+                    .frame(maxWidth: .infinity)
                 }
-                .onAppear {
-                    scrollTaxReserveSelectionIntoView(proxy: proxy, animated: false)
+                reservePercentChip(
+                    title: "Custom",
+                    selected: showsCustomPercent
+                ) {
+                    showsCustomPercent = true
+                    if customPercent.isEmpty {
+                        customPercent = PropFirmYearOverviewBuilder.percentLabel(viewModel.reservePercent)
+                    }
                 }
-                .onChange(of: showsCustomPercent) { _, _ in
-                    scrollTaxReserveSelectionIntoView(proxy: proxy, animated: true)
-                }
-                .onChange(of: viewModel.reservePercent) { _, _ in
-                    scrollTaxReserveSelectionIntoView(proxy: proxy, animated: true)
-                }
+                .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity)
             if showsCustomPercent {
                 TextField("22.5", text: $customPercent)
                     .keyboardType(.decimalPad)
@@ -444,7 +434,7 @@ struct PropFirmExpensesView: View {
         }
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
+        .propFirmExpenseTrackerSectionCard(cornerRadius: ExperienceRadius.md)
         .onChange(of: viewModel.reservePercent) { _, newValue in
             guard !PropFirmYearOverviewBuilder.isPreset(newValue) else { return }
             showsCustomPercent = true
@@ -498,7 +488,11 @@ struct PropFirmExpensesView: View {
 
     private func spendingAnalyticsSection(_ overview: PropFirmYearOverview) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            sectionTitle("Spending Analytics")
+            sectionTitle(
+                "Spending Analytics",
+                infoBody: PropFirmExpenseTrackerSectionInfo.spendingAnalytics,
+                infoAccessibilityID: "propFirmExpenses.info.spendingAnalytics"
+            )
                 .padding(.horizontal, ExperienceSpacing.md)
             monthly(overview.months)
                 .padding(ExperienceSpacing.md)
@@ -509,32 +503,58 @@ struct PropFirmExpensesView: View {
 
     private var exportSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            sectionTitle("Export")
-            Text("Download a spreadsheet for \(String(viewModel.selectedYear)), or choose another tax year or date range. The file includes purchase dates, prop firm names, payment labels, categories, quantities, costs, payout rows, and totals for payouts, expenses, and net results.")
+            sectionTitle(
+                "Export Tax CSV",
+                infoBody: PropFirmExpenseTrackerSectionInfo.exportTaxCSV,
+                infoAccessibilityID: "propFirmExpenses.info.exportTaxCSV"
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                Text(
+                    "Download a spreadsheet for \(String(viewModel.selectedYear)), or choose another tax year or date range. "
+                        + "The file includes line items, category subtotals, linked accounts, payout rows, and summary totals with clear disclaimers. This is not tax advice."
+                )
                 .experienceStyle(.subheadline, color: colors.secondaryText)
-            Button {
-                showsExport = true
-            } label: {
-                Text("Export Tax CSV")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, ExperienceSpacing.sm)
-                    .background(colors.profit.opacity(0.16), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                            .stroke(colors.profit.opacity(0.45), lineWidth: 1)
-                    )
+                Button {
+                    showsExport = true
+                } label: {
+                    Text("Export Tax CSV")
+                        .experienceStyle(.headline, color: colors.primaryText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, ExperienceSpacing.sm)
+                        .background(colors.profit.opacity(0.16), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                                .stroke(colors.profit.opacity(0.45), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("propFirmExpenses.export")
+                .contextualTourTarget(.expenseTrackerExport)
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("propFirmExpenses.export")
-            .contextualTourTarget(.expenseTrackerExport)
+            .padding(ExperienceSpacing.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .propFirmExpenseTrackerSectionCard(cornerRadius: ExperienceRadius.md)
+            .padding(.horizontal, ExperienceSpacing.md)
         }
-        .padding(.horizontal, ExperienceSpacing.md)
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .experienceStyle(.headline, color: colors.primaryText)
+    private func sectionTitle(
+        _ title: String,
+        infoBody: String? = nil,
+        infoAccessibilityID: String? = nil
+    ) -> some View {
+        HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
+            Text(title)
+                .experienceStyle(.headline, color: colors.primaryText)
+            if let infoBody {
+                AnalyticsMetricInfoButton(
+                    title: title,
+                    bodyText: infoBody,
+                    accessibilityID: infoAccessibilityID
+                )
+            }
+        }
     }
 
     private func metric(_ title: String, _ value: String, tint: Color, detail: String? = nil) -> some View {
@@ -554,7 +574,7 @@ struct PropFirmExpensesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(ExperienceSpacing.sm)
-        .experienceDashboardNestedCard(cornerRadius: ExperienceRadius.md)
+        .propFirmExpenseTrackerSectionCard(cornerRadius: ExperienceRadius.md)
     }
 
     private func monthly(_ points: [PropFirmMonthComparison]) -> some View {
@@ -777,9 +797,11 @@ struct PropFirmExpensesView: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, ExperienceSpacing.xs)
+                .padding(.vertical, 7)
                 .foregroundStyle(selected ? colors.primaryText : colors.secondaryText)
                 .background {
                     if selected {
@@ -789,30 +811,6 @@ struct PropFirmExpensesView: View {
                 .modifier(PropFirmReservePercentChipChrome(isSelected: selected))
         }
         .buttonStyle(.plain)
-    }
-
-    private func scrollTaxReserveSelectionIntoView(
-        proxy: ScrollViewProxy,
-        animated: Bool
-    ) {
-        let target: String = {
-            if showsCustomPercent || !PropFirmYearOverviewBuilder.isPreset(viewModel.reservePercent) {
-                return "reserveCustom"
-            }
-            let preset = Int(NSDecimalNumber(decimal: viewModel.reservePercent).doubleValue.rounded())
-            if [15, 20, 25, 30].contains(preset) {
-                return "reservePreset\(preset)"
-            }
-            return "reserveCustom"
-        }()
-        let scroll = {
-            proxy.scrollTo(target, anchor: .center)
-        }
-        if animated {
-            withAnimation(.easeInOut(duration: 0.25), scroll)
-        } else {
-            scroll()
-        }
     }
 
     private func openIncome(_ row: TrackerIncome) {
@@ -989,7 +987,7 @@ private struct PropFirmExpenseTaxExportSheet: View {
     private var projectNames: [String] {
         var names = Set<String>()
         for expense in viewModel.expenses {
-            let label = (expense.projectLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = PropFirmExpenseTaxExport.projectName(forListing: expense)
             if !label.isEmpty { names.insert(label) }
         }
         return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -1270,6 +1268,27 @@ private struct TrackerIncomeEditorSheet: View {
         guard let income else { return }
         let ok = await viewModel.deleteIncome(income)
         if ok { isPresented = false }
+    }
+}
+
+/// Expense Tracker section tiles: white dashboard cards in light mode, nested fills in dark mode.
+private struct PropFirmExpenseTrackerSectionCard: ViewModifier {
+    var cornerRadius: CGFloat
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if colorScheme == .light {
+            content.experienceDashboardCard(cornerRadius: cornerRadius)
+        } else {
+            content.experienceDashboardNestedCard(cornerRadius: cornerRadius)
+        }
+    }
+}
+
+private extension View {
+    func propFirmExpenseTrackerSectionCard(cornerRadius: CGFloat = ExperienceRadius.md) -> some View {
+        modifier(PropFirmExpenseTrackerSectionCard(cornerRadius: cornerRadius))
     }
 }
 

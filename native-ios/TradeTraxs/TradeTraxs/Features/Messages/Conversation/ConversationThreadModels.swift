@@ -27,10 +27,7 @@ nonisolated enum ConversationThreadSupport {
     }
 
     static func message(for error: Error) -> String {
-        if let app = error as? AppError {
-            return UserFacingError.map(app).message
-        }
-        return UserFacingError.map(AppError.unknown(message: error.localizedDescription)).message
+        UserFacingError.message(for: error)
     }
 
     /// Trade Room incoming sender label, never raw UUIDs.
@@ -146,9 +143,10 @@ enum ConversationThreadScrollSupport {
         if richContentHydrationCount > 0 { return true }
         for message in messages {
             guard SharedContentMessageSupport.isInternallySharedContent(message) else { continue }
-            if let reference = message.sharedContent,
-               unavailableKeys.contains(reference.stableKey)
-            {
+            if SharedContentMessageReconciliation.unavailableKeys(
+                for: message,
+                unavailableKeys: unavailableKeys
+            ) {
                 continue
             }
             if !isPresentationResolved(message) {

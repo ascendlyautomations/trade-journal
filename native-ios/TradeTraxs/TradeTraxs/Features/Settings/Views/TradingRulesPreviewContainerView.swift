@@ -93,6 +93,13 @@ struct TradingRulesPreviewContainerView: View {
                 navigationCoordinator: navigationCoordinator,
                 detailCache: data.detailCache
             )
+        case .tradingRulesTrends:
+            TradingRulesComplianceTrendsView()
+        case .tradingRulesViolationHistory:
+            TradingRulesViolationHistoryGroupsView(
+                navigationCoordinator: navigationCoordinator,
+                detailCache: data.detailCache
+            )
         default:
             previewUnavailable(message: "Exit preview to use other parts of the app.")
         }

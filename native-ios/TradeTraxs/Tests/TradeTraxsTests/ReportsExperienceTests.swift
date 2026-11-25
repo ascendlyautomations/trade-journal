@@ -81,6 +81,7 @@ final class ReportsExperienceTests: XCTestCase {
             winRate: 50,
             knownResultCount: 2,
             averageRr: 1,
+            averageReachedRr: 1.5,
             profitFactor: 1.2,
             tradesTaken: 2,
             bestDayLabel: nil,
@@ -578,9 +579,17 @@ final class ReportsExperienceTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(report.metrics.netPnl, summary.netPnL)
-        XCTAssertEqual(report.metrics.tradeCount, summary.tradeCount)
-        XCTAssertEqual(report.metrics.maxDrawdown, summary.maxDrawdown)
+        XCTAssertEqual(
+            report.metrics.netPnl,
+            NSDecimalNumber(decimal: summary.netPnL).doubleValue,
+            accuracy: 0.01
+        )
+        XCTAssertEqual(report.metrics.tradesTaken, summary.tradeCount)
+        XCTAssertEqual(
+            report.metrics.maxDrawdown ?? -1,
+            NSDecimalNumber(decimal: summary.maxDrawdown).doubleValue,
+            accuracy: 0.01
+        )
     }
 
     func testBootstrapIncludesYearlyCard() async throws {

@@ -247,7 +247,11 @@ export default function FollowButton({
     )
   }
 
-  const label = followButtonLabel(followState, followsYou)
+  const label = followButtonLabel(
+    followState,
+    followsYou,
+    targetIsPrivate === true
+  )
   const buttonClass =
     followState === "requested" ? FOLLOWING_BUTTON_CLASS : PRIMARY_BUTTON_CLASS
 

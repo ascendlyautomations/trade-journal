@@ -7,10 +7,13 @@ extension View {
         imagePipeline: any ImagePipeline
     ) -> some View {
         sheet(isPresented: Binding(
-            get: { coordinator.viewerPresentation == .expanded },
+            get: {
+                coordinator.viewerPresentation == .expanded
+                    && !coordinator.suppressesBroadcastViewerSheet
+            },
             set: { presented in
                 if presented {
-                    coordinator.presentViewer()
+                    coordinator.presentExpandedLivestreamChrome()
                 } else if coordinator.viewerPresentation == .expanded {
                     coordinator.minimizeViewer()
                 }

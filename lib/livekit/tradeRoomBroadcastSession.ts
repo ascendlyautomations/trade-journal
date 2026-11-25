@@ -112,14 +112,31 @@ export async function recoverStaleTradeRoomBroadcast(
   const now = Date.now()
   const cutoff = new Date(now - STALE_BROADCAST_MS).toISOString()
   const prepCutoff = new Date(now - STALE_OBS_PREPARING_MS).toISOString()
-  await broadcastsTable(admin)
-    .update({
-      ended_at: new Date().toISOString(),
-      ended_reason: "stale_timeout",
-    })
+
+  const { data: staleGeneralRows } = await broadcastsTable(admin)
+    .select("id, room_id, broadcaster_user_id")
     .eq("room_id", roomId)
     .is("ended_at", null)
     .lt("started_at", cutoff)
+
+  for (const row of staleGeneralRows ?? []) {
+    const ended = await endTradeRoomBroadcastSession(admin, {
+      roomId: row.room_id as string,
+      sessionId: row.id as string,
+      actorUserId: row.broadcaster_user_id as string,
+      reason: "stale_timeout",
+    })
+    if (ended.ok) {
+      const { logObsIngressLifecycle } = await import(
+        "./tradeRoomBroadcastIngressTelemetry.ts"
+      )
+      logObsIngressLifecycle("stale_session_ended", {
+        roomId: row.room_id as string,
+        sessionId: row.id as string,
+        extra: { context: "stale_general" },
+      })
+    }
+  }
 
   const { data: stalePrepRows } = await broadcastsTable(admin)
     .select("id, room_id, broadcaster_user_id")
@@ -139,11 +156,29 @@ export async function recoverStaleTradeRoomBroadcast(
       reason: "obs_preparing_timeout",
     })
     if (ended.ok) {
+      const { logObsIngressLifecycle } = await import(
+        "./tradeRoomBroadcastIngressTelemetry.ts"
+      )
+      logObsIngressLifecycle("stale_session_ended", {
+        roomId: rrid,
+        sessionId: sid,
+        extra: { context: "obs_preparing_timeout" },
+      })
       const { evictBroadcastRoomParticipants, deleteLiveKitBroadcastRoomIfEmpty } =
         await import("./tradeRoomBroadcastReconcile.ts")
       await evictBroadcastRoomParticipants(rrid)
       await deleteLiveKitBroadcastRoomIfEmpty(rrid)
     }
+  }
+
+  try {
+    const { cleanupOrphanTradeRoomIngresses } = await import(
+      "./tradeRoomBroadcastIngressOrphans.ts"
+    )
+    await cleanupOrphanTradeRoomIngresses(admin, { roomId })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[livekit/obs-ingress] orphan sweep failed", message)
   }
 }
 
@@ -440,7 +475,26 @@ export async function endTradeRoomBroadcastSession(
     (active as { livekit_ingress_id?: string | null }).livekit_ingress_id?.trim() ??
     ""
   if (ingressId) {
-    await deleteLiveKitIngress(ingressId)
+    const del = await deleteLiveKitIngress(ingressId)
+    const { logObsIngressLifecycle } = await import(
+      "./tradeRoomBroadcastIngressTelemetry.ts"
+    )
+    if (del.ok) {
+      logObsIngressLifecycle("delete_ingress", {
+        roomId: options.roomId,
+        sessionId: options.sessionId,
+        ingressId,
+        extra: { reason: options.reason },
+      })
+    } else {
+      logObsIngressLifecycle("delete_ingress_failed", {
+        roomId: options.roomId,
+        sessionId: options.sessionId,
+        ingressId,
+        error: del.error,
+        extra: { reason: options.reason },
+      })
+    }
   }
 
   const { clearBroadcastInteractiveStateForSession } = await import(
@@ -495,6 +549,8 @@ export async function attachObsRtmpIngressToActiveSession(
       primary_media_publisher_identity: options.primaryMediaPublisherIdentity,
       livekit_ingress_id: options.livekitIngressId.trim(),
       ingress_status_snapshot: label,
+      ingress_creation_lease_token: null,
+      ingress_creation_lease_at: null,
       last_livekit_signal_at: new Date().toISOString(),
     })
     .eq("id", options.sessionId)
@@ -518,6 +574,70 @@ export async function attachObsRtmpIngressToActiveSession(
 }
 
 /**
+ * End an OBS `preparing` session (explicit cancel). Does not stop a public live stream.
+ */
+export async function cancelObsBroadcastPreparation(
+  admin: SupabaseClient<Database>,
+  options: {
+    roomId: string
+    sessionId: string
+    broadcasterUserId: string
+  }
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const { data: row, error: loadErr } = await broadcastsTable(admin)
+    .select("id, room_id, broadcaster_user_id, ended_at, visibility")
+    .eq("id", options.sessionId)
+    .eq("room_id", options.roomId)
+    .maybeSingle()
+
+  if (loadErr) {
+    return { ok: false, status: 500, error: "Could not load broadcast session." }
+  }
+
+  if (!row || row.ended_at != null) {
+    return { ok: true }
+  }
+
+  if (row.broadcaster_user_id !== options.broadcasterUserId) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Only the authorized broadcaster can cancel OBS preparation.",
+    }
+  }
+
+  const visibility = (row.visibility as string | null)?.trim() || "public"
+  if (visibility !== "preparing") {
+    return {
+      ok: false,
+      status: 409,
+      error:
+        "This stream is already live. Close the sheet without ending the broadcast, or use End Stream.",
+    }
+  }
+
+  const ended = await endTradeRoomBroadcastSession(admin, {
+    roomId: options.roomId,
+    sessionId: options.sessionId,
+    actorUserId: options.broadcasterUserId,
+    reason: "obs_preparation_cancelled",
+  })
+  if (!ended.ok) {
+    return ended
+  }
+
+  const { logObsIngressLifecycle } = await import(
+    "./tradeRoomBroadcastIngressTelemetry.ts"
+  )
+  logObsIngressLifecycle("cancel_preparation", {
+    roomId: options.roomId,
+    sessionId: options.sessionId,
+  })
+
+  return { ok: true }
+}
+
+/**
  * Clear OBS ingress metadata (revoke). Idempotent; ignores missing rows.
  */
 export async function clearObsIngressMetadata(
@@ -534,6 +654,8 @@ export async function clearObsIngressMetadata(
       primary_media_publisher_identity: null,
       livekit_ingress_id: null,
       ingress_status_snapshot: null,
+      ingress_creation_lease_token: null,
+      ingress_creation_lease_at: null,
       last_livekit_signal_at: new Date().toISOString(),
     })
     .eq("id", options.sessionId)
