@@ -5,7 +5,7 @@ enum LeaderboardDisplayMode: String, Equatable, Sendable {
     case curve
 }
 
-enum LeaderboardCurveSeries: String, CaseIterable, Hashable, Sendable {
+nonisolated enum LeaderboardCurveSeries: String, CaseIterable, Hashable, Sendable {
     case highest
     case you
     case average

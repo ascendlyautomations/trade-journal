@@ -41,6 +41,13 @@ final class TradingRulesAnalyticsScopeController {
     func hydrate(profileID: ProfileID, accounts: [TradingAccount]) {
         self.profileID = profileID
         self.accounts = accounts
+        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+            if !traxsProPreviewInitialScopeApplied {
+                applyTraxsProPreviewScopeDefaults()
+                traxsProPreviewInitialScopeApplied = true
+            }
+            return
+        }
         if let dashboard = TradingRulesCompliancePresentationBridge.dashboardViewModel,
            dashboard.isTradingRulesComplianceDashboardSource(profileID: profileID)
         {
@@ -212,16 +219,22 @@ final class TradingRulesAnalyticsScopeController {
         generation: UInt64
     ) async {
         guard let profileID else { return }
-        persistScope(profileID: profileID)
+        let usesSampleData = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+        if !usesSampleData {
+            persistScope(profileID: profileID)
+        }
 
         let scope = resolvedScope(profileID: profileID)
+        let injectedPreferences: PreferenceRuleContext? = usesSampleData
+            ? TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID)
+            : nil
         let baseline = TradingRulesComplianceRecomputeCoordinator.currentGeneration
         let output = await TradingRulesComplianceSnapshotBuilder.build(
             profileID: profileID,
             scope: scope,
             accounts: accounts,
             dependencies: dependencies,
-            injectedPreferences: nil,
+            injectedPreferences: injectedPreferences,
             dashboardInsights: nil
         )
         guard generation == recomputeGeneration else { return }
@@ -235,13 +248,17 @@ final class TradingRulesAnalyticsScopeController {
             ready: true,
             inputFingerprint: nil,
             generation: token,
-            preferencesUnavailable: output.preferencesContext == nil || output.preferencesError != nil
+            preferencesUnavailable: usesSampleData
+                ? false
+                : output.preferencesContext == nil || output.preferencesError != nil
         )
     }
 
     private func publishScopeChange() {
         guard let profileID else { return }
-        persistScope(profileID: profileID)
+        if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+            persistScope(profileID: profileID)
+        }
         if let dashboard = TradingRulesCompliancePresentationBridge.dashboardViewModel,
            dashboard.isTradingRulesComplianceDashboardSource(profileID: profileID)
         {

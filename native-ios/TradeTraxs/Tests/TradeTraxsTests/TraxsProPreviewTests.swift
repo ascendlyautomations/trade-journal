@@ -378,6 +378,123 @@ final class TraxsProPreviewTests: XCTestCase {
         )
         TraxsProPreviewSession.shared.endDashboardPreview(detailCache: cache)
     }
+
+    func testDashboardRestoreAfterPreviewExitSupportsRapidAccountSwitch() {
+        SessionViewerGate.shared.resetForTesting()
+        SessionViewerGate.shared.bind(freeUserID)
+        BackendV2FeatureFlags.setFlagForTests(.dashboardAnalyticsV3, enabled: true)
+        defer {
+            BackendV2FeatureFlags.resetFlagsForTests()
+            SessionViewerGate.shared.resetForTesting()
+            DashboardAnalyticsAccountChartsStore.shared.invalidate()
+        }
+
+        let profileID = ProfileID(freeUserID)
+        let accountA = TradingAccountID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        let accountB = TradingAccountID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+        let cache = DetailPresentationCache()
+        let liveAccount = TradingAccount(
+            id: accountA,
+            ownerProfileID: profileID,
+            name: "Live A",
+            category: .personal,
+            mode: .live,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        let secondAccount = TradingAccount(
+            id: accountB,
+            ownerProfileID: profileID,
+            name: "Live B",
+            category: .personal,
+            mode: .live,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        SessionAccountsStore.shared.seed(
+            [liveAccount, secondAccount],
+            for: profileID,
+            detailCache: cache,
+            kind: .rest
+        )
+
+        let now = Date()
+        let ownerTrade = Trade(
+            id: TradeID("owner-trade-live"),
+            ownerProfileID: profileID,
+            accountID: accountA,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: now,
+            exitAt: now.addingTimeInterval(60),
+            realizedPnL: Money(amount: 50),
+            visibility: .private,
+            createdAt: now,
+            updatedAt: now
+        )
+        let demoTrade = DemoCanonicalDataset.trades().first!
+
+        let viewModel = DashboardViewModel(
+            home: TraxsProPreviewTestsStubHomeRepository(),
+            trades: TraxsProPreviewTestsEmptyTradeRepository(),
+            achievements: TraxsProPreviewTestsEmptyAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
+            session: TraxsProPreviewTestsStubSession(userID: freeUserID),
+            detailCache: cache,
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.seedLocalDashboardForTradingRules(
+            profileID: profileID,
+            preferences: nil,
+            trades: [ownerTrade, demoTrade],
+            accounts: [liveAccount, secondAccount]
+        )
+        viewModel.setAccountFilter(.account(accountA))
+        let tokenBeforePreview = DashboardAnalyticsAccountChartsCoordinator.currentSelectionToken()
+
+        TraxsProPreviewSession.shared.beginDashboardPreview(detailCache: cache, viewer: profileID)
+        XCTAssertTrue(JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID))
+        DashboardAnalyticsAccountChartsStore.shared.markFailed(
+            accountID: DemoCanonicalDataset.evaluationAccountID,
+            revision: 0,
+            nonRetryable: true
+        )
+
+        var previewEndNotified = false
+        let observer = NotificationCenter.default.addObserver(
+            forName: .traxsProCanonicalJournalPreviewDidEnd,
+            object: nil,
+            queue: .main
+        ) { _ in
+            previewEndNotified = true
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        TraxsProPreviewSession.shared.endDashboardPreview(detailCache: cache)
+        XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID))
+        XCTAssertTrue(previewEndNotified)
+
+        viewModel.restoreAfterCanonicalJournalPreviewEnded()
+        XCTAssertEqual(viewModel.tradeInputs.count, 1)
+        XCTAssertFalse(JournalSampleDataPolicy.isCanonicalTrade(id: viewModel.tradeInputs[0].trade.id))
+
+        viewModel.setAccountFilter(.account(accountB))
+        XCTAssertEqual(viewModel.accountFilter, .account(accountB))
+        let tokenAfterSwitch = DashboardAnalyticsAccountChartsCoordinator.currentSelectionToken()
+        XCTAssertGreaterThan(tokenAfterSwitch, tokenBeforePreview)
+        XCTAssertEqual(
+            DashboardAnalyticsAccountChartsStore.shared.availability(accountID: accountB, revision: 0),
+            .notRequested
+        )
+    }
 }
 
 @MainActor
@@ -385,6 +502,7 @@ private func resetPreviewSessionForTesting() {
     TraxsProPreviewRuntimeFlag.isReportsPreviewActive = false
     TraxsProPreviewRuntimeFlag.isDashboardPreviewActive = false
     TraxsProPreviewRuntimeFlag.isExpenseTrackerPreviewActive = false
+    TraxsProPreviewRuntimeFlag.isTradingRulesPreviewActive = false
     TraxsProPreviewRuntimeFlag.isBacktestLabPreviewActive = false
     if TraxsProPreviewSession.shared.isAnyPreviewActive {
         TraxsProPreviewSession.shared.endActivePreview(detailCache: DetailPresentationCache())

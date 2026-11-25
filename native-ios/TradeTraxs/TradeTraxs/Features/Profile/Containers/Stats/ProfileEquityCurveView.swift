@@ -93,6 +93,7 @@ struct ProfileEquityCurveView: View {
         .chartYScale(domain: yDomain, type: .linear)
         .modifier(EquityCurveXAxisModifier(
             usesTimeline: usesTimelineAxis,
+            horizontalLayout: horizontalLayout,
             tradeIndexDomain: tradeIndexDomain,
             timelineDomain: timelineDomain,
             tradeAxisValues: tradeAxisValues,
@@ -140,7 +141,7 @@ struct ProfileEquityCurveView: View {
                 }
             }
         }
-        .padding(.horizontal, ExperienceSpacing.xxs)
+        .padding(.horizontal, horizontalLayout == .dashboard ? 0 : ExperienceSpacing.xxs)
         .padding(.top, ExperienceSpacing.xs)
     }
 
@@ -399,6 +400,7 @@ struct ProfileEquityCurveView: View {
 
 private struct EquityCurveXAxisModifier: ViewModifier {
     let usesTimeline: Bool
+    let horizontalLayout: ProfileEquityCurveChartHorizontalLayout
     let tradeIndexDomain: ClosedRange<Int>
     let timelineDomain: ClosedRange<Date>?
     let tradeAxisValues: [Int]
@@ -412,8 +414,7 @@ private struct EquityCurveXAxisModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if usesTimeline, let timelineDomain {
-            content
-                .chartXScale(domain: timelineDomain)
+            applyDashboardXScale(domain: timelineDomain, to: content)
                 .chartXAxis {
                     AxisMarks(values: timelineAxisValues) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -435,8 +436,7 @@ private struct EquityCurveXAxisModifier: ViewModifier {
                 .chartXSelection(value: $selectedPlotDate)
                 .onChange(of: selectedPlotDate) { _, _ in snapTimeline() }
         } else {
-            content
-                .chartXScale(domain: tradeIndexDomain)
+            applyDashboardXScale(domain: tradeIndexDomain, to: content)
                 .chartXAxis {
                     AxisMarks(values: tradeAxisValues) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -476,5 +476,29 @@ private struct EquityCurveXAxisModifier: ViewModifier {
 
     private func datesMatchForAxisLabel(_ lhs: Date, _ rhs: Date) -> Bool {
         abs(lhs.timeIntervalSince(rhs)) < 1
+    }
+
+    @ViewBuilder
+    private func applyDashboardXScale(domain: ClosedRange<Date>, to content: Content) -> some View {
+        if let trailingInset = horizontalLayout.xPlotTrailingInset {
+            content.chartXScale(
+                domain: domain,
+                range: .plotDimension(startPadding: 0, endPadding: trailingInset)
+            )
+        } else {
+            content.chartXScale(domain: domain)
+        }
+    }
+
+    @ViewBuilder
+    private func applyDashboardXScale(domain: ClosedRange<Int>, to content: Content) -> some View {
+        if let trailingInset = horizontalLayout.xPlotTrailingInset {
+            content.chartXScale(
+                domain: domain,
+                range: .plotDimension(startPadding: 0, endPadding: trailingInset)
+            )
+        } else {
+            content.chartXScale(domain: domain)
+        }
     }
 }

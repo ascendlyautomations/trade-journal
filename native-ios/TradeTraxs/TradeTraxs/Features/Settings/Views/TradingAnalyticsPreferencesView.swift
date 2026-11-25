@@ -139,41 +139,26 @@ struct TradingAnalyticsPreferencesView: View {
     }
 
     private var preferencesScroll: some View {
-        ScrollViewReader { scrollProxy in
-            ScrollView {
-                LazyVStack(spacing: ExperienceSpacing.md) {
-                    if !embeddedInTraxsProRulesPreview {
-                        tradingRulesAnalyticsLinkCard
-                    }
-                    statusMessageBanner
-                    if restrictsPremiumRulesEditing {
-                        freeTierRulesEditor
-                        TradingRulesPremiumLockedSection()
-                    } else {
-                        generalSettingsCategory
-                        riskManagementCategory
-                        tradeExecutionCategory
-                        disciplineCategory
-                        sessionsAndInstrumentsCategory
-                    }
-                    if expandedPlannedTimeField != nil {
-                        Color.clear
-                            .frame(height: TradingRulesPlannedTimePickerLayout.expandedScrollTailClearance)
-                            .accessibilityHidden(true)
-                    }
+        ScrollView {
+            LazyVStack(spacing: ExperienceSpacing.md) {
+                if !embeddedInTraxsProRulesPreview {
+                    tradingRulesAnalyticsLinkCard
                 }
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.top, ExperienceSpacing.xs)
-                .padding(.bottom, ExperienceSpacing.xl)
-            }
-            .onChange(of: expandedPlannedTimeField) { _, field in
-                guard let field else { return }
-                let anchorID = TradingRulesPlannedTimePickerLayout.scrollAnchorID(for: field)
-                let anchor = TradingRulesPlannedTimePickerLayout.scrollRevealAnchor
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
-                    scrollProxy.scrollTo(anchorID, anchor: anchor)
+                statusMessageBanner
+                if restrictsPremiumRulesEditing {
+                    freeTierRulesEditor
+                    TradingRulesPremiumLockedSection()
+                } else {
+                    generalSettingsCategory
+                    riskManagementCategory
+                    tradeExecutionCategory
+                    disciplineCategory
+                    sessionsAndInstrumentsCategory
                 }
             }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.xs)
+            .padding(.bottom, ExperienceSpacing.xl)
         }
     }
 

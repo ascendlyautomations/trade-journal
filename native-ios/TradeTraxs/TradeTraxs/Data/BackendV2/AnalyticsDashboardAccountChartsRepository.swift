@@ -97,6 +97,10 @@ enum DashboardAnalyticsAggregateChartsLoader {
     }
 }
 
+enum DashboardAnalyticsAccountChartsLoaderError: Error {
+    case remoteAccountIneligible
+}
+
 enum DashboardAnalyticsAccountChartsLoader {
     private static func flightKey(accountID: TradingAccountID, revision: Int64, viewerID: ProfileID?) -> String {
         let norm = DashboardAnalyticsAccountMetricsLookup.normalizedAccountID(accountID.rawValue)
@@ -112,6 +116,15 @@ enum DashboardAnalyticsAccountChartsLoader {
         rpc: any RPCClient,
         viewerID: ProfileID? = nil
     ) async throws -> [String: AnalyticsDashboardChartsPresetV1] {
+        if let viewerID,
+           !DashboardAnalyticsRemoteAccountPolicy.shouldFetchAccountChartsRemotely(
+               accountID: accountID,
+               profileID: viewerID
+           )
+        {
+            throw DashboardAnalyticsAccountChartsLoaderError.remoteAccountIneligible
+        }
+
         let store = DashboardAnalyticsAccountChartsStore.shared
         if let cached = store.charts(accountID: accountID, revision: revision),
            store.availability(accountID: accountID, revision: revision).isLoaded,

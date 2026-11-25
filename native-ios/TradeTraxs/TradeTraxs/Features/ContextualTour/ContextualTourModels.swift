@@ -13,6 +13,7 @@ enum ContextualTourSurface: String, Equatable, Sendable {
     case settings
     case payouts
     case expenseTracker
+    case trades
 }
 
 enum ContextualTourStepRole: Equatable, Sendable {
@@ -42,6 +43,7 @@ enum ContextualTourTargetID: String, Hashable, Sendable {
     case dashboardAccountAndDates
     case dashboardPerformance
     case dashboardTrades
+    case tradesBacktest
     case dashboardReports
     case dashboardWithdrawals
     case dashboardCalendar
@@ -135,6 +137,13 @@ enum ContextualTourCatalog {
             title: "Trades",
             message: "Review your full trade journal.",
             surface: .dashboard
+        ),
+        ContextualTourStep(
+            target: .tradesBacktest,
+            title: "Backtest",
+            message: "Open your backtesting journal here to review simulated trades.",
+            surface: .trades,
+            presentsIfUnmeasured: true
         ),
         ContextualTourStep(
             target: .dashboardReports,

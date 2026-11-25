@@ -72,7 +72,7 @@ struct DashboardEquityHero: View {
                 .padding(.horizontal, ExperienceSpacing.md)
 
             equityCurve
-                .padding(.horizontal, ExperienceSpacing.sm)
+                .padding(.horizontal, ExperienceSpacing.md)
         }
         .padding(.bottom, ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)

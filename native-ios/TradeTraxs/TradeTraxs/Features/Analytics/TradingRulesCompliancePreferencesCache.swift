@@ -17,6 +17,12 @@ enum TradingRulesCompliancePreferencesCache {
     }
 
     static func invalidate(profileID: ProfileID) {
+        guard !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome else {
+            _ = TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID)
+            inFlight[profileID]?.cancel()
+            inFlight[profileID] = nil
+            return
+        }
         byProfile[profileID] = nil
         fingerprintByProfile[profileID] = nil
         inFlight[profileID]?.cancel()
@@ -38,6 +44,10 @@ enum TradingRulesCompliancePreferencesCache {
         if let injected {
             store(injected, for: profileID)
             return .loaded(injected)
+        }
+        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+            let sample = TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID)
+            return .loaded(sample)
         }
         if let cached = byProfile[profileID] {
             return .loaded(cached)

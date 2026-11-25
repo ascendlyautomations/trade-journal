@@ -304,6 +304,10 @@ struct DashboardHomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .tradingRulesComplianceOwnerTradesChanged)) { notification in
             viewModel.handleTradingRulesOwnerTradesChangedNotification(notification)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .traxsProCanonicalJournalPreviewDidEnd)) { _ in
+            guard !embeddedInTraxsProPreview else { return }
+            viewModel.restoreAfterCanonicalJournalPreviewEnded()
+        }
     }
 
     @ViewBuilder

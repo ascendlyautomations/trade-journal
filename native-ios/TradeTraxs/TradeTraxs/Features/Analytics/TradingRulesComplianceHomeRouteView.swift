@@ -157,7 +157,11 @@ struct TradingRulesComplianceHomeRouteView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tradingPreferencesDidChange)) { _ in
-            if let profileID = activeProfileID {
+            if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome,
+               let profileID = activeProfileID
+            {
+                _ = TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID)
+            } else if let profileID = activeProfileID {
                 TradingRulesCompliancePreferencesCache.invalidate(profileID: profileID)
             }
             TradingRulesComplianceRecomputeCoordinator.reset()
@@ -230,6 +234,16 @@ struct TradingRulesComplianceHomeRouteView: View {
         loadGeneration += 1
         let generation = loadGeneration
 
+        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+            await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
+                profileID: profileID,
+                dependencies: loadDependencies
+            )
+            if snapshotMatchesActiveViewer {
+                presentationRevision = TradingRulesComplianceSessionStore.shared.contentRevision
+            }
+        }
+
         if forceReveal {
             _ = TradingRulesCompliancePresentationBridge.revealCachedSnapshotIfPossible(
                 profileID: profileID,
@@ -253,7 +267,9 @@ struct TradingRulesComplianceHomeRouteView: View {
         if nextRevision != presentationRevision {
             presentationRevision = nextRevision
         }
-        scopeController.syncFromDashboardIfAvailable()
+        if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+            scopeController.syncFromDashboardIfAvailable()
+        }
     }
 
     private func loadAccountsForScope(profileID: ProfileID) async -> [TradingAccount] {

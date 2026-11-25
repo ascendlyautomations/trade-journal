@@ -1,6 +1,14 @@
 import Foundation
 import Observation
 
+extension Notification.Name {
+    /// Fired when a TraxsPro preview that routes journal reads through bundled sample data ends.
+    /// The live Home ``DashboardViewModel`` should restore owner scope and chart hydration.
+    static let traxsProCanonicalJournalPreviewDidEnd = Notification.Name(
+        "traxspro.canonicalJournalPreview.didEnd"
+    )
+}
+
 /// Cross-actor preview flag, readable from repositories without hopping to the main actor.
 nonisolated enum TraxsProPreviewRuntimeFlag {
     nonisolated(unsafe) static var isReportsPreviewActive = false
@@ -67,6 +75,11 @@ final class TraxsProPreviewSession {
         seededTradeIDs = trades.map(\.id)
         DemoCanonicalDataset.seedDetailCache(detailCache, viewer: viewer)
         seedPreviewCheckIns(for: viewer, trades: trades)
+        TradingRulesAnalyticsPreviewSupport.seedJournalAndPreferences(
+            profileID: viewer,
+            detailCache: detailCache,
+            seedDetailCacheTrades: false
+        )
     }
 
     /// Expense tracker preview uses in-memory sample rows only, no journal or Supabase seeds.
@@ -103,20 +116,12 @@ final class TraxsProPreviewSession {
         refreshRollingJournalForPreview()
         let trades = DemoCanonicalDataset.trades()
         seededTradeIDs = trades.map(\.id)
-        let accounts = DemoCanonicalDataset.accounts(owner: viewer)
         DemoCanonicalDataset.seedDetailCache(detailCache, viewer: viewer)
         seedPreviewCheckIns(for: viewer, trades: trades)
-        SessionAccountsStore.shared.seed(accounts, for: viewer, detailCache: detailCache)
-        SessionOwnerTradesStore.shared.seed(
-            trades,
-            for: viewer,
+        TradingRulesAnalyticsPreviewSupport.seedJournalAndPreferences(
+            profileID: viewer,
             detailCache: detailCache,
-            historyComplete: true,
-            totalTradeCount: trades.count
-        )
-        TradingRulesCompliancePreferencesCache.store(
-            DemoCanonicalDataset.previewPreferenceContext(for: viewer),
-            for: viewer
+            seedDetailCacheTrades: false
         )
     }
 
@@ -155,6 +160,7 @@ final class TraxsProPreviewSession {
             tearDownBacktestLabPreview(detailCache: detailCache)
             return
         }
+        let canonicalJournalPreviewWasActive = TraxsProPreviewRuntimeFlag.usesCanonicalJournalSampleData
         isReportsPreviewActive = false
         isDashboardPreviewActive = false
         isExpenseTrackerPreviewActive = false
@@ -170,6 +176,13 @@ final class TraxsProPreviewSession {
         }
         seededTradeIDs = []
         clearPreviewSessionCheckInsIfNeeded()
+        if canonicalJournalPreviewWasActive {
+            notifyCanonicalJournalPreviewDidEnd()
+        }
+    }
+
+    private func notifyCanonicalJournalPreviewDidEnd() {
+        NotificationCenter.default.post(name: .traxsProCanonicalJournalPreviewDidEnd, object: nil)
     }
 
     private func tearDownBacktestLabPreview(detailCache: DetailPresentationCache) {
@@ -212,6 +225,7 @@ final class TraxsProPreviewSession {
     }
 
     private func tearDownTradingRulesPreview(detailCache: DetailPresentationCache) {
+        let canonicalJournalPreviewWasActive = TraxsProPreviewRuntimeFlag.usesCanonicalJournalSampleData
         isTradingRulesPreviewActive = false
         TraxsProPreviewRuntimeFlag.isTradingRulesPreviewActive = false
         if activeFeature == .tradingRules {
@@ -227,6 +241,9 @@ final class TraxsProPreviewSession {
             detailCache.removeTrade(id: id)
         }
         seededTradeIDs = []
+        if canonicalJournalPreviewWasActive {
+            notifyCanonicalJournalPreviewDidEnd()
+        }
     }
 }
 

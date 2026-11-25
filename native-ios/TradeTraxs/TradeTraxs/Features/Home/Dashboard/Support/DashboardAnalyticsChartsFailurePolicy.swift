@@ -17,6 +17,8 @@ nonisolated enum DashboardAnalyticsChartsFailurePolicy {
         if text.contains("42501") { return true }
         if text.contains("permission denied") { return true }
         if text.contains("not_authenticated") { return true }
+        if text.contains("22p02") { return true }
+        if text.contains("invalid input syntax for type uuid") { return true }
         return false
     }
 }

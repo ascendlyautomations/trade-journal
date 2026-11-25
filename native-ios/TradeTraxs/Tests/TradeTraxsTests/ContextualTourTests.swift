@@ -135,6 +135,7 @@ final class ContextualTourTests: XCTestCase {
             "Accounts & timeframe",
             "Equity curve",
             "Trades",
+            "Backtest",
             "Reports",
             "Withdrawals",
             "Calendar",
@@ -616,6 +617,7 @@ final class ContextualTourTests: XCTestCase {
     private func gates(for surface: ContextualTourSurface) -> ContextualTourGates {
         ContextualTourGates(
             homeRootActive: surface == .dashboard,
+            tradesActive: surface == .trades,
             feedRootActive: surface == .feed,
             profileRootActive: surface == .profile,
             settingsHomeActive: surface == .settings,

@@ -460,6 +460,8 @@ final class ContextualTourCoordinator {
             return gates.payoutsActive
         case .expenseTracker:
             return gates.expenseTrackerActive
+        case .trades:
+            return gates.tradesActive
         }
     }
 

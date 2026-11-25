@@ -111,6 +111,7 @@ struct TradeHistoryView: View {
                 } label: {
                     Image(systemName: "clock.arrow.circlepath")
                 }
+                .contextualTourTarget(.tradesBacktest)
                 .accessibilityLabel("Backtest Lab")
                 .accessibilityIdentifier("trades.backtest")
             }

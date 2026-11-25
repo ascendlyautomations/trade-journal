@@ -31,7 +31,7 @@ nonisolated enum DashboardAccountScopePolicy {
         accounts: [TradingAccount]
     ) -> DashboardAccountFilter {
         guard case .account(let id) = filter else { return filter }
-        guard let account = accounts.first(where: { $0.id == id }) else { return filter }
+        guard let account = accounts.first(where: { $0.id == id }) else { return .all }
         return includesAccountInDashboard(account) ? filter : .all
     }
 }

@@ -32,6 +32,24 @@ enum DashboardAnalyticsAccountChartsCoordinator {
             return token == selectionToken
         }
 
+        guard DashboardAnalyticsRemoteAccountPolicy.shouldFetchAccountChartsRemotely(
+            accountID: selectedAccountID,
+            profileID: viewerID
+        ) else {
+            if token == selectionToken, inFlightAccountID == nil {
+                if JournalSampleDataPolicy.usesCanonicalJournalData(for: viewerID) {
+                    store.markNotRequested(accountID: selectedAccountID, revision: revision)
+                } else {
+                    store.markFailed(
+                        accountID: selectedAccountID,
+                        revision: revision,
+                        nonRetryable: true
+                    )
+                }
+            }
+            return false
+        }
+
         store.markLoading(accountID: selectedAccountID, revision: revision)
         inFlightAccountID = selectedAccountID
 
@@ -47,7 +65,8 @@ enum DashboardAnalyticsAccountChartsCoordinator {
                 if !TraxsProPreviewSupport.isAnyPreviewActive {
                     _ = ProLimitPresentation.presentUpgradeIfProGate(error)
                 }
-                let nonRetryable = DashboardAnalyticsChartsFailurePolicy.shouldNotRetry(error)
+                let nonRetryable = error is DashboardAnalyticsAccountChartsLoaderError
+                    || DashboardAnalyticsChartsFailurePolicy.shouldNotRetry(error)
                 store.markFailed(
                     accountID: selectedAccountID,
                     revision: revision,

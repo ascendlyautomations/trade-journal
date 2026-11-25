@@ -441,6 +441,8 @@ struct AppRootView: View {
                         && navigation.store.paths.profile.last == .settings(.payouts),
                     expenseTrackerActive: navigation.store.selectedTab == .profile
                         && navigation.store.paths.profile.last == .settings(.propFirmExpenses),
+                    tradesActive: navigation.store.selectedTab == .home
+                        && navigation.store.paths.home.last == .trades,
                     sceneActive: scenePhase != .background,
                     unobstructed: navigation.store.presentedSheet == nil
                         && navigation.store.presentedFullScreen == nil
@@ -835,6 +837,16 @@ struct AppRootView: View {
             navigation.coordinator.pushProfileSettingsHome(source: "appWalkthrough")
         case .payouts, .expenseTracker:
             break
+        case .trades:
+            navigation.coordinator.selectTab(.home)
+            if navigation.store.paths.home.last != .trades {
+                if navigation.store.paths.home.isEmpty {
+                    navigation.coordinator.pushHome(.trades)
+                } else {
+                    navigation.coordinator.popToRoot(.home)
+                    navigation.coordinator.pushHome(.trades)
+                }
+            }
         }
     }
 

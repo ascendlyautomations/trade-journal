@@ -1165,6 +1165,7 @@ final class DashboardViewModel {
 
     /// Lazy V3 equity curve, re-request chart overlay when the dashboard becomes visible before hydration finished or after a failed/cancelled fetch.
     func ensureEquityChartOverlayIfNeeded() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil, profileID != nil else { return }
         guard isHomeTabActive else {
             if needsEquityChartOverlayFetch(ignoreSettlement: true) {
@@ -1315,6 +1316,56 @@ final class DashboardViewModel {
     func handleCheckInMutation() {
         recomputePsychology()
         scheduleTradingRulesComplianceRecompute()
+    }
+
+    /// Live Home dashboard only — restores owner scope after TraxsPro sample-data preview dismisses.
+    func restoreAfterCanonicalJournalPreviewEnded() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
+        guard let profileID else {
+            loadIfNeeded()
+            return
+        }
+        guard hasLoaded else {
+            loadIfNeeded()
+            return
+        }
+        accountChartHydrateTask?.cancel()
+        accountChartHydrateTask = nil
+        aggregateChartHydrateTask?.cancel()
+        aggregateChartHydrateTask = nil
+        scopeFilterTradesHydrateTask?.cancel()
+        scopeFilterTradesHydrateTask = nil
+        equityChartOverlayRetryScheduled = false
+        accountChartSelectionToken = DashboardAnalyticsAccountChartsCoordinator.bumpSelection()
+        aggregateChartSelectionToken = DashboardAnalyticsAggregateChartsCoordinator.bumpSelection()
+        resetChartOverlayFetchSettlement()
+        purgeCanonicalPreviewChartOverlayState()
+        clearIneligibleRemoteAccountChartState()
+        restoreScopeFiltersIfNeeded(profileID: profileID)
+        if !tradeInputs.isEmpty {
+            tradeInputs.removeAll { JournalSampleDataPolicy.isCanonicalTrade(id: $0.trade.id) }
+        }
+        patchAccountsFromSessionStore()
+        reconcileTradeInputsWithOwnerStore(profileID: profileID)
+        lastAccountScopedSummary = nil
+        lastAccountScopedFilter = nil
+        lastDisplayedEquityHeroChartPoints = []
+        equityChartSummary = nil
+        equityChartAccountFilter = nil
+        isScopeFilteredMetricsLoading = false
+        recomputePsychology()
+        recompute()
+        ensureEquityChartOverlayIfNeeded()
+    }
+
+    private func purgeCanonicalPreviewChartOverlayState() {
+        let revision = analyticsV3Revision
+        for accountID in JournalSampleDataPolicy.canonicalAccountIDs {
+            DashboardAnalyticsAccountChartsStore.shared.dropCharts(
+                accountID: accountID,
+                revision: revision
+            )
+        }
     }
 
     /// Re-run unlock gate when dashboard metrics/check-ins change without a full recompute.
@@ -2598,6 +2649,25 @@ final class DashboardViewModel {
         recomputePsychology()
     }
 
+    private func clearIneligibleRemoteAccountChartState() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
+        guard let profileID, !JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) else { return }
+        accountChartHydrateTask?.cancel()
+        accountChartHydrateTask = nil
+        equityChartOverlayRetryScheduled = false
+        resetChartOverlayFetchSettlement()
+        guard case .account(let id) = accountFilter else { return }
+        let accountMissing = !accounts.contains(where: { $0.id == id })
+        let canonicalOrNonUUID = JournalSampleDataPolicy.isCanonicalAccount(id: id)
+            || UUID(uuidString: id.rawValue) == nil
+        guard accountMissing || canonicalOrNonUUID else { return }
+        accountFilter = .all
+        DashboardAnalyticsAccountChartsStore.shared.markNotRequested(
+            accountID: id,
+            revision: analyticsV3Revision
+        )
+    }
+
     private func applyTraxsProPreviewScopeDefaults() {
         accountFilter = .all
         dateRange = .oneYear
@@ -2686,6 +2756,7 @@ final class DashboardViewModel {
             }
             accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
             reconcileDashboardAccountFilterIfNeeded()
+            clearIneligibleRemoteAccountChartState()
             let accountTypes = Dictionary(
                 uniqueKeysWithValues: accounts.map {
                     ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
@@ -2780,11 +2851,19 @@ final class DashboardViewModel {
             accounts: ownerAccountSource()
         )
         guard sanitized != accountFilter else { return }
+        accountChartHydrateTask?.cancel()
+        accountChartHydrateTask = nil
+        aggregateChartHydrateTask?.cancel()
+        aggregateChartHydrateTask = nil
+        accountChartSelectionToken = DashboardAnalyticsAccountChartsCoordinator.bumpSelection()
+        aggregateChartSelectionToken = DashboardAnalyticsAggregateChartsCoordinator.bumpSelection()
+        resetChartOverlayFetchSettlement()
         accountFilter = sanitized
         lastAccountScopedSummary = nil
         lastAccountScopedFilter = nil
         equityChartSummary = nil
         equityChartAccountFilter = nil
+        ensureEquityChartOverlayIfNeeded()
     }
 
     private func includesTradeInDashboardScope(_ trade: Trade) -> Bool {
@@ -2841,6 +2920,7 @@ final class DashboardViewModel {
             }
             accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
             reconcileDashboardAccountFilterIfNeeded()
+            clearIneligibleRemoteAccountChartState()
             let accountTypes = Dictionary(
                 uniqueKeysWithValues: accounts.map {
                     ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
@@ -3218,6 +3298,7 @@ final class DashboardViewModel {
     }
 
     private func scheduleChartHydration() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         guard isHomeTabActive else {
             if needsEquityChartOverlayFetch(ignoreSettlement: true) {
                 pendingChartOverlayRefreshAfterInactive = true
@@ -3254,6 +3335,26 @@ final class DashboardViewModel {
             return
         }
         guard selectionToken == accountChartSelectionToken else { return }
+
+        guard DashboardAnalyticsRemoteAccountPolicy.shouldFetchAccountChartsRemotely(
+            accountID: id,
+            profileID: profileID
+        ) else {
+            let store = DashboardAnalyticsAccountChartsStore.shared
+            if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
+                store.markNotRequested(accountID: id, revision: analyticsV3Revision)
+            } else {
+                store.markFailed(
+                    accountID: id,
+                    revision: analyticsV3Revision,
+                    nonRetryable: true
+                )
+            }
+            if shouldMarkChartOverlayFetchSettled(forAccountID: id) {
+                markChartOverlayFetchSettledForCurrentSelection()
+            }
+            return
+        }
 
         if await trySeedAccountChartsFromGRDB(
             accountID: id,

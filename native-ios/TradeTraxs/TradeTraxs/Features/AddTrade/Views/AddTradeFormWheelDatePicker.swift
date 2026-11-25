@@ -36,6 +36,66 @@ enum AddTradeWheelTimePickerSupport {
     }
 }
 
+/// Compact bottom sheet with a centered hour/minute wheel (Trading Rules planned times, etc.).
+struct AddTradeWheelTimePickerSheet: View {
+    let title: String
+    @Binding var selection: Date
+    var onClear: (() -> Void)? = nil
+    let onDone: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    /// Wheel (~216pt) + header; avoids medium/large detents that feel full-screen.
+    static let presentationHeight: CGFloat = 296
+
+    var body: some View {
+        VStack(spacing: ExperienceSpacing.xs) {
+            sheetHeader
+            DatePicker(
+                "",
+                selection: $selection,
+                displayedComponents: .hourAndMinute
+            )
+            .datePickerStyle(.wheel)
+            .labelsHidden()
+            .environment(\.timeZone, AddTradeWheelTimePickerSupport.easternCalendar.timeZone)
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.bottom, ExperienceSpacing.xs)
+        .experienceSheetChrome(
+            detents: [.height(Self.presentationHeight)],
+            dragIndicator: .visible,
+            keyboardDoneToolbar: false
+        )
+    }
+
+    private var sheetHeader: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            if let onClear {
+                Button("Clear", action: onClear)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.secondaryText)
+            } else {
+                Color.clear
+                    .frame(width: 52, height: 1)
+                    .accessibilityHidden(true)
+            }
+            Spacer(minLength: ExperienceSpacing.xs)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Spacer(minLength: ExperienceSpacing.xs)
+            Button("Done", action: onDone)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.accent)
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.sm)
+    }
+}
+
 /// Inline wheel date/time rows in the Add Trade `Form` (Entry / Exit).
 struct AddTradeFormWheelDatePicker: View {
     let title: String

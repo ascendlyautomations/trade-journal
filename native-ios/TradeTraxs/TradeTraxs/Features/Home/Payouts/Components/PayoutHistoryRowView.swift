@@ -8,26 +8,28 @@ struct PayoutHistoryRowView: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 Text(amountText)
-                    .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
+                    .font(.system(.headline, design: .rounded).weight(.semibold).monospacedDigit())
                     .foregroundStyle(colors.profit)
 
                 Text(accountContextLine)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
+                    .font(.system(.subheadline, design: .default))
+                    .foregroundStyle(colors.primaryText)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: ExperienceSpacing.sm) {
+                HStack(spacing: ExperienceSpacing.xs) {
                     Text(TradeDisplay.dateText(item.date))
-                        .experienceStyle(.caption, color: colors.secondaryText)
+                        .font(.system(.caption, design: .default))
+                        .foregroundStyle(colors.secondaryText)
                     if let status = statusLabel {
                         Text(status)
-                            .font(.caption.weight(.semibold))
+                            .font(.system(.caption2, design: .default).weight(.semibold))
                             .foregroundStyle(colors.secondaryText)
-                            .padding(.horizontal, ExperienceSpacing.xs)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
                             .background {
                                 Capsule(style: .continuous)
                                     .fill(colors.fillSecondary.opacity(0.85))
@@ -42,10 +44,11 @@ struct PayoutHistoryRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(colors.tertiaryText)
         }
-        .padding(ExperienceSpacing.md)
+        .padding(.horizontal, ExperienceSpacing.sm)
+        .padding(.vertical, ExperienceSpacing.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("withdrawals.history.\(item.id)")

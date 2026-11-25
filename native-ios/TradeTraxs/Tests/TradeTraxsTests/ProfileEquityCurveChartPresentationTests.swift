@@ -78,7 +78,7 @@ final class ProfileEquityCurveChartPresentationTests: XCTestCase {
         XCTAssertEqual(domain.lowerBound, 0)
     }
 
-    func testDashboardTradeIndexDomainUsesSingleTrailingSlot() {
+    func testDashboardTradeIndexDomainMatchesDataExtents() {
         let render = (0...80).map { idx in
             ProfileEquityCurveChartModel.RenderPoint(
                 index: idx,
@@ -90,10 +90,11 @@ final class ProfileEquityCurveChartPresentationTests: XCTestCase {
         let standard = ProfileEquityCurveChartModel.tradeIndexDomain(for: render, horizontalLayout: .standard)
         let dashboard = ProfileEquityCurveChartModel.tradeIndexDomain(for: render, horizontalLayout: .dashboard)
         XCTAssertGreaterThan(standard.upperBound, dashboard.upperBound)
-        XCTAssertEqual(dashboard.upperBound, 81)
+        XCTAssertEqual(dashboard.lowerBound, 0)
+        XCTAssertEqual(dashboard.upperBound, 80)
     }
 
-    func testDashboardTimelineDomainUsesTighterTrailingInset() {
+    func testDashboardTimelineDomainMatchesDataExtents() {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let end = start.addingTimeInterval(86_400 * 90)
         let render = [
@@ -115,9 +116,8 @@ final class ProfileEquityCurveChartPresentationTests: XCTestCase {
             ),
         ]
         let span = end.timeIntervalSince(start)
-        let standardInsets = ProfileEquityCurveChartModel.timelineXAxisInsets(span: span, horizontalLayout: .standard)
-        let dashboardInsets = ProfileEquityCurveChartModel.timelineXAxisInsets(span: span, horizontalLayout: .dashboard)
-        XCTAssertLessThan(dashboardInsets.trailing, standardInsets.trailing)
+        let standardInsets = ProfileEquityCurveChartModel.timelineXAxisInsets(span: span)
+        XCTAssertGreaterThan(standardInsets.trailing, standardInsets.leading)
 
         guard let standardDomain = ProfileEquityCurveChartModel.timelineDomain(for: render, horizontalLayout: .standard),
               let dashboardDomain = ProfileEquityCurveChartModel.timelineDomain(for: render, horizontalLayout: .dashboard)
@@ -129,11 +129,9 @@ final class ProfileEquityCurveChartPresentationTests: XCTestCase {
             dashboardDomain.upperBound.timeIntervalSince1970,
             standardDomain.upperBound.timeIntervalSince1970
         )
-        XCTAssertEqual(
-            dashboardDomain.upperBound.timeIntervalSince1970,
-            end.timeIntervalSince1970 + dashboardInsets.trailing,
-            accuracy: 1
-        )
+        XCTAssertEqual(dashboardDomain.lowerBound, start)
+        XCTAssertEqual(dashboardDomain.upperBound, end)
+        XCTAssertEqual(ProfileEquityCurveChartHorizontalLayout.dashboard.xPlotTrailingInset, 10)
     }
 
     func testHeroPipelineValuesReachChartUnmodified() throws {

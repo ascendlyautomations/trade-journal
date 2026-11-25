@@ -340,13 +340,27 @@ nonisolated enum DashboardScopeFilterPersistence {
 
     static func accountFilter(from key: String?) -> DashboardAccountFilter {
         guard let key, key != "all", !key.isEmpty else { return .all }
-        return .account(TradingAccountID(key))
+        let accountID = TradingAccountID(key)
+        if JournalSampleDataPolicy.isCanonicalAccount(id: accountID) {
+            return .all
+        }
+        if UUID(uuidString: key) == nil {
+            return .all
+        }
+        return .account(accountID)
     }
 
     static func accountFilterKey(for filter: DashboardAccountFilter) -> String {
         switch filter {
         case .all: return "all"
-        case .account(let id): return id.rawValue
+        case .account(let id):
+            if JournalSampleDataPolicy.isCanonicalAccount(id: id) {
+                return "all"
+            }
+            if UUID(uuidString: id.rawValue) == nil {
+                return "all"
+            }
+            return id.rawValue
         }
     }
 

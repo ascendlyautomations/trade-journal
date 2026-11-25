@@ -733,6 +733,26 @@ final class DashboardExperienceTests: XCTestCase {
         XCTAssertEqual(menu.map(\.id), [live.id])
     }
 
+    func testDashboardAccountScopePolicyFallsBackToAllWhenSelectedAccountMissing() {
+        let owner = ProfileID("user.dashboard.missing.account")
+        let live = TradingAccount(
+            id: TradingAccountID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+            ownerProfileID: owner,
+            name: "Live",
+            category: .personal,
+            mode: .live,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        let sanitized = DashboardAccountScopePolicy.sanitizedFilter(
+            .account(DemoCanonicalDataset.evaluationAccountID),
+            accounts: [live]
+        )
+        XCTAssertEqual(sanitized, .all)
+    }
+
     func testDashboardAccountScopePolicyFallsBackToAllAccountsForBacktestSelection() {
         let owner = ProfileID("user.dashboard.scope")
         let backtest = TradingAccount(

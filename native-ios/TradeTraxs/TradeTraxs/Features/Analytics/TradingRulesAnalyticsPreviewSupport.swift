@@ -34,11 +34,19 @@ enum TradingRulesAnalyticsPreviewSupport {
         }
     }
 
-    private static func seedCanonicalSample(profileID: ProfileID, detailCache: DetailPresentationCache) {
+    /// Sample trading rules + journal stores for analytics preview (never persisted to Supabase).
+    static func seedJournalAndPreferences(
+        profileID: ProfileID,
+        detailCache: DetailPresentationCache,
+        seedDetailCacheTrades: Bool = true
+    ) {
         let trades = DemoCanonicalDataset.trades()
         let accounts = DemoCanonicalDataset.accounts(owner: profileID)
-        DemoCanonicalDataset.seedDetailCache(detailCache, viewer: profileID)
-        SessionAccountsStore.shared.seed(accounts, for: profileID, detailCache: detailCache)
+        if seedDetailCacheTrades {
+            DemoCanonicalDataset.seedDetailCache(detailCache, viewer: profileID)
+        }
+        SessionAccountsStore.shared.invalidate(profileID: profileID)
+        SessionAccountsStore.shared.seed(accounts, for: profileID, detailCache: detailCache, kind: .rest)
         SessionOwnerTradesStore.shared.seed(
             trades,
             for: profileID,
@@ -46,9 +54,75 @@ enum TradingRulesAnalyticsPreviewSupport {
             historyComplete: true,
             totalTradeCount: trades.count
         )
-        TradingRulesCompliancePreferencesCache.store(
-            DemoCanonicalDataset.previewPreferenceContext(for: profileID),
-            for: profileID
+        storeResolvedPreferenceContext(for: profileID)
+    }
+
+    /// Returns and caches demo rule preferences for the active preview session.
+    @discardableResult
+    static func resolvedPreferenceContext(for profileID: ProfileID) -> PreferenceRuleContext {
+        if let cached = TradingRulesCompliancePreferencesCache.cachedContext(for: profileID) {
+            return cached
+        }
+        let demo = DemoCanonicalDataset.previewPreferenceContext(for: profileID)
+        TradingRulesCompliancePreferencesCache.store(demo, for: profileID)
+        return demo
+    }
+
+    private static func storeResolvedPreferenceContext(for profileID: ProfileID) {
+        _ = resolvedPreferenceContext(for: profileID)
+    }
+
+    private static func seedCanonicalSample(profileID: ProfileID, detailCache: DetailPresentationCache) {
+        seedJournalAndPreferences(profileID: profileID, detailCache: detailCache)
+    }
+
+    /// Fixed 1Y / all-accounts scope for bundled sample analytics (matches ``TradingRulesAnalyticsScopeController/applyTraxsProPreviewScopeDefaults()``).
+    static func sampleClientScopeFilter(accounts: [TradingAccount]) -> DashboardClientScopeFilter {
+        DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .oneYear,
+            customInterval: nil,
+            accountMode: .all,
+            showPublicOnly: false,
+            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+        )
+    }
+
+    /// Builds compliance from seeded demo trades + preferences only (no dashboard or network hydration).
+    @discardableResult
+    static func publishBundledSampleSnapshot(
+        profileID: ProfileID,
+        dependencies: TradingRulesComplianceLoadDependencies
+    ) async -> Bool {
+        guard showsSampleDataChrome else { return false }
+        let accounts = SessionAccountsStore.shared.cached(for: profileID)
+            ?? dependencies.detailCache.accounts(for: profileID)
+            ?? []
+        guard !accounts.isEmpty else { return false }
+
+        let scope = PsychologyAnalyticsScopeResolver.resolve(
+            filter: sampleClientScopeFilter(accounts: accounts),
+            profileID: profileID,
+            accounts: accounts
+        )
+        let injected = resolvedPreferenceContext(for: profileID)
+        let output = await TradingRulesComplianceSnapshotBuilder.build(
+            profileID: profileID,
+            scope: scope,
+            accounts: accounts,
+            dependencies: dependencies,
+            injectedPreferences: injected,
+            dashboardInsights: nil
+        )
+        let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
+        return TradingRulesComplianceSessionStore.shared.commit(
+            output: output,
+            profileID: profileID,
+            scope: scope,
+            ready: true,
+            inputFingerprint: nil,
+            generation: token,
+            preferencesUnavailable: false
         )
     }
 }

@@ -28,7 +28,9 @@ enum TradingRulesComplianceSessionLoader {
 
         TradingRulesComplianceSessionStore.shared.clearIfProfileMismatch(profileID)
 
-        if let dashboardViewModel,
+        let usesBundledSample = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+        if !usesBundledSample,
+           let dashboardViewModel,
            dashboardViewModel.isTradingRulesComplianceDashboardSource(profileID: profileID)
         {
             await dashboardViewModel.ensureTradingRulesComplianceForPresentation(
@@ -98,25 +100,42 @@ enum TradingRulesComplianceSessionLoader {
         dependencies: TradingRulesComplianceLoadDependencies,
         profileID: ProfileID
     ) async -> TradingRulesComplianceLoadOutcome {
-        await SessionNetworkGate.shared.awaitReady()
+        let usesBundledSample = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+        if !usesBundledSample {
+            await SessionNetworkGate.shared.awaitReady()
+        }
 
         let accounts = await loadAccounts(profileID: profileID, dependencies: dependencies)
-        let persisted = PsychologyAnalyticsScopeResolver.resolve(
-            profileID: profileID,
-            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
-        )
-        let scope = PsychologyAnalyticsScopeResolver.resolve(
-            filter: persisted.filter,
-            profileID: profileID,
-            accounts: accounts
-        )
+        let scope: PsychologyAnalyticsScopeResolver.Resolved
+        if usesBundledSample {
+            scope = PsychologyAnalyticsScopeResolver.resolve(
+                filter: TradingRulesAnalyticsPreviewSupport.sampleClientScopeFilter(accounts: accounts),
+                profileID: profileID,
+                accounts: accounts
+            )
+        } else {
+            let persisted = PsychologyAnalyticsScopeResolver.resolve(
+                profileID: profileID,
+                linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+            )
+            scope = PsychologyAnalyticsScopeResolver.resolve(
+                filter: persisted.filter,
+                profileID: profileID,
+                accounts: accounts
+            )
+        }
+
+        let injectedPreferences: PreferenceRuleContext? = usesBundledSample
+            ? TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID)
+            : nil
 
         let baseline = TradingRulesComplianceRecomputeCoordinator.currentGeneration
         let output = await TradingRulesComplianceSnapshotBuilder.build(
             profileID: profileID,
             scope: scope,
             accounts: accounts,
-            dependencies: dependencies
+            dependencies: dependencies,
+            injectedPreferences: injectedPreferences
         )
         guard TradingRulesComplianceRecomputeCoordinator.isCurrent(baseline) else {
             if TradingRulesComplianceSessionStore.shared.ready {

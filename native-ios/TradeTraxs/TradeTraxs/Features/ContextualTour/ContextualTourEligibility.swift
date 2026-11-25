@@ -81,7 +81,7 @@ enum ContextualTourGeometry {
     /// Profile header targets stay at the top; autoscroll fights shell loading and causes flicker.
     static func skipsTourAutoscroll(for target: ContextualTourTargetID) -> Bool {
         switch target {
-        case .profileIdentity, .profileTradeRoom:
+        case .profileIdentity, .profileTradeRoom, .tradesBacktest:
             return true
         default:
             return false
@@ -209,6 +209,7 @@ struct ContextualTourGates: Equatable, Sendable {
     var settingsHomeActive = false
     var payoutsActive = false
     var expenseTrackerActive = false
+    var tradesActive = false
     var sceneActive = false
     var unobstructed = false
 

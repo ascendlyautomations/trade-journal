@@ -180,12 +180,13 @@ struct PayoutsScreenView: View {
     }
 
     private func historySection(title: String, items: [PayoutHistoryItem]) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             Text(title)
-                .experienceStyle(.headline, color: colors.primaryText)
+                .font(.system(.headline, design: .default))
+                .foregroundStyle(colors.primaryText)
                 .padding(.horizontal, ExperienceSpacing.md)
 
-            VStack(spacing: ExperienceSpacing.sm) {
+            VStack(spacing: ExperienceSpacing.xxs) {
                 ForEach(items) { item in
                     withdrawalRowLink(item: item, account: accountsByID[item.accountID])
                 }
@@ -201,7 +202,7 @@ struct PayoutsScreenView: View {
             account: account,
             showsPostedAsAchievement: withdrawalAchievementLinks.linkedAchievementID(for: item) != nil
         )
-        .experienceGroupedPanel(cornerRadius: ExperienceRadius.lg, prominence: .standard)
+        .experienceGroupedPanel(cornerRadius: ExperienceRadius.md, prominence: .standard)
 
         if data != nil, navigationCoordinator != nil {
             Button {

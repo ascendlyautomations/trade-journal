@@ -4,8 +4,20 @@ import Foundation
 nonisolated enum ProfileEquityCurveChartHorizontalLayout: Equatable, Sendable {
     /// Profile, reports, and other surfaces — extra trailing room for axis labels.
     case standard
-    /// Dashboard hero — minimal trailing inset so the curve meets the card edge.
+    /// Dashboard hero — data-tight X domain plus explicit plot trailing inset (see ``xPlotTrailingInset``).
     case dashboard
+
+    /// Trailing plot inset in points; overrides Swift Charts' default symmetric plot-dimension padding.
+    var xPlotTrailingInset: CGFloat? {
+        switch self {
+        case .standard: return nil
+        case .dashboard: return 10
+        }
+    }
+
+    var usesTightDataDomain: Bool {
+        self == .dashboard
+    }
 }
 
 /// Shared axis model for ``ProfileEquityCurveView``, trade index or timeline (X) and one balance scale (Y).
@@ -67,26 +79,20 @@ nonisolated enum ProfileEquityCurveChartModel {
         for renderPoints: [RenderPoint],
         horizontalLayout: ProfileEquityCurveChartHorizontalLayout = .standard
     ) -> ClosedRange<Int> {
-        let maxIndex = renderPoints.map(\.tradeIndex).max() ?? 1
-        let upper = max(1, maxIndex)
-        let trailingSlots = tradeIndexTrailingAxisInset(
-            maxTradeIndex: upper,
-            horizontalLayout: horizontalLayout
-        )
+        let indices = renderPoints.map(\.tradeIndex)
+        let minIndex = indices.min() ?? 0
+        let maxIndex = indices.max() ?? 1
+        let upper = max(minIndex + 1, maxIndex)
+        if horizontalLayout.usesTightDataDomain {
+            return minIndex...upper
+        }
+        let trailingSlots = tradeIndexTrailingAxisInset(maxTradeIndex: upper)
         return 0...(upper + trailingSlots)
     }
 
     /// Extra slots past the last trade so the terminal `MMMd` label is not clipped at the plot edge.
-    private static func tradeIndexTrailingAxisInset(
-        maxTradeIndex: Int,
-        horizontalLayout: ProfileEquityCurveChartHorizontalLayout
-    ) -> Int {
-        switch horizontalLayout {
-        case .standard:
-            return max(1, Int(ceil(Double(max(1, maxTradeIndex + 1)) * 0.07)))
-        case .dashboard:
-            return 1
-        }
+    private static func tradeIndexTrailingAxisInset(maxTradeIndex: Int) -> Int {
+        max(1, Int(ceil(Double(max(1, maxTradeIndex + 1)) * 0.07)))
     }
 
     static func timelineDomain(
@@ -95,28 +101,21 @@ nonisolated enum ProfileEquityCurveChartModel {
     ) -> ClosedRange<Date>? {
         let stamps = renderPoints.compactMap(\.plotTime)
         guard let minDate = stamps.min(), let maxDate = stamps.max(), minDate < maxDate else { return nil }
+        if horizontalLayout.usesTightDataDomain {
+            return minDate...maxDate
+        }
         let span = maxDate.timeIntervalSince1970 - minDate.timeIntervalSince1970
-        let insets = timelineXAxisInsets(span: span, horizontalLayout: horizontalLayout)
+        let insets = timelineXAxisInsets(span: span)
         let start = Date(timeIntervalSince1970: minDate.timeIntervalSince1970 - insets.leading)
         let end = Date(timeIntervalSince1970: maxDate.timeIntervalSince1970 + insets.trailing)
         return start...end
     }
 
     /// Asymmetric domain padding sized for `MMMyy` / `MMMd` axis labels without over-shrinking the curve.
-    static func timelineXAxisInsets(
-        span: TimeInterval,
-        horizontalLayout: ProfileEquityCurveChartHorizontalLayout = .standard
-    ) -> (leading: TimeInterval, trailing: TimeInterval) {
-        switch horizontalLayout {
-        case .standard:
-            let leading = min(max(span * 0.04, 4 * 3_600), 86_400 * 3)
-            let trailing = min(max(span * 0.07, 8 * 3_600), 86_400 * 5)
-            return (leading, trailing)
-        case .dashboard:
-            let leading = min(max(span * 0.03, 2 * 3_600), 86_400 * 2)
-            let trailing = min(max(span * 0.012, 2 * 3_600), 86_400)
-            return (leading, trailing)
-        }
+    static func timelineXAxisInsets(span: TimeInterval) -> (leading: TimeInterval, trailing: TimeInterval) {
+        let leading = min(max(span * 0.04, 4 * 3_600), 86_400 * 3)
+        let trailing = min(max(span * 0.07, 8 * 3_600), 86_400 * 5)
+        return (leading, trailing)
     }
 
     static func xAxisMode(for series: ProfileEquityCurveDisplaySeries) -> XAxisMode {
