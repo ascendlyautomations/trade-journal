@@ -1,5 +1,6 @@
 import { after } from "next/server"
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { buildStoryLikeNotificationContent } from "@/lib/storyLikeNotificationContent"
 import { emitActivityNotification } from "@/lib/server/notifications/emit"
 
 export type LikeTarget =
@@ -8,6 +9,7 @@ export type LikeTarget =
   | { kind: "profile_post"; profilePostId: string }
   | { kind: "achievement_post"; achievementPostId: string }
   | { kind: "reel"; reelId: string }
+  | { kind: "story"; storyId: string }
   | {
       kind: "comment"
       commentId: string
@@ -39,6 +41,7 @@ type ContentOwnerTable =
   | "profile_posts"
   | "achievement_posts"
   | "reels"
+  | "stories"
   | "comments"
   | "trade_comments"
   | "profile_post_comments"
@@ -52,6 +55,7 @@ function isContentOwnerTable(table: string): table is ContentOwnerTable {
     table === "profile_posts" ||
     table === "achievement_posts" ||
     table === "reels" ||
+    table === "stories" ||
     COMMENT_SOURCES.has(table)
   )
 }
@@ -149,6 +153,28 @@ export async function resolveLikeTarget(
           recipientUserId,
           notificationTarget: {
             achievement_post_id: target.achievementPostId,
+          },
+          likeExists: Boolean(like.data),
+        }
+      : null
+  }
+
+  if (target.kind === "story" && target.storyId) {
+    const [recipientUserId, like] = await Promise.all([
+      resolveContentOwner("stories", target.storyId),
+      supabaseServiceRole
+        .from("story_likes")
+        .select("story_id")
+        .eq("story_id", target.storyId)
+        .eq("user_id", actorUserId)
+        .maybeSingle(),
+    ])
+    return recipientUserId
+      ? {
+          recipientUserId,
+          notificationTarget: {
+            story_id: target.storyId,
+            content: buildStoryLikeNotificationContent(target.storyId),
           },
           likeExists: Boolean(like.data),
         }

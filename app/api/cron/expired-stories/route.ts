@@ -11,7 +11,12 @@ function isAuthorizedCron(req: Request): boolean {
   return auth === `Bearer ${secret}`
 }
 
-/** Vercel Cron — deletes story rows older than 24 hours and their story-bucket media. */
+/**
+ * Vercel Cron — expires story media after 24h and purges owner metadata after +30 days.
+ * Schedule: `vercel.json` → `15 7 * * *` (once daily). Hobby-tier plans usually cannot run
+ * more often; Pro can use e.g. `15 7,19 * * *` to shorten public-bucket URL exposure until
+ * the stories bucket is made private with signed URLs (see docs/STORY_ENGAGEMENT_DEPLOYMENT.md).
+ */
 export async function GET(req: Request) {
   if (!isAuthorizedCron(req)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })

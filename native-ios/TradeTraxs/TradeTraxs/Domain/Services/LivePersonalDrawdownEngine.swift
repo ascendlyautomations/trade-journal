@@ -84,6 +84,86 @@ nonisolated enum LivePersonalDrawdownEngine {
 
     /// Dashboard bootstrap wire fields for live/broker/personal manual-ledger accounts.
     /// PostgREST patch body, always emits JSON null when clearing drawdown columns.
+    enum GearDraftLimitPolicy: Sendable {
+        /// Dashboard gear — blank or zero limit clears drawdown.
+        case clearWhenEmptyOrZero
+        /// Live account create — enabled drawdown requires a positive limit.
+        case requirePositiveLimit
+    }
+
+    /// User-facing validation failure from ``parseGearDraft``.
+    nonisolated struct GearDraftValidationError: Error, Sendable {
+        let message: String
+    }
+
+    /// Shared parse/validation for dashboard gear and live account create drawdown fields.
+    static func parseGearDraft(
+        limitDigits: String,
+        limitType: LivePersonalDrawdownType,
+        floorCapDigits: String,
+        includeFloorCapField: Bool,
+        limitPolicy: GearDraftLimitPolicy
+    ) -> Result<LivePersonalDrawdownConfig?, GearDraftValidationError> {
+        let trimmed = limitDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+        let capTrimmed = floorCapDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            switch limitPolicy {
+            case .clearWhenEmptyOrZero:
+                return .success(nil)
+            case .requirePositiveLimit:
+                return .failure(
+                    GearDraftValidationError(
+                        message: "Enter a valid non-negative dollar amount for drawdown limit."
+                    )
+                )
+            }
+        }
+
+        guard let limit = Decimal(string: trimmed.replacingOccurrences(of: ",", with: "")),
+              limit >= 0
+        else {
+            return .failure(
+                GearDraftValidationError(
+                    message: "Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear."
+                )
+            )
+        }
+
+        if limit == 0 {
+            switch limitPolicy {
+            case .clearWhenEmptyOrZero:
+                return .success(nil)
+            case .requirePositiveLimit:
+                return .failure(
+                    GearDraftValidationError(message: "Enter a drawdown limit greater than zero.")
+                )
+            }
+        }
+
+        var floorCap: Decimal?
+        if includeFloorCapField, !capTrimmed.isEmpty {
+            guard let cap = Decimal(string: capTrimmed.replacingOccurrences(of: ",", with: "")),
+                  cap > 0
+            else {
+                return .failure(
+                    GearDraftValidationError(
+                        message: "Enter a valid positive dollar amount for floor cap, or leave blank for no cap."
+                    )
+                )
+            }
+            floorCap = cap
+        }
+
+        return .success(
+            LivePersonalDrawdownConfig(
+                limitAmount: limit,
+                limitType: limitType,
+                floorCap: floorCap
+            )
+        )
+    }
+
     static func makeAccountDrawdownPatchBody(
         config: LivePersonalDrawdownConfig?
     ) -> LivePersonalDrawdownAccountPatchBody {

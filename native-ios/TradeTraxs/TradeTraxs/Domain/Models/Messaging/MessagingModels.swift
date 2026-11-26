@@ -16,6 +16,18 @@ nonisolated enum MessageKind: String, Hashable, Codable, Sendable {
 }
 
 /// Domain conversation, mirrors web inbox row fields (`DmConversationRow` + unread/mute).
+/// Partial group shell update (PostgREST `conversations` row).
+nonisolated struct GroupConversationDetailsPatch: Sendable, Equatable {
+    var name: String?
+    var avatarURL: String?
+}
+
+/// Idempotent leave flow result (delete-first, then system message).
+nonisolated enum GroupLeaveConversationOutcome: Sendable, Equatable {
+    case left
+    case alreadyLeft
+}
+
 nonisolated struct Conversation: Hashable, Codable, Sendable, Identifiable {
     var id: ConversationID
     var participantProfileIDs: [ProfileID]

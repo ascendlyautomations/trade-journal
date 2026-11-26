@@ -6,6 +6,8 @@ enum TradingPreferenceFormLayout {
     static let secondaryLineSpacing: CGFloat = 3
     static let rowColumnSpacing: CGFloat = ExperienceSpacing.sm
     static let valueControlWidth: CGFloat = 108
+    /// Rule template menu — wider trailing column so placeholder text is not clipped.
+    static let templateDropdownControlWidth: CGFloat = valueControlWidth * 1.25
 }
 
 extension View {
@@ -16,8 +18,11 @@ extension View {
     }
 
     /// Trailing control column: fixed width so the row never exceeds the card width.
-    func tradingRulesSettingsValueColumn(alignment: Alignment = .trailing) -> some View {
-        frame(width: TradingPreferenceFormLayout.valueControlWidth, alignment: alignment)
+    func tradingRulesSettingsValueColumn(
+        width: CGFloat = TradingPreferenceFormLayout.valueControlWidth,
+        alignment: Alignment = .trailing
+    ) -> some View {
+        frame(width: width, alignment: alignment)
             .layoutPriority(0)
     }
 

@@ -50,6 +50,15 @@ final class MediaDeliveryOptimizationTests: XCTestCase {
         XCTAssertEqual(VideoUploadDurationValidation.chooseAnotherTitle, "Choose Another Video")
     }
 
+    func testInAppCameraRecordingCapsDoNotChangeUploadLimits() {
+        XCTAssertEqual(MediaVideoPreparation.cameraMaxRecordingSeconds, 89.8, accuracy: 0.001)
+        XCTAssertLessThan(MediaVideoPreparation.cameraMaxRecordingSeconds, Double(MediaVideoPreparation.maxDurationSeconds))
+        XCTAssertEqual(MediaVideoPreparation.maxDurationSeconds, 90)
+
+        XCTAssertEqual(StoryMediaDuration.cameraMaxRecordingSeconds, 10, accuracy: 0.001)
+        XCTAssertEqual(StoryMediaDuration.maxVideoDurationSeconds, 10)
+    }
+
     func testStoryDurationPreflightUsesTenSecondCap() {
         XCTAssertFalse(StoryMediaDuration.exceedsLimit(durationSeconds: 10))
         XCTAssertFalse(StoryMediaDuration.exceedsLimit(durationSeconds: 9.5))

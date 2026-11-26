@@ -41,6 +41,8 @@ enum MediaVideoPreparation {
     }
 
     nonisolated static let maxDurationSeconds = Limits.reel.maxDurationSeconds
+    /// In-app camera auto-stop. Library picks and upload validation still use ``maxDurationSeconds``.
+    nonisolated static let cameraMaxRecordingSeconds: TimeInterval = 89.8
     /// Final optimized upload must remain below this ceiling.
     nonisolated static let maxFileBytes = Limits.reel.maxFinalUploadBytes
     nonisolated static let maxFinalUploadBytes = maxFileBytes

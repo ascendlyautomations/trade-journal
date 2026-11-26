@@ -285,6 +285,7 @@ struct DashboardHomeView: View {
         content
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
             entitlementGateRevision += 1
+            viewModel.refreshPremiumChartOverlayEntitlementIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
             entitlementGateRevision += 1
@@ -407,13 +408,7 @@ struct DashboardHomeView: View {
     }
 
     private var accountValueWithdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary? {
-        guard let account = viewModel.selectedAccount else { return nil }
-        return AccountTrackedBalanceSupport.withdrawalSummary(
-            account: account,
-            payoutCycles: viewModel.payoutCyclesForAccountValueSummary(accountID: account.id),
-            ledgerEntries: withdrawalsHistory.ledgerByAccount[account.id] ?? [],
-            scope: viewModel.clientScopeFilter()
-        )
+        viewModel.equityHeroWithdrawalSummary(ledgerByAccount: withdrawalsHistory.ledgerByAccount)
     }
 
     private var emptyDashboardContent: some View {

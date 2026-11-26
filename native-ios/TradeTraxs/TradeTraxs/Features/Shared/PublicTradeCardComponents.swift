@@ -487,6 +487,73 @@ private enum TradeExecutionEntryExitTypography {
     }
 }
 
+// MARK: - Public achievement cards (feed + detail)
+
+/// Achievement title + optional payout/milestone on the right, matches ``PublicTradeHeadlineRow``.
+struct PublicAchievementHeadlineRow: View {
+    let achievement: Achievement
+
+    @Environment(\.themeColors) private var colors
+    @Environment(\.experienceTheme) private var theme
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+            Text(achievement.title)
+                .font(ExperienceTypography.headline)
+                .foregroundStyle(colors.primaryText)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .minimumScaleFactor(0.82)
+                .layoutPriority(1)
+
+            Spacer(minLength: ExperienceSpacing.xs)
+
+            if let trailing = AchievementDetailPresentation.headlineTrailingAmount(for: achievement) {
+                Text(trailing.text)
+                    .font(ExperienceTypography.headline.monospacedDigit())
+                    .foregroundStyle(trailingAmountColor(trailing))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .accessibilityIdentifier("achievement.headline.trailingAmount")
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func trailingAmountColor(_ trailing: (text: String, usesMetricColor: Bool)) -> Color {
+        guard trailing.usesMetricColor, let value = achievement.value else {
+            return colors.secondaryText
+        }
+        return theme.metricColor(
+            for: NSDecimalNumber(decimal: value.amount).doubleValue
+        )
+    }
+}
+
+/// Achievement kind + account/firm chips, matches ``PublicTradeMetaChipRow`` feed styling.
+struct PublicAchievementMetaChipRow: View {
+    let achievement: Achievement
+
+    var body: some View {
+        let titles = AchievementDetailPresentation.metaChipTitles(for: achievement)
+        if titles.isEmpty {
+            EmptyView()
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: PublicTradeMetaChipRowLayout.chipSpacing) {
+                    ForEach(titles, id: \.self) { title in
+                        PublicTradeMetaChip(title: title, tone: .info)
+                    }
+                }
+            }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("achievement.meta.chips")
+        }
+    }
+}
+
 /// Compact intrinsic-width chip for public trade metadata rows.
 private struct PublicTradeMetaChip: View {
     let title: String

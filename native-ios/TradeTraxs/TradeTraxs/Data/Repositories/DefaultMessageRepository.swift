@@ -423,6 +423,119 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         )
     }
 
+    func updateGroupConversationDetails(
+        conversationID: ConversationID,
+        patch: GroupConversationDetailsPatch
+    ) async throws -> Conversation {
+        guard await session.currentUserID != nil else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let trimmedName = patch.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAvatar = patch.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasName = trimmedName?.isEmpty == false
+        let hasAvatar = trimmedAvatar?.isEmpty == false
+        guard hasName || hasAvatar else {
+            return try await conversation(id: conversationID)
+        }
+
+        let existing = try await conversation(id: conversationID)
+        guard existing.isGroup else {
+            throw AppError.unknown(message: "Only group conversations support this update.")
+        }
+
+        let body = GroupConversationUpdateBody(
+            name: hasName ? trimmedName : nil,
+            avatar_url: hasAvatar ? trimmedAvatar : nil
+        )
+        AppLog.networking.info(
+            """
+            conversations.groupUpdate begin \
+            id=\(SafeInboxLog.hash(conversationID.rawValue), privacy: .public) \
+            hasName=\(hasName, privacy: .public) hasAvatar=\(hasAvatar, privacy: .public)
+            """
+        )
+        do {
+            try await supabase.database.update(
+                body,
+                table: "conversations",
+                query: [SupabaseQuery.eq("id", conversationID.rawValue)]
+            )
+            AppLog.networking.info(
+                """
+                conversations.groupUpdate ok \
+                id=\(SafeInboxLog.hash(conversationID.rawValue), privacy: .public)
+                """
+            )
+        } catch {
+            AppLog.networking.error(
+                """
+                conversations.groupUpdate failed \
+                convo=\(SafeInboxLog.hash(conversationID.rawValue), privacy: .public) \
+                error=\(String(describing: error), privacy: .public)
+                """
+            )
+            throw error
+        }
+        return try await conversation(id: conversationID)
+    }
+
+    func leaveGroupConversation(conversationID: ConversationID) async throws -> GroupLeaveConversationOutcome {
+        guard await session.currentUserID != nil else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let existing = try await conversation(id: conversationID)
+        guard existing.isGroup else {
+            throw AppError.unknown(message: "Only group conversations can be left with this action.")
+        }
+
+        AppLog.networking.info(
+            """
+            conversations.leaveGroup begin \
+            id=\(SafeInboxLog.hash(conversationID.rawValue), privacy: .public)
+            """
+        )
+
+        struct RpcArgs: Encodable, Sendable {
+            var p_conversation_id: String
+        }
+        struct RpcResponse: Decodable, Sendable {
+            var status: String?
+        }
+
+        do {
+            let data = try await supabase.database.rpcData(
+                functionName: "rpc_v1_leave_group_conversation",
+                parametersJSON: try JSONEncoder().encode(
+                    RpcArgs(p_conversation_id: conversationID.rawValue)
+                )
+            )
+            let response = try JSONDecoder().decode(RpcResponse.self, from: data)
+            switch response.status {
+            case "left":
+                AppLog.networking.info(
+                    """
+                    conversations.leaveGroup ok \
+                    id=\(SafeInboxLog.hash(conversationID.rawValue), privacy: .public)
+                    """
+                )
+                return .left
+            case "already_left":
+                return .alreadyLeft
+            default:
+                throw AppError.unknown(message: "Could not leave the group. Try again.")
+            }
+        } catch {
+            AppLog.networking.error(
+                """
+                conversations.leaveGroup rpc failed \
+                convo=\(SafeInboxLog.hash(conversationID.rawValue), privacy: .public) \
+                error=\(String(describing: error), privacy: .public)
+                """
+            )
+            throw error
+        }
+    }
+
     func deleteConversation(id: ConversationID) async throws {
         // Exact web `handleDeleteConversation`:
         // delete from conversation_participants where conversation_id + user_id.
@@ -1000,12 +1113,13 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
 
     /// Web `handleSendTrade` payload, does not invent a new message type.
     private func sendTradeShare(_ message: Message, tradeID: TradeID) async throws -> Message {
+        let caption = SharedContentMessageSupport.tradeShareStoredBody(from: message.body)
         let body = MessageInsertBodies.TradeShare(
             conversation_id: message.conversationID.rawValue,
             sender_id: message.senderProfileID.rawValue,
             type: "trade",
             trade_id: tradeID.rawValue,
-            content: nil,
+            content: caption,
             parent_message_id: message.replyToMessageID?.rawValue
         )
         let inserted: DMInsertRow = try await supabase.database.insert(
@@ -1024,7 +1138,7 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             conversationID: message.conversationID,
             senderProfileID: message.senderProfileID,
             kind: .tradeShare,
-            body: nil,
+            body: caption,
             attachments: [
                 MessageAttachment(
                     id: tradeID.rawValue,
@@ -1292,7 +1406,11 @@ private nonisolated enum MessageInsertBodies {
             try container.encode(sender_id, forKey: .sender_id)
             try container.encode(type, forKey: .type)
             try container.encode(trade_id, forKey: .trade_id)
-            try container.encodeNil(forKey: .content)
+            if let content, !content.isEmpty {
+                try container.encode(content, forKey: .content)
+            } else {
+                try container.encodeNil(forKey: .content)
+            }
             try container.encodeNil(forKey: .channel)
             if let parent_message_id {
                 try container.encode(parent_message_id, forKey: .parent_message_id)
@@ -1354,6 +1472,22 @@ private nonisolated enum MessageInsertBodies {
                 try container.encode(parent_message_id, forKey: .parent_message_id)
             }
         }
+    }
+}
+
+private nonisolated struct GroupConversationUpdateBody: Encodable, Sendable {
+    var name: String?
+    var avatar_url: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case avatar_url
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if let name { try container.encode(name, forKey: .name) }
+        if let avatar_url { try container.encode(avatar_url, forKey: .avatar_url) }
     }
 }
 

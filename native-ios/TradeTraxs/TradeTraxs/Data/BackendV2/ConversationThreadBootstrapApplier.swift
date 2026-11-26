@@ -245,7 +245,9 @@ nonisolated enum ConversationThreadBootstrapApplier {
             conversationID: conversationID,
             senderProfileID: sender,
             kind: kind,
-            body: isTrade ? nil : row.content,
+            body: isTrade
+                ? SharedContentMessageSupport.tradeShareStoredBody(from: row.content)
+                : row.content,
             attachments: attachments,
             replyToMessageID: replyID,
             createdAt: createdAt,

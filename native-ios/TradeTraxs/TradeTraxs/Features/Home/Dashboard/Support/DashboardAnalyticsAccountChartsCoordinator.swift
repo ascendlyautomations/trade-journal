@@ -32,6 +32,17 @@ enum DashboardAnalyticsAccountChartsCoordinator {
             return token == selectionToken
         }
 
+        guard DashboardPremiumChartsRemotePolicy.mayFetchPremiumChartsRemotely(profileID: viewerID) else {
+            if token == selectionToken, inFlightAccountID == nil {
+                store.markFailed(
+                    accountID: selectedAccountID,
+                    revision: revision,
+                    nonRetryable: true
+                )
+            }
+            return false
+        }
+
         guard DashboardAnalyticsRemoteAccountPolicy.shouldFetchAccountChartsRemotely(
             accountID: selectedAccountID,
             profileID: viewerID

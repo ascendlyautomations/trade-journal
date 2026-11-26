@@ -7,9 +7,11 @@ struct RoomInfoView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
+    @Environment(\.dismiss) private var dismiss
     @State private var logoImage: Image?
     @State private var ownerAvatarImage: Image?
     @State private var showsInviteShareSheet = false
+    @State private var showsTradingRules = false
 
     init(
         roomID: RoomID,
@@ -56,6 +58,8 @@ struct RoomInfoView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Room Info")
+        .navigationBarBackButtonHidden(true)
+        .experienceArrowBackToolbarButton { dismiss() }
         .task {
             viewModel.loadIfNeeded()
         }
@@ -104,7 +108,13 @@ struct RoomInfoView: View {
             roomInfoCardRow { roomHeader }
 
             roomInfoCardDivider
+            roomInfoCardRow { ownerRow }
+
+            roomInfoCardDivider
             roomInfoCardRow { membersRow }
+
+            roomInfoCardDivider
+            roomInfoCardRow { tradingRulesRow }
 
             roomInfoCardDivider
             roomInfoCardRow { inviteLinkRow }
@@ -113,9 +123,6 @@ struct RoomInfoView: View {
                 roomInfoCardDivider
                 roomInfoCardRow { createFeedPostRow }
             }
-
-            roomInfoCardDivider
-            roomInfoCardRow { ownerRow }
 
             if viewModel.canManageRoom {
                 roomInfoCardDivider
@@ -192,9 +199,16 @@ struct RoomInfoView: View {
                 Text(roomMetadataLine)
                     .experienceStyle(.footnote, color: colors.secondaryText)
 
-                Text(displayDescription)
-                    .experienceStyle(.footnote, color: colors.tertiaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                ExperienceExpandableText(
+                    text: displayDescription,
+                    typography: .footnote,
+                    textColor: colors.tertiaryText,
+                    moreColor: colors.accent,
+                    collapsedLineLimit: 4,
+                    moreSuffix: " More...",
+                    lessSuffix: " Show Less",
+                    accessibilityIdentifier: "tradeRooms.info.description.more"
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -215,6 +229,38 @@ struct RoomInfoView: View {
             return "No description"
         }
         return description
+    }
+
+    private var tradingRulesRow: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Button {
+                ExperienceHaptics.play(.selection)
+                withAnimation(ExperienceMotion.selection) {
+                    showsTradingRules.toggle()
+                }
+            } label: {
+                HStack(spacing: ExperienceSpacing.sm) {
+                    Text("Trading Rules")
+                        .experienceStyle(.body, color: colors.primaryText)
+                    Spacer(minLength: ExperienceSpacing.xs)
+                    Image(systemName: showsTradingRules ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colors.tertiaryText)
+                }
+            }
+            .buttonStyle(.experiencePlain)
+
+            if showsTradingRules {
+                Text(
+                    viewModel.tradingRulesText
+                        ?? "No trading rules have been set."
+                )
+                .experienceStyle(.footnote, color: colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .accessibilityIdentifier("tradeRooms.info.tradingRules")
     }
 
     private var membersRow: some View {
@@ -259,12 +305,8 @@ struct RoomInfoView: View {
                 .foregroundStyle(colors.accent)
                 .accessibilityIdentifier("tradeRooms.info.invite.copy")
             }
-            Text(viewModel.inviteLink)
-                .experienceStyle(.caption2, color: colors.secondaryText)
-                .lineLimit(2)
-                .textSelection(.enabled)
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .sheet(isPresented: $showsInviteShareSheet) {
             if let url = RoomInfoViewModel.inviteURL(
                 slug: viewModel.room?.slug,

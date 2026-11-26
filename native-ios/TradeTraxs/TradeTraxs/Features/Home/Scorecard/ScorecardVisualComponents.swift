@@ -452,18 +452,9 @@ enum ScorecardVisualSupport {
         }
     }
 
-    /// One-line reason the composite score is still hidden (history gates already met).
+    /// Secondary ring line while the composite score is nil. Always nil so the center caption stays ``Building``.
     static func overallBuildingHint(result: ScorecardResult) -> String? {
         guard result.overall.score == nil else { return nil }
-        let tradeCount = result.overall.tradeCount
-        let tradingDayCount = result.overall.tradingDayCount
-        if tradeCount < ScorecardConstants.minTradesOverall
-            || tradingDayCount < ScorecardConstants.minTradingDaysOverall
-        {
-            return nil
-        }
-
-        if scoredCategories(for: result).isEmpty { return "Tag plan on trades" }
         return nil
     }
 

@@ -87,24 +87,24 @@ struct PsychologyReportDetailView: View {
 private struct PsychologyReportNavigationChrome: ViewModifier {
     @Bindable var viewModel: PsychologyReportDetailViewModel
 
-    @Environment(\.themeColors) private var colors
-
     func body(content: Content) -> some View {
-        content
-            .experienceNavigationTitle(viewModel.title)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    if viewModel.supportsDateScope {
-                        PsychologyReportDateScopeToolbarMenu(viewModel: viewModel)
-                    } else if let range = viewModel.dateRangeLabel {
-                        Text(range)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(colors.secondaryText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                            .accessibilityAddTraits(.isHeader)
+        if let periodLabel = viewModel.navigationPeriodLabel {
+            content.modifier(
+                ReportDetailPerformanceNavigationChrome(
+                    periodLabel: periodLabel,
+                    fallbackTitle: viewModel.title
+                )
+            )
+        } else {
+            content
+                .experienceNavigationTitle(viewModel.title)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        if viewModel.supportsDateScope {
+                            PsychologyReportDateScopeToolbarMenu(viewModel: viewModel)
+                        }
                     }
                 }
-            }
+        }
     }
 }

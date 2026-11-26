@@ -6,6 +6,8 @@ import SwiftUI
 /// Story video duration guard, uses the selected asset's timeline, not picker metadata alone.
 enum StoryMediaDuration {
     static let maxVideoDurationSeconds = 10
+    /// In-app camera auto-stop. Library picks and upload validation still use ``maxVideoDurationSeconds``.
+    static let cameraMaxRecordingSeconds: TimeInterval = 10
     static let durationExceededMessage = "Story videos can be up to 10 seconds."
 
     /// PhotoKit duration when available, preflight before loading the full movie provider.

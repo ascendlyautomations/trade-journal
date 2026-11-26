@@ -1,6 +1,6 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
-import { deleteUnsharedStoryStorage } from "@/lib/storyMediaCleanup"
+import { purgeStoryStorageAfterStoryRemoval } from "@/lib/storyStorageAfterDelete"
 import {
   getDemoFollowingIds,
   getDemoStoriesForUserIds,
@@ -186,7 +186,7 @@ export async function deleteStoryById(
   const imageURL = (existing as { image_url?: string | null } | null)?.image_url
   if (imageURL) {
     try {
-      await deleteUnsharedStoryStorage(client, [imageURL])
+      await purgeStoryStorageAfterStoryRemoval(client, imageURL)
     } catch (storageError) {
       console.warn("[deleteStoryById] storage cleanup:", storageError)
     }

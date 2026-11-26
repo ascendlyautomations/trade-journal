@@ -13,6 +13,7 @@ final class ReportsScreenViewModel: ScreenLifecycle {
     var showsPeriodPicker = false
     var showsYearPicker = false
     var showsCustomRangeSheet = false
+    var showsPsychologyCustomRangeSheet = false
     var draftCustomRangeStart: Date?
     var draftCustomRangeEnd: Date?
     var draftCustomMonth: Int = 1
@@ -195,6 +196,34 @@ final class ReportsScreenViewModel: ScreenLifecycle {
         ReportsNavigation.openDetail(ref.reportID, using: navigationCoordinator)
     }
 
+    func openPsychologyCustomRangeSheet() {
+        ExperienceHaptics.play(.selection)
+        let defaults = TradingReportCustomRangeSupport.defaultMonthSelection()
+        draftCustomYear = defaults.year
+        draftCustomMonth = defaults.month
+        draftCustomRangeStart = defaults.start
+        draftCustomRangeEnd = defaults.end
+        showsPsychologyCustomRangeSheet = true
+    }
+
+    func generateCustomPsychologyReport() {
+        guard canGenerateCustomReport,
+              let start = draftCustomRangeStart,
+              let end = draftCustomRangeEnd
+        else { return }
+        ExperienceHaptics.play(.selection)
+        let calendar = TradingReportPeriods.eastern
+        let interval = DashboardScopeFilterSupport.normalizedCustomInterval(
+            start: start,
+            end: end,
+            calendar: calendar
+        )
+        let periodID = PsychologyReportTimeScope.custom(interval).periodID
+        let ref = PsychologyReportPeriodRef(template: .custom, periodID: periodID)
+        showsPsychologyCustomRangeSheet = false
+        ReportsNavigation.openPsychologyDetail(ref.reportID, using: navigationCoordinator)
+    }
+
     func primaryAction(for card: PsychologyReportCardModel) {
         if card.template.isPeriodic, card.availablePeriods.count > 1 {
             showPsychologyPeriodPicker(for: card)
@@ -337,18 +366,13 @@ final class ReportsScreenViewModel: ScreenLifecycle {
     }
 
     private static func placeholderPsychologyCards() -> [PsychologyReportCardModel] {
-        PsychologyReportTemplate.allCases.map { template in
-            PsychologyReportCardModel(
-                template: template,
-                title: template.catalogTitle,
-                subtitle: template.catalogSubtitle,
-                systemImage: template.systemImage,
-                actionTitle: "View Report",
-                availability: .readyToGenerate,
-                periodRef: nil,
-                availablePeriods: []
+        PsychologyReportsBootstrap.buildCards(
+            from: PsychologyReportsSnapshot(
+                reports: [:],
+                computedAt: 0,
+                catalogPeriods: []
             )
-        }
+        )
     }
 
     static func userFacingMessage(for error: Error) -> String {

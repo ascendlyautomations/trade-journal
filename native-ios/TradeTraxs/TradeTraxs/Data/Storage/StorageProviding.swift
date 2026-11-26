@@ -60,6 +60,8 @@ extension ObjectStorageProviding {
 nonisolated enum StorageBucket: String, Sendable {
     case screenshots
     case avatars
+    /// Group DM conversation avatars (`conversations.avatar_url`).
+    case groupAvatars = "group-avatars"
     case stories
     case reels
     case rooms = "room-images"

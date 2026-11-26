@@ -1435,6 +1435,97 @@ final class DashboardExperienceTests: XCTestCase {
         )
     }
 
+    func testAggregateWithdrawalSummarySumsScopedAccounts() {
+        let owner = ProfileID("user.dashboard.withdrawals")
+        let live = TradingAccount(
+            id: TradingAccountID("live-1"),
+            ownerProfileID: owner,
+            name: "Live",
+            category: .personal,
+            mode: .live,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        let funded = TradingAccount(
+            id: TradingAccountID("funded-1"),
+            ownerProfileID: owner,
+            name: "Funded",
+            category: .propFirm,
+            mode: .funded,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        let payoutDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let ledger: [TradingAccountID: [AccountPayoutEntry]] = [
+            live.id: [
+                AccountPayoutEntry(
+                    id: AccountPayoutEntryID("w1"),
+                    accountID: live.id,
+                    amount: Money(amount: 500),
+                    payoutDate: payoutDate,
+                    note: nil
+                ),
+            ],
+        ]
+        let cycles: [TradingAccountID: [AccountPayoutCycle]] = [
+            funded.id: [
+                AccountPayoutCycle(
+                    id: "c1",
+                    accountID: funded.id,
+                    startedAt: payoutDate,
+                    endedAt: payoutDate,
+                    cycleStartBalance: 50_000,
+                    payoutAmount: 1_950,
+                    note: nil,
+                    balanceBeforePayout: 51_950,
+                    balanceAfterPayout: 50_000,
+                    drawdownBehavior: .resetToAccount,
+                    drawdownFloorAfterPayout: 48_000,
+                    cycleNumber: 1
+                ),
+            ],
+        ]
+        let scope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .all,
+            customInterval: nil,
+            accountMode: .all,
+            showPublicOnly: false
+        )
+        let summary = AccountTrackedBalanceSupport.aggregateWithdrawalSummary(
+            accounts: [live, funded],
+            cyclesByAccount: cycles,
+            ledgerByAccount: ledger,
+            scope: scope
+        )
+        XCTAssertEqual(summary?.count, 2)
+        XCTAssertEqual(summary?.totalAmount, 2_450)
+        XCTAssertEqual(
+            summary?.compactLabel(formattedTotal: "$2,450"),
+            "2 Withdrawals • $2,450"
+        )
+
+        let liveOnlyScope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .all,
+            customInterval: nil,
+            accountMode: .live,
+            showPublicOnly: false
+        )
+        let liveOnly = AccountTrackedBalanceSupport.aggregateWithdrawalSummary(
+            accounts: [live, funded],
+            cyclesByAccount: cycles,
+            ledgerByAccount: ledger,
+            scope: liveOnlyScope
+        )
+        XCTAssertEqual(liveOnly?.count, 1)
+        XCTAssertEqual(liveOnly?.totalAmount, 500)
+    }
+
     func testViewModelLoadsFixturesAndFiltersLocally() async {
         let cache = DetailPresentationCache()
         let navigationStore = NavigationStore()

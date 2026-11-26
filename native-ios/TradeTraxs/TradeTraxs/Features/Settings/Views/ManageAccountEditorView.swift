@@ -17,12 +17,16 @@ struct ManageAccountEditorView: View {
     @State private var showsPayoutSheet = false
     @State private var showsRecordPayout = false
     @State private var propFirmFieldText: [String: String] = [:]
+    @State private var enableLiveDrawdownOnCreate = false
+    @State private var liveDrawdownLimitDigits = ""
+    @State private var liveDrawdownType: LivePersonalDrawdownType = .fixed
+    @State private var liveDrawdownFloorCapDigits = ""
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
-    private let onCreateSubmit: ((TradingAccountDraft) async -> Bool)?
+    private let onCreateSubmit: ((TradingAccountDraft, LivePersonalDrawdownConfig?) async -> Bool)?
 
     init(
         viewModel: ManageAccountsViewModel,
@@ -30,7 +34,7 @@ struct ManageAccountEditorView: View {
         draft: TradingAccountDraft,
         data: DataEnvironment? = nil,
         navigationCoordinator: NavigationCoordinator? = nil,
-        onCreateSubmit: ((TradingAccountDraft) async -> Bool)? = nil
+        onCreateSubmit: ((TradingAccountDraft, LivePersonalDrawdownConfig?) async -> Bool)? = nil
     ) {
         self.viewModel = viewModel
         self.mode = mode
@@ -162,6 +166,58 @@ struct ManageAccountEditorView: View {
                             + "Use the amount you began trading with, not current equity or imported P&L."
                     )
                     .experienceStyle(.footnote, color: colors.tertiaryText)
+                }
+            }
+
+            if showsLiveDrawdownOnCreateSection {
+                Section {
+                    Toggle("Enable Drawdown", isOn: $enableLiveDrawdownOnCreate)
+                        .accessibilityIdentifier("manageAccounts.liveDrawdown.enable")
+                        .manageAccountFormRow()
+
+                    if enableLiveDrawdownOnCreate {
+                        Picker("Drawdown Type", selection: $liveDrawdownType) {
+                            ForEach(LivePersonalDrawdownType.allCases, id: \.self) { kind in
+                                Text(kind.displayTitle).tag(kind)
+                            }
+                        }
+                        .manageAccountFormRow()
+                        .accessibilityIdentifier("manageAccounts.liveDrawdown.type")
+
+                        accountField("Max Drawdown") {
+                            NumericAdornedTextField(
+                                placeholder: "0",
+                                text: $liveDrawdownLimitDigits,
+                                style: .unsignedCurrency,
+                                adornment: .currencyPrefix
+                            )
+                            .accessibilityIdentifier("manageAccounts.liveDrawdown.limit")
+                        }
+                        .manageAccountFormRow()
+
+                        if liveDrawdownType == .trailing {
+                            accountField("Trailing Drawdown Cap") {
+                                NumericAdornedTextField(
+                                    placeholder: "Optional",
+                                    text: $liveDrawdownFloorCapDigits,
+                                    style: .unsignedCurrency,
+                                    adornment: .currencyPrefix
+                                )
+                                .accessibilityIdentifier("manageAccounts.liveDrawdown.floorCap")
+                            }
+                            .manageAccountFormRow()
+                        }
+                    }
+                } header: {
+                    sectionHeader("Drawdown Settings")
+                } footer: {
+                    if enableLiveDrawdownOnCreate {
+                        Text(
+                            "Informational drawdown floor on the Dashboard equity curve. "
+                                + "You can change these settings later from the equity chart."
+                        )
+                        .experienceStyle(.footnote, color: colors.tertiaryText)
+                    }
                 }
             }
 
@@ -433,14 +489,58 @@ struct ManageAccountEditorView: View {
         )
     }
 
+    private var showsLiveDrawdownOnCreateSection: Bool {
+        guard case .create = mode else { return false }
+        guard draft.category == .personal || draft.category == .broker else { return false }
+        return draft.mode == .live
+    }
+
+    private enum LiveDrawdownCreateResolution {
+        case skip
+        case apply(LivePersonalDrawdownConfig)
+        case invalid(String)
+    }
+
+    private func resolveLiveDrawdownForCreate() -> LiveDrawdownCreateResolution {
+        guard showsLiveDrawdownOnCreateSection, enableLiveDrawdownOnCreate else {
+            return .skip
+        }
+        switch LivePersonalDrawdownEngine.parseGearDraft(
+            limitDigits: liveDrawdownLimitDigits,
+            limitType: liveDrawdownType,
+            floorCapDigits: liveDrawdownFloorCapDigits,
+            includeFloorCapField: liveDrawdownType == .trailing,
+            limitPolicy: .requirePositiveLimit
+        ) {
+        case .success(let config):
+            guard let config else {
+                return .invalid("Enter a drawdown limit greater than zero.")
+            }
+            return .apply(config)
+        case .failure(let error):
+            return .invalid(error.message)
+        }
+    }
+
     private func save() async {
+        viewModel.clearFormError()
         var ok: Bool
         switch mode {
         case .create:
+            let liveDrawdownConfig: LivePersonalDrawdownConfig?
+            switch resolveLiveDrawdownForCreate() {
+            case .skip:
+                liveDrawdownConfig = nil
+            case .apply(let config):
+                liveDrawdownConfig = config
+            case .invalid(let message):
+                viewModel.noteFormValidationError(message)
+                return
+            }
             if let onCreateSubmit {
-                ok = await onCreateSubmit(draft)
+                ok = await onCreateSubmit(draft, liveDrawdownConfig)
             } else {
-                ok = await viewModel.create(draft)
+                ok = await viewModel.create(draft, livePersonalDrawdown: liveDrawdownConfig)
             }
         case .edit(let account):
             ok = await viewModel.update(id: account.id, draft: draft)

@@ -655,7 +655,9 @@ nonisolated enum MessageMapper: DTOMapper {
             conversationID: ConversationID(conversationID),
             senderProfileID: ProfileID(sender),
             kind: kind,
-            body: isTrade ? nil : (dto.body ?? dto.content),
+            body: isTrade
+                ? SharedContentMessageSupport.tradeShareStoredBody(from: dto.body ?? dto.content)
+                : (dto.body ?? dto.content),
             attachments: attachments,
             replyToMessageID: replyToMessageID,
             createdAt: createdAt,

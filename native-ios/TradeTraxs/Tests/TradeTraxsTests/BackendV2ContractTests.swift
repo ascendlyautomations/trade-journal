@@ -346,7 +346,7 @@ enum BackendV2ContractFixtures {
     """
 
     static let activity = """
-    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"notifications":[{"id":"n1","user_id":"11111111-1111-1111-1111-111111111111","sender_id":"22222222-2222-2222-2222-222222222222","type":"like","read":false,"created_at":"2026-08-19T20:00:00.000Z"}],"actors":{"22222222-2222-2222-2222-222222222222":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","display_name":"Trader A","avatar_url":null}},"follow_requests":[],"unread_total":2,"next_cursor":null}}
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"notifications":[{"id":"n1","user_id":"11111111-1111-1111-1111-111111111111","sender_id":"22222222-2222-2222-2222-222222222222","type":"like","story_id":null,"read":false,"created_at":"2026-08-19T20:00:00.000Z"}],"actors":{"22222222-2222-2222-2222-222222222222":{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","display_name":"Trader A","avatar_url":null}},"follow_requests":[],"unread_total":2,"next_cursor":null}}
     """
 
     static let explore = """

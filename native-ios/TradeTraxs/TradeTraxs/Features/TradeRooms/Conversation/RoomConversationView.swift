@@ -15,6 +15,7 @@ struct RoomConversationView: View {
     @State private var actionMenuMessageID: MessageID?
     @State private var showsUnicodeEmojiPicker = false
     @State private var emojiPickerMessageID: MessageID?
+    @State private var pendingPrivateTradeConfirm: Trade?
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
@@ -166,12 +167,36 @@ struct RoomConversationView: View {
                     trades: viewModel.tradePickerTrades,
                     imagePipeline: imagePipeline,
                     isLoading: viewModel.isLoadingTradePicker,
+                    title: "Attach Trade",
                     onSelect: { trade in
-                        Task { await viewModel.sendTrade(trade) }
+                        if trade.visibility == .private {
+                            pendingPrivateTradeConfirm = trade
+                        } else {
+                            viewModel.stageSharedTrade(trade)
+                        }
                     },
                     onClose: { viewModel.showsTradePicker = false }
                 )
                 .task { await viewModel.loadTradePickerIfNeeded() }
+            }
+            .alert(
+                "Attach private trade?",
+                isPresented: Binding(
+                    get: { pendingPrivateTradeConfirm != nil },
+                    set: { if !$0 { pendingPrivateTradeConfirm = nil } }
+                )
+            ) {
+                Button("Attach") {
+                    if let trade = pendingPrivateTradeConfirm {
+                        viewModel.stageSharedTrade(trade)
+                    }
+                    pendingPrivateTradeConfirm = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    pendingPrivateTradeConfirm = nil
+                }
+            } message: {
+                Text(CommentTradeShareSupport.privateAttachmentDisclaimer)
             }
             .sheet(isPresented: $viewModel.showsActivePresenceSheet) {
                 RoomActivePresenceSheet(
@@ -188,7 +213,7 @@ struct RoomConversationView: View {
                 RoomMemberManagementSheet(
                     member: member,
                     imagePipeline: imagePipeline,
-                    canRemove: viewModel.canRemoveMember(member),
+                    canRemove: false,
                     canBan: viewModel.canBanMember(member),
                     onViewProfile: {
                         viewModel.managedMemberSheetItem = nil
@@ -535,11 +560,20 @@ struct RoomConversationView: View {
                     .padding(.horizontal, ExperienceSpacing.xs)
                     .padding(.top, ExperienceSpacing.xxs)
                 }
+                if let trade = viewModel.pendingSharedTrade {
+                    MessageComposerTradeStagingRow(
+                        trade: trade,
+                        imagePipeline: imagePipeline,
+                        onRemove: { viewModel.clearPendingSharedTrade() }
+                    )
+                    .padding(.top, ExperienceSpacing.xxs)
+                }
                 MessageComposerBar(
                     draft: $viewModel.draft,
                     isSending: viewModel.isSending,
                     isEnabled: viewModel.canPostInSelectedChannel,
                     placeholder: composerPlaceholder,
+                    hasStagedTrade: viewModel.pendingSharedTrade != nil,
                     onSend: {
                         Task { await viewModel.sendText() }
                     },

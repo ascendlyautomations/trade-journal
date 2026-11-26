@@ -42,3 +42,20 @@ struct StoryAvatarRingStroke: View {
         avatarSize + 10
     }
 }
+
+/// Green “+” affordance on the viewer story bubble and own profile avatar.
+struct StoryAddPlusBadge: View {
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        Image(systemName: "plus")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 20, height: 20)
+            .background(Color(red: 0.06, green: 0.72, blue: 0.45))
+            .clipShape(Circle())
+            .overlay(
+                Circle().stroke(colors.backgroundPrimary, lineWidth: 2)
+            )
+    }
+}

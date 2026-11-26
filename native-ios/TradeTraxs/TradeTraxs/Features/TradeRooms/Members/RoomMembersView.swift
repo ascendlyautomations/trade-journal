@@ -76,11 +76,6 @@ struct RoomMembersView: View {
                                     viewModel.requestMemberAction(.ban(item.id))
                                 }
                             }
-                            if viewModel.canRemoveMember(item) {
-                                Button("Remove", role: .destructive) {
-                                    viewModel.requestMemberAction(.remove(item.id))
-                                }
-                            }
                         }
                     }
                 }
@@ -173,7 +168,7 @@ struct RoomMembersView: View {
         RoomMemberManagementSheet(
             member: member,
             imagePipeline: imagePipeline,
-            canRemove: viewModel.canRemoveMember(member),
+            canRemove: false,
             canBan: viewModel.canBanMember(member),
             onViewProfile: {
                 selectedMember = nil

@@ -496,6 +496,7 @@ struct ConversationBubbleView: View {
 
     private func tradeShareBubbleContent(tradeID: TradeID) -> some View {
         VStack(alignment: .leading, spacing: 0) {
+            tradeShareCaptionAboveCard()
             SharedTradeMessageCard(
                 trade: sharedTrade,
                 tradeID: tradeID,
@@ -505,7 +506,6 @@ struct ConversationBubbleView: View {
                 includesBackground: false,
                 mediaLayoutWidth: sharedCardInnerMediaWidth
             )
-            sharedContentUserCaptionBlock()
         }
         .padding(.horizontal, ExperienceSpacing.sm + 2)
         .padding(.top, ExperienceSpacing.sm)
@@ -631,6 +631,20 @@ struct ConversationBubbleView: View {
             item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
             in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
         )
+    }
+
+    @ViewBuilder
+    private func tradeShareCaptionAboveCard() -> some View {
+        if let caption = item.resolvedShareUserCaption {
+            Text(caption)
+                .experienceStyle(
+                    .body,
+                    color: item.isOutgoing ? colors.onAccent : colors.primaryText
+                )
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: tradeBubbleMaxWidth, alignment: .leading)
+                .padding(.bottom, ExperienceSpacing.xs)
+        }
     }
 
     @ViewBuilder

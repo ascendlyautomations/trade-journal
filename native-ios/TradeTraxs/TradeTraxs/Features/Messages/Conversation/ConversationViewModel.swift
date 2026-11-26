@@ -42,6 +42,9 @@ final class ConversationViewModel {
     var showsDeleteConversationConfirmation = false
     var isDeletingConversation = false
     var deleteConversationErrorMessage: String?
+    var showsLeaveGroupConfirmation = false
+    var isLeavingGroup = false
+    var leaveGroupErrorMessage: String?
     private(set) var shouldDismissAfterConversationDelete = false
     private(set) var blockStatus: DmBlockStatus?
     private(set) var isUpdatingBlock = false
@@ -52,6 +55,7 @@ final class ConversationViewModel {
         tradePickerSummaries.map { TradeSummaryMapper.previewTrade(from: $0) }
     }
     private(set) var isLoadingTradePicker = false
+    var pendingSharedTrade: Trade?
     private(set) var sharedTrades: [TradeID: Trade] = [:]
     private(set) var sharedPosts: [PostID: Post] = [:]
     private(set) var sharedReels: [ReelID: Reel] = [:]
@@ -188,6 +192,15 @@ final class ConversationViewModel {
     var showsDirectMessageActions: Bool {
         guard let conversation else { return false }
         return !conversation.isGroup
+    }
+
+    var showsGroupConversationActions: Bool {
+        guard let conversation else { return false }
+        return conversation.isGroup
+    }
+
+    var showsConversationActionsMenu: Bool {
+        !isSelectionMode && (showsDirectMessageActions || showsGroupConversationActions)
     }
 
     var conversationSharedMediaRPC: (any RPCClient)? { rpc }
@@ -598,11 +611,33 @@ final class ConversationViewModel {
     func sendText() async {
         guard !rejectGuestMutationIfNeeded() else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isSending else { return }
+        let stagedTrade = pendingSharedTrade
+        guard !text.isEmpty || stagedTrade != nil, !isSending else { return }
         let replyTo = replyTarget?.messageID
         draft = ""
         if replyTo != nil { clearReply() }
+        if let stagedTrade {
+            pendingSharedTrade = nil
+            let summary =
+                tradePickerSummaries.first(where: { $0.id == stagedTrade.id })
+                ?? TradeSummaryMapper.summary(fromPartialListTrade: stagedTrade)
+            let caption = text.isEmpty ? nil : text
+            await sendTradeSummary(summary, caption: caption, replyToMessageID: replyTo)
+            return
+        }
         await send(body: text, imageURL: nil, localImageData: nil, replyToMessageID: replyTo)
+    }
+
+    func stageSharedTrade(_ trade: Trade) {
+        ExperienceHaptics.play(.selection)
+        pendingSharedTrade = trade
+        sharedTrades[trade.id] = trade
+        detailCache.seedPresentationSeed(TradeSummaryMapper.summary(fromPartialListTrade: trade))
+        showsTradePicker = false
+    }
+
+    func clearPendingSharedTrade() {
+        pendingSharedTrade = nil
     }
 
     func sendImage(_ image: UIImage) async {
@@ -658,20 +693,15 @@ final class ConversationViewModel {
         }
     }
 
-    func sendTrade(_ trade: Trade) async {
-        guard !rejectGuestMutationIfNeeded() else { return }
-        guard viewerID != nil, !isSending else { return }
-        let summary =
-            tradePickerSummaries.first(where: { $0.id == trade.id })
-            ?? TradeSummaryMapper.summary(fromPartialListTrade: trade)
-        await sendTradeSummary(summary)
-    }
-
-    func sendTradeSummary(_ summary: TradeSummary) async {
+    func sendTradeSummary(
+        _ summary: TradeSummary,
+        caption: String? = nil,
+        replyToMessageID: MessageID? = nil
+    ) async {
         guard !rejectGuestMutationIfNeeded() else { return }
         guard let viewerID, !isSending else { return }
-        let replyTo = replyTarget?.messageID
-        if replyTo != nil { clearReply() }
+        let replyTo = replyToMessageID ?? replyTarget?.messageID
+        let storedCaption = SharedContentMessageSupport.tradeShareStoredBody(from: caption)
         showsTradePicker = false
         sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
         detailCache.seedPresentationSeed(summary)
@@ -684,7 +714,7 @@ final class ConversationViewModel {
             conversationID: conversationID,
             senderProfileID: viewerID,
             kind: .tradeShare,
-            body: nil,
+            body: storedCaption,
             attachments: [
                 MessageAttachment(
                     id: summary.id.rawValue,
@@ -845,7 +875,13 @@ final class ConversationViewModel {
         if item.message.kind == .tradeShare, let trade = sharedTrade(for: item.message) {
             removeMessage(id: item.id)
             sendStates.removeValue(forKey: item.id)
-            await sendTrade(trade)
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+            let caption = SharedContentMessageSupport.userWrittenMessage(for: item.message)
+            await sendTradeSummary(
+                summary,
+                caption: caption,
+                replyToMessageID: item.message.replyToMessageID
+            )
             return
         }
 
@@ -1241,6 +1277,89 @@ final class ConversationViewModel {
                 inboxStore.cancelPendingConversationDelete(id: conversationID)
             }
             deleteConversationErrorMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
+    /// Upload optional avatar, persist group name/avatar on server, refresh thread header + inbox.
+    func updateGroupConversationMetadata(name: String?, avatarJPEG: Data?) async throws {
+        guard let conversation, conversation.isGroup else {
+            throw AppError.unknown(message: "Not a group conversation.")
+        }
+        var patch = GroupConversationDetailsPatch()
+        if let name {
+            patch.name = name
+        }
+        if let avatarJPEG {
+            let avatarURL = try await GroupAvatarUpload.upload(
+                jpegData: avatarJPEG,
+                conversationID: conversationID,
+                uploadService: uploadService,
+                objectStorage: objectStorage
+            )
+            patch.avatarURL = avatarURL
+        }
+        guard patch.name != nil || patch.avatarURL != nil else { return }
+        let saved = try await messagesRepo.updateGroupConversationDetails(
+            conversationID: conversationID,
+            patch: patch
+        )
+        publishGroupConversationMetadata(saved)
+        ExperienceHaptics.play(.success)
+    }
+
+    /// Delete membership first (idempotent), then one system line — mirrors web leave group.
+    func leaveGroupChat() async throws {
+        guard let conversation, conversation.isGroup else { return }
+        guard let viewerID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let outcome = try await messagesRepo.leaveGroupConversation(conversationID: conversationID)
+        switch outcome {
+        case .alreadyLeft, .left:
+            inboxStore.removeConversation(id: conversationID)
+            ConversationThreadSessionStore.shared.invalidate(
+                viewerID: viewerID,
+                conversationID: conversationID
+            )
+            shouldDismissAfterConversationDelete = true
+            ExperienceHaptics.play(.success)
+        }
+    }
+
+    private func publishGroupConversationMetadata(_ saved: Conversation) {
+        GroupConversationLocalMetadata.apply(saved: saved, to: &conversation)
+        applyHeader(from: conversation)
+        GroupConversationLocalMetadata.publish(saved: saved, inboxStore: inboxStore)
+    }
+
+    /// Pull title/avatar from inbox catch-up while the thread is open (no extra subscriptions).
+    func mergeConversationMetadataFromInbox() {
+        guard let conversation, conversation.isGroup,
+              let row = inboxStore.conversations.first(where: { $0.id == conversationID })
+        else { return }
+        let titleChanged = row.title != conversation.title
+        let avatarChanged = row.avatar?.id != conversation.avatar?.id
+        guard titleChanged || avatarChanged else { return }
+        publishGroupConversationMetadata(row)
+    }
+
+    func requestLeaveGroup() {
+        guard !isLeavingGroup else { return }
+        ExperienceHaptics.play(.warning)
+        showsLeaveGroupConfirmation = true
+    }
+
+    func confirmLeaveGroup() async {
+        guard !isLeavingGroup else { return }
+        isLeavingGroup = true
+        leaveGroupErrorMessage = nil
+        showsLeaveGroupConfirmation = false
+        defer { isLeavingGroup = false }
+        do {
+            try await leaveGroupChat()
+        } catch {
+            leaveGroupErrorMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.warning)
         }
     }

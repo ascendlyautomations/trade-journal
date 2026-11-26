@@ -19,6 +19,7 @@ export type ActivityInsertRow = {
   profile_post_id?: string | null
   achievement_post_id?: string | null
   reel_id?: string | null
+  story_id?: string | null
   comment_id?: string | null
   room_id?: string | null
   room_message_id?: string | null

@@ -50,6 +50,7 @@ import {
 } from "@/lib/formatDisplay"
 import { isConversationParticipant } from "@/lib/conversationAccess"
 import { ensureDmConversation } from "@/lib/dmConversation"
+import { leaveGroupConversation as leaveGroupConversationRpc } from "@/lib/leaveGroupConversation"
 import {
   dispatchConversationInboxPatch,
   latestConversationPreviewFromMessages,
@@ -3548,33 +3549,17 @@ export default function DMPage() {
     setLeaveBusy(true)
 
     if (conversation.is_group) {
-      const meRow = participants.find((p: any) => p.user_id === user.id)
-      const rawProf = meRow?.profiles
-      const prof = Array.isArray(rawProf) ? rawProf[0] : rawProf
-      const displayName = prof?.username || "Someone"
-
-      const leaveSystemPayload = {
-        conversation_id: conversation.id,
-        content: `${displayName} left the group`,
-        sender_id: null,
-        is_system: true,
-        channel: null,
-      }
-      const { error: leaveSystemErr } = await supabase
-        .from("messages")
-        .insert(leaveSystemPayload)
-      if (leaveSystemErr) {
-        logSupabaseError(
-          "handleLeaveConversation system message insert",
-          leaveSystemErr,
-          {
-            table: "messages",
-            query: "insert",
-            payload: leaveSystemPayload,
-            userId: user.id,
-            conversationId: conversation.id,
-          }
-        )
+      const leaveGroupResult = await leaveGroupConversationRpc(
+        supabase,
+        conversation.id
+      )
+      if (leaveGroupResult.error) {
+        logSupabaseError("handleLeaveConversation rpc_v1_leave_group", leaveGroupResult.error, {
+          query: "rpc",
+          functionName: "rpc_v1_leave_group_conversation",
+          userId: user.id,
+          conversationId: conversation.id,
+        })
         setLeaveBusy(false)
         showPopup({
           type: "error",
@@ -3582,13 +3567,13 @@ export default function DMPage() {
         })
         return
       }
+    } else {
+      await supabase
+        .from("conversation_participants")
+        .delete()
+        .eq("conversation_id", conversation.id)
+        .eq("user_id", user.id)
     }
-
-    await supabase
-      .from("conversation_participants")
-      .delete()
-      .eq("conversation_id", conversation.id)
-      .eq("user_id", user.id)
 
     setLeaveBusy(false)
     setConfirmLeaveOpen(false)

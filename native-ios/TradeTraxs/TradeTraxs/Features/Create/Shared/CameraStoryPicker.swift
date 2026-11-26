@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Story camera, photo or video; recorded video is capped at ``StoryMediaDuration/maxVideoDurationSeconds``.
+/// Story camera, photo or video; recorded video auto-stops at ``StoryMediaDuration/cameraMaxRecordingSeconds``.
 struct CameraStoryPicker: UIViewControllerRepresentable {
     var onPickedPhoto: (UIImage) -> Void
     var onPickedVideo: (URL) -> Void
@@ -12,7 +12,7 @@ struct CameraStoryPicker: UIViewControllerRepresentable {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
         picker.mediaTypes = [UTType.image.identifier, UTType.movie.identifier]
-        picker.videoMaximumDuration = TimeInterval(StoryMediaDuration.maxVideoDurationSeconds)
+        picker.videoMaximumDuration = StoryMediaDuration.cameraMaxRecordingSeconds
         picker.videoQuality = .typeHigh
         picker.delegate = context.coordinator
         return picker

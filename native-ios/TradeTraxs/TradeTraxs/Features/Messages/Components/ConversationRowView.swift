@@ -9,15 +9,14 @@ struct ConversationRowView: View {
     @State private var avatarImage: Image?
 
     var body: some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+        HStack(alignment: .center, spacing: MessagesInboxLayout.rowHorizontalSpacing) {
             avatar
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
-                    HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
-                        Text(item.displayName)
-                            .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
-                            .lineLimit(1)
-                    }
+                    Text(item.displayName)
+                        .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     if item.isMuted {
                         Image(systemName: "bell.slash.fill")
                             .font(.caption2)
@@ -27,10 +26,11 @@ struct ConversationRowView: View {
                     Spacer(minLength: 4)
                     Text(MessagesInboxSupport.relativeTimestamp(item.timestamp))
                         .experienceStyle(.caption, color: item.unreadCount > 0 ? colors.accent : colors.tertiaryText)
+                        .lineLimit(1)
                 }
                 HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
                     VStack(alignment: .leading, spacing: 2) {
-                        if let username = item.username {
+                        if showsUsernameSubtitle, let username = item.username {
                             Text(username)
                                 .experienceStyle(.caption, color: colors.secondaryText)
                                 .lineLimit(1)
@@ -42,9 +42,9 @@ struct ConversationRowView: View {
                 }
             }
         }
-        .padding(.vertical, ExperienceSpacing.xs)
         .contentShape(Rectangle())
         .task(id: item.peer?.avatar?.id ?? item.conversation.avatar?.id) {
+            guard !item.conversation.isGroup else { return }
             await loadAvatar()
         }
         .experienceAccessibility(
@@ -54,20 +54,39 @@ struct ConversationRowView: View {
         )
     }
 
+    private var showsUsernameSubtitle: Bool {
+        !showsCompactPreview
+    }
+
+    private var showsCompactPreview: Bool {
+        if item.isTyping { return true }
+        let trimmed = item.preview.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed != "No messages yet"
+    }
+
     private var avatar: some View {
         ZStack(alignment: .bottomTrailing) {
-            ExperienceAvatar(
-                initials: ProfileDisplay.initials(
-                    displayName: item.displayName,
-                    username: item.peer?.username ?? ""
-                ),
-                image: avatarImage,
-                size: 52
-            )
-            if item.isOnline {
+            if item.conversation.isGroup {
+                GroupConversationAvatarView(
+                    avatar: item.conversation.avatar,
+                    imagePipeline: imagePipeline,
+                    size: MessagesInboxLayout.avatarSide
+                )
+            } else {
+                ExperienceAvatar(
+                    initials: ProfileDisplay.initials(
+                        displayName: item.displayName,
+                        username: item.peer?.username ?? ""
+                    ),
+                    image: avatarImage,
+                    size: MessagesInboxLayout.avatarSide
+                )
+            }
+            if item.isOnline, !item.conversation.isGroup {
                 Circle()
                     .fill(colors.success)
-                    .frame(width: 12, height: 12)
+                    .frame(width: 11, height: 11)
                     .overlay(Circle().stroke(colors.backgroundPrimary, lineWidth: 2))
                     .offset(x: 1, y: 1)
                     .accessibilityLabel("Online")
@@ -94,7 +113,7 @@ struct ConversationRowView: View {
                         item.unreadCount > 0 ? .subheadline : .footnote,
                         color: item.unreadCount > 0 ? colors.primaryText : colors.secondaryText
                     )
-                    .lineLimit(2)
+                    .lineLimit(1)
             }
         }
     }

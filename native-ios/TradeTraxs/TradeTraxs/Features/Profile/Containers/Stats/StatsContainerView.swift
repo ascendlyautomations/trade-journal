@@ -275,8 +275,9 @@ struct StatsContainerView: View {
     private func equityCurveBody(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
         let tradeCount = metrics.filteredTradeCount
         if tradeCount >= DashboardEquityChartRangeResolver.minimumTradeCountForEquityCurve {
-            ProfileEquityCurveView(points: metrics.equityData)
+            ProfileEquityCurveView(points: metrics.equityData, horizontalLayout: .dashboard)
                 .frame(height: 180)
+                .frame(maxWidth: .infinity)
                 .accessibilityLabel("Equity curve")
                 .accessibilityIdentifier("profile.stats.equity.chart")
         } else if tradeCount == 1 {

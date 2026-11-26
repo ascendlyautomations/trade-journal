@@ -160,6 +160,10 @@ struct AchievementDetailView: View {
                         .padding(.top, ExperienceSpacing.sm)
                         .padding(.bottom, ExperienceSpacing.md)
 
+                        achievementHeadlineBlock(achievement)
+                            .padding(.horizontal, ExperienceSpacing.lg)
+                            .padding(.bottom, ExperienceSpacing.sm)
+
                         if achievementHasAttachedImage(achievement) {
                             InteractiveImageView(
                                 mediaID: achievement.id.rawValue,
@@ -275,10 +279,7 @@ struct AchievementDetailView: View {
 
     @ViewBuilder
     private func achievementTextContent(_ achievement: Achievement) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            achievementMetadataTags(achievement)
-            AchievementDetailMetadataSection(achievement: achievement)
-        }
+        AchievementDetailMetadataSection(achievement: achievement)
     }
 
     private func vaultRef(for achievement: Achievement) -> VaultContentRef {
@@ -306,6 +307,17 @@ struct AchievementDetailView: View {
     private func achievementMetadataTags(_ achievement: Achievement) -> some View {
         if achievement.isFeatured {
             ExperienceTag(title: "Featured", tone: .success)
+        }
+    }
+
+    @ViewBuilder
+    private func achievementHeadlineBlock(_ achievement: Achievement) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            achievementMetadataTags(achievement)
+            PublicAchievementHeadlineRow(achievement: achievement)
+                .accessibilityIdentifier("detail.achievement.headline")
+            PublicAchievementMetaChipRow(achievement: achievement)
+                .accessibilityIdentifier("detail.achievement.badges")
         }
     }
 

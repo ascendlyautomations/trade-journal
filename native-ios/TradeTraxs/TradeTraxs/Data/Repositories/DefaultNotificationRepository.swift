@@ -282,6 +282,7 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
             profilePostID: dto.profile_post_id.map { PostID($0) },
             achievementPostID: dto.achievement_post_id.map { PostID($0) },
             reelID: dto.reel_id.map { ReelID($0) },
+            storyID: dto.story_id.map { StoryID($0) },
             commentID: dto.comment_id.map { CommentID($0) },
             conversationID: nil,
             roomID: roomID,

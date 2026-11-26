@@ -3,6 +3,7 @@
 import type { ChangeEvent, RefObject } from "react"
 import FollowButton from "@/app/components/FollowButton"
 import StoryAvatarRing from "@/app/components/feed/StoryAvatarRing"
+import StoryPlusBadge from "@/app/components/feed/StoryPlusBadge"
 import ProfileCreateMenu from "@/app/components/profile/ProfileCreateMenu"
 import ProfileVisitorModerationMenu from "@/app/components/profile/ProfileVisitorModerationMenu"
 import type { ProfileHeaderData } from "@/app/components/profile/profileTypes"
@@ -133,6 +134,7 @@ export default function MobileWebProfileHeader({
   onOpenFollowers,
   onOpenFollowing,
   onEditProfile,
+  onStoryFileSelect,
   onCreateStory,
   onCreatePost,
   onCreateReel,
@@ -185,31 +187,45 @@ export default function MobileWebProfileHeader({
         </div>
       ) : null}
 
+      {isOwnProfile ? (
+        <input
+          id="storyUploadInput"
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={onStoryFileSelect}
+        />
+      ) : null}
       <div className="flex items-center gap-3">
-        {hasActiveStory ? (
-          <button
-            type="button"
-            onClick={onOpenStory}
-            className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#4EC4E0]/60"
-            aria-label={`View ${profile.username || "user"}'s story`}
-          >
+        <div className="relative shrink-0">
+          {hasActiveStory ? (
+            <button
+              type="button"
+              onClick={onOpenStory}
+              className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#4EC4E0]/60"
+              aria-label={`View ${profile.username || "user"}'s story`}
+            >
+              <StoryAvatarRing
+                profile={profile}
+                hasActiveStory
+                priority
+                displaySizePx={88}
+                sizeClassName="h-[88px] w-[88px]"
+              />
+            </button>
+          ) : (
             <StoryAvatarRing
               profile={profile}
-              hasActiveStory
+              hasActiveStory={false}
               priority
               displaySizePx={88}
               sizeClassName="h-[88px] w-[88px]"
             />
-          </button>
-        ) : (
-          <StoryAvatarRing
-            profile={profile}
-            hasActiveStory={false}
-            priority
-            displaySizePx={88}
-            sizeClassName="h-[88px] w-[88px]"
-          />
-        )}
+          )}
+          {isOwnProfile ? (
+            <StoryPlusBadge onClick={onCreateStory} />
+          ) : null}
+        </div>
 
         <div
           className={`min-w-0 flex-1 ${isOwnProfile ? "pr-[5.75rem]" : "pr-12"}`}

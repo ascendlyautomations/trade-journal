@@ -4,6 +4,7 @@ import type { ChangeEvent } from "react"
 import { memo, useMemo } from "react"
 import type { StoryBarProfile } from "@/lib/activeStories"
 import StoryAvatarRing from "./StoryAvatarRing"
+import StoryPlusBadge from "./StoryPlusBadge"
 
 export type { StoryBarProfile }
 
@@ -17,22 +18,6 @@ type FeedStoriesBarProps = {
 
 function openStoryUpload() {
   document.getElementById("storyUploadInput")?.click()
-}
-
-function StoryPlusBadge({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label="Add story"
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-      className="tt-mobile-web-hit-slop absolute -bottom-0.5 -right-0.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#0f172a] bg-emerald-500 text-[13px] font-bold leading-none text-white shadow-md transition hover:bg-emerald-400 active:scale-95"
-    >
-      +
-    </button>
-  )
 }
 
 function MyStoryItem({

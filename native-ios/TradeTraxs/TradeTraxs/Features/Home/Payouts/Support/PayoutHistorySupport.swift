@@ -222,6 +222,14 @@ nonisolated enum PayoutHistorySupport {
         return false
     }
 
+    /// V3 compact bootstrap `payout_total`, public payout achievements aggregate (all accounts / all time).
+    static func v3BootstrapPayoutTotalMatchesWithdrawalsHomeInterim(
+        accountFilter: DashboardAccountFilter,
+        scope: DashboardClientScopeFilter
+    ) -> Bool {
+        dashboardMatchesWithdrawalsHomeScope(accountFilter: accountFilter, scope: scope)
+    }
+
     /// Dashboard Performance → Payouts card. All Accounts + All Time uses the Withdrawals page total exactly.
     static func dashboardPayoutsCardTotal(
         accounts: [TradingAccount],

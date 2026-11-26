@@ -159,6 +159,12 @@ nonisolated enum ProGateReasonParser {
     }
 
     static func feature(from error: Error) -> ProFeatureKind? {
+        if case BackendV2RPCError.requestValidation(let detail) = error,
+           let message = detail.message,
+           let parsed = feature(fromMessage: message)
+        {
+            return parsed
+        }
         if let domain = error as? DomainError {
             switch domain {
             case .subscription(.proRequired):

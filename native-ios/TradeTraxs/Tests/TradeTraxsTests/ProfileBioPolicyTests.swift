@@ -48,4 +48,16 @@ final class ProfileBioPolicyTests: XCTestCase {
             XCTFail("Expected apply for over-limit paste")
         }
     }
+
+    func testWrappedBioTruncatesBeforeFourthVisibleLine() {
+        let width = ProfileBioPolicy.referenceContentWidth(screenWidth: 390)
+        let longWord = String(repeating: "a", count: 400)
+        let capped = ProfileBioPolicy.constrained(longWord, contentWidth: width)
+        XCTAssertLessThanOrEqual(ProfileBioPolicy.visibleLineCount(capped, contentWidth: width), 3)
+        XCTAssertLessThan(capped.count, longWord.count)
+    }
+
+    func testMaximumAllowedCharacterCountIsPositive() {
+        XCTAssertGreaterThan(ProfileBioPolicy.maximumAllowedCharacterCount(), 60)
+    }
 }

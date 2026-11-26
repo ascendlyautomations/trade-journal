@@ -1079,7 +1079,7 @@ nonisolated enum RoomDTO {
 nonisolated enum NotificationDTO {
     /// Columns used by web Activity (`app/notifications/page.tsx`) plus room FKs.
     static let selectColumns =
-        "id,user_id,sender_id,type,post_id,trade_id,profile_post_id,achievement_post_id,reel_id,comment_id,room_id,room_message_id,content,read,created_at"
+        "id,user_id,sender_id,type,post_id,trade_id,profile_post_id,achievement_post_id,reel_id,story_id,comment_id,room_id,room_message_id,content,read,created_at"
 
     struct Item: Codable, Sendable {
         var id: String?
@@ -1099,6 +1099,7 @@ nonisolated enum NotificationDTO {
         var profile_post_id: String?
         var achievement_post_id: String?
         var reel_id: String?
+        var story_id: String?
         var comment_id: String?
         var room_id: String?
         var room_message_id: String?

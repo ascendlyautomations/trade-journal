@@ -16,7 +16,11 @@ struct ConversationView: View {
     @State private var actionMenuMessageID: MessageID?
     @State private var showsUnicodeEmojiPicker = false
     @State private var emojiPickerMessageID: MessageID?
+    @State private var showsGroupSettings = false
+    @State private var showsGroupMembers = false
+    @Bindable private var inboxStore = MessagesInboxStore.shared
     private let imagePipeline: any ImagePipeline
+    private let dataEnvironment: DataEnvironment?
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator?
 
@@ -49,6 +53,7 @@ struct ConversationView: View {
             )
         )
         self.imagePipeline = data.imagePipeline
+        self.dataEnvironment = data
         self.detailCache = data.detailCache
         self.navigationCoordinator = navigationCoordinator
     }
@@ -58,6 +63,7 @@ struct ConversationView: View {
         _viewModel = State(initialValue: viewModel)
         self.imagePipeline = imagePipeline
         self.detailCache = DetailPresentationCache()
+        self.dataEnvironment = nil
         self.navigationCoordinator = nil
     }
 
@@ -113,8 +119,35 @@ struct ConversationView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                if !viewModel.isSelectionMode, viewModel.showsDirectMessageActions {
+                if viewModel.showsConversationActionsMenu {
                     conversationActionsMenu
+                }
+            }
+        }
+        .sheet(isPresented: $showsGroupSettings) {
+            if let conversation = viewModel.conversation, conversation.isGroup {
+                GroupConversationSettingsView(
+                    conversation: conversation,
+                    imagePipeline: imagePipeline,
+                    onSave: { name, jpeg in
+                        try await viewModel.updateGroupConversationMetadata(name: name, avatarJPEG: jpeg)
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showsGroupMembers) {
+            if let dataEnvironment,
+               let conversation = viewModel.conversation, conversation.isGroup {
+                NavigationStack {
+                    GroupConversationMembersView(
+                        conversation: conversation,
+                        data: dataEnvironment,
+                        navigationCoordinator: navigationCoordinator,
+                        onOpenProfile: { profileID in
+                            showsGroupMembers = false
+                            openPeerProfile(profileID)
+                        }
+                    )
                 }
             }
         }
@@ -147,6 +180,29 @@ struct ConversationView: View {
             }
         } message: {
             Text(viewModel.blockConfirmationMessage)
+        }
+        .alert("Leave Group?", isPresented: $viewModel.showsLeaveGroupConfirmation) {
+            Button("Leave Group", role: .destructive) {
+                Task { await viewModel.confirmLeaveGroup() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You will stop receiving messages from this group.")
+        }
+        .alert(
+            "Couldn't leave group",
+            isPresented: Binding(
+                get: { viewModel.leaveGroupErrorMessage != nil },
+                set: { presented in
+                    if !presented { viewModel.leaveGroupErrorMessage = nil }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                viewModel.leaveGroupErrorMessage = nil
+            }
+        } message: {
+            Text(viewModel.leaveGroupErrorMessage ?? "")
         }
         .alert("Delete Conversation?", isPresented: $viewModel.showsDeleteConversationConfirmation) {
             Button("Delete", role: .destructive) {
@@ -191,6 +247,9 @@ struct ConversationView: View {
         .onChange(of: viewModel.shouldDismissAfterConversationDelete) { _, shouldDismiss in
             guard shouldDismiss else { return }
             navigationCoordinator?.pop()
+        }
+        .onChange(of: inboxStore.activityRevision) { _, _ in
+            viewModel.mergeConversationMetadataFromInbox()
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -672,53 +731,10 @@ struct ConversationView: View {
     @ViewBuilder
     private var conversationActionsMenu: some View {
         Menu {
-            if let profileID = viewModel.peerProfileID {
-                Button("View Profile") {
-                    openPeerProfile(profileID)
-                }
-            }
-            Button("Shared Media") {
-                let galleryViewModel = ConversationSharedMediaViewModel(
-                    conversationID: viewModel.conversationID,
-                    rpc: viewModel.conversationSharedMediaRPC
-                )
-                sharedMediaSheetPresentation = ConversationSharedMediaSheetPresentation(
-                    viewModel: galleryViewModel
-                )
-            }
-            Button(viewModel.isMuted ? "Unmute Conversation" : "Mute Conversation") {
-                viewModel.toggleMute()
-            }
-            Button("Select Messages") {
-                viewModel.enterSelectionMode()
-            }
-
-            Divider()
-
-            if let peerProfileID = viewModel.peerProfileID {
-                Button("Report User", role: .destructive) {
-                    ExperienceHaptics.play(.selection)
-                    ContentReportSupport.presentUser(
-                        profileID: peerProfileID,
-                        displayName: viewModel.peerProfile?.displayName,
-                        presenter: appEnvironment.contentReportPresenter
-                    )
-                }
-            }
-            if viewModel.blockedByMe {
-                Button("Unblock User") {
-                    viewModel.requestBlockToggle()
-                }
-            } else {
-                Button("Block User", role: .destructive) {
-                    viewModel.requestBlockToggle()
-                }
-            }
-
-            Divider()
-
-            Button("Delete Conversation", role: .destructive) {
-                viewModel.requestDeleteConversation()
+            if viewModel.showsGroupConversationActions {
+                groupConversationActionsMenu
+            } else if viewModel.showsDirectMessageActions {
+                directConversationActionsMenu
             }
         } label: {
             Image(systemName: "ellipsis")
@@ -727,6 +743,81 @@ struct ConversationView: View {
         }
         .accessibilityLabel("Conversation actions")
         .accessibilityIdentifier("conversation.actions.menu")
+    }
+
+    @ViewBuilder
+    private var groupConversationActionsMenu: some View {
+        Button("Group Settings") {
+            showsGroupSettings = true
+        }
+        Button("Members") {
+            showsGroupMembers = true
+        }
+        sharedMediaMenuButton
+        muteMenuButton
+        Button("Select Messages") {
+            viewModel.enterSelectionMode()
+        }
+        Divider()
+        Button("Leave Group", role: .destructive) {
+            viewModel.requestLeaveGroup()
+        }
+    }
+
+    @ViewBuilder
+    private var directConversationActionsMenu: some View {
+        if let profileID = viewModel.peerProfileID {
+            Button("View Profile") {
+                openPeerProfile(profileID)
+            }
+        }
+        sharedMediaMenuButton
+        muteMenuButton
+        Button("Select Messages") {
+            viewModel.enterSelectionMode()
+        }
+        Divider()
+        if let peerProfileID = viewModel.peerProfileID {
+            Button("Report User", role: .destructive) {
+                ExperienceHaptics.play(.selection)
+                ContentReportSupport.presentUser(
+                    profileID: peerProfileID,
+                    displayName: viewModel.peerProfile?.displayName,
+                    presenter: appEnvironment.contentReportPresenter
+                )
+            }
+        }
+        if viewModel.blockedByMe {
+            Button("Unblock User") {
+                viewModel.requestBlockToggle()
+            }
+        } else {
+            Button("Block User", role: .destructive) {
+                viewModel.requestBlockToggle()
+            }
+        }
+        Divider()
+        Button("Delete Conversation", role: .destructive) {
+            viewModel.requestDeleteConversation()
+        }
+    }
+
+    private var sharedMediaMenuButton: some View {
+        Button("Shared Media") {
+            let galleryViewModel = ConversationSharedMediaViewModel(
+                conversationID: viewModel.conversationID,
+                rpc: viewModel.conversationSharedMediaRPC
+            )
+            sharedMediaSheetPresentation = ConversationSharedMediaSheetPresentation(
+                viewModel: galleryViewModel
+            )
+        }
+    }
+
+    private var muteMenuButton: some View {
+        Button(viewModel.isMuted ? "Unmute Conversation" : "Mute Conversation") {
+            viewModel.toggleMute()
+        }
     }
 
     private var conversationHeaderTitle: some View {
@@ -748,14 +839,23 @@ struct ConversationView: View {
     }
 
     private var conversationHeaderTitleContent: some View {
-        VStack(spacing: 1) {
-            Text(viewModel.title)
-                .experienceStyle(.headline, color: colors.primaryText)
-                .lineLimit(1)
-            if let subtitle = viewModel.subtitle {
-                Text(subtitle)
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
+        HStack(spacing: ExperienceSpacing.xs) {
+            if viewModel.showsGroupConversationActions {
+                GroupConversationAvatarView(
+                    avatar: viewModel.conversation?.avatar,
+                    imagePipeline: imagePipeline,
+                    size: 28
+                )
+            }
+            VStack(spacing: 1) {
+                Text(viewModel.title)
+                    .experienceStyle(.headline, color: colors.primaryText)
                     .lineLimit(1)
+                if let subtitle = viewModel.subtitle {
+                    Text(subtitle)
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                        .lineLimit(1)
+                }
             }
         }
         .contentShape(Rectangle())

@@ -31,6 +31,23 @@ final class PsychologyReportExpansionTests: XCTestCase {
         XCTAssertEqual(detail.metrics.tradeCount, 1)
     }
 
+    func testCustomPsychologyReportBoundsRespectSelectedDates() {
+        let ref = PsychologyReportPeriodRef(
+            template: .custom,
+            periodID: "custom:2026-08-01:2026-08-15"
+        )
+        let bounds = PsychologyReportPeriods.bounds(for: ref, now: baseDate)
+        XCTAssertEqual(
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.start),
+            "2026-08-01"
+        )
+        XCTAssertEqual(
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.end),
+            "2026-08-15"
+        )
+        XCTAssertFalse(bounds.dateRangeLabel.isEmpty)
+    }
+
     func testPsychologyReportGeneratorProducesWeeklyReport() {
         let trades = (0..<15).map { makeTrade(id: "t\($0)", pnl: $0.isMultiple(of: 2) ? 40 : -15, offsetHours: $0) }
         let ref = PsychologyReportPeriodRef(template: .weekly, periodID: "week:2026-09-01")

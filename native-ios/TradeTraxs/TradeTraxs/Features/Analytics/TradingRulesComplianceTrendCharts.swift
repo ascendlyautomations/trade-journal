@@ -22,13 +22,13 @@ struct TradingRulesComplianceTrendCharts: View {
     var body: some View {
         VStack(alignment: .leading, spacing: layout == .compact ? ExperienceSpacing.sm : ExperienceSpacing.md) {
             trendBlock(
-                title: "Weekly",
+                title: "Weekly Compliance",
                 points: weekly.suffix(8),
                 period: .weekly,
                 selectedPeriodKey: $selectedWeeklyKey
             )
             trendBlock(
-                title: "Monthly",
+                title: "Monthly Compliance",
                 points: monthly.suffix(8),
                 period: .monthly,
                 selectedPeriodKey: $selectedMonthlyKey

@@ -90,6 +90,23 @@ async function urlsStillReferenced(
   return [...retained]
 }
 
+/**
+ * Removes story-bucket objects regardless of DM / message references.
+ * Used when the 24h story window ends so public URLs and cached previews cannot replay media.
+ */
+export async function deleteExpiredStoryStoragePaths(
+  client: SupabaseClient,
+  storagePaths: readonly string[]
+): Promise<string[]> {
+  const paths = [
+    ...new Set(storagePaths.map((p) => p.trim()).filter(Boolean)),
+  ]
+  if (paths.length === 0) return []
+  const { error } = await client.storage.from(STORY_STORAGE_BUCKET).remove(paths)
+  if (error) throw error
+  return paths
+}
+
 /** Deletes story-bucket objects that no remaining story, post, clip, or trade uses. */
 export async function deleteUnsharedStoryStorage(
   client: SupabaseClient,

@@ -7,10 +7,17 @@ import { nativeIosAppStoreURL } from "@/lib/nativeIosAppStore"
 type Props = {
   surface: "hero" | "nav" | "ios_section" | "final_cta"
   className?: string
+  /** Override App Store listing URL (e.g. regional canonical link). */
+  href?: string
 }
 
-export default function LandingAppStoreButton({ surface, className = "" }: Props) {
-  const url = readConfiguredIosAppStoreUrl() ?? nativeIosAppStoreURL()
+export default function LandingAppStoreButton({
+  surface,
+  className = "",
+  href,
+}: Props) {
+  const url =
+    href ?? readConfiguredIosAppStoreUrl() ?? nativeIosAppStoreURL()
 
   return (
     <a

@@ -585,7 +585,8 @@ final class BrokerIntegrationsViewModel {
         provider: BrokerIntegrationProvider,
         connectionId: String,
         brokerAccount: BrokerIntegrationAccount,
-        draft: TradingAccountDraft
+        draft: TradingAccountDraft,
+        livePersonalDrawdown: LivePersonalDrawdownConfig? = nil
     ) async -> Bool {
         do {
             let response: BrokerLinkAccountsResponse
@@ -606,6 +607,14 @@ final class BrokerIntegrationsViewModel {
             accountsByConnection[connectionId] = response.accounts
             await refreshCanonicalAccounts()
             noteBrokerIntegrationChanged()
+            if let livePersonalDrawdown,
+               let accountIDRaw = response.tradetraxsAccountId
+            {
+                _ = await manageAccounts.applyLivePersonalDrawdown(
+                    accountID: TradingAccountID(accountIDRaw),
+                    config: livePersonalDrawdown
+                )
+            }
             presentMessage("Trading account created and linked.", error: false)
             return true
         } catch {

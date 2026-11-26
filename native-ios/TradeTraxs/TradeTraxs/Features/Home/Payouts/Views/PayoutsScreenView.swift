@@ -82,6 +82,26 @@ struct PayoutsScreenView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Withdrawals")
+        .toolbar {
+            if data != nil, let navigationCoordinator {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        ExperienceHaptics.play(.selection)
+                        navigationCoordinator.openCompose(.withdrawal)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.body.weight(.semibold))
+                            .frame(
+                                width: ExperienceAccessibility.minTouchTarget,
+                                height: ExperienceAccessibility.minTouchTarget
+                            )
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Add Withdrawal")
+                    .accessibilityIdentifier("withdrawals.add")
+                }
+            }
+        }
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             WithdrawalsTrace.log("viewAppeared")
@@ -103,6 +123,10 @@ struct PayoutsScreenView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .propFirmPayoutAssignmentsDidChange)) { _ in
             Task { await reloadPayoutAssignmentsForList() }
+        }
+        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            guard case .payoutRecorded = AccountMutationStore.shared.latestKind else { return }
+            Task { await hydrateWithdrawalsScreen() }
         }
         .accessibilityIdentifier("withdrawals.home")
     }

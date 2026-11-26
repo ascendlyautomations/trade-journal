@@ -464,8 +464,9 @@ final class ManageRoomViewModel {
 
     func requestModeratorStatusChange(for member: RoomManagedMember) {
         guard canManageModeratorStatus(for: member) else { return }
+        let makeModerator = !isMemberModerator(member)
         pendingModeratorProfileID = member.id
-        pendingModeratorMake = !isMemberModerator(member)
+        pendingModeratorMake = makeModerator
         showsModeratorConfirmation = true
     }
 
@@ -476,13 +477,15 @@ final class ManageRoomViewModel {
     }
 
     var moderatorConfirmationTitle: String {
-        pendingModeratorMake == true
+        guard let makeModerator = pendingModeratorMake else { return "" }
+        return makeModerator
             ? "Make this member a moderator?"
             : "Remove moderator status from this member?"
     }
 
     var moderatorConfirmationButtonTitle: String {
-        pendingModeratorMake == true ? "Make Moderator" : "Remove Moderator"
+        guard let makeModerator = pendingModeratorMake else { return "Confirm" }
+        return makeModerator ? "Make Moderator" : "Remove Moderator"
     }
 
     func confirmModeratorStatusChange() async {
@@ -510,7 +513,9 @@ final class ManageRoomViewModel {
                 management: rooms
             )
             await refreshMembersAndBans()
-            statusMessage = makeModerator ? "Moderator added." : "Moderator removed."
+            SaveSuccessConfirmationCenter.shared.present(
+                makeModerator ? "Moderator assigned." : "Moderator removed."
+            )
             ExperienceHaptics.play(.success)
         } catch {
             statusMessage = ConversationThreadSupport.message(for: error)
@@ -546,7 +551,7 @@ final class ManageRoomViewModel {
                     inboxStore: inboxStore,
                     viewerID: viewerID
                 )
-                statusMessage = "Member removed."
+                SaveSuccessConfirmationCenter.shared.present("Member removed.")
             case .ban(let profileID):
                 try await RoomMemberModerationExecutor.banMember(
                     roomID: roomID,
@@ -556,7 +561,7 @@ final class ManageRoomViewModel {
                     inboxStore: inboxStore,
                     viewerID: viewerID
                 )
-                statusMessage = "Member banned."
+                SaveSuccessConfirmationCenter.shared.present("Member banned.")
             }
             await refreshMembersAndBans()
             tagStore.invalidate(roomID: roomID)
@@ -573,8 +578,8 @@ final class ManageRoomViewModel {
         defer { isMutatingMember = false }
         do {
             try await rooms.unbanMember(roomID: roomID, banID: ban.id)
-            statusMessage = "Member unbanned."
             await refreshMembersAndBans()
+            SaveSuccessConfirmationCenter.shared.present("User unbanned.")
             ExperienceHaptics.play(.success)
         } catch {
             statusMessage = ConversationThreadSupport.message(for: error)

@@ -33,6 +33,44 @@ final class SharedContentMessageSupportTests: XCTestCase {
         XCTAssertFalse(bundling.hiddenMessageIDs.contains(other.id))
     }
 
+    func testTradeShareDoesNotBundleAdjacentText() {
+        let tradeID = TradeID("trade-bundle")
+        let share = Message(
+            id: MessageID("share-trade"),
+            conversationID: conversationID,
+            senderProfileID: senderID,
+            kind: .tradeShare,
+            body: nil,
+            attachments: SharedContentMessageSupport.tradeShareAttachments(for: tradeID),
+            replyToMessageID: nil,
+            createdAt: baseDate,
+            isReadByViewer: true,
+            sharedContent: .trade(tradeID)
+        )
+        let note = makeText(id: "text-after", body: "After trade", at: baseDate.addingTimeInterval(1))
+        let bundling = SharedContentMessageSupport.bundleShareCaptions(in: [share, note])
+        XCTAssertNil(bundling.captionByShareID[share.id])
+        XCTAssertFalse(bundling.hiddenMessageIDs.contains(note.id))
+    }
+
+    func testTradeShareUsesInlineCaptionOnly() {
+        let tradeID = TradeID("trade-inline")
+        let share = Message(
+            id: MessageID("share-trade"),
+            conversationID: conversationID,
+            senderProfileID: senderID,
+            kind: .tradeShare,
+            body: "Check this setup",
+            attachments: SharedContentMessageSupport.tradeShareAttachments(for: tradeID),
+            replyToMessageID: nil,
+            createdAt: baseDate,
+            isReadByViewer: true,
+            sharedContent: .trade(tradeID)
+        )
+        let bundling = SharedContentMessageSupport.bundleShareCaptions(in: [share])
+        XCTAssertEqual(bundling.captionByShareID[share.id], "Check this setup")
+    }
+
     func testReconciliationRemovesTradeOnlyShare() {
         let tradeID = TradeID("trade-gone")
         let share = Message(

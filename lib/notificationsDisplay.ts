@@ -29,6 +29,7 @@ export type NotificationRecord = {
   profile_post_id: string | null
   achievement_post_id: string | null
   reel_id: string | null
+  story_id: string | null
   comment_id: string | null
   room_id: string | null
   content: string | null
@@ -51,6 +52,7 @@ export type LikeNotificationGroup = {
   profile_post_id: string | null
   achievement_post_id: string | null
   reel_id: string | null
+  story_id: string | null
   comment_id: string | null
   notificationIds: string[]
   read: boolean
@@ -328,6 +330,7 @@ export function groupLikeNotifications(
       profile_post_id: latest.profile_post_id ?? null,
       achievement_post_id: latest.achievement_post_id ?? null,
       reel_id: latest.reel_id ?? null,
+      story_id: latest.story_id ?? null,
       comment_id: latest.comment_id ?? null,
       notificationIds: sorted.map((row) => row.id),
       read: sorted.every((row) => row.read),
@@ -419,6 +422,7 @@ function engagementGroupKey(row: NotificationRecord): string {
   if (row.profile_post_id) return `profile_post:${row.profile_post_id}`
   if (row.achievement_post_id) return `achievement_post:${row.achievement_post_id}`
   if (row.reel_id) return `reel:${row.reel_id}`
+  if (row.story_id) return `story:${row.story_id}`
   if (row.trade_id) return `trade:${row.trade_id}`
   return `row:${row.id}`
 }

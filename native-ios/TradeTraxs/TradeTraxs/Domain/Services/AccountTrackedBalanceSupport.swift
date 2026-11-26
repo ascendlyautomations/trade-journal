@@ -127,4 +127,63 @@ nonisolated enum AccountTrackedBalanceSupport {
             ledgerEntries: scopedLedger
         )
     }
+
+    /// Dashboard equity hero when All Accounts is selected (per-account rules, no duplicate rows).
+    static func aggregateWithdrawalSummary(
+        accounts: [TradingAccount],
+        cyclesByAccount: [TradingAccountID: [AccountPayoutCycle]],
+        ledgerByAccount: [TradingAccountID: [AccountPayoutEntry]],
+        scope: DashboardClientScopeFilter,
+        now: Date = Date()
+    ) -> WithdrawalSummary? {
+        guard case .all = scope.accountFilter else { return nil }
+
+        var totalCount = 0
+        var totalAmount = Decimal.zero
+        var sawPayouts = false
+        var sawWithdrawals = false
+
+        for account in accounts {
+            guard DashboardAccountScopePolicy.includesAccountInDashboard(account) else { continue }
+            guard matchesDashboardAccountModeFilter(account: account, scope: scope) else { continue }
+            guard let partial = withdrawalSummary(
+                account: account,
+                payoutCycles: cyclesByAccount[account.id] ?? [],
+                ledgerEntries: ledgerByAccount[account.id] ?? [],
+                scope: scope,
+                now: now
+            ) else { continue }
+            totalCount += partial.count
+            totalAmount += partial.totalAmount
+            switch partial.terminology {
+            case .payouts: sawPayouts = true
+            case .withdrawals: sawWithdrawals = true
+            }
+        }
+
+        guard totalCount > 0, totalAmount > 0 else { return nil }
+
+        let terminology: WithdrawalSummary.Terminology = {
+            if sawPayouts && !sawWithdrawals { return .payouts }
+            if sawWithdrawals && !sawPayouts { return .withdrawals }
+            return .withdrawals
+        }()
+
+        return WithdrawalSummary(
+            count: totalCount,
+            totalAmount: totalAmount,
+            terminology: terminology
+        )
+    }
+
+    private static func matchesDashboardAccountModeFilter(
+        account: TradingAccount,
+        scope: DashboardClientScopeFilter
+    ) -> Bool {
+        let selected = scope.accountMode
+        if selected == .all { return true }
+        if selected == .backtest { return account.mode == .backtest }
+        guard let target = selected.tradingAccountMode else { return true }
+        return account.mode == target
+    }
 }

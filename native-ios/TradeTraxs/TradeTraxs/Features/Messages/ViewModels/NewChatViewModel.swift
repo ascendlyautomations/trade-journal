@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 @MainActor
@@ -28,6 +29,8 @@ final class NewChatViewModel {
     private(set) var canLoadMoreSuggested = false
     var searchText = ""
     var groupName = ""
+    private(set) var groupAvatarPreview: UIImage?
+    private(set) var pendingGroupAvatarJPEG: Data?
 
     private let messages: any MessageRepository
     private let search: any SearchRepository
@@ -37,6 +40,8 @@ final class NewChatViewModel {
     private let detailCache: DetailPresentationCache
     private let inboxStore: MessagesInboxStore
     private let creationCoordinator: ConversationCreationCoordinator
+    private let uploadService: (any UploadService)?
+    private let objectStorage: (any ObjectStorageProviding)?
 
     private var viewerID: ProfileID?
     private var searchTask: Task<Void, Never>?
@@ -57,7 +62,9 @@ final class NewChatViewModel {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         inboxStore: MessagesInboxStore? = nil,
-        creationCoordinator: ConversationCreationCoordinator? = nil
+        creationCoordinator: ConversationCreationCoordinator? = nil,
+        uploadService: (any UploadService)? = nil,
+        objectStorage: (any ObjectStorageProviding)? = nil
     ) {
         self.messages = messages
         self.search = search
@@ -67,6 +74,8 @@ final class NewChatViewModel {
         self.detailCache = detailCache
         self.inboxStore = inboxStore ?? MessagesInboxStore.shared
         self.creationCoordinator = creationCoordinator ?? .shared
+        self.uploadService = uploadService
+        self.objectStorage = objectStorage
     }
 
     var normalizedQuery: String {
@@ -133,7 +142,18 @@ final class NewChatViewModel {
         results = []
         selectedGroupMembers = []
         groupName = ""
+        clearGroupAvatar()
         phase = .idle
+    }
+
+    func setGroupAvatar(from image: UIImage) {
+        groupAvatarPreview = image
+        pendingGroupAvatarJPEG = MediaImagePreparation.avatarJPEGData(from: image)
+    }
+
+    func clearGroupAvatar() {
+        groupAvatarPreview = nil
+        pendingGroupAvatarJPEG = nil
     }
 
     func backToChooser() {
@@ -143,6 +163,7 @@ final class NewChatViewModel {
         results = []
         selectedGroupMembers = []
         groupName = ""
+        clearGroupAvatar()
         phase = .idle
         openingProfileID = nil
         isCreatingGroup = false
@@ -377,6 +398,9 @@ final class NewChatViewModel {
                 viewerID: viewerID,
                 recipients: selectedGroupMembers,
                 name: groupName.nilIfEmpty,
+                avatarJPEG: pendingGroupAvatarJPEG,
+                uploadService: uploadService,
+                objectStorage: objectStorage,
                 messages: messages,
                 detailCache: detailCache,
                 inboxStore: inboxStore

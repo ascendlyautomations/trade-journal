@@ -165,13 +165,14 @@ final class TradeHistoryViewModel {
     }
 
     var accountsForMenu: [TradingAccount] {
-        let selectedID: TradingAccountID? = {
-            if case .account(let id) = filters.account { return id }
-            return nil
-        }()
-        return OwnerAccountDropdownSupport.menuAccounts(
+        let selectedID = tradesJournalEligibleSelectedAccountID()
+        let visible = OwnerAccountDropdownSupport.menuAccounts(
             profileID: profileID,
             fallback: accounts,
+            preservingSelection: selectedID
+        )
+        return DashboardAccountScopePolicy.menuAccounts(
+            from: visible,
             preservingSelection: selectedID
         )
     }
@@ -654,7 +655,7 @@ final class TradeHistoryViewModel {
         }
         applyAccountList(loaded)
         OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
-        reconcileAccountFilterIfNeeded()
+        reconcileAccountFilterIfNeeded(reloadIfChanged: true)
     }
 
     // MARK: - Private
@@ -1044,12 +1045,24 @@ final class TradeHistoryViewModel {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
         accountNames = OwnerAccountMutationSync.accountNamesMap(from: accounts)
+        reconcileAccountFilterIfNeeded(reloadIfChanged: true)
     }
 
-    private func reconcileAccountFilterIfNeeded() {
+    private func tradesJournalEligibleSelectedAccountID() -> TradingAccountID? {
+        guard case .account(let id) = filters.account else { return nil }
+        guard let account = accounts.first(where: { $0.id == id }),
+              DashboardAccountScopePolicy.includesAccountInDashboard(account)
+        else { return nil }
+        return id
+    }
+
+    private func reconcileAccountFilterIfNeeded(reloadIfChanged: Bool = false) {
         let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(filters.account, accounts: accounts)
         guard sanitized != filters.account else { return }
         filters.account = sanitized
+        if reloadIfChanged {
+            Task { await reload(reason: "account") }
+        }
     }
 
     private func applySnapshot(_ snap: TradeHistorySessionStore.Snapshot) {

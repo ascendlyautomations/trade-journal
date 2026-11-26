@@ -47,6 +47,7 @@ final class RoomConversationViewModel {
         tradePickerSummaries.map { TradeSummaryMapper.previewTrade(from: $0) }
     }
     private(set) var isLoadingTradePicker = false
+    var pendingSharedTrade: Trade?
     private(set) var sharedTrades: [TradeID: Trade] = [:]
     private(set) var sharedPosts: [PostID: Post] = [:]
     private(set) var sharedReels: [ReelID: Reel] = [:]
@@ -930,12 +931,34 @@ final class RoomConversationViewModel {
 
     func sendText() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isSending, canPostInSelectedChannel else { return }
+        let stagedTrade = pendingSharedTrade
+        guard !text.isEmpty || stagedTrade != nil, !isSending, canPostInSelectedChannel else { return }
         guard await ensureAuthoritativeMembershipBeforeSend() else { return }
         let replyTo = replyTarget?.messageID
         draft = ""
         if replyTo != nil { clearReply() }
+        if let stagedTrade {
+            pendingSharedTrade = nil
+            let summary =
+                tradePickerSummaries.first(where: { $0.id == stagedTrade.id })
+                ?? TradeSummaryMapper.summary(fromPartialListTrade: stagedTrade)
+            let caption = text.isEmpty ? nil : text
+            await sendTradeSummary(summary, caption: caption, replyToMessageID: replyTo)
+            return
+        }
         await send(body: text, imageURL: nil, localImageData: nil, replyToMessageID: replyTo)
+    }
+
+    func stageSharedTrade(_ trade: Trade) {
+        ExperienceHaptics.play(.selection)
+        pendingSharedTrade = trade
+        sharedTrades[trade.id] = trade
+        detailCache.seedPresentationSeed(TradeSummaryMapper.summary(fromPartialListTrade: trade))
+        showsTradePicker = false
+    }
+
+    func clearPendingSharedTrade() {
+        pendingSharedTrade = nil
     }
 
     func sendImage(_ image: UIImage) async {
@@ -990,18 +1013,15 @@ final class RoomConversationViewModel {
         }
     }
 
-    func sendTrade(_ trade: Trade) async {
-        let summary =
-            tradePickerSummaries.first(where: { $0.id == trade.id })
-            ?? TradeSummaryMapper.summary(fromPartialListTrade: trade)
-        await sendTradeSummary(summary)
-    }
-
-    func sendTradeSummary(_ summary: TradeSummary) async {
+    func sendTradeSummary(
+        _ summary: TradeSummary,
+        caption: String? = nil,
+        replyToMessageID: MessageID? = nil
+    ) async {
         guard let viewerID, !isSending, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
         guard await ensureAuthoritativeMembershipBeforeSend() else { return }
-        let replyTo = replyTarget?.messageID
-        if replyTo != nil { clearReply() }
+        let replyTo = replyToMessageID ?? replyTarget?.messageID
+        let storedCaption = SharedContentMessageSupport.tradeShareStoredBody(from: caption)
         showsTradePicker = false
         sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
         detailCache.seedPresentationSeed(summary)
@@ -1014,7 +1034,7 @@ final class RoomConversationViewModel {
             conversationID: conversationID,
             senderProfileID: viewerID,
             kind: .tradeShare,
-            body: nil,
+            body: storedCaption,
             attachments: [
                 MessageAttachment(
                     id: summary.id.rawValue,
@@ -1037,12 +1057,13 @@ final class RoomConversationViewModel {
             return
         }
 
+        let roomContent = SharedContentMessageSupport.tradeShareRoomOutboundContent(userCaption: storedCaption)
         do {
             let payload = RoomMessage(
                 id: RoomMessageID(tempID.rawValue),
                 roomID: roomID,
                 senderProfileID: viewerID,
-                body: "Shared a trade",
+                body: roomContent,
                 attachedTradeID: summary.id,
                 media: [],
                 parentMessageID: roomParentID(from: replyTo),
@@ -1064,7 +1085,7 @@ final class RoomConversationViewModel {
                 tempID: tempID,
                 optimistic: optimistic,
                 channelID: channelID,
-                content: "Shared a trade",
+                content: roomContent,
                 error: error
             )
         }
@@ -1279,6 +1300,7 @@ final class RoomConversationViewModel {
             )
             managedMemberSheetItem = nil
             await refreshRoomMemberCount(viewerID: viewerID)
+            SaveSuccessConfirmationCenter.shared.present("Member removed.")
             ExperienceHaptics.play(.success)
         } catch {
             memberModerationErrorMessage = ConversationThreadSupport.message(for: error)
@@ -1312,6 +1334,7 @@ final class RoomConversationViewModel {
             )
             managedMemberSheetItem = nil
             await refreshRoomMemberCount(viewerID: viewerID)
+            SaveSuccessConfirmationCenter.shared.present("Member banned.")
             ExperienceHaptics.play(.success)
         } catch {
             memberModerationErrorMessage = ConversationThreadSupport.message(for: error)
@@ -1436,7 +1459,9 @@ final class RoomConversationViewModel {
 
         let body = item.text ?? ""
         let reconcileContent = item.message.kind == .tradeShare
-            ? "Shared a trade"
+            ? SharedContentMessageSupport.tradeShareRoomOutboundContent(
+                userCaption: SharedContentMessageSupport.userWrittenMessage(for: item.message)
+            )
             : (item.text ?? item.message.body)
         if let channelID = selectedChannelID {
             switch await reconcileOptimisticSend(
@@ -1466,7 +1491,12 @@ final class RoomConversationViewModel {
             removeMessage(id: item.id)
             sendStates.removeValue(forKey: item.id)
             let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
-            await sendTradeSummary(summary)
+            let caption = SharedContentMessageSupport.userWrittenMessage(for: item.message)
+            await sendTradeSummary(
+                summary,
+                caption: caption,
+                replyToMessageID: item.message.replyToMessageID
+            )
             return
         }
 

@@ -86,15 +86,7 @@ struct FeedStoriesRow: View {
                 .accessibilityLabel(hasActiveStory ? "View your story" : "Add story")
 
                 Button(action: onAddStory) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 20, height: 20)
-                        .background(Color(red: 0.06, green: 0.72, blue: 0.45))
-                        .clipShape(Circle())
-                        .overlay(
-                            Circle().stroke(colors.backgroundPrimary, lineWidth: 2)
-                        )
+                    StoryAddPlusBadge()
                 }
                 .buttonStyle(.experiencePlain)
                 .accessibilityLabel("Add story")

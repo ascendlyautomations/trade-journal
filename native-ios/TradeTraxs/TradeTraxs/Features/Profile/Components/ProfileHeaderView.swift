@@ -82,6 +82,7 @@ struct ProfileHeaderView: View {
                     .font(.system(.subheadline, design: .default))
                     .foregroundStyle(colors.primaryText)
                     .lineSpacing(3)
+                    .lineLimit(ProfileBioPolicy.maximumLines)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("profile.bio")
             }
@@ -203,32 +204,43 @@ struct ProfileHeaderView: View {
         let avatarSize: CGFloat = 88
         let ringDiameter = StoryAvatarRingStroke.ringDiameter(avatarSize: avatarSize)
 
-        if let story = store.activeStory {
-            Button {
-                viewModel.openViewerStory(story)
-            } label: {
-                ZStack {
-                    StoryAvatarRingStroke(isHighlighted: true, diameter: ringDiameter)
-                    ExperienceAvatar(
-                        initials: store.initials,
-                        image: store.avatarImage,
-                        size: avatarSize
-                    )
+        ZStack(alignment: .bottomTrailing) {
+            if let story = store.activeStory {
+                Button {
+                    viewModel.openViewerStory(story)
+                } label: {
+                    ZStack {
+                        StoryAvatarRingStroke(isHighlighted: true, diameter: ringDiameter)
+                        ExperienceAvatar(
+                            initials: store.initials,
+                            image: store.avatarImage,
+                            size: avatarSize
+                        )
+                    }
                 }
+                .buttonStyle(.experiencePlain)
+                .accessibilityLabel(
+                    store.isOwner ? "View your story" : "View @\(profile.username)'s story"
+                )
+                .accessibilityIdentifier("profile.avatar.story")
+            } else {
+                ExperienceAvatar(
+                    initials: store.initials,
+                    image: store.avatarImage,
+                    size: avatarSize
+                )
+                .accessibilityLabel("\(profile.displayName) profile photo")
+                .accessibilityIdentifier("profile.avatar")
             }
-            .buttonStyle(.experiencePlain)
-            .accessibilityLabel(
-                store.isOwner ? "View your story" : "View @\(profile.username)'s story"
-            )
-            .accessibilityIdentifier("profile.avatar.story")
-        } else {
-            ExperienceAvatar(
-                initials: store.initials,
-                image: store.avatarImage,
-                size: avatarSize
-            )
-            .accessibilityLabel("\(profile.displayName) profile photo")
-            .accessibilityIdentifier("profile.avatar")
+
+            if store.isOwner {
+                Button(action: viewModel.openCreateStory) {
+                    StoryAddPlusBadge()
+                }
+                .buttonStyle(.experiencePlain)
+                .accessibilityLabel("Add story")
+                .accessibilityIdentifier("profile.story.add")
+            }
         }
     }
 

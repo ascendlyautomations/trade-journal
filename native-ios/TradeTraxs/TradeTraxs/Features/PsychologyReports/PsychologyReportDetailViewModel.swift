@@ -41,8 +41,18 @@ final class PsychologyReportDetailViewModel {
     var title: String { report?.title ?? "Psychology Report" }
     var dateRangeLabel: String? { report?.dateRangeLabel }
 
+    /// Weekly / monthly / custom — date range only in the nav bar (performance report pattern).
+    var navigationPeriodLabel: String? {
+        guard let template = basePeriodRef?.template else { return nil }
+        if template.isPeriodic || template == .custom {
+            return report?.dateRangeLabel ?? dateRangeLabel
+        }
+        return nil
+    }
+
     var supportsDateScope: Bool {
-        basePeriodRef?.template.isPeriodic == false
+        guard let template = basePeriodRef?.template else { return false }
+        return !template.isPeriodic && template != .custom
     }
 
     var timeScopeMenuTitle: String { selectedTimeScope.menuTitle }
@@ -97,13 +107,22 @@ final class PsychologyReportDetailViewModel {
             phase = .loading
             do {
                 let loaded: PsychologyReport
-                if let basePeriodRef,
-                   !basePeriodRef.template.isPeriodic,
-                   let periodRef = activePeriodRef() {
-                    loaded = try await psychologyReports.generateReport(
-                        periodRef: periodRef,
-                        forceNetwork: false
-                    )
+                if let basePeriodRef {
+                    if basePeriodRef.template == .custom {
+                        let periodRef = activePeriodRef() ?? basePeriodRef
+                        loaded = try await psychologyReports.generateReport(
+                            periodRef: periodRef,
+                            forceNetwork: false
+                        )
+                    } else if !basePeriodRef.template.isPeriodic,
+                              let periodRef = activePeriodRef() {
+                        loaded = try await psychologyReports.generateReport(
+                            periodRef: periodRef,
+                            forceNetwork: false
+                        )
+                    } else {
+                        loaded = try await psychologyReports.report(for: reportID, forceNetwork: false)
+                    }
                 } else {
                     loaded = try await psychologyReports.report(for: reportID, forceNetwork: false)
                 }

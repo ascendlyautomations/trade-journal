@@ -9,6 +9,7 @@ struct MessageComposerBar: View {
     var isEnabled: Bool = true
     var placeholder: String = "Message"
     var showsTradeShare: Bool = true
+    var hasStagedTrade: Bool = false
     var onSend: () -> Void
     var onSendImage: (UIImage) -> Void
     var onSendVoice: ((URL, TimeInterval) -> Void)?
@@ -75,7 +76,7 @@ struct MessageComposerBar: View {
 
             messageField
 
-            if canSendText, isEnabled {
+            if canSendComposer, isEnabled {
                 sendButton
             }
         }
@@ -252,8 +253,8 @@ struct MessageComposerBar: View {
         }
     }
 
-    private var canSendText: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var canSendComposer: Bool {
+        hasStagedTrade || !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Mic stays inside the field until Send takes over for non-empty text.
@@ -261,7 +262,7 @@ struct MessageComposerBar: View {
         onSendVoice != nil
             && allowsVoiceRecording
             && isEnabled
-            && !(canSendText && isEnabled)
+            && !(canSendComposer && isEnabled)
             && !liveVoiceCoordinator.isSessionActive
     }
 
@@ -277,7 +278,7 @@ struct MessageComposerBar: View {
     /// Both routes use the same `onSend` closure as the on-screen button, once per key press.
     private func submitFromKeyboard() {
         guard !keyboardSendScheduled else { return }
-        guard canSendText, isEnabled, !isSending else { return }
+        guard canSendComposer, isEnabled, !isSending else { return }
         keyboardSendScheduled = true
         onSend()
         Task { @MainActor in

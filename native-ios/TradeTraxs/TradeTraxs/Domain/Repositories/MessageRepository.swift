@@ -46,6 +46,13 @@ nonisolated protocol MessageRepository: Sendable {
     ) async throws -> Conversation
     /// Web messages `handleDeleteConversation`, delete own `conversation_participants` row.
     func deleteConversation(id: ConversationID) async throws
+    /// Web `saveGroupSettings` / avatar upload — update `conversations` for group chats.
+    func updateGroupConversationDetails(
+        conversationID: ConversationID,
+        patch: GroupConversationDetailsPatch
+    ) async throws -> Conversation
+    /// `rpc_v1_leave_group_conversation` — server derives actor from `auth.uid()` only.
+    func leaveGroupConversation(conversationID: ConversationID) async throws -> GroupLeaveConversationOutcome
     /// Web `deleteForEveryone`, soft-delete own DM (`messages.deleted_for_everyone = true`).
     func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws
     /// Web `deleteForMe`, per-user hide via `message_deletions`.
@@ -127,5 +134,16 @@ extension MessageRepository {
 
     func deleteMessageForMe(_ messageID: MessageID, in conversationID: ConversationID) async throws {
         throw AppError.notImplemented(feature: "deleteMessageForMe")
+    }
+
+    func updateGroupConversationDetails(
+        conversationID: ConversationID,
+        patch: GroupConversationDetailsPatch
+    ) async throws -> Conversation {
+        throw AppError.notImplemented(feature: "updateGroupConversationDetails")
+    }
+
+    func leaveGroupConversation(conversationID: ConversationID) async throws -> GroupLeaveConversationOutcome {
+        throw AppError.notImplemented(feature: "leaveGroupConversation")
     }
 }

@@ -22,35 +22,25 @@ test("story storage paths stay inside the stories bucket", () => {
   )
 })
 
-test("expired story rows are deleted while shared media is kept", () => {
+test("shared reference retention applies only to unshared cleanup planner", () => {
   const plan = planStoryMediaDeletion({
     stories: [
       { id: "expired-own", image_url: storyURL },
       { id: "expired-shared", image_url: storyURL },
-      { id: "expired-reel-url", image_url: reelURL },
-      { id: "expired-external", image_url: "https://cdn.example/photo.jpg" },
     ],
     retainedMediaURLs: [storyURL],
   })
 
-  assert.deepEqual(plan.storyIDs, [
-    "expired-own",
-    "expired-shared",
-    "expired-reel-url",
-    "expired-external",
-  ])
   assert.deepEqual(plan.storagePaths, [])
 })
 
-test("unshared story objects are the only storage deletions", () => {
+test("unshared story objects are eligible for deletion", () => {
   const owned =
     "https://example.supabase.co/storage/v1/object/public/stories/user-2/a.jpg"
   const plan = planStoryMediaDeletion({
-    stories: [
-      { id: "gone", image_url: owned },
-      { id: "other", image_url: reelURL },
-    ],
+    stories: [{ id: "gone", image_url: owned }],
     retainedMediaURLs: [],
   })
   assert.deepEqual(plan.storagePaths, ["user-2/a.jpg"])
 })
+

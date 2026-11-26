@@ -15,3 +15,14 @@ nonisolated enum DashboardAnalyticsRemoteAccountPolicy {
         return UUID(uuidString: accountID.rawValue) != nil
     }
 }
+
+/// Client TraxPro gate for premium V3 chart bundle RPCs (matches server `premium_analytics` enforcement).
+@MainActor
+enum DashboardPremiumChartsRemotePolicy {
+    static func mayFetchPremiumChartsRemotely(profileID: ProfileID) -> Bool {
+        ProMonetizationPolicy.includesPremiumDashboardAnalytics(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+}

@@ -13,7 +13,50 @@ final class LivePersonalDrawdownPersistenceTests: XCTestCase {
         super.tearDown()
     }
 
-  func testDrawdownPatchBodyEncodesNullWhenCleared() throws {
+    func testParseGearDraftClearsWhenLimitEmpty() {
+        let result = LivePersonalDrawdownEngine.parseGearDraft(
+            limitDigits: "",
+            limitType: .fixed,
+            floorCapDigits: "",
+            includeFloorCapField: true,
+            limitPolicy: .clearWhenEmptyOrZero
+        )
+        XCTAssertEqual(try? result.get(), nil)
+    }
+
+    func testParseGearDraftRequiresPositiveLimitOnCreate() {
+        let result = LivePersonalDrawdownEngine.parseGearDraft(
+            limitDigits: "",
+            limitType: .trailing,
+            floorCapDigits: "",
+            includeFloorCapField: true,
+            limitPolicy: .requirePositiveLimit
+        )
+        switch result {
+        case .failure:
+            break
+        default:
+            XCTFail("Expected validation failure")
+        }
+    }
+
+    func testParseGearDraftBuildsTrailingConfigWithOptionalCap() {
+        let result = LivePersonalDrawdownEngine.parseGearDraft(
+            limitDigits: "1500",
+            limitType: .trailing,
+            floorCapDigits: "50000",
+            includeFloorCapField: true,
+            limitPolicy: .requirePositiveLimit
+        )
+        guard case .success(let config?) = result else {
+            return XCTFail("Expected config")
+        }
+        XCTAssertEqual(config.limitAmount, 1_500)
+        XCTAssertEqual(config.limitType, .trailing)
+        XCTAssertEqual(config.floorCap, 50_000)
+    }
+
+    func testDrawdownPatchBodyEncodesNullWhenCleared() throws {
         let body = LivePersonalDrawdownEngine.makeAccountDrawdownPatchBody(config: nil)
         let data = try JSONEncoder().encode(body)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

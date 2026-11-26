@@ -43,6 +43,8 @@ final class TradeDetailViewModel {
     /// Prevents repeat account fetches when size is legitimately absent.
     private let experience: TradeDetailExperience
     private var didResolveAccountMetadata = false
+    /// Invalidates in-flight owner comparison loads when detail hydrates or edits land.
+    private var ownerAnalyticsGeneration: UInt64 = 0
 
     convenience init(
         tradeID: TradeID,
@@ -307,8 +309,10 @@ final class TradeDetailViewModel {
                 ),
             ]
         }
-        Task { await resolveAccountMetadata(for: trade) }
-        Task { await loadOwnerAnalytics(for: trade) }
+        Task {
+            await resolveAccountMetadata(for: trade)
+            await loadOwnerAnalytics(for: trade)
+        }
     }
 
     func handleJournalMutation() {
@@ -574,6 +578,15 @@ final class TradeDetailViewModel {
             ownerAnalytics = nil
             return
         }
+        guard let tradeForAnalytics = authoritativeTradeForOwnerAnalytics(
+            preferred: trade,
+            ownerProfileID: profileID
+        ) else {
+            return
+        }
+
+        ownerAnalyticsGeneration &+= 1
+        let generation = ownerAnalyticsGeneration
 
         let accountModes = Dictionary(
             uniqueKeysWithValues: (cache.accounts(for: profileID) ?? []).map { ($0.id, $0.mode) }
@@ -582,13 +595,24 @@ final class TradeDetailViewModel {
         var dataSource = "client_fallback(\(SessionOwnerTradesStore.shared.cached(for: profileID) != nil ? "SessionOwnerTradesStore.cache" : "TradeRepository.trades"))"
         var rpcPayload: TradeDetailOwnerComparisonBootstrapV1.DataPayload?
         var rpcError: String?
+        var analyticsResult: TradeDetailAnalytics.Result?
 
         do {
-            let bootstrap = try await TradeDetailComparisonLoader.loadBootstrap(trade: trade, rpc: rpc)
+            let bootstrap = try await TradeDetailComparisonLoader.loadBootstrap(
+                trade: tradeForAnalytics,
+                rpc: rpc
+            )
             rpcPayload = bootstrap.data
-            ownerAnalytics = TradeDetailAnalytics.map(
+            guard generation == ownerAnalyticsGeneration,
+                  let tradeForFilters = authoritativeTradeForOwnerAnalytics(
+                      preferred: tradeForAnalytics,
+                      ownerProfileID: profileID
+                  )
+            else { return }
+
+            analyticsResult = TradeDetailAnalytics.map(
                 from: bootstrap.data,
-                trade: trade,
+                trade: tradeForFilters,
                 accountModes: accountModes
             )
             dataSource = BackendV2Versioning.RPCName.tradeDetailOwnerComparison.rawValue
@@ -605,18 +629,32 @@ final class TradeDetailViewModel {
                 )) ?? []
             }
 
-            ownerAnalytics = TradeDetailAnalytics.analyze(
-                trade: trade,
+            guard generation == ownerAnalyticsGeneration,
+                  let tradeForFilters = authoritativeTradeForOwnerAnalytics(
+                      preferred: tradeForAnalytics,
+                      ownerProfileID: profileID
+                  )
+            else { return }
+
+            analyticsResult = TradeDetailAnalytics.analyze(
+                trade: tradeForFilters,
                 history: history,
                 accountModes: accountModes
             )
         }
 
+        guard generation == ownerAnalyticsGeneration else { return }
+        ownerAnalytics = analyticsResult
+
         #if DEBUG
         let debugHistory = SessionOwnerTradesStore.shared.cached(for: profileID) ?? []
+        let diagnosticsTrade = authoritativeTradeForOwnerAnalytics(
+            preferred: tradeForAnalytics,
+            ownerProfileID: profileID
+        ) ?? tradeForAnalytics
         TradeDetailTickerHistoryDiagnostics.log(
             TradeDetailTickerHistoryDiagnostics.Context(
-                trade: trade,
+                trade: diagnosticsTrade,
                 profileID: profileID,
                 dataSource: dataSource,
                 rpcPayload: rpcPayload,
@@ -627,6 +665,22 @@ final class TradeDetailViewModel {
             )
         )
         #endif
+    }
+
+    /// Comparison filter chips require detail-only fields; list/presentation shells must not drive analytics.
+    private func authoritativeTradeForOwnerAnalytics(
+        preferred: Trade,
+        ownerProfileID: ProfileID
+    ) -> Trade? {
+        if let authoritative = cache.authoritativeDetail(id: tradeID) {
+            return authoritative
+        }
+        if ProfileSectionSupport.isLocalDevelopmentProfile(ownerProfileID),
+           preferred.id == tradeID
+        {
+            return self.trade?.id == tradeID ? self.trade : preferred
+        }
+        return nil
     }
 
     private func resolveAccountMetadata(for trade: Trade) async {

@@ -6,6 +6,7 @@ struct FollowListRowView: View {
     let imagePipeline: any ImagePipeline
     var followButtonRevision: Int = 0
     let isFollowing: Bool
+    var showsFollowControl: Bool = true
     let showsRemove: Bool
     let onOpen: () -> Void
     let onToggleFollow: () -> Void
@@ -42,7 +43,7 @@ struct FollowListRowView: View {
                 profileID: profile.id,
                 viewerProfileID: viewerProfileID,
                 isFollowing: isFollowing,
-                showsFollowControl: true,
+                showsFollowControl: showsFollowControl,
                 style: .followList,
                 accessibilityPrefix: "followList",
                 onToggleFollow: onToggleFollow

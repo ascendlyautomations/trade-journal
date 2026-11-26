@@ -159,6 +159,14 @@ final class ManageAccountsViewModel {
         isLoading = false
     }
 
+    func noteFormValidationError(_ message: String) {
+        formError = message
+    }
+
+    func clearFormError() {
+        formError = nil
+    }
+
     func emptyDraft() -> TradingAccountDraft {
         TradingAccountDraft(
             name: "",
@@ -185,7 +193,10 @@ final class ManageAccountsViewModel {
         )
     }
 
-    func create(_ draft: TradingAccountDraft) async -> Bool {
+    func create(
+        _ draft: TradingAccountDraft,
+        livePersonalDrawdown: LivePersonalDrawdownConfig? = nil
+    ) async -> Bool {
         if let viewerID {
             let tier = TradeEntryEntitlementGate.viewerTier(profileID: viewerID)
             if !FreePlanTradeAccountPolicy.canCreateAnotherAccount(accounts: accounts, viewerTier: tier),
@@ -209,12 +220,43 @@ final class ManageAccountsViewModel {
             {
                 throw AppError.unknown(message: message)
             }
-            let created = try await trades.createAccount(ownerID: viewerID, draft: draft)
+            var created = try await trades.createAccount(ownerID: viewerID, draft: draft)
+            if let livePersonalDrawdown {
+                created = try await trades.updateLivePersonalDrawdownConfig(
+                    id: created.id,
+                    ownerID: viewerID,
+                    config: livePersonalDrawdown
+                )
+                AccountPersistedCacheCoordinator.noteAccountPatched(created, viewerID: viewerID)
+            }
             accounts = Self.sorted(accounts + [created])
             noteAccountDisplayDraft(for: created)
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
             AccountMutationStore.shared.noteAccountCreated(created, allAccounts: accounts)
             ExperienceHaptics.play(.success)
+        }
+    }
+
+    /// Applies live personal drawdown after account creation elsewhere (e.g. broker link create).
+    func applyLivePersonalDrawdown(
+        accountID: TradingAccountID,
+        config: LivePersonalDrawdownConfig
+    ) async -> Bool {
+        await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            let updated = try await trades.updateLivePersonalDrawdownConfig(
+                id: accountID,
+                ownerID: viewerID,
+                config: config
+            )
+            if let index = accounts.firstIndex(where: { $0.id == updated.id }) {
+                accounts[index] = updated
+            } else {
+                accounts = Self.sorted(accounts + [updated])
+            }
+            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
+            AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
+            AccountPersistedCacheCoordinator.noteAccountPatched(updated, viewerID: viewerID)
         }
     }
 

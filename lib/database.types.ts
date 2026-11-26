@@ -2630,6 +2630,7 @@ export type Database = {
           profile_post_id: string | null
           read: boolean | null
           reel_id: string | null
+          story_id: string | null
           room_id: string | null
           room_message_id: string | null
           sender_id: string | null
@@ -2648,6 +2649,7 @@ export type Database = {
           profile_post_id?: string | null
           read?: boolean | null
           reel_id?: string | null
+          story_id?: string | null
           room_id?: string | null
           room_message_id?: string | null
           sender_id?: string | null
@@ -2666,6 +2668,7 @@ export type Database = {
           profile_post_id?: string | null
           read?: boolean | null
           reel_id?: string | null
+          story_id?: string | null
           room_id?: string | null
           room_message_id?: string | null
           sender_id?: string | null
@@ -2700,6 +2703,13 @@ export type Database = {
             columns: ["reel_id"]
             isOneToOne: false
             referencedRelation: "reels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
             referencedColumns: ["id"]
           },
           {
@@ -5126,6 +5136,64 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_likes: {
+        Row: {
+          created_at: string
+          id: string
+          story_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          story_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          story_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_likes_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      story_views: {
+        Row: {
+          first_viewed_at: string
+          id: string
+          story_id: string
+          viewer_id: string
+        }
+        Insert: {
+          first_viewed_at?: string
+          id?: string
+          story_id: string
+          viewer_id: string
+        }
+        Update: {
+          first_viewed_at?: string
+          id?: string
+          story_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_views_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
             referencedColumns: ["id"]
           },
         ]
@@ -8199,6 +8267,14 @@ export type Database = {
         Returns: boolean
       }
       trading_session_from_et: { Args: { p_ts: string }; Returns: string }
+      rpc_v1_story_insights: {
+        Args: { p_story_id: string }
+        Returns: Json
+      }
+      rpc_v1_story_record_view: {
+        Args: { p_story_id: string }
+        Returns: undefined
+      }
       try_story_reply_image_url: {
         Args: { p_content: string }
         Returns: string

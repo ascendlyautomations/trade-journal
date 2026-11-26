@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { buildStoryLikeNotificationContent } from "@/lib/storyLikeNotificationContent"
 
 export type LikeNotificationTarget =
   | { kind: "trade"; tradeId: string }
@@ -6,6 +7,7 @@ export type LikeNotificationTarget =
   | { kind: "profile_post"; profilePostId: string }
   | { kind: "achievement_post"; achievementPostId: string }
   | { kind: "reel"; reelId: string }
+  | { kind: "story"; storyId: string }
   | {
       kind: "comment"
       commentId: string
@@ -74,6 +76,13 @@ export function buildLikeNotificationInsertPayload(
   }
   if (params.target.kind === "achievement_post") {
     return { ...base, achievement_post_id: params.target.achievementPostId }
+  }
+  if (params.target.kind === "story") {
+    return {
+      ...base,
+      story_id: params.target.storyId,
+      content: buildStoryLikeNotificationContent(params.target.storyId),
+    }
   }
   if (params.target.kind === "comment") {
     return {

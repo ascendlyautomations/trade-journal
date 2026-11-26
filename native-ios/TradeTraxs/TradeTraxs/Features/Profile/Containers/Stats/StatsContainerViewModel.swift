@@ -290,7 +290,9 @@ final class StatsContainerViewModel {
                 profileID: profileID,
                 trades: trades,
                 rpc: rpc,
-                accountModes: accountModes
+                accountModes: accountModes,
+                session: session,
+                detailCache: detailCache
             )
             if inputs.isEmpty, !modeResults.isEmpty {
                 hasLoadedAnalytics = true
@@ -512,7 +514,9 @@ final class StatsContainerViewModel {
                     profileID: profileID,
                     trades: trades,
                     rpc: rpc,
-                    accountModes: accountModes
+                    accountModes: accountModes,
+                    session: session,
+                    detailCache: detailCache
                 )
                 guard !Task.isCancelled else { return }
                 tradeInputs = inputs
@@ -536,20 +540,39 @@ final class StatsContainerViewModel {
         if selectedTimeframe.isAllTime, let server = modeResults[selectedMode] {
             metrics = server
         } else if hasLoadedTradeInputs {
-            metrics = ProfileStatisticsMetrics.compute(
+            let computed = ProfileStatisticsMetrics.compute(
                 from: tradeInputs,
                 selectedMode: selectedMode,
                 selectedTimeframe: selectedTimeframe
             )
+            metrics = computed
+#if DEBUG
+            if !selectedTimeframe.isAllTime {
+                let sessionTaggedInputs = tradeInputs.filter {
+                    TradingSessionLabel.canonicalLabel(fromStored: $0.session) != nil
+                }.count
+                ProfileStatsTrace.filteredSessionRecompute(
+                    subject: profileID.rawValue,
+                    timeframe: selectedTimeframe.rawValue,
+                    loadedInputs: tradeInputs.count,
+                    sessionTaggedInputs: sessionTaggedInputs,
+                    filteredTrades: computed.filteredTradeCount,
+                    sessionTotal: computed.sessionTotal
+                )
+            }
+#endif
         } else if selectedTimeframe.isAllTime, let server = modeResults[selectedMode] {
             metrics = server
         } else {
-            metrics = ProfileStatisticsMetrics.compute(
-                from: [],
-                selectedMode: selectedMode,
-                selectedTimeframe: selectedTimeframe
-            )
             scheduleTradeInputsLoadIfNeeded()
+            // Retain the last snapshot while paginated trade inputs load for timeframe filters.
+            if metrics == nil {
+                metrics = ProfileStatisticsMetrics.compute(
+                    from: [],
+                    selectedMode: selectedMode,
+                    selectedTimeframe: selectedTimeframe
+                )
+            }
         }
 
         let allCount: Int = {

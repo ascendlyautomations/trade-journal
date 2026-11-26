@@ -13,7 +13,6 @@ struct AddTradeView: View {
     @State private var showsClipMenu = false
     @State private var showsNewClipComposer = false
     @State private var showsReelPicker = false
-    @State private var showsClipCamera = false
     @State private var showsClipPreview = false
     @State private var showsInstrumentPicker = false
     @State private var showsPsychologySheet = false
@@ -151,16 +150,15 @@ struct AddTradeView: View {
                     draft: viewModel.reelDraft,
                     contextNote: viewModel.clipContextNote,
                     videoItem: $clipVideoItem,
-                    onRecord: {
-                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                            showsClipCamera = true
-                        }
+                    onRecord: { url in
+                        viewModel.applyClipVideo(from: url, contentType: "video/quicktime")
                     },
                     onClear: {
                         viewModel.clearReelDraft()
                         clipVideoItem = nil
                     },
                     onPreview: { showsClipPreview = true },
+                    onCancel: { showsNewClipComposer = false },
                     onDone: { showsNewClipComposer = false }
                 )
             }
@@ -188,16 +186,6 @@ struct AddTradeView: View {
                 showsPsychologySheet = false
             }
             .experienceSheetChrome(interactiveDismiss: false)
-        }
-        .fullScreenCover(isPresented: $showsClipCamera) {
-            CameraVideoPicker(
-                onPicked: { url in
-                    showsClipCamera = false
-                    viewModel.applyClipVideo(from: url, contentType: "video/quicktime")
-                },
-                onCancel: { showsClipCamera = false }
-            )
-            .ignoresSafeArea()
         }
         .sheet(isPresented: $showsClipPreview) {
             if let url = viewModel.reelDraft?.localVideoURL {
@@ -1485,10 +1473,13 @@ struct AddTradeNewClipComposerView: View {
     var draft: ReelDraft?
     var contextNote: String
     @Binding var videoItem: PhotosPickerItem?
-    var onRecord: () -> Void
+    var onRecord: (URL) -> Void
     var onClear: () -> Void
     var onPreview: () -> Void
+    var onCancel: () -> Void
     var onDone: () -> Void
+
+    @State private var showsCamera = false
 
     @Environment(\.themeColors) private var colors
 
@@ -1530,7 +1521,7 @@ struct AddTradeNewClipComposerView: View {
                     }
                     .accessibilityIdentifier("addTrade.newClip.choose")
                     if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                        Button("Record Video", action: onRecord)
+                        Button("Record Video") { showsCamera = true }
                             .accessibilityIdentifier("addTrade.newClip.record")
                     }
                 }
@@ -1548,10 +1539,23 @@ struct AddTradeNewClipComposerView: View {
         .experienceTradeTraxsFormStyle(pageBackground: false)
         .experienceNavigationTitle("New Clip")
         .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", action: onCancel)
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done", action: onDone)
                     .disabled(draft == nil && !isPreparing)
             }
+        }
+        .fullScreenCover(isPresented: $showsCamera) {
+            CameraVideoPicker(
+                onPicked: { url in
+                    showsCamera = false
+                    onRecord(url)
+                },
+                onCancel: { showsCamera = false }
+            )
+            .ignoresSafeArea()
         }
         .accessibilityIdentifier("addTrade.newClip")
     }

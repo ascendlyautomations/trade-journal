@@ -19,6 +19,12 @@ enum DashboardAnalyticsAggregateChartsCoordinator {
         rpc: any RPCClient
     ) async -> Bool {
         let store = DashboardAnalyticsAggregateChartsStore.shared
+        guard DashboardPremiumChartsRemotePolicy.mayFetchPremiumChartsRemotely(profileID: viewerID) else {
+            if token == selectionToken {
+                store.markFailed(revision: revision, nonRetryable: true)
+            }
+            return false
+        }
         if store.availability(revision: revision).isLoaded,
            let cached = store.charts(revision: revision),
            DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached)

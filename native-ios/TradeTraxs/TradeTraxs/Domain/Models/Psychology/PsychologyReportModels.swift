@@ -4,6 +4,7 @@ import Foundation
 nonisolated enum PsychologyReportTemplate: String, Hashable, Codable, Sendable, CaseIterable, Identifiable {
     case weekly
     case monthly
+    case custom
     case sleepPerformance
     case discipline
     case emotions
@@ -17,6 +18,7 @@ nonisolated enum PsychologyReportTemplate: String, Hashable, Codable, Sendable, 
         switch self {
         case .weekly: return "Weekly Psych Report"
         case .monthly: return "Monthly Psych Report"
+        case .custom: return "Custom Psychology Report"
         case .sleepPerformance: return "Sleep & Performance"
         case .discipline: return "Discipline Report"
         case .emotions: return "Emotional Trading"
@@ -30,6 +32,7 @@ nonisolated enum PsychologyReportTemplate: String, Hashable, Codable, Sendable, 
         switch self {
         case .weekly: return "Check-ins, discipline, emotions, and behavior for a calendar week."
         case .monthly: return "Monthly trends with comparisons to the prior month."
+        case .custom: return "Generate a report for any start and end date."
         case .sleepPerformance: return "How sleep correlates with your results."
         case .discipline: return "Plan adherence and execution over recent trades."
         case .emotions: return "Emotion tags and their performance impact."
@@ -42,6 +45,7 @@ nonisolated enum PsychologyReportTemplate: String, Hashable, Codable, Sendable, 
     var systemImage: String {
         switch self {
         case .weekly, .monthly: return "brain.head.profile"
+        case .custom: return "calendar.badge.plus"
         case .sleepPerformance: return "bed.double.fill"
         case .discipline: return "checkmark.seal.fill"
         case .emotions: return "face.smiling"

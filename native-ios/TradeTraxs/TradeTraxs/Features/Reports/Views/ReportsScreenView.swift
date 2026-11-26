@@ -104,7 +104,11 @@ struct ReportsScreenView: View {
             .experienceSheetChrome()
         }
         .sheet(isPresented: $viewModel.showsCustomRangeSheet) {
-            TradingReportCustomRangeSheet(viewModel: viewModel)
+            TradingReportCustomRangeSheet(viewModel: viewModel, target: .performance)
+                .experienceSheetChrome()
+        }
+        .sheet(isPresented: $viewModel.showsPsychologyCustomRangeSheet) {
+            TradingReportCustomRangeSheet(viewModel: viewModel, target: .psychology)
                 .experienceSheetChrome()
         }
         .accessibilityIdentifier("reports.home")
@@ -432,7 +436,13 @@ struct ReportsScreenView: View {
             trailingBehavior: showsPeriodPicker
                 ? .interactive { viewModel.showPsychologyPeriodPicker(for: card) }
                 : .decorative,
-            onTap: { viewModel.openPsychologyReport(for: card) }
+            onTap: {
+                if card.template == .custom {
+                    viewModel.openPsychologyCustomRangeSheet()
+                } else {
+                    viewModel.openPsychologyReport(for: card)
+                }
+            }
         )
         .accessibilityIdentifier("reports.psychology.\(card.template.rawValue)")
     }

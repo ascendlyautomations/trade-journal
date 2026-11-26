@@ -455,19 +455,24 @@ struct ManageRoomView: View {
                     .experienceStyle(.body, color: colors.tertiaryText)
             } else {
                 ForEach(viewModel.bans) { ban in
-                    HStack {
+                    HStack(spacing: ExperienceSpacing.md) {
+                        FollowListAvatarView(profile: ban.profile, imagePipeline: imagePipeline)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ban.profile.displayName)
                                 .experienceStyle(.subheadline, color: colors.primaryText)
+                                .lineLimit(1)
                             Text("@\(ban.profile.username)")
-                                .experienceStyle(.caption, color: colors.secondaryText)
+                                .experienceStyle(.footnote, color: colors.secondaryText)
+                                .lineLimit(1)
                         }
-                        Spacer()
+                        Spacer(minLength: ExperienceSpacing.xs)
                         Button("Unban") {
                             Task { await viewModel.unban(ban) }
                         }
+                        .font(.subheadline.weight(.semibold))
                         .disabled(!viewModel.canUnban(ban) || viewModel.isMutatingMember)
                     }
+                    .experienceDashboardListRow()
                 }
             }
         }
@@ -481,7 +486,7 @@ struct ManageRoomView: View {
         RoomMemberManagementSheet(
             member: member.asMemberListItem,
             imagePipeline: imagePipeline,
-            canRemove: viewModel.canRemoveMember(member),
+            canRemove: false,
             canBan: viewModel.canBanMember(member),
             onViewProfile: {
                 selectedMember = nil

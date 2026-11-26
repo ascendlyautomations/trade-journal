@@ -88,6 +88,7 @@ nonisolated struct ActivityNotification: Hashable, Codable, Sendable, Identifiab
     var profilePostID: PostID?
     var achievementPostID: PostID?
     var reelID: ReelID?
+    var storyID: StoryID? = nil
     var commentID: CommentID?
     var conversationID: ConversationID?
     var roomID: RoomID?

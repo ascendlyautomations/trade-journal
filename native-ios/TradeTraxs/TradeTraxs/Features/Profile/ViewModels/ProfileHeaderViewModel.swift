@@ -219,6 +219,11 @@ final class ProfileHeaderViewModel {
         navigationCoordinator.pushTradeRoomsHome()
     }
 
+    func openCreateStory() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.openCompose(.story)
+    }
+
     func openViewerStory(_ story: Story) {
         guard ActiveStorySemantics.isActive(createdAt: story.createdAt) else { return }
         ExperienceHaptics.play(.selection)

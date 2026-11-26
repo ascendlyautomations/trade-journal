@@ -24,7 +24,7 @@ nonisolated enum PsychologyReportPeriods {
     ) -> [PsychologyReportPeriodRef] {
         var refs: [PsychologyReportPeriodRef] = []
 
-        for template in PsychologyReportTemplate.allCases where !template.isPeriodic {
+        for template in PsychologyReportTemplate.allCases where !template.isPeriodic && template != .custom {
             refs.append(PsychologyReportPeriodRef(template: template, periodID: "rolling:90d"))
         }
 

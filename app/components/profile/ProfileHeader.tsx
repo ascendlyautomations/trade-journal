@@ -3,6 +3,7 @@
 import type { ChangeEvent, RefObject } from "react"
 import FollowButton from "@/app/components/FollowButton"
 import StoryAvatarRing from "@/app/components/feed/StoryAvatarRing"
+import StoryPlusBadge from "@/app/components/feed/StoryPlusBadge"
 import { PROFILE_PAGE_AVATAR_PX } from "@/app/components/SafeProfileAvatar"
 import { normalizeTraderType } from "@/lib/traderType"
 import ProfileCreateMenu from "./ProfileCreateMenu"
@@ -132,30 +133,35 @@ export default function ProfileHeader({
             ref={storyTriggerRef}
             className="flex min-w-0 w-full flex-1 flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-6"
           >
-            {hasActiveStory ? (
-              <button
-                type="button"
-                onClick={onOpenStory}
-                className="shrink-0 rounded-full outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
-                aria-label={`View ${profile.username || "user"}'s story`}
-              >
+            <div className="relative shrink-0">
+              {hasActiveStory ? (
+                <button
+                  type="button"
+                  onClick={onOpenStory}
+                  className="rounded-full outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+                  aria-label={`View ${profile.username || "user"}'s story`}
+                >
+                  <StoryAvatarRing
+                    profile={profile}
+                    hasActiveStory
+                    priority
+                    displaySizePx={PROFILE_PAGE_AVATAR_PX}
+                    sizeClassName="h-20 w-20 md:h-24 md:w-24"
+                  />
+                </button>
+              ) : (
                 <StoryAvatarRing
                   profile={profile}
-                  hasActiveStory
+                  hasActiveStory={false}
                   priority
                   displaySizePx={PROFILE_PAGE_AVATAR_PX}
                   sizeClassName="h-20 w-20 md:h-24 md:w-24"
                 />
-              </button>
-            ) : (
-              <StoryAvatarRing
-                profile={profile}
-                hasActiveStory={false}
-                priority
-                displaySizePx={PROFILE_PAGE_AVATAR_PX}
-                sizeClassName="h-20 w-20 md:h-24 md:w-24"
-              />
-            )}
+              )}
+              {isOwnProfile ? (
+                <StoryPlusBadge onClick={onCreateStory} />
+              ) : null}
+            </div>
 
             <div className="flex min-w-0 w-full flex-1 flex-col justify-center text-center sm:text-left">
               <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">

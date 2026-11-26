@@ -64,6 +64,7 @@ struct BrokerIntegrationConnectionCoordinator: View {
                         )
                     }
                 )
+                .experienceSheetChrome()
             }
             .sheet(item: $createLinkTarget) { target in
                 NavigationStack {
@@ -72,12 +73,13 @@ struct BrokerIntegrationConnectionCoordinator: View {
                         mode: .create,
                         draft: target.draft,
                         data: data,
-                        onCreateSubmit: { draft in
+                        onCreateSubmit: { draft, liveDrawdown in
                             await viewModel.createAndLink(
                                 provider: target.provider,
                                 connectionId: target.connectionId,
                                 brokerAccount: target.account,
-                                draft: draft
+                                draft: draft,
+                                livePersonalDrawdown: liveDrawdown
                             )
                         }
                     )
@@ -168,50 +170,73 @@ struct BrokerLinkExistingAccountSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
+    private var eligibleLinkAccounts: [TradingAccount] {
+        manageAccounts
+    }
+
+    private var brokerAccountNumberText: String {
+        let trimmed = brokerAccount.externalAccountId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        return brokerAccount.displayTitle
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Text(brokerAccount.displayTitle)
-                        .experienceStyle(.body, color: colors.primaryText)
-                    Text("Choose a TradeTraxs account to link, or create a new one.")
-                        .experienceStyle(.footnote, color: colors.secondaryText)
+                    SettingsIntroBlock(
+                        title: "Link to TradeTraxs",
+                        message: "Choose an account to link, or create a new one."
+                    )
+                    .experienceDashboardListRow()
                 }
 
-                Section("Link Existing") {
-                    ForEach(manageAccounts) { account in
-                        Button {
-                            selectedAccountID = account.id
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(account.name)
-                                    Text(account.category.rawValue.capitalized)
-                                        .experienceStyle(.caption, color: colors.secondaryText)
-                                }
-                                Spacer()
-                                if selectedAccountID == account.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(colors.accent)
-                                }
-                            }
+                Section {
+                    brokerAccountCard
+                        .padding(ExperienceSpacing.md)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .experienceGroupedPanel(cornerRadius: ExperienceRadius.md, prominence: .standard)
+                        .listRowInsets(SettingsListLayout.groupedCardRowInsets)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+
+                if !eligibleLinkAccounts.isEmpty {
+                    Section("Link Existing") {
+                        ForEach(eligibleLinkAccounts) { account in
+                            linkableAccountRow(account)
                         }
-                        .buttonStyle(.experiencePlain)
                     }
                 }
 
                 Section {
-                    Button("Create New TradeTraxs Account") {
+                    Button {
                         dismiss()
                         onCreateNew()
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Create New TradeTraxs Account",
+                            subtitle: "Set up a new account linked to this broker.",
+                            systemImage: "plus",
+                            showsChevron: true
+                        )
                     }
+                    .buttonStyle(.experiencePlain)
+                    .experienceDashboardListRow()
+                    .accessibilityIdentifier("brokerIntegrations.linkAccount.createNew")
                 }
             }
-            .experienceTradeTraxsFormStyle(pageBackground: false)
+            .experienceInsetGroupedListStyle(pageBackground: false)
+            .listRowSeparatorTint(colors.separator)
+            .listSectionSpacing(ExperienceSpacing.xs)
             .experienceNavigationTitle("Link Account")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .accessibilityIdentifier("brokerIntegrations.linkAccount.cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Link") {
@@ -228,8 +253,51 @@ struct BrokerLinkExistingAccountSheet: View {
                         }
                     }
                     .disabled(selectedAccountID == nil)
+                    .accessibilityIdentifier("brokerIntegrations.linkAccount.confirm")
                 }
             }
         }
+        .accessibilityIdentifier("brokerIntegrations.linkAccountSheet")
+    }
+
+    @ViewBuilder
+    private var brokerAccountCard: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            SettingsLabeledField(title: "Broker Account") {
+                Text(brokerAccountNumberText)
+                    .experienceStyle(.body, color: colors.primaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if brokerAccount.displayTitle != brokerAccountNumberText {
+                Text(brokerAccount.displayTitle)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+        }
+    }
+
+    private func linkableAccountRow(_ account: TradingAccount) -> some View {
+        let isSelected = selectedAccountID == account.id
+        return Button {
+            ExperienceHaptics.play(.selection)
+            selectedAccountID = account.id
+        } label: {
+            HStack(spacing: ExperienceSpacing.sm) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? colors.accent : colors.tertiaryText)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text(TradingAccountDisplay.title(for: account, audience: .owner))
+                        .experienceStyle(.body, color: colors.primaryText)
+                    Text(TradingAccountDisplay.ownerDropdownModeLabel(account.mode))
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, ExperienceSpacing.xxs)
+        }
+        .buttonStyle(.experiencePlain)
+        .experienceDashboardListRow()
+        .accessibilityIdentifier("brokerIntegrations.linkAccount.account.\(account.id.rawValue)")
     }
 }

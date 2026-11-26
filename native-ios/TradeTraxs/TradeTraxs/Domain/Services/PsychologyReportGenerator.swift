@@ -417,7 +417,7 @@ nonisolated enum PsychologyReportGenerator {
         template: PsychologyReportTemplate
     ) -> [PsychologyReportSection] {
         switch template {
-        case .weekly, .monthly:
+        case .weekly, .monthly, .custom:
             return sections
         case .sleepPerformance:
             return sections.filter { ["performance", "sleep", "checkIn", "trends"].contains($0.id) }

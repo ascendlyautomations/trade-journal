@@ -141,7 +141,7 @@ final class RoomMembersViewModel {
                 inboxStore: inboxStore,
                 viewerID: viewerID
             )
-            statusMessage = "Member removed."
+            SaveSuccessConfirmationCenter.shared.present("Member removed.")
             await applyMemberRemovedLocally(profileID: profileID, viewerID: viewerID)
             ExperienceHaptics.play(.success)
         } catch {
@@ -166,7 +166,7 @@ final class RoomMembersViewModel {
                 inboxStore: inboxStore,
                 viewerID: viewerID
             )
-            statusMessage = "Member banned."
+            SaveSuccessConfirmationCenter.shared.present("Member banned.")
             await applyMemberRemovedLocally(profileID: profileID, viewerID: viewerID)
             ExperienceHaptics.play(.success)
         } catch {
@@ -320,8 +320,9 @@ final class RoomMembersViewModel {
 
     func requestModeratorStatusChange(for item: RoomMemberItem) {
         guard canManageModeratorStatus(for: item) else { return }
+        let makeModerator = !isMemberModerator(item)
         pendingModeratorProfileID = item.id
-        pendingModeratorMake = !isMemberModerator(item)
+        pendingModeratorMake = makeModerator
         showsModeratorConfirmation = true
     }
 
@@ -332,13 +333,15 @@ final class RoomMembersViewModel {
     }
 
     var moderatorConfirmationTitle: String {
-        pendingModeratorMake == true
+        guard let makeModerator = pendingModeratorMake else { return "" }
+        return makeModerator
             ? "Make this member a moderator?"
             : "Remove moderator status from this member?"
     }
 
     var moderatorConfirmationButtonTitle: String {
-        pendingModeratorMake == true ? "Make Moderator" : "Remove Moderator"
+        guard let makeModerator = pendingModeratorMake else { return "Confirm" }
+        return makeModerator ? "Make Moderator" : "Remove Moderator"
     }
 
     func confirmModeratorStatusChange() async {
@@ -367,7 +370,9 @@ final class RoomMembersViewModel {
                 management: management
             )
             applyCachedTagsToMembers()
-            statusMessage = makeModerator ? "Moderator added." : "Moderator removed."
+            SaveSuccessConfirmationCenter.shared.present(
+                makeModerator ? "Moderator assigned." : "Moderator removed."
+            )
             ExperienceHaptics.play(.success)
         } catch {
             statusMessage = ConversationThreadSupport.message(for: error)

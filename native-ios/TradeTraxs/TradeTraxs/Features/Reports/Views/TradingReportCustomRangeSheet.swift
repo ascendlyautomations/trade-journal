@@ -1,7 +1,13 @@
 import SwiftUI
 
+enum TradingReportCustomRangeSheetTarget {
+    case performance
+    case psychology
+}
+
 struct TradingReportCustomRangeSheet: View {
     @Bindable var viewModel: ReportsScreenViewModel
+    var target: TradingReportCustomRangeSheetTarget = .performance
 
     @Environment(\.themeColors) private var colors
     @Environment(\.dismiss) private var dismiss
@@ -65,7 +71,12 @@ struct TradingReportCustomRangeSheet: View {
                         kind: .primary,
                         isEnabled: viewModel.canGenerateCustomReport
                     ) {
-                        viewModel.generateCustomReport()
+                        switch target {
+                        case .performance:
+                            viewModel.generateCustomReport()
+                        case .psychology:
+                            viewModel.generateCustomPsychologyReport()
+                        }
                         dismiss()
                     }
                     .listRowInsets(EdgeInsets())

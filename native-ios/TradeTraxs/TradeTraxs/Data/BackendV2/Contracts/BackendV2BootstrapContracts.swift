@@ -558,6 +558,7 @@ nonisolated struct ActivityNotificationWireV1: Codable, Sendable, Equatable {
     var profile_post_id: String?
     var achievement_post_id: String?
     var reel_id: String?
+    var story_id: String?
     var comment_id: String?
     var room_id: String?
     var room_message_id: String?
@@ -584,6 +585,7 @@ nonisolated struct ActivityNotificationWireV1: Codable, Sendable, Equatable {
             profile_post_id: profile_post_id,
             achievement_post_id: achievement_post_id,
             reel_id: reel_id,
+            story_id: story_id,
             comment_id: comment_id,
             room_id: room_id,
             room_message_id: room_message_id

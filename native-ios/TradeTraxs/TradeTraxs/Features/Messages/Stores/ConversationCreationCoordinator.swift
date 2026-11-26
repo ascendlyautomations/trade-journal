@@ -161,6 +161,9 @@ final class ConversationCreationCoordinator {
         viewerID: ProfileID,
         recipients: [Profile],
         name: String?,
+        avatarJPEG: Data? = nil,
+        uploadService: (any UploadService)? = nil,
+        objectStorage: (any ObjectStorageProviding)? = nil,
         messages: any MessageRepository,
         detailCache: DetailPresentationCache,
         inboxStore: MessagesInboxStore
@@ -211,11 +214,32 @@ final class ConversationCreationCoordinator {
 
         guard sessionGeneration == generation else { throw CreationError.staleSession }
 
-        let conversation = try await messages.createGroupConversation(
+        var conversation = try await messages.createGroupConversation(
             viewerID: viewerID,
             recipients: uniqueRecipients,
             name: name
         )
+        if let avatarJPEG,
+           let uploadService,
+           let objectStorage
+        {
+            let avatarURL = try await GroupAvatarUpload.upload(
+                jpegData: avatarJPEG,
+                conversationID: conversation.id,
+                uploadService: uploadService,
+                objectStorage: objectStorage
+            )
+            var patch = GroupConversationDetailsPatch(avatarURL: avatarURL)
+            if let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty {
+                patch.name = trimmed
+            } else if let title = conversation.title {
+                patch.name = title
+            }
+            conversation = try await messages.updateGroupConversationDetails(
+                conversationID: conversation.id,
+                patch: patch
+            )
+        }
         #if DEBUG
         ConversationCreationTelemetry.persisted(conversationID: conversation.id)
         ConversationCreationTelemetry.participantsCompleted(count: uniqueRecipients.count + 1)

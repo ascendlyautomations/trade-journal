@@ -87,4 +87,26 @@ nonisolated enum AchievementDetailPresentation {
     static func trailingAccessoryUsesMetricColor(for achievement: Achievement) -> Bool {
         achievement.value != nil && !ProfilePayoutTotals.isPayout(achievement.kind)
     }
+
+    /// Headline trailing amount (payout or milestone), nil when nothing to show on the right.
+    static func headlineTrailingAmount(for achievement: Achievement) -> (text: String, usesMetricColor: Bool)? {
+        if ProfilePayoutTotals.isPayout(achievement.kind),
+           let payoutText = ProfilePayoutTotals.payoutDisplayText(for: achievement)
+        {
+            return (payoutText, true)
+        }
+        if let accessory = titleTrailingAccessory(for: achievement) {
+            return (accessory, trailingAccessoryUsesMetricColor(for: achievement))
+        }
+        return nil
+    }
+
+    /// Chip labels for achievement type and account/firm (feed + detail meta row).
+    static func metaChipTitles(for achievement: Achievement) -> [String] {
+        var chips = [achievementKindDisplayName(achievement.kind)]
+        if let firm = trimmedFirm(achievement.firm) {
+            chips.append(firm)
+        }
+        return chips
+    }
 }

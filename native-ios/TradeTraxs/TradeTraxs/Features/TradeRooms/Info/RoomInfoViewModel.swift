@@ -98,11 +98,10 @@ final class RoomInfoViewModel {
         return TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID)
     }
 
-    var rulesText: String {
-        """
-        Be respectful. No spam, no financial advice guarantees, and keep screenshots \
-        of your own journal. Moderators may remove messages that break community standards.
-        """
+    var tradingRulesText: String? {
+        guard let raw = room?.rules else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     func loadIfNeeded() {

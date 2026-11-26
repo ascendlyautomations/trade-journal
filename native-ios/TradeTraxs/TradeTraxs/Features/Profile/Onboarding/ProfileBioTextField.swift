@@ -8,13 +8,33 @@ struct ProfileBioTextField: View {
     var minHeight: CGFloat?
     var maxHeight: CGFloat?
 
+    @Environment(\.themeColors) private var colors
+
     var body: some View {
-        ProfileBioTextViewRepresentable(
-            text: $text,
-            placeholder: placeholder,
-            minHeight: minHeight,
-            maxHeight: maxHeight
-        )
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            ProfileBioTextViewRepresentable(
+                text: $text,
+                placeholder: placeholder,
+                minHeight: minHeight,
+                maxHeight: maxHeight
+            )
+            HStack {
+                Spacer(minLength: 0)
+                Text(ProfileBioPolicy.characterCounterLabel(for: text))
+                    .font(.caption2)
+                    .foregroundStyle(counterColor)
+                    .accessibilityIdentifier("profile.bio.characterCounter")
+            }
+        }
+    }
+
+    private var counterColor: Color {
+        let limit = ProfileBioPolicy.maximumAllowedCharacterCount()
+        let count = ProfileBioPolicy.characterCount(for: text)
+        if count >= limit {
+            return colors.tertiaryText
+        }
+        return colors.secondaryText.opacity(0.9)
     }
 }
 
@@ -55,7 +75,8 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: BioTextViewContainer, context: Context) {
         context.coordinator.attach(container: uiView)
         uiView.placeholderLabel.text = placeholder
-        let display = ProfileBioPolicy.constrained(text)
+        let width = Self.contentWidth(for: uiView)
+        let display = ProfileBioPolicy.constrained(text, contentWidth: width)
         if uiView.textView.text != display {
             uiView.textView.text = display
         }
@@ -83,10 +104,12 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
             replacementText string: String
         ) -> Bool {
             let current = textView.text ?? ""
+            let width = contentWidth(for: container)
             switch ProfileBioPolicy.editDecision(
                 current: current,
                 range: range,
-                replacement: string
+                replacement: string,
+                contentWidth: width
             ) {
             case .accept:
                 return true
@@ -104,7 +127,8 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             let raw = textView.text ?? ""
-            let capped = ProfileBioPolicy.constrained(raw)
+            let width = contentWidth(for: container)
+            let capped = ProfileBioPolicy.constrained(raw, contentWidth: width)
             if capped != raw {
                 textView.text = capped
             }
@@ -114,6 +138,19 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
             container?.updatePlaceholderVisibility()
             container?.invalidateIntrinsicContentSize()
         }
+
+        private func contentWidth(for container: BioTextViewContainer?) -> CGFloat {
+            guard let width = container?.bounds.width, width > 0 else {
+                return ProfileBioPolicy.referenceContentWidth()
+            }
+            return width
+        }
+    }
+
+    private static func contentWidth(for container: BioTextViewContainer) -> CGFloat {
+        let width = container.bounds.width
+        if width > 0 { return width }
+        return ProfileBioPolicy.referenceContentWidth()
     }
 }
 

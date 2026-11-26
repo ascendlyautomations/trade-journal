@@ -341,6 +341,21 @@ nonisolated enum SharedContentMessageSupport {
         var hiddenMessageIDs: Set<MessageID> = []
     }
 
+    /// Room/API placeholder when a trade row has no user-written caption.
+    static func tradeShareRoomPlaceholderContent() -> String {
+        "Shared a trade"
+    }
+
+    /// `content` stored on a trade-share row (DM `messages.content` or room caption).
+    static func tradeShareStoredBody(from content: String?) -> String? {
+        normalizedUserWrittenBody(content)
+    }
+
+    /// Outbound room `content` for a trade attachment.
+    static func tradeShareRoomOutboundContent(userCaption: String?) -> String {
+        tradeShareStoredBody(from: userCaption) ?? tradeShareRoomPlaceholderContent()
+    }
+
     /// Pairs optional sender notes with share rows (card-first layout); hides consumed text rows.
     static func bundleShareCaptions(in messages: [Message]) -> ShareCaptionBundling {
         var result = ShareCaptionBundling()
@@ -351,6 +366,8 @@ nonisolated enum SharedContentMessageSupport {
             if let inline = userWrittenMessage(for: share) {
                 result.captionByShareID[share.id] = inline
             }
+            // Trade shares use a single message row (caption + attachment). Never hide adjacent text.
+            if share.kind == .tradeShare { continue }
             if result.captionByShareID[share.id] == nil,
                index + 1 < messages.count
             {
@@ -370,6 +387,7 @@ nonisolated enum SharedContentMessageSupport {
         for index in messages.indices {
             let share = messages[index]
             guard isInternallySharedContent(share), result.captionByShareID[share.id] == nil else { continue }
+            if share.kind == .tradeShare { continue }
             guard index > 0 else { continue }
             let previous = messages[index - 1]
             guard !result.hiddenMessageIDs.contains(previous.id),

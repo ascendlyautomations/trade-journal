@@ -5,7 +5,7 @@ import SwiftUI
 enum PsychologyReportChartPlanner {
     static func sectionIDs(for template: PsychologyReportTemplate) -> [String] {
         switch template {
-        case .weekly, .monthly:
+        case .weekly, .monthly, .custom:
             return [
                 "discipline", "sleep", "emotion", "afterLosses", "stress",
                 "tradeFrequency", "focus", "energy",
@@ -53,7 +53,7 @@ enum PsychologyReportChartPlanner {
             case .afterLosses: return .afterLosses
             case .mentalState: return .mentalState
             case .tradeFrequency: return .tradeFrequency
-            case .weekly, .monthly: return nil
+            case .weekly, .monthly, .custom: return nil
             }
         }()
         if let preferred,
@@ -65,7 +65,7 @@ enum PsychologyReportChartPlanner {
 
     static func showsEmotionBreakdown(for report: PsychologyReport) -> Bool {
         switch report.periodRef.template {
-        case .emotions, .weekly, .monthly:
+        case .emotions, .weekly, .monthly, .custom:
             return report.emotionBreakdown.contains { $0.metrics.tradeCount >= 1 }
         default:
             return false

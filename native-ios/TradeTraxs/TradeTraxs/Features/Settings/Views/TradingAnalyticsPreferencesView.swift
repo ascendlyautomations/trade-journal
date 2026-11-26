@@ -227,19 +227,10 @@ struct TradingAnalyticsPreferencesView: View {
                     }
                 }
                 settingsInlineDivider()
-                Button {
-                    showsInstrumentPicker = true
-                } label: {
-                    dropdownLabel(
-                        "Primary Instrument",
-                        info: .primaryInstruments,
-                        value: instrumentSummary,
-                        isPlaceholder: viewModel.preferences.primaryInstruments.isEmpty
-                    )
-                }
-                .buttonStyle(.experiencePlain)
-                .accessibilityIdentifier("settings.tradingAnalytics.instruments")
-                .tradingRulesSettingsRow()
+                primaryInstrumentsInlineRow(
+                    title: "Primary Instrument",
+                    identifier: "settings.tradingAnalytics.instruments"
+                )
                 settingsInlineDivider()
                 dropdownRow(
                     "Allowed Trading Days",
@@ -580,19 +571,10 @@ struct TradingAnalyticsPreferencesView: View {
                     }
                 }
                 settingsInlineDivider()
-                Button {
-                    showsInstrumentPicker = true
-                } label: {
-                    dropdownLabel(
-                        "Primary Instruments",
-                        info: .primaryInstruments,
-                        value: instrumentSummary,
-                        isPlaceholder: viewModel.preferences.primaryInstruments.isEmpty
-                    )
-                }
-                .buttonStyle(.experiencePlain)
-                .accessibilityIdentifier("settings.tradingAnalytics.instruments")
-                .tradingRulesSettingsRow()
+                primaryInstrumentsInlineRow(
+                    title: "Primary Instruments",
+                    identifier: "settings.tradingAnalytics.instruments"
+                )
                 settingsInlineDivider()
                 dropdownRow(
                     "Allowed trading days",
@@ -806,7 +788,8 @@ struct TradingAnalyticsPreferencesView: View {
             info: .ruleTemplate,
             value: "Choose template…",
             isPlaceholder: true,
-            identifier: "settings.tradingAnalytics.template"
+            identifier: "settings.tradingAnalytics.template",
+            valueColumnWidth: TradingPreferenceFormLayout.templateDropdownControlWidth
         ) {
             ForEach(TradingRuleTemplateID.allCases.filter { $0 != .custom }) { template in
                 Button {
@@ -849,12 +832,32 @@ struct TradingAnalyticsPreferencesView: View {
         viewModel.accounts.first { $0.id == viewModel.selectedAccountID }?.name ?? "None"
     }
 
+    private func primaryInstrumentsInlineRow(title: String, identifier: String) -> some View {
+        HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
+            TradingRulesFieldLabel(title: title, info: .primaryInstruments)
+                .tradingRulesSettingsLabelColumn()
+            Button {
+                showsInstrumentPicker = true
+            } label: {
+                dropdownValueLabel(
+                    value: instrumentSummary,
+                    isPlaceholder: viewModel.preferences.primaryInstruments.isEmpty
+                )
+            }
+            .buttonStyle(.experiencePlain)
+            .tradingRulesSettingsValueColumn()
+            .accessibilityIdentifier(identifier)
+        }
+        .tradingRulesSettingsRow()
+    }
+
     private func inlineDropdownRow<MenuContent: View>(
         _ title: String,
         info: TradingRulesFieldInfo,
         value: String,
         isPlaceholder: Bool,
         identifier: String,
+        valueColumnWidth: CGFloat = TradingPreferenceFormLayout.valueControlWidth,
         @ViewBuilder menu: () -> MenuContent
     ) -> some View {
         HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
@@ -864,7 +867,7 @@ struct TradingAnalyticsPreferencesView: View {
                 dropdownValueLabel(value: value, isPlaceholder: isPlaceholder)
             }
             .buttonStyle(.experiencePlain)
-            .tradingRulesSettingsValueColumn()
+            .tradingRulesSettingsValueColumn(width: valueColumnWidth)
             .accessibilityIdentifier(identifier)
         }
         .tradingRulesSettingsRow()
@@ -937,7 +940,7 @@ struct TradingAnalyticsPreferencesView: View {
         style: NumericInputStyle,
         keyboard: UIKeyboardType = .decimalPad
     ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
+        HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
             TradingRulesFieldLabel(title: title, info: info)
                 .tradingRulesSettingsLabelColumn()
             TextField(placeholder, text: text.numericInput(style))
@@ -991,7 +994,7 @@ struct TradingAnalyticsPreferencesView: View {
         scopeIdentifier: String
     ) -> some View {
         VStack(alignment: .leading, spacing: TradingPreferenceFormLayout.secondaryLineSpacing) {
-            HStack(alignment: .firstTextBaseline, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
+            HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
                 tradingRulesTitleInfoRow(title: title, info: info)
                     .tradingRulesSettingsLabelColumn()
                 TextField(placeholder, text: text.numericInput(style))

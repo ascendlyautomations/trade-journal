@@ -127,7 +127,9 @@ struct RoomMemberManagementSheet: View {
     private var moderatorConfirmationBinding: Binding<Bool> {
         Binding(
             get: {
-                presentsModeratorConfirmation && showsModeratorConfirmation
+                presentsModeratorConfirmation
+                    && showsModeratorConfirmation
+                    && !moderatorDialogTitle.isEmpty
             },
             set: { showsModeratorConfirmation = $0 }
         )

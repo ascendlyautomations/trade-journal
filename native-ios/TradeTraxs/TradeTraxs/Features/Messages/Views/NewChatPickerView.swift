@@ -1,8 +1,12 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 /// Native user picker for starting personal or group conversations.
 struct NewChatPickerView: View {
     @State private var viewModel: NewChatViewModel
+    @State private var groupPhotoItem: PhotosPickerItem?
+    @State private var groupCropSourceImage: UIImage?
     private let imagePipeline: any ImagePipeline
     var onConversationReady: (Conversation) -> Void
 
@@ -20,7 +24,9 @@ struct NewChatPickerView: View {
                 profiles: data.profiles,
                 explore: data.explore,
                 session: data.session,
-                detailCache: data.detailCache
+                detailCache: data.detailCache,
+                uploadService: data.uploadService,
+                objectStorage: data.objectStorage
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -52,6 +58,19 @@ struct NewChatPickerView: View {
             .onReceive(NotificationCenter.default.publisher(for: .userBlockListDidChange)) { _ in
                 viewModel.handleBlockListChange()
             }
+            .onChange(of: groupPhotoItem) { _, item in
+                Task { await presentGroupAvatarCrop(for: item) }
+            }
+            .imageCropSelectionBaked(
+                sourceImage: $groupCropSourceImage,
+                preset: .avatar,
+                onConfirm: { image in
+                    viewModel.setGroupAvatar(from: image)
+                    groupPhotoItem = nil
+                    groupCropSourceImage = nil
+                },
+                onCancel: { groupPhotoItem = nil }
+            )
         }
     }
 
@@ -287,9 +306,19 @@ struct NewChatPickerView: View {
 
     private var groupComposerHeader: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            TextField("Group name (optional)", text: $viewModel.groupName)
-                .textFieldStyle(.roundedBorder)
-                .padding(.horizontal, ExperienceSpacing.md)
+            HStack(spacing: ExperienceSpacing.sm) {
+                groupAvatarPicker
+                TextField("Group name (optional)", text: $viewModel.groupName)
+                    .font(ExperienceTypography.body)
+                    .foregroundStyle(colors.primaryText)
+                    .textInputAutocapitalization(.words)
+                    .disableAutocorrection(false)
+                    .padding(.horizontal, ExperienceSpacing.sm)
+                    .padding(.vertical, ExperienceSpacing.xs)
+                    .experienceFilterSearchField()
+                    .accessibilityIdentifier("newChat.groupName")
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
 
             if !viewModel.selectedGroupMembers.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -315,6 +344,36 @@ struct NewChatPickerView: View {
             }
         }
         .padding(.bottom, ExperienceSpacing.xs)
+    }
+
+    private var groupAvatarPicker: some View {
+        PhotosPicker(
+            selection: $groupPhotoItem,
+            matching: MediaPickerPolicy.imageOnly.matching,
+            preferredItemEncoding: .compatible
+        ) {
+            ZStack {
+                if let preview = viewModel.groupAvatarPreview {
+                    Image(uiImage: preview)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Circle()
+                        .fill(colors.backgroundSecondary)
+                    ExperienceIcon(icon: .photo, size: .sm, color: colors.secondaryText)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(colors.border.opacity(0.35), lineWidth: ExperienceBorder.hairline))
+        }
+        .accessibilityLabel("Group photo, optional")
+        .accessibilityIdentifier("newChat.groupAvatar")
+    }
+
+    private func presentGroupAvatarCrop(for item: PhotosPickerItem?) async {
+        guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
+        groupCropSourceImage = image
     }
 
     private func personalRow(_ profile: Profile) -> some View {

@@ -523,7 +523,9 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 user_id: message.senderProfileID.rawValue,
                 type: "trade",
                 trade_id: tradeID.rawValue,
-                content: "Shared a trade",
+                content: SharedContentMessageSupport.tradeShareRoomOutboundContent(
+                    userCaption: message.body
+                ),
                 section_id: message.channelID?.rawValue,
                 parent_message_id: parentMessageID
             )

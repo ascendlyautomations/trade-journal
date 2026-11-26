@@ -8,12 +8,13 @@ nonisolated enum RoomMessageMapping {
             roomMessage.channelID?.rawValue ?? roomMessage.roomID.rawValue
         )
         if let tradeID = roomMessage.attachedTradeID {
+            let caption = SharedContentMessageSupport.tradeShareStoredBody(from: roomMessage.body)
             return Message(
                 id: MessageID(roomMessage.id.rawValue),
                 conversationID: conversationID,
                 senderProfileID: roomMessage.senderProfileID,
                 kind: .tradeShare,
-                body: nil,
+                body: caption,
                 attachments: [
                     MessageAttachment(
                         id: tradeID.rawValue,

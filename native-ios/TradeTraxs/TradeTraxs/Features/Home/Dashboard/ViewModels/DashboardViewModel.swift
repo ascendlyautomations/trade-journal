@@ -65,6 +65,8 @@ final class DashboardViewModel {
     private var profileID: ProfileID?
     private var tradeInputs: [DashboardChartMetrics.Input] = []
     private var payoutTotal: Decimal?
+    /// V3 compact bootstrap payout aggregate; interim display only when scope and calculation match Withdrawals home.
+    private var v3BootstrapPayoutTotal: Decimal?
     private var loadTask: Task<Void, Never>?
     private var secondaryTask: Task<Void, Never>?
     private(set) var hasLoaded = false
@@ -222,6 +224,7 @@ final class DashboardViewModel {
         accountNames = [:]
         tradeInputs = []
         payoutTotal = nil
+        v3BootstrapPayoutTotal = nil
         withdrawalRecordsHydrationComplete = false
         withdrawalRecordsHydrationInFlight = false
         analyticsV3Bootstrap = nil
@@ -514,6 +517,33 @@ final class DashboardViewModel {
         resolvedPayoutCycles(for: accountID)
     }
 
+    /// Equity hero line above the curve; single account or All Accounts aggregate.
+    func equityHeroWithdrawalSummary(
+        ledgerByAccount: [TradingAccountID: [AccountPayoutEntry]]
+    ) -> AccountTrackedBalanceSupport.WithdrawalSummary? {
+        let scope = clientScopeFilter()
+        if case .account(let id) = accountFilter, let account = selectedAccount {
+            return AccountTrackedBalanceSupport.withdrawalSummary(
+                account: account,
+                payoutCycles: resolvedPayoutCycles(for: id),
+                ledgerEntries: ledgerByAccount[id] ?? [],
+                scope: scope
+            )
+        }
+        if case .all = accountFilter {
+            let cyclesByAccount = Dictionary(
+                uniqueKeysWithValues: accounts.map { ($0.id, resolvedPayoutCycles(for: $0.id)) }
+            )
+            return AccountTrackedBalanceSupport.aggregateWithdrawalSummary(
+                accounts: accounts,
+                cyclesByAccount: cyclesByAccount,
+                ledgerByAccount: ledgerByAccount,
+                scope: scope
+            )
+        }
+        return nil
+    }
+
     var equityHeroSummary: DashboardChartMetrics.Summary? {
         guard equityChartAccountFilter == accountFilter else { return nil }
         return equityChartSummary
@@ -688,33 +718,19 @@ final class DashboardViewModel {
             return
         }
 
-        let trimmed = equityDrawdownLimitDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let capTrimmed = equityDrawdownFloorCapDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsed = LivePersonalDrawdownEngine.parseGearDraft(
+            limitDigits: equityDrawdownLimitDraft,
+            limitType: equityDrawdownTypeDraft,
+            floorCapDigits: equityDrawdownFloorCapDraft,
+            includeFloorCapField: true,
+            limitPolicy: .clearWhenEmptyOrZero
+        )
         let config: LivePersonalDrawdownConfig?
-        if trimmed.isEmpty {
-            config = nil
-        } else if let limit = Decimal(string: trimmed.replacingOccurrences(of: ",", with: "")), limit >= 0 {
-            if limit == 0 {
-                config = nil
-            } else {
-                var floorCap: Decimal?
-                if !capTrimmed.isEmpty {
-                    guard let cap = Decimal(string: capTrimmed.replacingOccurrences(of: ",", with: "")), cap > 0 else {
-                        equityDrawdownSettingsError =
-                            "Enter a valid positive dollar amount for floor cap, or leave blank for no cap."
-                        return
-                    }
-                    floorCap = cap
-                }
-                config = LivePersonalDrawdownConfig(
-                    limitAmount: limit,
-                    limitType: equityDrawdownTypeDraft,
-                    floorCap: floorCap
-                )
-            }
-        } else {
-            equityDrawdownSettingsError =
-                "Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear."
+        switch parsed {
+        case .success(let value):
+            config = value
+        case .failure(let error):
+            equityDrawdownSettingsError = error.message
             return
         }
 
@@ -1001,11 +1017,19 @@ final class DashboardViewModel {
         var total: Decimal?
     }
 
-    private func payoutsCardDataReady(withdrawalsHistory: WithdrawalsHistoryStore) -> Bool {
-        if withdrawalRecordsHydrationComplete { return true }
+    private func withdrawalsLedgerReady(withdrawalsHistory: WithdrawalsHistoryStore) -> Bool {
         guard let profileID, withdrawalsHistory.profileID == profileID else { return false }
-        guard !accounts.isEmpty else { return false }
+        guard !accounts.isEmpty else { return withdrawalRecordsHydrationComplete }
         return accounts.map(\.id).allSatisfy { withdrawalsHistory.ledgerByAccount[$0] != nil }
+    }
+
+    private func payoutsCardDataReady(withdrawalsHistory: WithdrawalsHistoryStore) -> Bool {
+        withdrawalsLedgerReady(withdrawalsHistory: withdrawalsHistory)
+    }
+
+    private func withdrawalLedgerStillLoading(withdrawalsHistory: WithdrawalsHistoryStore) -> Bool {
+        guard !accounts.isEmpty else { return false }
+        return accounts.contains { withdrawalsHistory.ledgerByAccount[$0.id] == nil }
     }
 
     private func noteWithdrawalsDisplayIfStoreAlreadyHydrated(
@@ -1020,6 +1044,9 @@ final class DashboardViewModel {
         withdrawalsHistory: WithdrawalsHistoryStore
     ) -> PayoutsCardDisplay {
         guard payoutsCardDataReady(withdrawalsHistory: withdrawalsHistory) else {
+            if let interim = interimBootstrapPayoutCardDisplay(withdrawalsHistory: withdrawalsHistory) {
+                return interim
+            }
             #if DEBUG
             let withdrawalsPageTotal = PayoutHistorySupport.withdrawalsScreenTotal(
                 accounts: accounts,
@@ -1084,6 +1111,35 @@ final class DashboardViewModel {
             tone: total > 0 ? .positive : .neutral,
             total: total
         )
+    }
+
+    /// Positive bootstrap achievements aggregate while ledger rows are still loading (Withdrawals home scope only).
+    private func interimBootstrapPayoutCardDisplay(
+        withdrawalsHistory: WithdrawalsHistoryStore
+    ) -> PayoutsCardDisplay? {
+        guard let bootstrap = v3BootstrapPayoutTotal, bootstrap > 0 else { return nil }
+        guard PayoutHistorySupport.v3BootstrapPayoutTotalMatchesWithdrawalsHomeInterim(
+            accountFilter: accountFilter,
+            scope: clientScopeFilter()
+        ) else { return nil }
+        guard withdrawalLedgerStillLoading(withdrawalsHistory: withdrawalsHistory) else { return nil }
+        let cycles = mergedWithdrawalCyclesByAccount(withdrawalsHistory: withdrawalsHistory)
+        let recorded = PayoutHistorySupport.withdrawalsPageRecordedTotal(
+            accounts: accounts,
+            entriesByAccount: withdrawalsHistory.ledgerByAccount,
+            cyclesByAccount: cycles
+        )
+        guard recorded == 0 else { return nil }
+        return PayoutsCardDisplay(
+            formatted: ProfileDisplay.formatMoney(bootstrap),
+            tone: .positive,
+            total: bootstrap
+        )
+    }
+
+    private func markWithdrawalLedgerHydrationCompleteIfReady() {
+        guard withdrawalsLedgerReady(withdrawalsHistory: WithdrawalsHistoryStore.shared) else { return }
+        withdrawalRecordsHydrationComplete = true
     }
 
     private func mergedWithdrawalCyclesByAccount(
@@ -1181,6 +1237,27 @@ final class DashboardViewModel {
             return
         }
         scheduleChartHydrationWithRetryIfNeeded()
+    }
+
+    /// Clears client-premium gate terminal state after TraxPro unlocks so chart RPCs may run again.
+    func refreshPremiumChartOverlayEntitlementIfNeeded() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
+        guard let profileID else { return }
+        guard DashboardPremiumChartsRemotePolicy.mayFetchPremiumChartsRemotely(profileID: profileID) else {
+            return
+        }
+        guard case .failedNonRetryable = selectedAccountChartsAvailability else { return }
+        resetChartOverlayFetchSettlement()
+        switch accountFilter {
+        case .all:
+            DashboardAnalyticsAggregateChartsStore.shared.dropCharts(revision: analyticsV3Revision)
+        case .account(let id):
+            DashboardAnalyticsAccountChartsStore.shared.dropCharts(
+                accountID: id,
+                revision: analyticsV3Revision
+            )
+        }
+        ensureEquityChartOverlayIfNeeded()
     }
 
     func refresh() async {
@@ -2497,6 +2574,15 @@ final class DashboardViewModel {
         _ = payoutsCardDisplay(withdrawalsHistory: store)
     }
 
+    private func applyV3BootstrapPayoutTotal(_ payout: Decimal?) {
+        if let payout {
+            v3BootstrapPayoutTotal = payout
+            payoutTotal = payout
+        } else {
+            v3BootstrapPayoutTotal = nil
+        }
+    }
+
     private func primeWithdrawalsHistoryStore(for profileID: ProfileID) {
         WithdrawalsHistoryStore.shared.bindProfile(profileID)
         WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: profileID)
@@ -2512,16 +2598,6 @@ final class DashboardViewModel {
         guard accountIDs.allSatisfy({ ledger[$0] != nil }) else { return false }
 
         let fundedIDs = fundedPropAccountIDs()
-        for accountID in fundedIDs {
-            let hasCyclesInStore = WithdrawalsHistoryStore.shared.cyclesByAccount[accountID] != nil
-            let hasSessionCycles = SessionPayoutCyclesStore.shared.cached(
-                for: accountID,
-                profileID: profileID
-            ) != nil
-            if !hasCyclesInStore, !hasSessionCycles {
-                return false
-            }
-        }
         if !fundedIDs.isEmpty {
             WithdrawalsHistoryStore.shared.hydrateCyclesFromSessionStore(
                 profileID: profileID,
@@ -2533,9 +2609,9 @@ final class DashboardViewModel {
                 }
             }
         }
-        withdrawalRecordsHydrationComplete = true
+        markWithdrawalLedgerHydrationCompleteIfReady()
         refreshAuthoritativePayoutTotal()
-        return true
+        return withdrawalRecordsHydrationComplete
     }
 
     private func scheduleDashboardWithdrawalRecordsHydration(
@@ -2564,6 +2640,7 @@ final class DashboardViewModel {
             recompute()
             return
         }
+        await SessionNetworkGate.shared.awaitReady()
         primeWithdrawalsHistoryStore(for: profileID)
         let accountIDs = accounts.map(\.id)
         guard !accountIDs.isEmpty else {
@@ -2603,9 +2680,13 @@ final class DashboardViewModel {
             forceNetwork: forceNetwork
         )
 
-        withdrawalRecordsHydrationComplete = true
+        markWithdrawalLedgerHydrationCompleteIfReady()
         refreshAuthoritativePayoutTotal()
-        recompute()
+        if withdrawalRecordsHydrationComplete {
+            syncAfterWithdrawalStoreMutation()
+        } else {
+            recompute()
+        }
     }
 
     private func applyFixtures(profileID: ProfileID) {
@@ -2751,6 +2832,7 @@ final class DashboardViewModel {
 
     private func apply(trades list: [Trade], accounts: [TradingAccount], profileID: ProfileID) {
         MainThreadWorkProbe.measure("dashboard.applyHydration", surface: "dashboard") {
+            self.profileID = profileID
             self.accounts = accounts.sorted {
                 $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
@@ -2775,10 +2857,8 @@ final class DashboardViewModel {
                     linkedAccountType: linked
                 )
             }
-            if let profileID = self.profileID {
-                if !tryPrimeWithdrawalRecordsFromSessionCache(profileID: profileID) {
-                    scheduleDashboardWithdrawalRecordsHydration(profileID: profileID)
-                }
+            if !tryPrimeWithdrawalRecordsFromSessionCache(profileID: profileID) {
+                scheduleDashboardWithdrawalRecordsHydration(profileID: profileID)
             }
         }
     }
@@ -3365,6 +3445,18 @@ final class DashboardViewModel {
             return
         }
 
+        guard DashboardPremiumChartsRemotePolicy.mayFetchPremiumChartsRemotely(profileID: profileID) else {
+            DashboardAnalyticsAccountChartsStore.shared.markFailed(
+                accountID: id,
+                revision: analyticsV3Revision,
+                nonRetryable: true
+            )
+            if shouldMarkChartOverlayFetchSettled(forAccountID: id) {
+                markChartOverlayFetchSettledForCurrentSelection()
+            }
+            return
+        }
+
         let applied = await DashboardAnalyticsAccountChartsCoordinator.loadIfNeeded(
             selectedAccountID: id,
             selectionToken: selectionToken,
@@ -3415,6 +3507,17 @@ final class DashboardViewModel {
             selectionToken: selectionToken
         ) {
             recompute()
+            return
+        }
+
+        guard DashboardPremiumChartsRemotePolicy.mayFetchPremiumChartsRemotely(profileID: profileID) else {
+            DashboardAnalyticsAggregateChartsStore.shared.markFailed(
+                revision: analyticsV3Revision,
+                nonRetryable: true
+            )
+            if shouldMarkChartOverlayFetchSettled(forAccountID: nil) {
+                markChartOverlayFetchSettledForCurrentSelection()
+            }
             return
         }
 
@@ -3640,7 +3743,21 @@ final class DashboardViewModel {
         if current.holdExtremes.isEmpty, !clientMetrics.holdExtremes.isEmpty {
             current.holdExtremes = clientMetrics.holdExtremes
         }
+        overlayClientSessionAndWeekdayMetrics(into: &current, clientMetrics: clientMetrics)
         summary = current
+    }
+
+    /// Sessions / weekdays live in premium chart distributions; mirror web `useDashboardAnalytics` when overlay is absent.
+    private func overlayClientSessionAndWeekdayMetrics(
+        into summary: inout DashboardChartMetrics.Summary,
+        clientMetrics: DashboardChartMetrics.Summary
+    ) {
+        guard !selectedChartOverlayLoaded else { return }
+        guard !isScopeFilteredMetricsLoading else { return }
+        summary.sessions = clientMetrics.sessions
+        summary.sessionPerformance = clientMetrics.sessionPerformance
+        summary.weekdays = clientMetrics.weekdays
+        summary.weekdayHeatmap = clientMetrics.weekdayHeatmap
     }
 
     #if DEBUG
@@ -3709,9 +3826,7 @@ final class DashboardViewModel {
         assignAnalyticsV3Revision(applied.revision)
         apply(trades: [], accounts: applied.accounts, profileID: profileID)
         promoteOwnerTradesFromSessionCache(profileID: profileID)
-        if let payout = applied.payoutTotal {
-            payoutTotal = payout
-        }
+        applyV3BootstrapPayoutTotal(applied.payoutTotal)
         noteTradeHistoryApplied(
             totalTradeCount: applied.bootstrap.data.aggregatePresets["all"]?.metrics.trade_count,
             historyComplete: true
@@ -3772,9 +3887,7 @@ final class DashboardViewModel {
             assignAnalyticsV3Revision(applied.revision)
             apply(trades: [], accounts: applied.accounts, profileID: profileID)
             promoteOwnerTradesFromSessionCache(profileID: profileID)
-            if let payout = applied.payoutTotal {
-                payoutTotal = payout
-            }
+            applyV3BootstrapPayoutTotal(applied.payoutTotal)
             noteTradeHistoryApplied(
                 totalTradeCount: applied.bootstrap.data.aggregatePresets["all"]?.metrics.trade_count,
                 historyComplete: true
@@ -4612,9 +4725,7 @@ final class DashboardViewModel {
             assignAnalyticsV3Revision(applied.revision)
             apply(trades: [], accounts: applied.accounts, profileID: profileID)
             promoteOwnerTradesFromSessionCache(profileID: profileID)
-            if let payout = applied.payoutTotal {
-                payoutTotal = payout
-            }
+            applyV3BootstrapPayoutTotal(applied.payoutTotal)
             noteTradeHistoryApplied(
                 totalTradeCount: applied.bootstrap.data.aggregatePresets["all"]?.metrics.trade_count,
                 historyComplete: true
@@ -4822,9 +4933,7 @@ final class DashboardViewModel {
             )
             analyticsV3Bootstrap = applied.bootstrap
             assignAnalyticsV3Revision(applied.revision)
-            if let payout = applied.payoutTotal {
-                payoutTotal = payout
-            }
+            applyV3BootstrapPayoutTotal(applied.payoutTotal)
             recompute()
         } catch {
             // Preserve GRDB/JSON presentation when background reconcile fails.

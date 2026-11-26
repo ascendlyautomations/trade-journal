@@ -54,6 +54,30 @@ enum ProfileStatsTrace {
         loadStartedAt.removeValue(forKey: subject)
     }
 
+    static func tradeInputsHydration(
+        subject: String,
+        source: String,
+        loaded: Int,
+        sessionTagged: Int
+    ) {
+        print(
+            "[ProfileStatsTrace] tradeInputsHydration subject=\(subject) source=\(source) loaded=\(loaded) sessionTagged=\(sessionTagged)"
+        )
+    }
+
+    static func filteredSessionRecompute(
+        subject: String,
+        timeframe: String,
+        loadedInputs: Int,
+        sessionTaggedInputs: Int,
+        filteredTrades: Int,
+        sessionTotal: Int
+    ) {
+        print(
+            "[ProfileStatsTrace] filteredSessionRecompute subject=\(subject) timeframe=\(timeframe) loadedInputs=\(loadedInputs) sessionTaggedInputs=\(sessionTaggedInputs) filteredTrades=\(filteredTrades) sessionTotal=\(sessionTotal)"
+        )
+    }
+
     private static func elapsedMs(subject: String) -> Int {
         guard let started = loadStartedAt[subject] else { return -1 }
         return Int(Date().timeIntervalSince(started) * 1000)
@@ -72,5 +96,19 @@ enum ProfileStatsTrace {
     static func applyAccepted(subject: String, source: String) {}
     static func applyRejected(subject: String, reason: String) {}
     static func finalState(subject: String, state: String) {}
+    static func tradeInputsHydration(
+        subject: String,
+        source: String,
+        loaded: Int,
+        sessionTagged: Int
+    ) {}
+    static func filteredSessionRecompute(
+        subject: String,
+        timeframe: String,
+        loadedInputs: Int,
+        sessionTaggedInputs: Int,
+        filteredTrades: Int,
+        sessionTotal: Int
+    ) {}
 }
 #endif

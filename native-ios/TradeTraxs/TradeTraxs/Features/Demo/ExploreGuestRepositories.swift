@@ -555,6 +555,17 @@ nonisolated struct DemoExploreMessageRepository: MessageRepository, @unchecked S
     }
 
     func deleteConversation(id: ConversationID) async throws { throw DemoAuthRequired.error }
+
+    func updateGroupConversationDetails(
+        conversationID: ConversationID,
+        patch: GroupConversationDetailsPatch
+    ) async throws -> Conversation {
+        throw DemoAuthRequired.error
+    }
+
+    func leaveGroupConversation(conversationID: ConversationID) async throws -> GroupLeaveConversationOutcome {
+        throw DemoAuthRequired.error
+    }
     func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {
         throw DemoAuthRequired.error
     }

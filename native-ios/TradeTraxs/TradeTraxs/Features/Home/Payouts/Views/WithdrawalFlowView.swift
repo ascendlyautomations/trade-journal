@@ -168,14 +168,14 @@ struct WithdrawalFlowView: View {
                 }
             }
             Section {
-                SettingsLabeledField(title: "Withdrawal amount", helper: "USD") {
+                SettingsLabeledField(title: "Withdrawal Amount (USD)") {
                     TextField("0", text: $draft.amountDigits.numericInput(.unsignedCurrency))
                         .keyboardType(.decimalPad)
                 }
                 .experienceDashboardListRow()
                 DatePicker("Date", selection: $draft.payoutDate, in: ...Date(), displayedComponents: .date)
                     .experienceDashboardListRow()
-                SettingsLabeledField(title: "Note", helper: "Optional") {
+                SettingsLabeledField(title: "Notes") {
                     TextField("Optional", text: $draft.note, axis: .vertical)
                         .lineLimit(2...3)
                 }

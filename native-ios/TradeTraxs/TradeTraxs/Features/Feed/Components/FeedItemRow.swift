@@ -147,6 +147,8 @@ struct FeedItemRow: View {
             engagement
             if case .trade(_, let summary) = entry {
                 tradePostDetails(summary, opensOnTap: true)
+            } else if case .achievement(_, let achievement) = entry {
+                achievementPostDetails(achievement, opensOnTap: true)
             } else {
                 summary
             }
@@ -174,6 +176,20 @@ struct FeedItemRow: View {
                 engagement
                 VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                     tradePostDetails(summary)
+                    feedCaptionPreview
+                    linkedEmbeds
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .experienceDoubleTapLike(
+                    target: entry.interactionTarget,
+                    store: engagementStore,
+                    onSingleTap: onOpen
+                )
+            } else if case .achievement(_, let achievement) = entry {
+                engagement
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    achievementPostDetails(achievement)
                     feedCaptionPreview
                     linkedEmbeds
                 }
@@ -391,12 +407,8 @@ struct FeedItemRow: View {
             EmptyView()
         case .clip:
             EmptyView()
-        case .achievement(_, let achievement):
-            Text(achievement.title)
-                .experienceStyle(.headline, color: colors.primaryText)
-                .lineLimit(entry.hasDisplayMedia ? 2 : 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .feedOpensOnTap(entry.hasDisplayMedia, action: onOpen)
+        case .achievement:
+            EmptyView()
         }
     }
 
@@ -441,6 +453,20 @@ struct FeedItemRow: View {
             )
                 .accessibilityIdentifier("feed.trade.badges")
                 .feedOpensOnTap(opensOnTap, allowsSiblingScroll: true, action: onOpen)
+        }
+    }
+
+    @ViewBuilder
+    private func achievementPostDetails(_ achievement: Achievement, opensOnTap: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            PublicAchievementHeadlineRow(achievement: achievement)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .feedOpensOnTap(opensOnTap, action: onOpen)
+                .accessibilityIdentifier("feed.achievement.headline")
+
+            PublicAchievementMetaChipRow(achievement: achievement)
+                .feedOpensOnTap(opensOnTap, allowsSiblingScroll: true, action: onOpen)
+                .accessibilityIdentifier("feed.achievement.badges")
         }
     }
 
