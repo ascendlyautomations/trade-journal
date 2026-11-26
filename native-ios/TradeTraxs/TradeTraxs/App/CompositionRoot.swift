@@ -235,6 +235,7 @@ enum CompositionRoot {
                 routerFacade: NotificationRouterFacade(router: NotificationRouter())
             )
         }
+        NativeIosOnboardingServices.rpc = data.rpc
         authentication.coordinator.profileOnboardingGate = profileOnboardingGate
         logLaunchSummary(
             configuration: configuration,
@@ -534,6 +535,8 @@ enum CompositionRoot {
         AnalyticsReconciliationRuntime.configure(rpc: data.rpc, detailCache: data.detailCache)
         Task { await AnalyticsReconciliationCoordinator.shared.installProductionExecutor() }
 
+        PerformanceReportReminderServerSync.configure(transport: transport)
+
         let pushNotifications = PushNotificationCenter(
             tokenClient: DevicePushTokenClient(transport: transport),
             navigation: navigation,
@@ -544,12 +547,14 @@ enum CompositionRoot {
         pushNotifications.attachNotificationsRepository(data.notifications)
 
         authentication.coordinator.prepareSessionTeardown = {
+            await PerformanceReportReminderCoordinator.shared.cancelAll()
             await pushNotifications.unregisterForLogout()
         }
         authentication.coordinator.prepareAccountDeletion = {
             await pushNotifications.unregisterForAccountDeletion()
             await data.realtimeHub.stop()
         }
+        NativeIosOnboardingServices.rpc = data.rpc
         authentication.coordinator.profileOnboardingGate = profileOnboardingGate
         authentication.coordinator.invalidateSessionCaches = {
             SessionScopedCaches.invalidate(
@@ -559,7 +564,9 @@ enum CompositionRoot {
             appBootstrapState.reset()
             profileOnboardingGate.reset()
             authentication.coordinator.postSignupTransition.reset()
+            NativeIosOnboardingSessionStore.reset()
             ContextualTourCoordinator.shared.resetForSessionBoundary()
+            PostOnboardingWelcomeCoordinator.shared.resetForSessionBoundary()
             FirstTradeDetailCoachmarkStore.shared.resetForSessionBoundary()
         }
         Task {
@@ -595,6 +602,11 @@ enum CompositionRoot {
                             name: .billingEntitlementsDidRefresh,
                             object: refreshed
                         )
+                        Task {
+                            await PerformanceReportReminderCoordinator.shared.reconcile(
+                                profileID: profileID
+                            )
+                        }
                     }
                 } catch {
                     // Keep last-known entitlement when refresh fails offline.
@@ -621,9 +633,11 @@ enum CompositionRoot {
                 AppIconBadgeSync.refresh(animated: false)
                 await DailyCheckInReminderCoordinator.shared.sync()
                 await TradeImportReminderCoordinator.shared.sync()
-                if let profileID = sessionManager.currentSession.map({ ProfileID($0.userID.rawValue) }),
-                   let refresher = data.billing as? MonetizationConfigurationRefreshing {
-                    await refresher.refreshMonetizationConfiguration(for: profileID)
+                if let profileID = sessionManager.currentSession.map({ ProfileID($0.userID.rawValue) }) {
+                    await PerformanceReportReminderCoordinator.shared.reconcile(profileID: profileID)
+                    if let refresher = data.billing as? MonetizationConfigurationRefreshing {
+                        await refresher.refreshMonetizationConfiguration(for: profileID)
+                    }
                 }
                 if IosSubscriptionReleaseConfiguration.iosPaywallEnabled {
                     await data.storeKitSubscriptions.startTransactionListenerIfNeeded()

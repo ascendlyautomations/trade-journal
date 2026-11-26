@@ -132,6 +132,8 @@ struct ProfileView: View {
                     Button("Settings", systemImage: AppIcon.settings.systemName) {
                         screen.openSettings()
                     }
+                    .contextualTourTarget(.profileSettings)
+                    .contextualTourGlobalFrame(.profileSettings)
                     .accessibilityIdentifier("profile.toolbar.settings")
                 }
             } else {
@@ -246,10 +248,10 @@ struct ProfileView: View {
             )
         }
         .accessibilityIdentifier(contentStore.isOwner ? "profile.root.owner" : "profile.root.other")
-        .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
-            guard let target else { return }
+        .onChange(of: ContextualTourCoordinator.shared.scrollGeneration) { _, _ in
+            guard let target = ContextualTourCoordinator.shared.scrollTarget else { return }
             guard !ContextualTourGeometry.skipsTourAutoscroll(for: target) else { return }
-            tourProxy.scrollTo(target, anchor: .center)
+            tourProxy.scrollTo(target, anchor: ContextualTourGeometry.scrollAnchor(for: target))
         }
         }
     }

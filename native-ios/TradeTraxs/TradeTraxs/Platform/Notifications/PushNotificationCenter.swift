@@ -46,22 +46,6 @@ final class PushNotificationCenter: NSObject {
         set { UserDefaults.standard.set(newValue, forKey: bannersDefaultsKey) }
     }
 
-    private let installationIDDefaultsKey = "tt.ios.push.installation_id"
-    private var installationID: String {
-        if let existing = UserDefaults.standard.string(forKey: installationIDDefaultsKey)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !existing.isEmpty,
-           existing != "unknown"
-        {
-            return existing
-        }
-        let generated =
-            UIDevice.current.identifierForVendor?.uuidString
-            ?? UUID().uuidString
-        UserDefaults.standard.set(generated, forKey: installationIDDefaultsKey)
-        return generated
-    }
-
     private var appVersion: String? {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
     }
@@ -134,15 +118,20 @@ final class PushNotificationCenter: NSObject {
     /// Re-register the cached APNs token after the app becomes active.
     /// Does not prompt. A denied or logged-out session is left alone.
     func refreshRemoteTokenIfAuthorized() {
-        guard tokenClient.registersTokensWithServer else { return }
         Task { [self] in
-            await refreshAuthorizationStatus()
-            guard authorizationStatus.isEnabled else { return }
-            guard navigation.store.sessionPhase == .authenticated else { return }
-            UIApplication.shared.registerForRemoteNotifications()
-            if let token = deviceTokenHex {
-                await uploadToken(token)
-            }
+            await reconcileRemotePushRegistrationForForeground()
+        }
+    }
+
+    /// Awaitable foreground path: refresh APNs registration row before per-install local reminder sync.
+    func reconcileRemotePushRegistrationForForeground() async {
+        guard tokenClient.registersTokensWithServer else { return }
+        await refreshAuthorizationStatus()
+        guard authorizationStatus.isEnabled else { return }
+        guard navigation.store.sessionPhase == .authenticated else { return }
+        UIApplication.shared.registerForRemoteNotifications()
+        if let token = deviceTokenHex {
+            await uploadToken(token)
         }
     }
 
@@ -198,7 +187,7 @@ final class PushNotificationCenter: NSObject {
 
     func handleNotificationResponse(_ response: UNNotificationResponse) {
         let userInfo = response.notification.request.content.userInfo
-        route(userInfo: userInfo)
+        route(userInfo: userInfo, deliveryDate: response.notification.date)
         // Mirror backend BadgeService, do not trust a stale APNs payload integer alone.
         AppIconBadgeSync.refresh(animated: false, force: true)
         Task { await softRefreshActivityUnread() }
@@ -222,7 +211,7 @@ final class PushNotificationCenter: NSObject {
         isRegistering = true
         defer { isRegistering = false }
         let client = tokenClient
-        let installID = installationID
+        let installID = DevicePushInstallationID.current
         let version = appVersion
         do {
             try await DevicePushRegistrationFlight.shared.register(
@@ -238,6 +227,11 @@ final class PushNotificationCenter: NSObject {
             }
             lastRegistrationError = nil
             AppLog.notifications.info("Push pipeline: BFF token registration succeeded")
+            if navigation.store.sessionPhase == .authenticated,
+               let profileID = SessionBillingEntitlementStore.shared.status?.profileID
+            {
+                await PerformanceReportReminderCoordinator.shared.reconcile(profileID: profileID)
+            }
         } catch {
             lastRegistrationError = error.localizedDescription
             AppLog.notifications.error(
@@ -263,8 +257,11 @@ final class PushNotificationCenter: NSObject {
         }
     }
 
-    private func route(userInfo: [AnyHashable: Any]) {
-        let destination = PushNotificationPayloadParser.parse(userInfo: userInfo)
+    private func route(userInfo: [AnyHashable: Any], deliveryDate: Date? = nil) {
+        let destination = PushNotificationPayloadParser.parse(
+            userInfo: userInfo,
+            deliveryDate: deliveryDate
+        )
         RoomNotificationNavigationTrace.event(
             .init(
                 stage: "apns.parsed",

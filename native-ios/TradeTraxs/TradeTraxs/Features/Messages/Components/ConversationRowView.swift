@@ -13,10 +13,18 @@ struct ConversationRowView: View {
             avatar
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
-                    Text(item.displayName)
-                        .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                    HStack(spacing: ExperienceSpacing.xxs) {
+                        if item.conversation.isGroup {
+                            ExperienceIcon(icon: .rooms, size: .sm, color: colors.accent)
+                                .alignmentGuide(.firstTextBaseline) { dimensions in
+                                    dimensions[.bottom] - 1
+                                }
+                                .accessibilityHidden(true)
+                        }
+                        Text(item.displayName)
+                            .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
+                            .lineLimit(1)
+                    }
                     if item.isMuted {
                         Image(systemName: "bell.slash.fill")
                             .font(.caption2)
@@ -42,6 +50,7 @@ struct ConversationRowView: View {
                 }
             }
         }
+        .padding(.vertical, MessagesInboxLayout.rowVerticalPadding)
         .contentShape(Rectangle())
         .task(id: item.peer?.avatar?.id ?? item.conversation.avatar?.id) {
             guard !item.conversation.isGroup else { return }
@@ -86,7 +95,7 @@ struct ConversationRowView: View {
             if item.isOnline, !item.conversation.isGroup {
                 Circle()
                     .fill(colors.success)
-                    .frame(width: 11, height: 11)
+                    .frame(width: 12, height: 12)
                     .overlay(Circle().stroke(colors.backgroundPrimary, lineWidth: 2))
                     .offset(x: 1, y: 1)
                     .accessibilityLabel("Online")
@@ -113,7 +122,7 @@ struct ConversationRowView: View {
                         item.unreadCount > 0 ? .subheadline : .footnote,
                         color: item.unreadCount > 0 ? colors.primaryText : colors.secondaryText
                     )
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
         }
     }

@@ -5,8 +5,15 @@ struct TradingRulesDayDetailView: View {
     let navigationCoordinator: NavigationCoordinator
     let detailCache: DetailPresentationCache
 
-    @Bindable private var session = TradingRulesComplianceSessionStore.shared
+    @Bindable private var session: TradingRulesComplianceSessionStore
     @Environment(\.themeColors) private var colors
+
+    init(dayKey: String, navigationCoordinator: NavigationCoordinator, detailCache: DetailPresentationCache) {
+        self.dayKey = dayKey
+        self.navigationCoordinator = navigationCoordinator
+        self.detailCache = detailCache
+        _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
+    }
 
     private var dayRow: TradingRulesViolationPatterns.WorstTradingDayRow? {
         session.result?.violationPatterns.worstTradingDays.first { $0.dayKey == dayKey }

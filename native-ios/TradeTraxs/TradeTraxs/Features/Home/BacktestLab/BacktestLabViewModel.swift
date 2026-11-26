@@ -32,8 +32,33 @@ final class BacktestLabViewModel {
     var pendingDelete: TradeOwnerJournalSummary?
     var journalSharePresentation: JournalTradeShareSupport.Presentation?
 
+    private(set) var dashboardSummary: DashboardChartMetrics.Summary?
+    private(set) var insightsPresentation = DashboardInsightsPresentation(
+        isLoading: false,
+        performance: [],
+        advancedEdge: [],
+        riskBehavior: []
+    )
+    private(set) var metricChips: [DashboardMetricChip] = []
+    private(set) var performanceCards: [DashboardMetricChip] = []
+    private(set) var equityChartPoints: [ProfileStatisticsMetrics.EquityPoint] = []
+    private(set) var equityHeroTitle = "Equity"
+    private(set) var equityHeroDisplayValue: Decimal = 0
+    private(set) var equityHeroPeriodChangePercent: Decimal?
+    private(set) var strategyLeaderboard: [BacktestLabGroupRow] = []
+    private(set) var setupTagLeaderboard: [BacktestLabGroupRow] = []
+    private(set) var instrumentLeaderboard: [BacktestLabGroupRow] = []
+    var activeDrillDown: BacktestLabChartDrillDown?
+    var showsEquityDrawdownSettings = false
+    var equityDrawdownLimitDraft = ""
+    var equityDrawdownFloorCapDraft = ""
+    var equityDrawdownTypeDraft: LivePersonalDrawdownType = .fixed
+    var equityDrawdownSettingsError: String?
+    private(set) var isSavingEquityDrawdownSettings = false
+
     private var profileID: ProfileID?
     private var loadTask: Task<Void, Never>?
+    private var analyticsTask: Task<Void, Never>?
 
     init(
         trades: any TradeRepository,
@@ -66,7 +91,8 @@ final class BacktestLabViewModel {
             strategy: BacktestLabMetrics.allStrategiesToken,
             timeFilter: timeFilter,
             customInterval: customTimeInterval,
-            backtestModeAccountIDs: backtestModeAccountIDScope
+            backtestModeAccountIDs: backtestModeAccountIDScope,
+            copyTradingGroups: []
         )
     }
 
@@ -77,6 +103,16 @@ final class BacktestLabViewModel {
             strategy: selectedStrategy,
             timeFilter: timeFilter,
             customInterval: customTimeInterval,
+            backtestModeAccountIDs: backtestModeAccountIDScope,
+            copyTradingGroups: []
+        )
+    }
+
+    var lifetimeScopedTrades: [Trade] {
+        BacktestLabFilters.lifetimeScopedTrades(
+            allTrades,
+            accountFilter: accountFilter,
+            strategy: selectedStrategy,
             backtestModeAccountIDs: backtestModeAccountIDScope
         )
     }
@@ -87,6 +123,24 @@ final class BacktestLabViewModel {
 
     var metrics: BacktestLabMetrics.Snapshot {
         BacktestLabMetrics.snapshot(for: filteredTrades)
+    }
+
+    var selectedAccount: TradingAccount? {
+        guard case .account(let id) = accountFilter else { return nil }
+        return accounts.first(where: { $0.id == id })
+    }
+
+    var backtestEligibleAccounts: [TradingAccount] {
+        BacktestLabFilters.eligibleBacktestAccounts(accounts)
+    }
+
+    var canConfigureEquityDrawdownSettings: Bool {
+        selectedAccount?.mode == .backtest
+    }
+
+    var drillDownJournalItems: [TradeOwnerJournalSummary] {
+        guard let activeDrillDown else { return [] }
+        return activeDrillDown.filter(filteredTrades).map(TradeSummaryMapper.ownerJournal(fromListTrade:))
     }
 
     var strategyBreakdown: [BacktestLabMetrics.StrategyBreakdown] {
@@ -108,15 +162,11 @@ final class BacktestLabViewModel {
     }
 
     var accountMenuTitle: String {
-        switch accountFilter {
-        case .all:
-            return "All Accounts"
-        case .account(let id):
-            if let account = accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.ownerDropdownLine(for: account)
-            }
-            return displayAccountTitle(for: id) ?? "Account"
-        }
+        OwnerAccountFilterMenuSupport.menuTitle(
+            filter: accountFilter,
+            accounts: BacktestLabFilters.eligibleBacktestAccounts(accounts),
+            profileID: profileID
+        )
     }
 
     var ownerAccountsProfileID: ProfileID? { profileID }
@@ -127,11 +177,12 @@ final class BacktestLabViewModel {
             if case .account(let id) = accountFilter { return id }
             return nil
         }()
-        return OwnerAccountDropdownSupport.menuAccounts(
+        let menu = OwnerAccountDropdownSupport.menuAccounts(
             profileID: profileID,
             fallback: eligible,
             preservingSelection: selectedID
         )
+        return BacktestLabFilters.eligibleBacktestAccounts(menu)
     }
 
     var canApplyCustomTimeRange: Bool {
@@ -153,12 +204,21 @@ final class BacktestLabViewModel {
         guard selectedStrategy != strategy else { return }
         ExperienceHaptics.play(.selection)
         selectedStrategy = strategy
+        refreshAnalytics()
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
-        guard accountFilter != filter else { return }
+        let eligible = BacktestLabFilters.eligibleBacktestAccounts(accounts)
+        let resolved = OwnerAccountMutationSync.reconciledAccountFilter(
+            filter,
+            accounts: eligible,
+            profileID: profileID
+        )
+        let sanitized = BacktestLabFilters.sanitizedAccountFilter(resolved, eligibleAccounts: eligible)
+        guard accountFilter != sanitized else { return }
         ExperienceHaptics.play(.selection)
-        accountFilter = filter
+        accountFilter = sanitized
+        refreshAnalytics()
     }
 
     func setTimeFilter(_ filter: BacktestLabTimeFilter) {
@@ -170,6 +230,7 @@ final class BacktestLabViewModel {
         ExperienceHaptics.play(.selection)
         timeFilter = filter
         customTimeInterval = nil
+        refreshAnalytics()
     }
 
     func openCustomTimeRangeEditor() {
@@ -189,6 +250,157 @@ final class BacktestLabViewModel {
         customTimeInterval = DashboardScopeFilterSupport.normalizedCustomInterval(start: start, end: end)
         timeFilter = .custom
         ExperienceHaptics.play(.selection)
+        refreshAnalytics()
+    }
+
+    func refreshAnalytics() {
+        analyticsTask?.cancel()
+        let periodTrades = filteredTrades
+        let lifetimeTrades = lifetimeScopedTrades
+        let accountFilter = accountFilter
+        let accounts = backtestEligibleAccounts
+        let selected = selectedAccount
+        let timeFilter = timeFilter
+        let customInterval = customTimeInterval
+        analyticsTask = Task { [weak self] in
+            let summary = BacktestLabAnalyticsSupport.computePeriodSummary(from: periodTrades)
+            let realizedRr = BacktestLabAnalyticsSupport.averageRealizedRr(for: periodTrades)
+            let payoff = BacktestLabAnalyticsSupport.payoffRatio(
+                avgWin: summary.avgWin,
+                avgLoss: summary.avgLoss
+            )
+            let chips = BacktestLabAnalyticsSupport.metricChips(summary: summary)
+            let performance = BacktestLabAnalyticsSupport.performanceCards(
+                summary: summary,
+                averageRealizedRr: realizedRr,
+                payoff: payoff
+            )
+            let insights = BacktestLabAnalyticsSupport.insightsPresentation(
+                summary: summary,
+                periodTrades: periodTrades,
+                isLoading: false
+            )
+            let chartPoints = BacktestLabEquitySupport.resolveChartPoints(
+                accountFilter: accountFilter,
+                selectedAccount: selected,
+                backtestAccounts: accounts,
+                lifetimeTrades: lifetimeTrades,
+                timeFilter: timeFilter,
+                customTimeInterval: customInterval
+            )
+            let hero = BacktestLabEquitySupport.headlinePresentation(
+                accountFilter: accountFilter,
+                selectedAccount: selected,
+                periodSummary: summary,
+                lifetimeTrades: lifetimeTrades,
+                timeFilter: timeFilter,
+                customTimeInterval: customInterval
+            )
+            let strategyRows = BacktestLabGroupedPerformance.strategyRows(from: periodTrades)
+            let setupRows = BacktestLabGroupedPerformance.setupTagRows(from: periodTrades)
+            let instrumentRows = BacktestLabGroupedPerformance.instrumentRows(from: periodTrades)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                self.dashboardSummary = summary
+                self.metricChips = chips
+                self.performanceCards = performance
+                self.insightsPresentation = insights
+                self.equityChartPoints = chartPoints
+                self.equityHeroTitle = hero.title
+                self.equityHeroDisplayValue = hero.displayEquity
+                self.equityHeroPeriodChangePercent = hero.periodChangePercent
+                self.strategyLeaderboard = strategyRows
+                self.setupTagLeaderboard = setupRows
+                self.instrumentLeaderboard = instrumentRows
+            }
+        }
+    }
+
+    func openEquityDrawdownSettings() {
+        guard let account = selectedAccount, account.mode == .backtest else { return }
+        let draft = LivePersonalDrawdownEngine.gearDraft(
+            from: account,
+            eligibility: .backtestAccount
+        )
+        equityDrawdownLimitDraft = draft.limitDigits
+        equityDrawdownFloorCapDraft = draft.floorCapDigits
+        equityDrawdownTypeDraft = draft.limitType
+        equityDrawdownSettingsError = nil
+        showsEquityDrawdownSettings = true
+    }
+
+    func cancelEquityDrawdownSettings() {
+        showsEquityDrawdownSettings = false
+        equityDrawdownSettingsError = nil
+    }
+
+    func saveEquityDrawdownSettings() async {
+        guard let account = selectedAccount else { return }
+        var owner = profileID
+        if owner == nil, let userID = await session.currentUserID {
+            owner = ProfileID(userID.rawValue)
+        }
+        guard let owner else { return }
+        isSavingEquityDrawdownSettings = true
+        defer { isSavingEquityDrawdownSettings = false }
+        switch LivePersonalDrawdownEngine.parseGearDraft(
+            limitDigits: equityDrawdownLimitDraft,
+            limitType: equityDrawdownTypeDraft,
+            floorCapDigits: equityDrawdownFloorCapDraft,
+            includeFloorCapField: equityDrawdownTypeDraft == .trailing,
+            limitPolicy: .clearWhenEmptyOrZero
+        ) {
+        case .failure(let error):
+            equityDrawdownSettingsError = error.message
+            return
+        case .success(let parsedConfig):
+            if parsedConfig != nil,
+               TradingAccountStartingBalancePolicy.resolvedStartingBalance(for: account) == nil
+            {
+                equityDrawdownSettingsError = TradingAccountStartingBalancePolicy.liveLedgerMessage
+                return
+            }
+            do {
+                let updated = try await trades.updateLivePersonalDrawdownConfig(
+                    id: account.id,
+                    ownerID: owner,
+                    config: parsedConfig
+                )
+                if let index = accounts.firstIndex(where: { $0.id == updated.id }) {
+                    accounts[index] = updated
+                }
+                showsEquityDrawdownSettings = false
+                equityDrawdownSettingsError = nil
+                refreshAnalytics()
+                ExperienceHaptics.play(.success)
+            } catch {
+                equityDrawdownSettingsError = ProfileSectionSupport.message(for: error)
+                ExperienceHaptics.play(.warning)
+            }
+        }
+    }
+
+    func browseWins() { presentDrillDown(.wins) }
+    func browseLosses() { presentDrillDown(.losses) }
+    func browseSession(_ label: String) { presentDrillDown(.session(label)) }
+    func browseWeekday(label: String) { presentDrillDown(.weekday(label)) }
+    func browseHour(label: String) { presentDrillDown(.hour(label)) }
+    func browseLong() { presentDrillDown(.long) }
+    func browseShort() { presentDrillDown(.short) }
+    func browseHoldBucket(label: String) { presentDrillDown(.holdBucket(label)) }
+    func browseStrategy(key: String) { presentDrillDown(.strategy(key)) }
+    func browseSetupTag(key: String) { presentDrillDown(.setupTag(key)) }
+    func browseInstrument(key: String) { presentDrillDown(.instrument(key)) }
+
+    private func presentDrillDown(_ drillDown: BacktestLabChartDrillDown) {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
+        ExperienceHaptics.play(.selection)
+        activeDrillDown = drillDown
+    }
+
+    func dismissDrillDown() {
+        activeDrillDown = nil
     }
 
     func openManageAccounts() {
@@ -221,6 +433,21 @@ final class BacktestLabViewModel {
         if sanitized != accountFilter {
             accountFilter = sanitized
         }
+        refreshAnalytics()
+    }
+
+    func handleCopyTradingGroupsMutation() {
+        guard let profileID else { return }
+        let eligible = BacktestLabFilters.eligibleBacktestAccounts(accounts)
+        let resolved = OwnerAccountMutationSync.reconciledAccountFilter(
+            accountFilter,
+            accounts: eligible,
+            profileID: profileID
+        )
+        let sanitized = BacktestLabFilters.sanitizedAccountFilter(resolved, eligibleAccounts: eligible)
+        guard accountFilter != sanitized else { return }
+        accountFilter = sanitized
+        refreshAnalytics()
     }
 
     func openTrade(_ item: TradeOwnerJournalSummary) {
@@ -286,6 +513,7 @@ final class BacktestLabViewModel {
                 detailCache: detailCache,
                 tradeDetailRepository: tradeDetailRepository
             )
+            refreshAnalytics()
             ExperienceHaptics.play(.success)
         } catch {
             if let removedIndex, let removed {
@@ -329,7 +557,10 @@ final class BacktestLabViewModel {
             self.accounts = accountList
             accountNames = Dictionary(uniqueKeysWithValues: accountList.map { ($0.id, $0.name) })
             allTrades = loaded
+            let eligible = BacktestLabFilters.eligibleBacktestAccounts(accountList)
+            accountFilter = BacktestLabFilters.sanitizedAccountFilter(accountFilter, eligibleAccounts: eligible)
             phase = .loaded
+            refreshAnalytics()
         } catch {
             phase = .failed(ProfileSectionSupport.message(for: error))
         }

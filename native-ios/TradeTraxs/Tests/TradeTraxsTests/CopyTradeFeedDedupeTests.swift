@@ -29,6 +29,18 @@ final class CopyTradeFeedDedupeTests: XCTestCase {
         XCTAssertFalse(summary.contains("0 Eval"))
     }
 
+    func testSingleVisibleCopyPostUsesParticipatingAccountModesPayload() {
+        let rows = [singleCopyPostWithParticipatingModesPayload()]
+        let plan = CopyTradeFeedDedupe.plan(from: rows)
+        guard let postID = plan.visiblePostIDs.first,
+              let summary = plan.publicModeSummaryByPostID[postID]
+        else {
+            return XCTFail("Expected representative copy post")
+        }
+        XCTAssertEqual(summary, "Copy Traded across 3 accounts • 1 Live • 2 Funded")
+        XCTAssertEqual(plan.visiblePostIDs.count, 1)
+    }
+
     func testSeparateCopyActionsRemainSeparate() {
         let batch1 = copyPostRows(idPrefix: "a", createdOffsets: [0, 0, 0], entryTime: "2026-06-01T12:00:00.000Z")
         let batch2 = copyPostRows(idPrefix: "b", createdOffsets: [0, 0, 0], entryTime: "2026-06-02T12:00:00.000Z")
@@ -148,13 +160,29 @@ final class CopyTradeFeedDedupeTests: XCTestCase {
         )
     }
 
+    private func singleCopyPostWithParticipatingModesPayload() -> FeedItemV1 {
+        tradeFeedRow(
+            id: "copy-single",
+            accountID: source,
+            mode: "live",
+            entryTime: "2026-06-01T12:00:00.000Z",
+            createdAt: "2026-06-01T12:00:00.000Z",
+            participatingAccountModes: [
+                ["account_id": source, "account_mode": "live"],
+                ["account_id": copyB, "account_mode": "funded"],
+                ["account_id": copyC, "account_mode": "funded"],
+            ]
+        )
+    }
+
     private func tradeFeedRow(
         id: String,
         accountID: String,
         mode: String,
         entryTime: String,
         createdAt: String,
-        tradeMode: String = "copy_traded"
+        tradeMode: String = "copy_traded",
+        participatingAccountModes: [[String: String]]? = nil
     ) -> FeedItemV1 {
         FeedItemV1(
             kind: "trade",
@@ -175,6 +203,17 @@ final class CopyTradeFeedDedupeTests: XCTestCase {
                     "trade_mode": .string(tradeMode),
                     "entry_time": .string(entryTime),
                     "created_at": .string(createdAt),
+                    "participating_account_modes": participatingAccountModes.map { payload in
+                        .array(
+                            payload.map { entry in
+                                .object(
+                                    Dictionary(uniqueKeysWithValues: entry.map { key, value in
+                                        (key, JSONValue.string(value))
+                                    })
+                                )
+                            }
+                        )
+                    } ?? .array([]),
                 ]),
             ]
         )

@@ -79,39 +79,27 @@ struct DashboardFilterBar: View {
     }
 
     private var accountMenu: some View {
-        OwnerAccountFilterDropdown(
+        let profileID = viewModel.ownerAccountsProfileID
+        let title = viewModel.accountFilterTitle
+        return OwnerAccountFilterDropdown(
             accounts: viewModel.accountsForMenu,
-            isAllAccountsSelected: {
-                if case .all = viewModel.accountFilter { return true }
-                return false
-            }(),
-            selectedAccountID: {
-                if case .account(let id) = viewModel.accountFilter { return id }
-                return nil
-            }(),
-            onSelectAll: { viewModel.setAccountFilter(.all) },
-            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            selectedFilter: viewModel.accountFilter,
+            copyGroups: OwnerAccountFilterMenuSupport.copyGroups(for: profileID),
+            isLoadingCopyGroups: OwnerAccountFilterMenuSupport.isLoadingCopyGroups(for: profileID),
+            onSelectFilter: { viewModel.setAccountFilter($0) },
             onManageAccounts: { viewModel.openManageAccounts() },
+            onManageCopyGroups: { viewModel.openManageCopyTradingGroups() },
+            onRequestCopyGroups: {
+                OwnerAccountFilterMenuSupport.requestCopyGroupsLoad(profileID: profileID)
+            },
             accessibilityIdentifier: "dashboard.account",
             boundary: .dashboard,
-            profileID: viewModel.ownerAccountsProfileID
+            profileID: profileID
         ) {
-            accountMenuLabel(selectedAccountTitle)
+            accountMenuLabel(title)
         }
         .accessibilityLabel("Account")
-        .accessibilityValue(selectedAccountTitle)
-    }
-
-    private var selectedAccountTitle: String {
-        switch viewModel.accountFilter {
-        case .all:
-            return "All Accounts"
-        case .account(let id):
-            if let account = viewModel.accounts.first(where: { $0.id == id }) {
-                return viewModel.accountMenuTitle(for: account)
-            }
-            return viewModel.accountFilterTitle
-        }
+        .accessibilityValue(title)
     }
 
     private var scopeFilterButton: some View {

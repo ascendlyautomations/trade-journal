@@ -22,6 +22,7 @@ struct BrokerIntegrationConnectionCoordinator: View {
     let data: DataEnvironment
     @Binding var linkTarget: BrokerIntegrationLinkTarget?
     @Binding var createLinkTarget: BrokerIntegrationCreateLinkTarget?
+    var linkPromptGate: BrokerIntegrationLinkPromptGate? = nil
     var showsImportedTradesReview: Bool
 
     var body: some View {
@@ -32,13 +33,13 @@ struct BrokerIntegrationConnectionCoordinator: View {
                     ProgressView("Opening Tradovate…")
                         .padding(ExperienceSpacing.lg)
                         .experienceFloatingPanelBackground(
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                         )
                 } else if viewModel.isConnectingRithmic, !viewModel.showsRithmicConnectSheet {
                     ProgressView("Connecting Rithmic…")
                         .padding(ExperienceSpacing.lg)
                         .experienceFloatingPanelBackground(
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                         )
                 }
             }
@@ -47,10 +48,13 @@ struct BrokerIntegrationConnectionCoordinator: View {
                 let reason = note.userInfo?[TradovateBrokerOAuthNotificationPayload.reasonKey] as? String
                 Task { await viewModel.handleOAuthDeepLink(status: status, reason: reason) }
             }
-            .sheet(item: $linkTarget) { target in
+            .sheet(item: $linkTarget, onDismiss: {
+                guard let linkPromptGate else { return }
+                linkPromptGate.handleLinkSheetDismissed(viewModel: viewModel)
+            }) { target in
                 BrokerLinkExistingAccountSheet(
                     viewModel: viewModel,
-                    manageAccounts: manageAccountsViewModel.accounts,
+                    manageAccountsViewModel: manageAccountsViewModel,
                     provider: target.provider,
                     connectionId: target.connectionId,
                     brokerAccount: target.account,
@@ -73,6 +77,10 @@ struct BrokerIntegrationConnectionCoordinator: View {
                         mode: .create,
                         draft: target.draft,
                         data: data,
+                        brokerLinkContext: BrokerAccountLinkContext(
+                            provider: target.provider,
+                            account: target.account
+                        ),
                         onCreateSubmit: { draft, liveDrawdown in
                             await viewModel.createAndLink(
                                 provider: target.provider,
@@ -160,7 +168,7 @@ struct BrokerIntegrationConnectionCoordinator: View {
 
 struct BrokerLinkExistingAccountSheet: View {
     let viewModel: BrokerIntegrationsViewModel
-    let manageAccounts: [TradingAccount]
+    @Bindable var manageAccountsViewModel: ManageAccountsViewModel
     let provider: BrokerIntegrationProvider
     let connectionId: String
     let brokerAccount: BrokerIntegrationAccount
@@ -170,62 +178,63 @@ struct BrokerLinkExistingAccountSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
-    private var eligibleLinkAccounts: [TradingAccount] {
-        manageAccounts
+    private var eligiblePresentation: BrokerLinkEligibleAccountsPresentation {
+        BrokerLinkEligibleAccountsPresentation.resolve(
+            isLoading: manageAccountsViewModel.isLoading,
+            errorMessage: manageAccountsViewModel.errorMessage,
+            accounts: manageAccountsViewModel.accounts
+        )
     }
 
-    private var brokerAccountNumberText: String {
-        let trimmed = brokerAccount.externalAccountId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            return trimmed
+    private var canConfirmLink: Bool {
+        if case .ready = eligiblePresentation {
+            return selectedAccountID != nil
         }
-        return brokerAccount.displayTitle
+        return false
     }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    SettingsIntroBlock(
-                        title: "Link to TradeTraxs",
-                        message: "Choose an account to link, or create a new one."
+                    BrokerDiscoveredAccountSummaryCard(provider: provider, account: brokerAccount)
+                        .brokerIntegrationsCardListRow()
+                }
+
+                Section {
+                    Text("Link an existing TradeTraxs account")
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                        .listRowSeparator(.hidden)
+                    BrokerLinkExistingAccountsSection(
+                        presentation: eligiblePresentation,
+                        accounts: manageAccountsViewModel.accounts,
+                        selectedAccountID: $selectedAccountID,
+                        onRetryLoad: {
+                            Task { await manageAccountsViewModel.refresh() }
+                        }
                     )
                     .experienceDashboardListRow()
                 }
 
                 Section {
-                    brokerAccountCard
-                        .padding(ExperienceSpacing.md)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .experienceGroupedPanel(cornerRadius: ExperienceRadius.md, prominence: .standard)
-                        .listRowInsets(SettingsListLayout.groupedCardRowInsets)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-
-                if !eligibleLinkAccounts.isEmpty {
-                    Section("Link Existing") {
-                        ForEach(eligibleLinkAccounts) { account in
-                            linkableAccountRow(account)
-                        }
-                    }
-                }
-
-                Section {
-                    Button {
+                    ExperienceButton(
+                        title: "Create New TradeTraxs Account",
+                        icon: .create,
+                        kind: .secondary,
+                        accessibilityIdentifier: "brokerIntegrations.linkAccount.createNew"
+                    ) {
                         dismiss()
                         onCreateNew()
-                    } label: {
-                        SettingsNavigationRow(
-                            title: "Create New TradeTraxs Account",
-                            subtitle: "Set up a new account linked to this broker.",
-                            systemImage: "plus",
-                            showsChevron: true
-                        )
                     }
-                    .buttonStyle(.experiencePlain)
                     .experienceDashboardListRow()
-                    .accessibilityIdentifier("brokerIntegrations.linkAccount.createNew")
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: ExperienceSpacing.xs,
+                            leading: ExperienceSpacing.md,
+                            bottom: ExperienceSpacing.md,
+                            trailing: ExperienceSpacing.md
+                        )
+                    )
                 }
             }
             .experienceInsetGroupedListStyle(pageBackground: false)
@@ -252,52 +261,17 @@ struct BrokerLinkExistingAccountSheet: View {
                             }
                         }
                     }
-                    .disabled(selectedAccountID == nil)
+                    .disabled(!canConfirmLink)
                     .accessibilityIdentifier("brokerIntegrations.linkAccount.confirm")
+                }
+            }
+            .task {
+                manageAccountsViewModel.loadIfNeeded()
+                if manageAccountsViewModel.accounts.isEmpty {
+                    await manageAccountsViewModel.refresh()
                 }
             }
         }
         .accessibilityIdentifier("brokerIntegrations.linkAccountSheet")
-    }
-
-    @ViewBuilder
-    private var brokerAccountCard: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            SettingsLabeledField(title: "Broker Account") {
-                Text(brokerAccountNumberText)
-                    .experienceStyle(.body, color: colors.primaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if brokerAccount.displayTitle != brokerAccountNumberText {
-                Text(brokerAccount.displayTitle)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-        }
-    }
-
-    private func linkableAccountRow(_ account: TradingAccount) -> some View {
-        let isSelected = selectedAccountID == account.id
-        return Button {
-            ExperienceHaptics.play(.selection)
-            selectedAccountID = account.id
-        } label: {
-            HStack(spacing: ExperienceSpacing.sm) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? colors.accent : colors.tertiaryText)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                    Text(TradingAccountDisplay.title(for: account, audience: .owner))
-                        .experienceStyle(.body, color: colors.primaryText)
-                    Text(TradingAccountDisplay.ownerDropdownModeLabel(account.mode))
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                }
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, ExperienceSpacing.xxs)
-        }
-        .buttonStyle(.experiencePlain)
-        .experienceDashboardListRow()
-        .accessibilityIdentifier("brokerIntegrations.linkAccount.account.\(account.id.rawValue)")
     }
 }

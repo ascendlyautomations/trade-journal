@@ -4,9 +4,15 @@ import os
 import SwiftUI
 
 enum ContextualTourEligibility {
+    /// Epoch fallback from bootstrap means unknown age, not a pre-cutoff account.
+    static func isAuthoritativeCreatedAt(_ createdAt: Date?) -> Bool {
+        guard let createdAt else { return false }
+        return createdAt.timeIntervalSince1970 > 1
+    }
+
     /// Missing or unparsed account age is not eligible. Pre-cutoff accounts are grandfathered.
     static func isAccountEligible(createdAt: Date?, cutoff: Date) -> Bool {
-        guard let createdAt else { return false }
+        guard isAuthoritativeCreatedAt(createdAt), let createdAt else { return false }
         return createdAt >= cutoff
     }
 
@@ -16,7 +22,8 @@ enum ContextualTourEligibility {
         dismissedVersion: Int,
         tourVersion: Int
     ) -> Bool {
-        guard isAccountEligible(createdAt: createdAt, cutoff: cutoff) else { return false }
+        _ = createdAt
+        _ = cutoff
         return dismissedVersion < tourVersion
     }
 }
@@ -30,6 +37,17 @@ enum ContextualTourTargetResolution: Equatable {
 enum ContextualTourGeometry {
     static let stabilityTolerance: CGFloat = 1
     static let resolveTimeout: TimeInterval = 1.2
+
+    static func resolveTimeout(for target: ContextualTourTargetID?) -> TimeInterval {
+        switch target {
+        case .dashboardCalendar, .feedExplore, .feedTradeRooms, .profileSettings:
+            return 2.5
+        case .mainTabHome, .mainTabFeed, .mainTabCreate, .mainTabMessages, .mainTabProfile:
+            return 2.0
+        default:
+            return resolveTimeout
+        }
+    }
 
     static func isUsable(_ frame: CGRect) -> Bool {
         frame.width > 1
@@ -81,7 +99,8 @@ enum ContextualTourGeometry {
     /// Profile header targets stay at the top; autoscroll fights shell loading and causes flicker.
     static func skipsTourAutoscroll(for target: ContextualTourTargetID) -> Bool {
         switch target {
-        case .profileIdentity, .profileTradeRoom, .tradesBacktest:
+        case .profileIdentity, .profileTradeRoom, .profileSettings,
+             .mainTabHome, .mainTabFeed, .mainTabCreate, .mainTabMessages, .mainTabProfile:
             return true
         default:
             return false
@@ -91,8 +110,22 @@ enum ContextualTourGeometry {
     /// Extra clearance so settings rows are not treated as visible under the navigation bar.
     static func measurementTopInset(for target: ContextualTourTargetID?) -> CGFloat {
         switch target {
+        case .dashboardAccountAndDates:
+            return ContextualTourCardPlacement.navigationClearance + ExperienceSpacing.sm
         case .settingsAppearance, .settingsTradingRules:
             return ContextualTourCardPlacement.navigationClearance
+        default:
+            return 0
+        }
+    }
+
+    /// Keeps settings rows out of the tab bar column when the tour overlays the main shell.
+    static func measurementBottomInset(for target: ContextualTourTargetID?) -> CGFloat {
+        switch target {
+        case .settingsAppearance, .settingsTradingRules:
+            return 49 + ExperienceSpacing.md
+        case .mainTabHome, .mainTabFeed, .mainTabCreate, .mainTabMessages, .mainTabProfile:
+            return ExperienceSpacing.xs
         default:
             return 0
         }
@@ -121,6 +154,8 @@ enum ContextualTourGeometry {
     /// Tall dashboard sections read better with a top anchor; compact controls stay centered.
     static func scrollAnchor(for target: ContextualTourTargetID) -> UnitPoint {
         switch target {
+        case .dashboardAccountAndDates:
+            return UnitPoint(x: 0.5, y: 0.14)
         case .dashboardPerformance,
              .dashboardTrades,
              .dashboardReports,
@@ -131,13 +166,24 @@ enum ContextualTourGeometry {
              .expenseTrackerAnalytics,
              .expenseTrackerExport:
             return .top
-        case .settingsAppearance:
-            return UnitPoint(x: 0.5, y: 0.28)
-        case .settingsTradingRules:
-            return UnitPoint(x: 0.5, y: 0.22)
+        case .settingsAppearance, .settingsTradingRules:
+            return .center
         default:
             return .center
         }
+    }
+
+    static func measurementVisibleRect(
+        viewport: CGRect,
+        topInset: CGFloat,
+        bottomInset: CGFloat
+    ) -> CGRect {
+        CGRect(
+            x: viewport.minX,
+            y: viewport.minY + topInset,
+            width: viewport.width,
+            height: max(0, viewport.height - topInset - bottomInset)
+        )
     }
 }
 
@@ -205,6 +251,7 @@ nonisolated enum ContextualTourDebug {
 struct ContextualTourGates: Equatable, Sendable {
     var homeRootActive = false
     var feedRootActive = false
+    var messagesRootActive = false
     var profileRootActive = false
     var settingsHomeActive = false
     var payoutsActive = false

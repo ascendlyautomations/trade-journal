@@ -90,6 +90,7 @@ enum SessionScopedCaches {
         Task {
             await DailyCheckInReminderCoordinator.shared.cancelAll()
             await TradeImportReminderCoordinator.shared.cancelAll()
+            await PerformanceReportReminderCoordinator.shared.cancelAll()
         }
         SessionDailyCheckInsStore.shared.invalidate()
         PsychologyDashboardCheckInsCoordinator.reset()

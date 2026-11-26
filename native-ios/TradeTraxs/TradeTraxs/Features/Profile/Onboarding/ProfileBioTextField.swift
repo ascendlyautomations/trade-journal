@@ -7,17 +7,18 @@ struct ProfileBioTextField: View {
     var placeholder: String
     var minHeight: CGFloat?
     var maxHeight: CGFloat?
+    var onEditingBegan: (() -> Void)?
+    var onEditingEnded: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
 
+    private var resolvedMinHeight: CGFloat {
+        minHeight ?? 44
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            ProfileBioTextViewRepresentable(
-                text: $text,
-                placeholder: placeholder,
-                minHeight: minHeight,
-                maxHeight: maxHeight
-            )
+            bioEditor
             HStack {
                 Spacer(minLength: 0)
                 Text(ProfileBioPolicy.characterCounterLabel(for: text))
@@ -25,6 +26,26 @@ struct ProfileBioTextField: View {
                     .foregroundStyle(counterColor)
                     .accessibilityIdentifier("profile.bio.characterCounter")
             }
+        }
+    }
+
+    @ViewBuilder
+    private var bioEditor: some View {
+        let representable = ProfileBioTextViewRepresentable(
+            text: $text,
+            placeholder: placeholder,
+            minHeight: minHeight,
+            maxHeight: maxHeight,
+            onEditingBegan: onEditingBegan,
+            onEditingEnded: onEditingEnded
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: resolvedMinHeight, alignment: .top)
+
+        if let maxHeight {
+            representable.frame(maxHeight: maxHeight, alignment: .top)
+        } else {
+            representable
         }
     }
 
@@ -43,9 +64,15 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
     let placeholder: String
     var minHeight: CGFloat?
     var maxHeight: CGFloat?
+    var onEditingBegan: (() -> Void)?
+    var onEditingEnded: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
+        Coordinator(
+            text: $text,
+            onEditingBegan: onEditingBegan,
+            onEditingEnded: onEditingEnded
+        )
     }
 
     func makeUIView(context: Context) -> BioTextViewContainer {
@@ -62,6 +89,7 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
         textView.autocorrectionType = .default
         textView.spellCheckingType = .default
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.accessibilityIdentifier = "profile.bio.editor"
         textView.text = text
         container.placeholderLabel.text = placeholder
         container.placeholderLabel.font = textView.font
@@ -74,6 +102,10 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
 
     func updateUIView(_ uiView: BioTextViewContainer, context: Context) {
         context.coordinator.attach(container: uiView)
+        context.coordinator.updateEditingHandlers(
+            onEditingBegan: onEditingBegan,
+            onEditingEnded: onEditingEnded
+        )
         uiView.placeholderLabel.text = placeholder
         let width = Self.contentWidth(for: uiView)
         let display = ProfileBioPolicy.constrained(text, contentWidth: width)
@@ -86,16 +118,52 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
         uiView.invalidateIntrinsicContentSize()
     }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: BioTextViewContainer, context: Context) -> CGSize? {
+        let proposed = proposal.replacingUnspecifiedDimensions()
+        let width = proposed.width.isFinite && proposed.width > 0
+            ? proposed.width
+            : ProfileBioPolicy.referenceContentWidth()
+        uiView.bounds.size = CGSize(width: width, height: proposed.height)
+        uiView.setNeedsLayout()
+        uiView.layoutIfNeeded()
+        let height = uiView.intrinsicContentSize.height
+        return CGSize(width: width, height: max(height, minHeight ?? 44))
+    }
+
     final class Coordinator: NSObject, UITextViewDelegate {
         private var text: Binding<String>
+        private var onEditingBegan: (() -> Void)?
+        private var onEditingEnded: (() -> Void)?
         private weak var container: BioTextViewContainer?
 
-        init(text: Binding<String>) {
+        init(
+            text: Binding<String>,
+            onEditingBegan: (() -> Void)?,
+            onEditingEnded: (() -> Void)?
+        ) {
             self.text = text
+            self.onEditingBegan = onEditingBegan
+            self.onEditingEnded = onEditingEnded
+        }
+
+        func updateEditingHandlers(
+            onEditingBegan: (() -> Void)?,
+            onEditingEnded: (() -> Void)?
+        ) {
+            self.onEditingBegan = onEditingBegan
+            self.onEditingEnded = onEditingEnded
         }
 
         func attach(container: BioTextViewContainer) {
             self.container = container
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            onEditingBegan?()
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            onEditingEnded?()
         }
 
         func textView(
@@ -191,7 +259,7 @@ private final class BioTextViewContainer: UIView {
     }
 
     override var intrinsicContentSize: CGSize {
-        let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
+        let width = bounds.width > 0 ? bounds.width : ProfileBioPolicy.defaultReferenceScreenWidth
         let fitting = textView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
         var height = fitting.height
         if let minHeight {
@@ -209,5 +277,13 @@ private final class BioTextViewContainer: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         invalidateIntrinsicContentSize()
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if let hit = super.hitTest(point, with: event) {
+            return hit
+        }
+        guard bounds.contains(point) else { return nil }
+        return textView
     }
 }

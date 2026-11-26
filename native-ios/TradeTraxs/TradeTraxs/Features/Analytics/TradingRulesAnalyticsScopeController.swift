@@ -86,6 +86,14 @@ final class TradingRulesAnalyticsScopeController {
         importScope(from: dashboard.clientScopeFilter())
     }
 
+    var accountMenuTitle: String {
+        OwnerAccountFilterMenuSupport.menuTitle(
+            filter: accountFilter,
+            accounts: accounts,
+            profileID: profileID
+        )
+    }
+
     func clientScopeFilter() -> DashboardClientScopeFilter {
         DashboardClientScopeFilter(
             accountFilter: accountFilter,
@@ -93,7 +101,8 @@ final class TradingRulesAnalyticsScopeController {
             customInterval: customDateInterval,
             accountMode: accountTypeFilter,
             showPublicOnly: showPublicOnly,
-            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) }),
+            copyTradingGroups: OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
         )
     }
 
@@ -126,9 +135,31 @@ final class TradingRulesAnalyticsScopeController {
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
-        let sanitized = DashboardAccountScopePolicy.sanitizedFilter(filter, accounts: accounts)
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
+            filter,
+            accounts: accounts,
+            profileID: profileID
+        )
         guard accountFilter != sanitized else { return }
         ExperienceHaptics.play(.selection)
+        accountFilter = sanitized
+        publishScopeChange()
+    }
+
+    func openManageCopyTradingGroups() {
+        ExperienceHaptics.play(.selection)
+        TradingRulesCompliancePresentationBridge.dashboardViewModel?
+            .openManageCopyTradingGroups()
+    }
+
+    func handleCopyTradingGroupsMutation() {
+        guard let profileID else { return }
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
+            accountFilter,
+            accounts: accounts,
+            profileID: profileID
+        )
+        guard sanitized != accountFilter else { return }
         accountFilter = sanitized
         publishScopeChange()
     }
@@ -141,7 +172,11 @@ final class TradingRulesAnalyticsScopeController {
         ) else { return }
         accounts = loaded
         OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
-        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(accountFilter, accounts: loaded)
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
+            accountFilter,
+            accounts: loaded,
+            profileID: profileID
+        )
         guard sanitized != accountFilter else { return }
         accountFilter = sanitized
         publishScopeChange()
@@ -241,7 +276,10 @@ final class TradingRulesAnalyticsScopeController {
         guard TradingRulesComplianceRecomputeCoordinator.isCurrent(baseline) else { return }
 
         let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
-        _ = TradingRulesComplianceSessionStore.shared.commit(
+        let presentationStore = TradingRulesCompliancePresentationStores.store(
+            detailCache: dependencies.detailCache
+        )
+        _ = presentationStore.commit(
             output: output,
             profileID: profileID,
             scope: scope,

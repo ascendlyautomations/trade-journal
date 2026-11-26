@@ -94,6 +94,21 @@ final class ConversationMessageMergeTests: XCTestCase {
         XCTAssertEqual(reconciled.map(\.id.rawValue), ["peer-old", "server-msg"])
     }
 
+    func testReconcileServerFirstPagePreservesHistoryWhenIncomingIsPartial() {
+        let older = makeMessage(id: "m1", body: "one", sender: peer, at: 100, read: true)
+        let middle = makeMessage(id: "m2", body: "two", sender: viewer, at: 200, read: true)
+        let newest = makeMessage(id: "m3", body: "three", sender: peer, at: 300, read: true)
+        let storyReplyOnly = makeMessage(id: "story-reply", body: "{}", sender: viewer, at: 400, read: true)
+
+        let reconciled = ConversationMessageMerge.reconcileServerFirstPage(
+            existing: [older, middle, newest],
+            incoming: [storyReplyOnly],
+            dropOmittedInWindow: false
+        )
+
+        XCTAssertEqual(reconciled.map(\.id.rawValue), ["m1", "m2", "m3", "story-reply"])
+    }
+
     func testReconcileServerFirstPageDropsSoftDeletedRowsInWindow() {
         let older = makeMessage(id: "old", body: "old", sender: peer, at: 50, read: true)
         let deleted = makeMessage(id: "gone", body: "deleted", sender: viewer, at: 150, read: true)

@@ -16,6 +16,8 @@ struct WithdrawalFlowView: View {
         ledgerEntryID: AccountPayoutEntryID
     )?
 
+    @Bindable private var withdrawalsHistory = WithdrawalsHistoryStore.shared
+
     @Environment(\.themeColors) private var colors
 
     init(
@@ -39,6 +41,20 @@ struct WithdrawalFlowView: View {
         viewModel.accounts.filter { PropFirmPayoutPolicy.supportsWithdrawal(for: $0) }
     }
 
+    /// Payout-ready funded accounts first; everyone else keeps list order within each group.
+    private var orderedWithdrawalAccounts: [TradingAccount] {
+        var ready: [TradingAccount] = []
+        var remaining: [TradingAccount] = []
+        for account in withdrawalAccounts {
+            if isPayoutReadyAccount(account) {
+                ready.append(account)
+            } else {
+                remaining.append(account)
+            }
+        }
+        return ready + remaining
+    }
+
     var body: some View {
         Group {
             if let pending = pendingLiveAchievementPrompt {
@@ -56,8 +72,14 @@ struct WithdrawalFlowView: View {
         .experienceScreenBackground()
         .experienceNavigationTitle("Withdrawal")
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(pendingLiveAchievementPrompt != nil ? "Done" : "Close", action: onDismiss)
+            if pendingLiveAchievementPrompt != nil {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done", action: onDismiss)
+                }
+            } else if selectedAccountID == nil {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close", action: onDismiss)
+                }
             }
         }
         .sheet(isPresented: recordPayoutPresented) {
@@ -77,6 +99,10 @@ struct WithdrawalFlowView: View {
                 if !viewModel.isLoading { break }
                 try? await Task.sleep(nanoseconds: 50_000_000)
             }
+            if let profileID = viewModel.viewerProfileID {
+                withdrawalsHistory.bindProfile(profileID)
+                withdrawalsHistory.hydrateFromSessionCaches(profileID: profileID)
+            }
         }
         .accessibilityIdentifier("withdrawal.flow")
     }
@@ -88,28 +114,8 @@ struct WithdrawalFlowView: View {
         )
     }
 
-    private var payoutHistoryLink: some View {
-        NavigationLink {
-            PayoutsScreenView(
-                data: data,
-                navigationCoordinator: navigationCoordinator
-            )
-        } label: {
-            Text("Payout History")
-                .experienceStyle(.subheadline, color: colors.accent)
-        }
-        .buttonStyle(.experiencePlain)
-        .simultaneousGesture(TapGesture().onEnded { ExperienceHaptics.play(.selection) })
-        .accessibilityIdentifier("withdrawal.payoutHistory")
-    }
-
     private var accountPicker: some View {
         List {
-            Section {
-                payoutHistoryLink
-                    .experienceDashboardListRow()
-            }
-
             if viewModel.isLoading, withdrawalAccounts.isEmpty {
                 Section {
                     HStack {
@@ -129,7 +135,7 @@ struct WithdrawalFlowView: View {
                 }
             } else {
                 Section("Account") {
-                    ForEach(withdrawalAccounts) { account in
+                    ForEach(orderedWithdrawalAccounts) { account in
                         Button {
                             ExperienceHaptics.play(.selection)
                             draft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
@@ -139,11 +145,7 @@ struct WithdrawalFlowView: View {
                                 selectedAccountID = account.id
                             }
                         } label: {
-                            SettingsNavigationRow(
-                                title: TradingAccountDisplay.title(for: account, audience: .owner),
-                                subtitle: accountSubtitle(for: account),
-                                systemImage: accountIcon(for: account)
-                            )
+                            withdrawalAccountRow(for: account)
                         }
                         .buttonStyle(.experiencePlain)
                         .experienceDashboardListRow()
@@ -182,11 +184,6 @@ struct WithdrawalFlowView: View {
                 .experienceDashboardListRow()
             } header: {
                 Text("Withdrawal")
-            }
-
-            Section {
-                payoutHistoryLink
-                    .experienceDashboardListRow()
             }
 
             if let error = viewModel.payoutError {
@@ -247,6 +244,55 @@ struct WithdrawalFlowView: View {
                 pendingLiveAchievementPrompt = nil
                 onDismiss()
             }
+        )
+    }
+
+    private func withdrawalAccountRow(for account: TradingAccount) -> some View {
+        let payoutReady = isPayoutReadyAccount(account)
+        return HStack(spacing: ExperienceSpacing.sm) {
+            Image(systemName: accountIcon(for: account))
+                .font(.body.weight(.medium))
+                .foregroundStyle(colors.accent)
+                .frame(width: 28, alignment: .center)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                Text(TradingAccountDisplay.title(for: account, audience: .owner))
+                    .experienceStyle(.body, color: colors.primaryText)
+                Text(accountSubtitle(for: account))
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            Spacer(minLength: ExperienceSpacing.xs)
+            if payoutReady {
+                Text("Ready For a Payout!")
+                    .experienceStyle(.caption, color: colors.profit)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("withdrawal.account.\(account.id.rawValue).payoutReady")
+            }
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(colors.tertiaryText)
+        }
+        .padding(.vertical, ExperienceSpacing.xs)
+        .contentShape(Rectangle())
+    }
+
+    private func isPayoutReadyAccount(_ account: TradingAccount) -> Bool {
+        propFirmSnapshot(for: account)?.payoutReady == true
+    }
+
+    private func propFirmSnapshot(for account: TradingAccount) -> PropFirmStatusSnapshot? {
+        guard PropFirmPayoutPolicy.supportsRecordPayout(for: account) else { return nil }
+        let trades: [Trade] = {
+            guard let profileID = viewModel.viewerProfileID else { return [] }
+            return data.detailCache.tradesOwnedBy(profileID).filter { $0.accountID == account.id }
+        }()
+        let cycles = withdrawalsHistory.cyclesByAccount[account.id] ?? []
+        return PropFirmStatusSnapshot.build(
+            account: account,
+            trades: trades,
+            payoutCycles: cycles
         )
     }
 

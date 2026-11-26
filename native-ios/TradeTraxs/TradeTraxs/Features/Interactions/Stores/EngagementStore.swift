@@ -33,6 +33,10 @@ final class EngagementStore {
         loadedTargets.contains(target)
     }
 
+    func isLikeInFlight(for target: InteractionTarget) -> Bool {
+        inFlightLikes.contains(target)
+    }
+
     /// Inject cached engagement (list → detail, fixtures, screenshots).
     func seed(_ snapshot: EngagementSnapshot, for target: InteractionTarget) {
         applyIncomingSnapshot(snapshot, for: target)

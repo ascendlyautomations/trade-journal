@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Feed V2 bootstrap, `rpc_v1_feed_bootstrap`.
 nonisolated struct FeedRpcBootstrapRepository: FeedBootstrapProviding {
@@ -35,6 +36,67 @@ nonisolated struct FeedRpcBootstrapRepository: FeedBootstrapProviding {
     }
 }
 
+/// Rotating rank feed bootstrap (`rpc_v2_feed_bootstrap`).
+nonisolated struct FeedRpcV2BootstrapRepository: FeedBootstrapProviding {
+    private let rpc: any RPCClient
+    private let client: BackendV2RPCClient
+
+    init(rpc: any RPCClient) {
+        self.rpc = rpc
+        self.client = BackendV2RPCClient(transport: rpc)
+    }
+
+    func loadFeedBootstrap(
+        scope: String,
+        contentFilter: String?,
+        cursor: String?,
+        limit: Int?
+    ) async throws -> FeedBootstrapV1 {
+        try await FeedRpcBootstrapRepository(rpc: rpc).loadFeedBootstrap(
+            scope: scope,
+            contentFilter: contentFilter,
+            cursor: cursor,
+            limit: limit
+        )
+    }
+
+    func loadFeedBootstrap(
+        scope: String,
+        contentFilter: String?,
+        cursor: String?,
+        limit: Int?,
+        rankSession: FeedRankSessionArguments
+    ) async throws -> FeedBootstrapV1 {
+        let args = FeedRpcV2Arguments(
+            p_scope: scope,
+            p_content_filter: contentFilter ?? "all",
+            p_limit: limit ?? 20,
+            p_cursor: cursor,
+            p_session_seed: rankSession.sessionSeed,
+            p_rank_frozen_at: rankSession.rankFrozenAtISO,
+            p_scan_cursor: rankSession.scanCursor
+        )
+        let body = try JSONEncoder().encode(args)
+        let value = try await client.call(
+            .feedV2,
+            argumentsJSON: body,
+            as: FeedBootstrapV1.self,
+            options: BackendV2RPCCallOptions(
+                cacheMiss: true,
+                flagName: BackendV2FeatureFlag.feedRotatingRank.dottedName
+            )
+        )
+        try value.validateContractVersion()
+        return value
+    }
+}
+
+nonisolated struct FeedRankSessionArguments: Sendable {
+    var sessionSeed: String
+    var rankFrozenAtISO: String
+    var scanCursor: String?
+}
+
 private nonisolated struct FeedRpcArguments: Encodable, Sendable {
     var p_scope: String
     var p_content_filter: String
@@ -61,12 +123,53 @@ private nonisolated struct FeedRpcArguments: Encodable, Sendable {
     }
 }
 
+private nonisolated struct FeedRpcV2Arguments: Encodable, Sendable {
+    var p_scope: String
+    var p_content_filter: String
+    var p_limit: Int
+    var p_cursor: String?
+    var p_session_seed: String
+    var p_rank_frozen_at: String
+    var p_scan_cursor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case p_scope
+        case p_content_filter
+        case p_limit
+        case p_cursor
+        case p_session_seed
+        case p_rank_frozen_at
+        case p_scan_cursor
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(p_scope, forKey: .p_scope)
+        try container.encode(p_content_filter, forKey: .p_content_filter)
+        try container.encode(p_limit, forKey: .p_limit)
+        if let p_cursor, !p_cursor.isEmpty {
+            try container.encode(p_cursor, forKey: .p_cursor)
+        } else {
+            try container.encodeNil(forKey: .p_cursor)
+        }
+        try container.encode(p_session_seed, forKey: .p_session_seed)
+        try container.encode(p_rank_frozen_at, forKey: .p_rank_frozen_at)
+        if let p_scan_cursor, !p_scan_cursor.isEmpty {
+            try container.encode(p_scan_cursor, forKey: .p_scan_cursor)
+        } else {
+            try container.encodeNil(forKey: .p_scan_cursor)
+        }
+    }
+}
+
 enum FeedBootstrapLoader {
     enum LoaderError: Error, Sendable {
         case flagOff
         case rpcUnavailable
         /// Filter reload cache-only pass, no session snapshot for this filter yet.
         case cacheMissSkipped
+        /// v2 failed; caller should reset rank pagination and fall back to v1.
+        case rotatingRankFallback
     }
 
     @MainActor
@@ -85,14 +188,16 @@ enum FeedBootstrapLoader {
         forceNetwork: Bool,
         allowNetwork: Bool = true,
         guestPublicMode: Bool = false,
-        traceTrigger: String = "feed.initial"
+        traceTrigger: String = "feed.initial",
+        rankSession: FeedRankSessionArguments? = nil
     ) async throws -> (
         entries: [FeedTimelineEntry],
         nextCursor: String?,
         stories: [Story],
         engagement: [InteractionTarget: EngagementSnapshot],
         pendingHydrationItems: [FeedItem],
-        feedItemOrder: [String]
+        feedItemOrder: [String],
+        rotatingRankFallback: Bool
     ) {
         guard BackendV2FeatureFlags.isEnabled(.feed) else {
             throw LoaderError.flagOff
@@ -123,7 +228,7 @@ enum FeedBootstrapLoader {
             let engagement = guestPublicMode
                 ? [:]
                 : FeedEngagementCacheRestore.engagementMap(from: cachedEntries)
-            return (cachedEntries, cached.nextCursor, cached.stories, engagement, [], [])
+            return (cachedEntries, cached.nextCursor, cached.stories, engagement, [], [], false)
         }
 
         #if DEBUG
@@ -152,14 +257,17 @@ enum FeedBootstrapLoader {
             throw LoaderError.rpcUnavailable
         }
 
+        let rankSuffix = rankSession?.sessionSeed ?? "-"
         let flightKey = BackendV2FlightKeys.feed(
             viewerID: viewerID.rawValue,
             scope: scope.rawValue,
             contentFilter: contentFilter.rpcValue,
             cursor: cursor
-        )
+        ) + "|\(rankSuffix)"
 
         let bootstrap: FeedBootstrapV1
+        let rotatingFallbackFlag = RotatingFallbackFlag()
+        let usesRotating = BackendV2FeatureFlags.isEnabled(.feedRotatingRank) && rankSession != nil
         do {
             let intentID = BootstrapRpcTrace.beginIntent(
                 rpc: rpcName,
@@ -184,14 +292,37 @@ enum FeedBootstrapLoader {
                     rpc: rpcName
                 ) {
                     try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
-                        let repo = FeedRpcBootstrapRepository(rpc: rpc)
                         let rpcScope = guestPublicMode ? FeedScope.global.rawValue : scope.rawValue
-                        let value = try await repo.loadFeedBootstrap(
-                            scope: rpcScope,
-                            contentFilter: contentFilter.rpcValue,
-                            cursor: cursor,
-                            limit: limit
-                        )
+                        let value: FeedBootstrapV1
+                        if usesRotating, let rankSession, !guestPublicMode {
+                            let v2 = FeedRpcV2BootstrapRepository(rpc: rpc)
+                            do {
+                                value = try await v2.loadFeedBootstrap(
+                                    scope: rpcScope,
+                                    contentFilter: contentFilter.rpcValue,
+                                    cursor: cursor,
+                                    limit: limit,
+                                    rankSession: rankSession
+                                )
+                            } catch {
+                                rotatingFallbackFlag.boolValue = true
+                                let v1 = FeedRpcBootstrapRepository(rpc: rpc)
+                                value = try await v1.loadFeedBootstrap(
+                                    scope: rpcScope,
+                                    contentFilter: contentFilter.rpcValue,
+                                    cursor: nil,
+                                    limit: limit
+                                )
+                            }
+                        } else {
+                            let repo = FeedRpcBootstrapRepository(rpc: rpc)
+                            value = try await repo.loadFeedBootstrap(
+                                scope: rpcScope,
+                                contentFilter: contentFilter.rpcValue,
+                                cursor: cursor,
+                                limit: limit
+                            )
+                        }
                         return try JSONEncoder().encode(value)
                     }
                 }
@@ -226,7 +357,7 @@ enum FeedBootstrapLoader {
                 let engagement = guestPublicMode
                     ? [:]
                     : FeedEngagementCacheRestore.engagementMap(from: cachedEntries)
-                return (cachedEntries, cached.nextCursor, cached.stories, engagement, [], [])
+                return (cachedEntries, cached.nextCursor, cached.stories, engagement, [], [], false)
             }
             if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcName) {
                 await BackendV2RpcAvailability.shared.markUnavailable(rpcName: rpcName, viewerID: viewerID.rawValue)
@@ -300,7 +431,17 @@ enum FeedBootstrapLoader {
             applied.stories,
             engagement,
             pendingHydrationItems,
-            feedItemOrder
+            feedItemOrder,
+            rotatingFallbackFlag.boolValue
         )
+    }
+}
+
+private final class RotatingFallbackFlag: Sendable {
+    private let value = Mutex(false)
+
+    nonisolated var boolValue: Bool {
+        get { value.withLock { $0 } }
+        set { value.withLock { $0 = newValue } }
     }
 }

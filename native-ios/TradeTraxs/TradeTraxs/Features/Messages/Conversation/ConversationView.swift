@@ -421,6 +421,13 @@ struct ConversationView: View {
                                         coordinator: navigationCoordinator
                                     )
                                 },
+                                onStoryReplyTap: { payload in
+                                    StoryReplyNavigation.open(
+                                        payload: payload,
+                                        cache: detailCache,
+                                        coordinator: navigationCoordinator
+                                    )
+                                },
                                 onSharedProfileTap: { payload in
                                     ProfileShareNavigation.open(
                                         payload: payload,

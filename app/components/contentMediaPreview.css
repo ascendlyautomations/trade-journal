@@ -18,7 +18,7 @@
 /* Feed: show the whole image inside the column. Height is capped; aspect is the file's. */
 .tt-content-media-frame--feed {
   width: 100%;
-  background: rgb(0 0 0 / 0.3);
+  background: transparent;
 }
 
 .tt-content-media-preview--feed {

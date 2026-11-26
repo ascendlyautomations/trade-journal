@@ -6,7 +6,7 @@ extension Notification.Name {
     static let postOnboardingPlanSelectionDidDismiss = Notification.Name("postOnboardingPlanSelectionDidDismiss")
 }
 
-/// Presents the one-time TraxsPro vs Free sheet after the contextual walkthrough settles (or on next launch when the tour already settled).
+/// Presents the one-time TraxsPro vs Free chooser **before** the contextual walkthrough (native funnel only).
 @MainActor
 @Observable
 final class PostOnboardingPlanSelectionCoordinator {
@@ -20,14 +20,13 @@ final class PostOnboardingPlanSelectionCoordinator {
     private init() {}
 
     func noteAccountContext(userID: String?, accountCreatedAt: Date?) {
+        let createdAtChanged = lastAccountCreatedAt != accountCreatedAt
         pendingUserID = userID
         lastAccountCreatedAt = accountCreatedAt
         reevaluatePresentation()
-    }
-
-    func handleTourCompleted(userID: String?) {
-        guard let userID, userID == pendingUserID else { return }
-        reevaluatePresentation(forceAfterTour: true)
+        if createdAtChanged {
+            ContextualTourCoordinator.shared.refreshAccountCreatedAt(accountCreatedAt)
+        }
     }
 
     func handleShellGatesChanged(
@@ -35,58 +34,59 @@ final class PostOnboardingPlanSelectionCoordinator {
         tourOverlayVisible: Bool,
         blockingModalPresented: Bool
     ) {
-        guard tourPhase == .idle, !tourOverlayVisible, !blockingModalPresented else {
+        guard tourPhase == .idle, !tourOverlayVisible else {
             if isPresented, tourOverlayVisible || tourPhase != .idle {
                 isPresented = false
             }
             return
         }
-        reevaluatePresentation()
+        reevaluatePresentation(blockingModalPresented: blockingModalPresented)
     }
 
     func markCompletedAndDismiss() {
         if let userID = pendingUserID {
             progress.markCompleted(userID: userID)
+            PostAuthOnboardingProgress.markPlanFinished(for: ProfileID(userID))
+            NativeIosOnboardingSync.recordPlanAcknowledged(
+                userID: userID,
+                rpc: NativeIosOnboardingServices.rpc
+            )
         }
         isPresented = false
         NotificationCenter.default.post(name: .postOnboardingPlanSelectionDidDismiss, object: nil)
+        if let userID = pendingUserID {
+            PostOnboardingWelcomeCoordinator.shared.presentAfterPlanIfNeeded(userID: userID)
+        }
     }
 
     /// Defers contextual-tour follow-up navigation (e.g. Trading Rules) until after the plan chooser.
     func defersPostTourNavigation(userID: String?) -> Bool {
         guard let userID, !userID.isEmpty else { return false }
-        return !progress.hasCompleted(userID: userID)
+        return !PostAuthOnboardingPolicy.hasSatisfiedNativePlanStep(userID: userID)
     }
 
-    private func reevaluatePresentation(forceAfterTour: Bool = false) {
+    func reevaluatePresentation(blockingModalPresented: Bool = false) {
         guard let userID = pendingUserID, !userID.isEmpty else {
             isPresented = false
             return
         }
-        guard !progress.hasCompleted(userID: userID) else {
+        guard PostAuthOnboardingPolicy.shouldPresentPlanOnMainShell(userID: userID) else {
             isPresented = false
             return
         }
 
-        let tourSettled = walkthroughSettled(for: userID, forceAfterTour: forceAfterTour)
         let tour = ContextualTourCoordinator.shared
-        guard tourSettled, tour.phase == .idle, !tour.showsOverlay else {
+        guard !tour.showsOverlay, tour.phase == .idle else {
+            if isPresented {
+                isPresented = false
+            }
+            return
+        }
+
+        guard !blockingModalPresented else {
             return
         }
 
         isPresented = true
-    }
-
-  private func walkthroughSettled(for userID: String, forceAfterTour: Bool) -> Bool {
-        if forceAfterTour { return true }
-        let tourEligible = ContextualTourEligibility.isAccountEligible(
-            createdAt: lastAccountCreatedAt,
-            cutoff: ContextualTourLaunch.accountCreatedAtCutoff
-        )
-        if !tourEligible {
-            return true
-        }
-        let dismissed = ContextualTourProgressStore().dismissedVersion(for: .dashboard, userID: userID)
-        return dismissed >= ContextualTourCatalog.dashboard.version
     }
 }

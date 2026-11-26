@@ -454,7 +454,7 @@ final class CurrentUserProfileStore {
     }
 }
 
-enum ProfileDisplay {
+nonisolated enum ProfileDisplay {
     static func initials(displayName: String, username: String) -> String {
         var source = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         if ProfileIdentitySanitizer.isUUIDLike(source) {

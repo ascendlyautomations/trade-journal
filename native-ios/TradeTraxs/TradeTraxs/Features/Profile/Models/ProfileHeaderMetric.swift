@@ -10,5 +10,5 @@ struct ProfileHeaderMetric: Identifiable, Hashable, Sendable {
     /// Display string. Use `"–"` when a metric is not yet available from cache.
     let value: String
 
-    static let placeholderValue = "–"
+    nonisolated static let placeholderValue = "–"
 }

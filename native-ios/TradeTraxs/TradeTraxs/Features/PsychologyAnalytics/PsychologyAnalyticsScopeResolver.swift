@@ -96,17 +96,11 @@ nonisolated enum PsychologyAnalyticsScopeResolver {
             dateRange: scope.dateRange,
             customInterval: scope.customInterval
         )
-        let account: String = {
-            switch scope.accountFilter {
-            case .all:
-                return "All accounts"
-            case .account(let id):
-                if let match = accounts.first(where: { $0.id == id }) {
-                    return TradingAccountDisplay.ownerDropdownLine(for: match)
-                }
-                return "One account"
-            }
-        }()
+        let account = DashboardAccountFilterCopyTradingSupport.menuTitle(
+            for: scope.accountFilter,
+            accounts: accounts,
+            copyGroups: scope.copyTradingGroups
+        )
         var parts = [timeframe, account]
         if scope.accountMode != .all {
             parts.append(DashboardScopeFilterSupport.accountTypeTitle(scope.accountMode))
@@ -135,9 +129,6 @@ nonisolated enum PsychologyAnalyticsScopeResolver {
 
 private extension DashboardAccountFilter {
     nonisolated var storageKey: String {
-        switch self {
-        case .all: return "all"
-        case .account(let id): return "acct:\(id.rawValue)"
-        }
+        DashboardAccountFilterCopyTradingSupport.persistenceKey(for: self)
     }
 }

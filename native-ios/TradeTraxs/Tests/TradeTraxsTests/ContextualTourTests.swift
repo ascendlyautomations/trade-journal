@@ -132,23 +132,28 @@ final class ContextualTourTests: XCTestCase {
         let informational = definition.steps.filter(\.role.countsTowardProgress)
         XCTAssertEqual(definition.informationalStepCount, informational.count)
         XCTAssertEqual(informational.map(\.title), [
-            "Accounts & timeframe",
-            "Equity curve",
-            "Trades",
-            "Backtest",
-            "Reports",
-            "Withdrawals",
-            "Calendar",
-            "Feed filters",
+            "Home tab — Your Dashboard",
+            "Accounts & Timeframe",
+            "Trading Performance",
+            "Your Trade Journal",
+            "Performance Reports",
+            "Withdrawals & Expenses",
+            "Trading Calendar",
+            "Feed tab — Trading Community",
+            "Feed Filters",
             "Trade Rooms",
             "Explore",
-            "Profile",
+            "Create tab — Create & Journal",
+            "Messages tab — Messages",
+            "Profile tab — Your Profile",
+            "Profile header — Your Trading Identity",
             "Your Trade Room",
+            "Settings button — Settings",
             "Appearance",
             "Trading Rules",
             "Trading Rules",
         ])
-        XCTAssertEqual(definition.steps.filter { $0.role == .sectionContinue }.count, 3)
+        XCTAssertEqual(definition.steps.filter { $0.role == .sectionContinue }.count, 0)
         XCTAssertFalse(informational.contains { $0.title == "Understand your trading" })
 
         for index in informational.indices {
@@ -205,7 +210,7 @@ final class ContextualTourTests: XCTestCase {
 
         coordinator.beginReplay()
         XCTAssertEqual(coordinator.phase, .measuring)
-        XCTAssertEqual(coordinator.currentStep?.title, "Accounts & timeframe")
+        XCTAssertEqual(coordinator.currentStep?.title, "Home tab — Your Dashboard")
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 1)
     }
 
@@ -214,9 +219,11 @@ final class ContextualTourTests: XCTestCase {
         arm(coordinator, createdAt: afterCutoff)
         presentCurrentStep(coordinator)
         coordinator.advance()
+        presentCurrentStep(coordinator)
+        coordinator.advance()
         XCTAssertEqual(coordinator.phase, .measuring)
         XCTAssertTrue(coordinator.showsOverlay)
-        XCTAssertEqual(coordinator.visibleStep?.title, "Accounts & timeframe")
+        XCTAssertEqual(coordinator.visibleStep?.title, "Trading Performance")
 
         let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
         let hidden = CGRect(x: 16, y: 1200, width: 350, height: 220)
@@ -236,7 +243,7 @@ final class ContextualTourTests: XCTestCase {
             now: now.addingTimeInterval(0.05)
         )
         XCTAssertTrue(coordinator.isPresenting)
-        XCTAssertEqual(coordinator.currentStep?.title, "Equity curve")
+        XCTAssertEqual(coordinator.currentStep?.title, "Trading Performance")
         XCTAssertNil(coordinator.scrollTarget)
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
     }
@@ -495,18 +502,18 @@ final class ContextualTourTests: XCTestCase {
         )
         XCTAssertEqual(
             ContextualTourGeometry.scrollAnchor(for: .dashboardAccountAndDates),
-            .center
+            UnitPoint(x: 0.5, y: 0.14)
         )
     }
 
     func testSettingsTourScrollAnchorsAndMeasurementInset() {
         XCTAssertEqual(
             ContextualTourGeometry.scrollAnchor(for: .settingsAppearance),
-            UnitPoint(x: 0.5, y: 0.28)
+            .center
         )
         XCTAssertEqual(
             ContextualTourGeometry.scrollAnchor(for: .settingsTradingRules),
-            UnitPoint(x: 0.5, y: 0.22)
+            .center
         )
         XCTAssertEqual(
             ContextualTourGeometry.measurementTopInset(for: .settingsAppearance),
@@ -617,12 +624,13 @@ final class ContextualTourTests: XCTestCase {
     private func gates(for surface: ContextualTourSurface) -> ContextualTourGates {
         ContextualTourGates(
             homeRootActive: surface == .dashboard,
-            tradesActive: surface == .trades,
             feedRootActive: surface == .feed,
+            messagesRootActive: surface == .messages,
             profileRootActive: surface == .profile,
             settingsHomeActive: surface == .settings,
             payoutsActive: surface == .payouts,
             expenseTrackerActive: surface == .expenseTracker,
+            tradesActive: surface == .trades,
             sceneActive: true,
             unobstructed: true
         )

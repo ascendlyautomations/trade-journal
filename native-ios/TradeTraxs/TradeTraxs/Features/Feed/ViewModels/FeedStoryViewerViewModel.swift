@@ -25,6 +25,7 @@ final class FeedStoryViewerViewModel {
     private(set) var videoPixelSize: CGSize = .zero
 
     let storyID: StoryID
+    let entryContext: StoryViewerEntryContext
     let playback: StoryPlaybackController
 
     private var sequence = StoryViewerContinuation()
@@ -35,23 +36,28 @@ final class FeedStoryViewerViewModel {
     private let session: any SessionProviding
     private let cache: DetailPresentationCache
     private let inboxStore: MessagesInboxStore
+    private let engagementStore: EngagementStore?
     private let onDismiss: () -> Void
 
     init(
         storyID: StoryID,
+        entryContext: StoryViewerEntryContext = .feedCarousel,
         feed: any FeedRepository,
         messages: any MessageRepository,
         session: any SessionProviding,
         cache: DetailPresentationCache,
         objectStorage: any ObjectStorageProviding,
+        engagementStore: EngagementStore? = nil,
         inboxStore: MessagesInboxStore? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.storyID = storyID
+        self.entryContext = entryContext
         self.feed = feed
         self.messages = messages
         self.session = session
         self.cache = cache
+        self.engagementStore = engagementStore
         self.inboxStore = inboxStore ?? MessagesInboxStore.shared
         self.onDismiss = onDismiss
         self.playback = StoryPlaybackController(storage: objectStorage)
@@ -88,7 +94,7 @@ final class FeedStoryViewerViewModel {
             return
         }
         authorIndex = position.authorIndex
-        slideIndex = 0
+        slideIndex = position.slideIndex
         await applyCurrentSlide()
     }
 
@@ -193,6 +199,10 @@ final class FeedStoryViewerViewModel {
     func goNextAuthor() {
         guard phase == .loaded else { return }
         ExperienceHaptics.play(.selection)
+        guard entryContext.allowsCrossAuthorNavigation else {
+            dismissViewer()
+            return
+        }
         guard authorIndex < sequence.authorOrder.count - 1 else {
             dismissViewer()
             return
@@ -205,6 +215,10 @@ final class FeedStoryViewerViewModel {
     func goPreviousAuthor() {
         guard phase == .loaded else { return }
         ExperienceHaptics.play(.selection)
+        guard entryContext.allowsCrossAuthorNavigation else {
+            dismissViewer()
+            return
+        }
         guard authorIndex > 0 else {
             dismissViewer()
             return
@@ -225,6 +239,14 @@ final class FeedStoryViewerViewModel {
 
     func clearReplyError() {
         replyErrorMessage = nil
+    }
+
+    func toggleCurrentStoryLike() async {
+        guard showReplyComposer,
+              let story,
+              let engagementStore
+        else { return }
+        await engagementStore.toggleLike(on: .story(story.id))
     }
 
     func deleteStory() async -> Bool {
@@ -352,7 +374,7 @@ final class FeedStoryViewerViewModel {
             Task { await applyCurrentSlide() }
             return
         }
-        if authorIndex < sequence.authorOrder.count - 1 {
+        if entryContext.allowsCrossAuthorNavigation, authorIndex < sequence.authorOrder.count - 1 {
             authorIndex += 1
             slideIndex = 0
             Task { await applyCurrentSlide() }
@@ -368,7 +390,7 @@ final class FeedStoryViewerViewModel {
             Task { await applyCurrentSlide() }
             return
         }
-        if authorIndex > 0 {
+        if entryContext.allowsCrossAuthorNavigation, authorIndex > 0 {
             authorIndex -= 1
             let previousSlides = sequence.slides(at: authorIndex)
             slideIndex = max(0, previousSlides.count - 1)
@@ -379,16 +401,27 @@ final class FeedStoryViewerViewModel {
     }
 
     private func bootstrapCatalogIfNeeded() async {
-        if FeedStoriesCatalogStore.shared.hasFullCatalog,
-           !FeedStoriesCatalogStore.shared.catalog.isEmpty,
-           let viewerID = viewerID ?? FeedStoriesCatalogStore.shared.viewerID
-        {
-            applyCatalog(FeedStoriesCatalogStore.shared.catalog, viewerID: viewerID)
+        guard let viewerID = viewerID ?? FeedStoriesCatalogStore.shared.viewerID else {
+            dismissViewer()
             return
         }
+        self.viewerID = viewerID
 
-        guard let viewerID else {
-            dismissViewer()
+        switch entryContext {
+        case .feedCarousel:
+            await bootstrapFeedCarouselCatalog(viewerID: viewerID)
+        case .profile(let authorID):
+            await bootstrapProfileCatalog(authorID: authorID, viewerID: viewerID)
+        case .dmReferencedStory:
+            await bootstrapDMReferencedCatalog(viewerID: viewerID)
+        }
+    }
+
+    private func bootstrapFeedCarouselCatalog(viewerID: ProfileID) async {
+        if FeedStoriesCatalogStore.shared.hasFullCatalog,
+           !FeedStoriesCatalogStore.shared.catalog.isEmpty
+        {
+            applyCatalog(FeedStoriesCatalogStore.shared.catalog, viewerID: viewerID)
             return
         }
 
@@ -418,6 +451,61 @@ final class FeedStoryViewerViewModel {
         }
     }
 
+    private func bootstrapProfileCatalog(authorID: ProfileID, viewerID: ProfileID) async {
+        var scoped = FeedStoriesCatalogStore.shared.catalog.filter {
+            $0.authorProfileID == authorID && ActiveStorySemantics.isActive(createdAt: $0.createdAt)
+        }
+        if scoped.isEmpty, let cached = cache.story(id: storyID),
+           cached.authorProfileID == authorID,
+           ActiveStorySemantics.isActive(createdAt: cached.createdAt)
+        {
+            scoped = [cached]
+        }
+        if scoped.isEmpty, !FeedSupport.isLocalDevelopmentProfile(viewerID) {
+            do {
+                let loaded = try await feed.allActiveStories(for: viewerID)
+                scoped = loaded.filter { $0.authorProfileID == authorID }
+            } catch {
+                scoped = []
+            }
+        }
+        if scoped.isEmpty, FeedSupport.isLocalDevelopmentProfile(viewerID) {
+            scoped = FeedFixtures.stories(viewerID: viewerID).filter { $0.authorProfileID == authorID }
+        }
+        guard !scoped.isEmpty else {
+            dismissViewer()
+            return
+        }
+        applyCatalog(scoped, viewerID: viewerID)
+    }
+
+    private func bootstrapDMReferencedCatalog(viewerID: ProfileID) async {
+        if let cached = cache.story(id: storyID),
+           ActiveStorySemantics.isActive(createdAt: cached.createdAt)
+        {
+            applyCatalog([cached], viewerID: viewerID)
+            return
+        }
+
+        if FeedSupport.isLocalDevelopmentProfile(viewerID) {
+            dismissViewer()
+            return
+        }
+
+        do {
+            if let loaded = try await feed.story(id: storyID),
+               ActiveStorySemantics.isActive(createdAt: loaded.createdAt)
+            {
+                cache.seed(loaded)
+                applyCatalog([loaded], viewerID: viewerID)
+            } else {
+                dismissViewer()
+            }
+        } catch {
+            dismissViewer()
+        }
+    }
+
     private func applyCatalog(_ catalog: [Story], viewerID: ProfileID) {
         self.viewerID = viewerID
         sequence.install(catalog: catalog, viewerID: viewerID)
@@ -428,6 +516,10 @@ final class FeedStoryViewerViewModel {
         case .dismiss:
             dismissViewer()
         case .showing(let nextAuthor, let nextSlide):
+            if !entryContext.allowsCrossAuthorNavigation, nextAuthor != authorIndex {
+                dismissViewer()
+                return
+            }
             authorIndex = nextAuthor
             slideIndex = nextSlide
             await applyCurrentSlide()
@@ -468,6 +560,24 @@ final class FeedStoryViewerViewModel {
             let authorID = current.authorProfileID
             Task { await loadVideoTextOverlays(for: storyID, authorID: authorID) }
         }
+        prefetchCurrentStoryEngagement()
+        recordStoryViewIfNeeded(for: current)
+    }
+
+    private func recordStoryViewIfNeeded(for story: Story) {
+        guard !isOwner, let viewerID, !FeedSupport.isLocalDevelopmentProfile(viewerID) else { return }
+        guard !story.id.rawValue.hasPrefix("dev-") else { return }
+        Task {
+            try? await feed.recordStoryView(id: story.id)
+        }
+    }
+
+    private func prefetchCurrentStoryEngagement() {
+        guard !isOwner,
+              let story,
+              let engagementStore
+        else { return }
+        engagementStore.prefetch([.story(story.id)])
     }
 
     private func loadVideoTextOverlays(for storyID: StoryID, authorID: ProfileID) async {

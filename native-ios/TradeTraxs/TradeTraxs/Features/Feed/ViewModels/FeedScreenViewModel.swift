@@ -503,7 +503,7 @@ final class FeedScreenViewModel {
         {
             detailCache.seed(author)
         }
-        navigationCoordinator.present(fullScreen: .storyViewer(story.id))
+        navigationCoordinator.present(fullScreen: .storyViewer(story.id, .feedCarousel))
     }
 
     func openCreateStory() {
@@ -607,6 +607,28 @@ final class FeedScreenViewModel {
             persistFeedFirstPage()
         }
         state.lastUpdated = Date()
+    }
+
+    private func buildRankSessionArguments(
+        viewerID: ProfileID,
+        scope: FeedScope,
+        filter: FeedContentFilter,
+        cursor: String?
+    ) -> FeedRankSessionArguments? {
+        guard BackendV2FeatureFlags.isEnabled(.feedRotatingRank) else { return nil }
+        if cursor == nil {
+            _ = FeedRotatingSessionStore.begin(viewerID: viewerID, scope: scope, filter: filter)
+        }
+        guard let session = FeedRotatingSessionStore.session(
+            viewerID: viewerID,
+            scope: scope,
+            filter: filter
+        ), session.usesV2 else { return nil }
+        return FeedRankSessionArguments(
+            sessionSeed: session.sessionID,
+            rankFrozenAtISO: ISO8601.string(from: session.rankFrozenAt),
+            scanCursor: session.scanCursor
+        )
     }
 
     private func persistFeedFirstPage() {
@@ -915,7 +937,13 @@ final class FeedScreenViewModel {
                 forceNetwork: true,
                 allowNetwork: true,
                 guestPublicMode: guestPublicFeed,
-                traceTrigger: "feed.reconnectHead"
+                traceTrigger: "feed.reconnectHead",
+                rankSession: buildRankSessionArguments(
+                    viewerID: viewerID,
+                    scope: resolvedScope,
+                    filter: resolvedFilter,
+                    cursor: nil
+                )
             )
             guard generation == bootstrapGeneration, !Task.isCancelled else { return }
             guard state.scope == resolvedScope, state.contentFilter == resolvedFilter else { return }
@@ -1089,7 +1117,13 @@ final class FeedScreenViewModel {
                         forceNetwork: forceNetwork,
                         allowNetwork: forceNetwork || !hadCachedFirstRender,
                         guestPublicMode: guestPublicFeed,
-                        traceTrigger: forceNetwork ? "feed.reconcile" : "feed.initial"
+                        traceTrigger: forceNetwork ? "feed.reconcile" : "feed.initial",
+                        rankSession: buildRankSessionArguments(
+                            viewerID: viewerID,
+                            scope: resolvedScope,
+                            filter: resolvedFilter,
+                            cursor: resolvedCursor
+                        )
                     )
                     guard shouldApplyBootstrapResult(
                         generation: activeGeneration,
@@ -1098,6 +1132,14 @@ final class FeedScreenViewModel {
                         queryFilter: resolvedFilter,
                         queryCursor: resolvedCursor
                     ) else { return }
+                    if loaded.rotatingRankFallback {
+                        FeedRotatingSessionStore.markV1Fallback(
+                            viewerID: viewerID,
+                            scope: resolvedScope,
+                            filter: resolvedFilter
+                        )
+                        state.nextCursor = nil
+                    }
                     state.viewerID = viewerID
                     let filteredEntries = FeedBlockedAuthorsFilter.shared.filterEntries(loaded.entries)
                     let filteredStories = FeedBlockedAuthorsFilter.shared.filterStories(
@@ -1142,13 +1184,35 @@ final class FeedScreenViewModel {
                             )
                             persistFeedFirstPage()
                         }
+                    } else if loaded.rotatingRankFallback {
+                        assignFeedEntries(filteredEntries)
                     } else {
                         let existing = Set(state.entries.map(\.id))
                         let appended = filteredEntries.filter { !existing.contains($0.id) }
                         assignFeedEntries(FeedSupport.sortDescending(state.entries + appended))
                     }
-                    state.nextCursor = loaded.nextCursor
-                    state.hasMore = loaded.nextCursor != nil
+                    if BackendV2FeatureFlags.isEnabled(.feedRotatingRank), !loaded.rotatingRankFallback {
+                        if let next = loaded.nextCursor {
+                            if FeedRotatingSessionStore.isRankCursor(next) {
+                                state.nextCursor = next
+                            } else {
+                                state.nextCursor = nil
+                                FeedRotatingSessionStore.setScanCursor(
+                                    viewerID: viewerID,
+                                    scope: resolvedScope,
+                                    filter: resolvedFilter,
+                                    scanCursor: next
+                                )
+                            }
+                            state.hasMore = true
+                        } else {
+                            state.nextCursor = nil
+                            state.hasMore = false
+                        }
+                    } else {
+                        state.nextCursor = loaded.nextCursor
+                        state.hasMore = loaded.nextCursor != nil
+                    }
                     for (target, snapshot) in loaded.engagement {
                         engagementStore.seed(snapshot, for: target)
                     }

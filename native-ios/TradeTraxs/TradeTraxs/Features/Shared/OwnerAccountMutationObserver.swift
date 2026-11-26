@@ -8,4 +8,12 @@ extension View {
             action()
         }
     }
+
+    /// Refreshes copy-trading group menus and reconciles copy-scoped account filters.
+    func onCopyTradingGroupsMutation(perform action: @escaping () -> Void) -> some View {
+        onChange(of: CopyTradingGroupsMutationStore.shared.revision) { _, _ in
+            OwnerAccountFilterDropdownController.shared.dismiss()
+            action()
+        }
+    }
 }

@@ -11,6 +11,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         case resolving
         case required(ProfileOnboardingSnapshot)
         case brokerOnboarding
+        case planSelection
         case complete
         /// Transient connectivity while authoritative bootstrap is still pending (session preserved).
         case connectivityBlocked(String)
@@ -19,7 +20,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         /// Onboarding or the main shell is ready. Creating Account must not cover that screen.
         var presentsAuthenticatedDestination: Bool {
             switch self {
-            case .required, .brokerOnboarding, .complete:
+            case .required, .brokerOnboarding, .planSelection, .complete:
                 return true
             case .idle, .resolving, .connectivityBlocked, .failed:
                 return false
@@ -64,7 +65,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
 
     var needsOnboarding: Bool {
         switch phase {
-        case .required, .brokerOnboarding:
+        case .required, .brokerOnboarding, .planSelection:
             return true
         default:
             return false
@@ -137,14 +138,46 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         )
         GettingStartedRefreshCenter.noteProfileOnboardingCompleted()
         BrokerOnboardingPersistence.markPending(snapshot.profileID)
+        PostAuthOnboardingProgress.activateFunnel(for: snapshot.profileID)
         phase = .brokerOnboarding
     }
 
     func markBrokerOnboardingFinished() {
         if let profileID = snapshot?.profileID {
             BrokerOnboardingPersistence.markFinished(profileID)
+            PostAuthOnboardingProgress.markBrokerFinished(for: profileID)
+            phase = phaseAfterBroker(for: profileID)
+        } else {
+            phase = .complete
         }
+    }
+
+    func markPlanSelectionFinished() {
+        guard let profileID = snapshot?.profileID else {
+            phase = .complete
+            return
+        }
+        PostAuthOnboardingProgress.markPlanFinished(for: profileID)
         phase = .complete
+        NativeIosOnboardingSync.recordPlanAcknowledged(
+            userID: profileID.rawValue,
+            rpc: rpc
+        )
+        PostOnboardingWelcomeCoordinator.shared.presentAfterPlanIfNeeded(userID: profileID.rawValue)
+    }
+
+    func shouldResumePlanSelection(profileID: ProfileID) -> Bool {
+        PostAuthOnboardingPolicy.shouldPresentPlanSelection(
+            profileID: profileID,
+            accountCreatedAt: profileStore.profile?.createdAt
+        )
+    }
+
+    private func phaseAfterBroker(for profileID: ProfileID) -> Phase {
+        if shouldResumePlanSelection(profileID: profileID) {
+            return .planSelection
+        }
+        return .complete
     }
 
     /// Re-attempt authoritative bootstrap when connectivity returns (returning users only).
@@ -274,6 +307,9 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
             } else {
                 phase = brokerOnboardingPhase(for: profileID)
             }
+            if let session = SessionBootstrapStore.shared.last?.data.session_profile {
+                await NativeIosOnboardingSync.reconcile(session: session, rpc: rpc)
+            }
             _ = profile
         } catch is CancellationError {
             if generation == loadGeneration {
@@ -285,7 +321,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
                ProfileOnboardingErrorMapping.isTransientConnectivityFailure(error)
             {
                 switch phase {
-                case .complete, .required, .brokerOnboarding:
+                case .complete, .required, .brokerOnboarding, .planSelection:
                     scheduleConnectivityRetry(after: 8)
                 default:
                     phase = .connectivityBlocked(message)
@@ -331,6 +367,9 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     func sessionBootstrapDidCommitNetworkRefresh(_ result: SessionBootstrapLoadResult) async {
         profileStore.applyBootstrapResult(profile: result.profile, stats: result.stats)
         snapshot = result.onboardingSnapshot
+        if let session = SessionBootstrapStore.shared.last?.data.session_profile {
+            await NativeIosOnboardingSync.reconcile(session: session, rpc: rpc)
+        }
         if ProfileOnboardingPolicy.profileNeedsOnboarding(result.onboardingSnapshot) {
             if case .complete = phase {
                 phase = .required(result.onboardingSnapshot)
@@ -346,7 +385,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
 
     private func abandonCancelledResolve() {
         switch phase {
-        case .complete, .required, .brokerOnboarding, .connectivityBlocked, .failed:
+        case .complete, .required, .brokerOnboarding, .planSelection, .connectivityBlocked, .failed:
             return
         case .idle, .resolving:
             break
@@ -364,7 +403,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         case .pending:
             return .brokerOnboarding
         case .finished:
-            return .complete
+            return phaseAfterBroker(for: profileID)
         case .unknown:
             BrokerOnboardingPersistence.grandfatherExistingProfileIfNeeded(profileID)
             return .complete

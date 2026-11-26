@@ -84,6 +84,10 @@ struct FeedItemRow: View {
 
             FeedSectionSeparator()
         }
+        .feedImpressionTracked(
+            contentKind: impressionKind(for: entry),
+            contentID: entry.id
+        )
         .contextMenu {
             Button {
                 onOpen()
@@ -458,16 +462,10 @@ struct FeedItemRow: View {
 
     @ViewBuilder
     private func achievementPostDetails(_ achievement: Achievement, opensOnTap: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            PublicAchievementHeadlineRow(achievement: achievement)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .feedOpensOnTap(opensOnTap, action: onOpen)
-                .accessibilityIdentifier("feed.achievement.headline")
-
-            PublicAchievementMetaChipRow(achievement: achievement)
-                .feedOpensOnTap(opensOnTap, allowsSiblingScroll: true, action: onOpen)
-                .accessibilityIdentifier("feed.achievement.badges")
-        }
+        PublicAchievementContentStack(achievement: achievement)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .feedOpensOnTap(opensOnTap, action: onOpen)
+            .accessibilityIdentifier("feed.achievement.content")
     }
 
     private func copyTradeFeedFooter(_ summary: TradeSummary) -> some View {
@@ -525,6 +523,15 @@ struct FeedItemRow: View {
                     ? "feed.post.seeMore"
                     : "feed.caption.seeMore"
             )
+        }
+    }
+
+    private func impressionKind(for entry: FeedTimelineEntry) -> String {
+        switch entry {
+        case .trade: return "post"
+        case .post: return "profile_post"
+        case .achievement: return "achievement_post"
+        case .clip: return "reel"
         }
     }
 }

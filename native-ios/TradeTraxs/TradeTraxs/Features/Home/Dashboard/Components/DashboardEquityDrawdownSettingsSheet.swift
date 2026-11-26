@@ -22,15 +22,14 @@ struct DashboardEquityDrawdownSettingsSheet: View {
         case floorCap
     }
 
+    private var showsFloorCapField: Bool {
+        limitType == .trailing
+    }
+
+    private let typeSwitchAnimation: Animation = .easeInOut(duration: 0.22)
+
     private var floorCapInfo: String {
-        switch limitType {
-        case .trailing:
-            return
-                "The highest balance your trailing drawdown floor can reach. Once it hits this amount, the floor stops moving upward."
-        case .fixed:
-            return
-                "The highest balance shown for your fixed drawdown floor on the chart. Your account baseline stays fixed; this only caps the informational floor line."
-        }
+        "The highest balance your trailing drawdown floor can reach. Once it hits this amount, the floor stops moving upward."
     }
 
     var body: some View {
@@ -52,7 +51,12 @@ struct DashboardEquityDrawdownSettingsSheet: View {
                     HStack(spacing: ExperienceSpacing.sm) {
                         ForEach(LivePersonalDrawdownType.allCases, id: \.self) { type in
                             Button {
-                                limitType = type
+                                withAnimation(typeSwitchAnimation) {
+                                    limitType = type
+                                    if type == .fixed, focusedField == .floorCap {
+                                        focusedField = .limit
+                                    }
+                                }
                             } label: {
                                 Text(type.displayTitle)
                                     .font(.subheadline.weight(.semibold))
@@ -77,29 +81,41 @@ struct DashboardEquityDrawdownSettingsSheet: View {
                         }
                     }
 
-                    HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                        currencyField(
-                            title: "Max drawdown limit",
-                            text: $limitDigits,
-                            field: .limit,
-                            accessibilityID: "dashboard.equityDrawdownSettings.limit",
-                            showsInfoPlaceholder: true
-                        )
+                    Group {
+                        if showsFloorCapField {
+                            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                                currencyField(
+                                    title: "Max drawdown limit",
+                                    text: $limitDigits,
+                                    field: .limit,
+                                    accessibilityID: "dashboard.equityDrawdownSettings.limit",
+                                    showsInfoPlaceholder: true
+                                )
 
-                        currencyField(
-                            title: "Drawdown floor cap",
-                            text: $floorCapDigits,
-                            field: .floorCap,
-                            accessibilityID: "dashboard.equityDrawdownSettings.floorCap",
-                            titleAccessory: {
-                                AnalyticsMetricInfoButton(
+                                currencyField(
                                     title: "Drawdown floor cap",
-                                    bodyText: floorCapInfo,
-                                    accessibilityID: "dashboard.equityDrawdownSettings.floorCapInfo"
+                                    text: $floorCapDigits,
+                                    field: .floorCap,
+                                    accessibilityID: "dashboard.equityDrawdownSettings.floorCap",
+                                    titleAccessory: {
+                                        AnalyticsMetricInfoButton(
+                                            title: "Drawdown floor cap",
+                                            bodyText: floorCapInfo,
+                                            accessibilityID: "dashboard.equityDrawdownSettings.floorCapInfo"
+                                        )
+                                    }
                                 )
                             }
-                        )
+                        } else {
+                            currencyField(
+                                title: "Max drawdown limit",
+                                text: $limitDigits,
+                                field: .limit,
+                                accessibilityID: "dashboard.equityDrawdownSettings.limit"
+                            )
+                        }
                     }
+                    .animation(typeSwitchAnimation, value: limitType)
 
                     if let errorMessage {
                         Text(errorMessage)

@@ -164,6 +164,12 @@ final class DetailPresentationCache {
 
     /// Canonical public copy-trade line, matches Profile card / feed (`CopyTradePresentation`).
     func copyTradePublicModeSummary(for id: TradeID) -> String? {
+        if let trade = trades[id], trade.mode == .copyTraded {
+            let journal = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
+            if let line = CopyTradePresentation.publicAcrossAccountsSummary(for: [journal]) {
+                return line
+            }
+        }
         if let line = Self.trimmedCopyTradePublicModeSummary(
             presentationSeeds[id]?.summary.copyTradePublicModeSummary
         ) {
@@ -175,9 +181,7 @@ final class DetailPresentationCache {
         if let line = Self.trimmedCopyTradePublicModeSummary(tradeSummary(id: id)?.copyTradePublicModeSummary) {
             return line
         }
-        guard let trade = trades[id], trade.mode == .copyTraded else { return nil }
-        let journal = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
-        return CopyTradePresentation.publicAcrossAccountsSummary(for: [journal])
+        return nil
     }
 
     private static func trimmedCopyTradePublicModeSummary(_ raw: String?) -> String? {

@@ -212,10 +212,16 @@ final class ManageAccountsViewModel {
         }
         return await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
-            if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnCreate(draft),
+            if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnCreate(
+                draft,
+                livePersonalDrawdown: livePersonalDrawdown
+            ),
                let message = TradingAccountStartingBalancePolicy.validationMessage(
                    for: draft.sizeDigits,
-                   context: draft.category == .personal || draft.category == .broker ? .liveLedger : .standard
+                   context: draft.category == .personal || draft.category == .broker
+                       || livePersonalDrawdown != nil
+                       ? .liveLedger
+                       : .standard
                )
             {
                 throw AppError.unknown(message: message)
@@ -260,18 +266,38 @@ final class ManageAccountsViewModel {
         }
     }
 
+    func applyLivePersonalDrawdownClearing(accountID: TradingAccountID) async -> Bool {
+        await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            let updated = try await trades.updateLivePersonalDrawdownConfig(
+                id: accountID,
+                ownerID: viewerID,
+                config: nil
+            )
+            if let index = accounts.firstIndex(where: { $0.id == updated.id }) {
+                accounts[index] = updated
+            }
+            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
+            AccountMutationStore.shared.noteAccountUpdated(updated, allAccounts: accounts)
+            AccountPersistedCacheCoordinator.noteAccountPatched(updated, viewerID: viewerID)
+        }
+    }
+
     func update(id: TradingAccountID, draft: TradingAccountDraft) async -> Bool {
         await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
-            if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnSave(draft),
+            let previous = accounts.first(where: { $0.id == id })
+            if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnSave(
+                draft,
+                drawdownConfiguredOnAccount: previous
+            ),
                let message = TradingAccountStartingBalancePolicy.validationMessage(
                    for: draft.sizeDigits,
-                   context: draft.category == .personal || draft.category == .broker ? .liveLedger : .standard
+                   context: .liveLedger
                )
             {
                 throw AppError.unknown(message: message)
             }
-            let previous = accounts.first(where: { $0.id == id })
             let updated = try await trades.updateAccount(id: id, ownerID: viewerID, draft: draft)
             accounts = Self.sorted(accounts.map { $0.id == id ? updated : $0 })
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)

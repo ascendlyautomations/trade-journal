@@ -11,15 +11,50 @@ struct FirstTradeDetailCoachmarkAnchorKey: PreferenceKey {
     }
 }
 
+struct FirstTradeBacktestCoachmarkAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? = nil
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        if let next = nextValue() {
+            value = next
+        }
+    }
+}
+
 extension View {
     func firstTradeDetailCoachmarkAnchor(for tradeID: TradeID) -> some View {
         modifier(FirstTradeDetailCoachmarkAnchorModifier(tradeID: tradeID))
     }
 
+    func firstTradeBacktestCoachmarkAnchor() -> some View {
+        modifier(FirstTradeBacktestCoachmarkAnchorModifier())
+    }
+
     func firstTradeDetailCoachmarkHost() -> some View {
-        overlayPreferenceValue(FirstTradeDetailCoachmarkAnchorKey.self) { anchors in
-            FirstTradeDetailCoachmarkOverlay(anchors: anchors)
+        overlayPreferenceValue(FirstTradeDetailCoachmarkAnchorKey.self) { tradeAnchors in
+            Color.clear
+                .frame(width: 0, height: 0)
+                .overlayPreferenceValue(FirstTradeBacktestCoachmarkAnchorKey.self) { backtestAnchor in
+                    FirstTradeDetailCoachmarkOverlay(
+                        tradeAnchors: tradeAnchors,
+                        backtestAnchor: backtestAnchor
+                    )
+                }
         }
+    }
+}
+
+private struct FirstTradeBacktestCoachmarkAnchorModifier: ViewModifier {
+    private var store: FirstTradeDetailCoachmarkStore { .shared }
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                if store.backtestCoachmarkActive, store.tradesJournalReadyForBacktestCoachmark {
+                    Color.clear
+                        .anchorPreference(key: FirstTradeBacktestCoachmarkAnchorKey.self, value: .bounds) { $0 }
+                }
+            }
     }
 }
 
@@ -41,8 +76,14 @@ private struct FirstTradeDetailCoachmarkAnchorModifier: ViewModifier {
     }
 }
 
+private enum FirstTradeCoachmarkPhase {
+    case tradeDetail
+    case backtest
+}
+
 private struct FirstTradeDetailCoachmarkOverlay: View {
-    let anchors: [TradeID: Anchor<CGRect>]
+    let tradeAnchors: [TradeID: Anchor<CGRect>]
+    let backtestAnchor: Anchor<CGRect>?
 
     @Bindable private var store = FirstTradeDetailCoachmarkStore.shared
     @Bindable private var reflectionGate = PostTradeReflectionGate.shared
@@ -55,22 +96,42 @@ private struct FirstTradeDetailCoachmarkOverlay: View {
     @State private var lockedCardTop: CGFloat = 0
     @State private var cardHeight: CGFloat = 0
     @State private var showsSpotlight = false
+    @State private var activePhase: FirstTradeCoachmarkPhase?
 
     private var tourShowsOverlay: Bool {
         ContextualTourCoordinator.shared.showsOverlay
     }
 
+    private var currentPhase: FirstTradeCoachmarkPhase? {
+        if store.pendingTradeID != nil {
+            return .tradeDetail
+        }
+        if store.backtestCoachmarkActive, store.tradesJournalReadyForBacktestCoachmark {
+            return .backtest
+        }
+        return nil
+    }
+
     private var mayResolveAnchor: Bool {
-        store.pendingTradeID != nil
-            && reflectionGate.pendingTrade == nil
-            && !tourShowsOverlay
+        guard currentPhase != nil else { return false }
+        guard reflectionGate.pendingTrade == nil, !tourShowsOverlay else { return false }
+        return true
     }
 
     var body: some View {
         GeometryReader { proxy in
             let viewport = CGRect(origin: .zero, size: proxy.size)
             let pendingID = store.pendingTradeID
-            let resolved = pendingID.flatMap { id in anchors[id].map { proxy[$0] } }
+            let resolved: CGRect? = {
+                switch currentPhase {
+                case .tradeDetail:
+                    return pendingID.flatMap { id in tradeAnchors[id].map { proxy[$0] } }
+                case .backtest:
+                    return backtestAnchor.map { proxy[$0] }
+                case .none:
+                    return nil
+                }
+            }()
             let liveRenderable = resolved.flatMap { frame in
                 ContextualTourGeometry.isRenderableSpotlight(frame, in: viewport) ? frame : nil
             }
@@ -104,8 +165,8 @@ private struct FirstTradeDetailCoachmarkOverlay: View {
                         .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
                         .accessibilityHidden(true)
                 }
-                if showsSpotlight {
-                    coachmarkCard(width: cardWidth(in: proxy.size))
+                if showsSpotlight, let phase = activePhase ?? currentPhase {
+                    coachmarkCard(phase: phase, width: cardWidth(in: proxy.size))
                         .padding(.top, cardTop)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -128,13 +189,33 @@ private struct FirstTradeDetailCoachmarkOverlay: View {
                 }
             }
             .onChange(of: store.pendingTradeID) { _, pending in
-                if pending == nil {
+                if pending == nil, !store.backtestCoachmarkActive {
                     resetMeasurement()
-                } else {
-                    resolveStartedAt = Date()
-                    previousFrame = nil
-                    lockedHole = nil
-                    showsSpotlight = false
+                } else if pending != nil {
+                    beginResolving(phase: .tradeDetail)
+                }
+            }
+            .onChange(of: store.backtestCoachmarkActive) { _, active in
+                if active {
+                    beginResolving(phase: .backtest)
+                } else if store.pendingTradeID == nil {
+                    resetMeasurement()
+                }
+            }
+            .onChange(of: store.tradesJournalReadyForBacktestCoachmark) { _, ready in
+                if ready, store.backtestCoachmarkActive {
+                    beginResolving(phase: .backtest)
+                }
+            }
+            .onChange(of: currentPhase) { _, phase in
+                guard let phase else {
+                    if !store.isActive {
+                        resetMeasurement()
+                    }
+                    return
+                }
+                if activePhase != phase {
+                    beginResolving(phase: phase)
                 }
             }
             .onChange(of: reflectionGate.pendingTrade) { _, pending in
@@ -152,19 +233,35 @@ private struct FirstTradeDetailCoachmarkOverlay: View {
         .accessibilityHidden(!showsSpotlight)
     }
 
-    private func coachmarkCard(width: CGFloat) -> some View {
-        ExperienceCard(elevated: true) {
+    private func coachmarkCard(phase: FirstTradeCoachmarkPhase, width: CGFloat) -> some View {
+        let copy: (title: String, message: String, accessibilityID: String) = {
+            switch phase {
+            case .tradeDetail:
+                return (
+                    "View your trade",
+                    "Tap a trade to see your full trade details and deeper analytics.",
+                    "firstTradeDetailCoachmark.gotIt"
+                )
+            case .backtest:
+                return (
+                    "Backtesting",
+                    "Access your backtest trades and analyze your strategies here.",
+                    "firstTradeBacktestCoachmark.gotIt"
+                )
+            }
+        }()
+        return ExperienceCard(elevated: true) {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text("View your trade")
+                Text(copy.title)
                     .experienceStyle(.headline, color: colors.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Tap a trade to see your full trade details and deeper analytics.")
+                Text(copy.message)
                     .experienceStyle(.subheadline, color: colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 ExperienceButton(
                     title: "Got it",
                     kind: .primary,
-                    accessibilityIdentifier: "firstTradeDetailCoachmark.gotIt"
+                    accessibilityIdentifier: copy.accessibilityID
                 ) {
                     store.dismissGotIt()
                 }
@@ -201,6 +298,7 @@ private struct FirstTradeDetailCoachmarkOverlay: View {
             lockedHole = stable
             lockedCardTop = proposedTop
             showsSpotlight = true
+            activePhase = currentPhase
         case .waiting:
             previousFrame = frame
         case .skip:
@@ -208,10 +306,19 @@ private struct FirstTradeDetailCoachmarkOverlay: View {
                 lockedHole = frame
                 lockedCardTop = proposedTop
                 showsSpotlight = true
+                activePhase = currentPhase
             } else {
                 resetMeasurement()
             }
         }
+    }
+
+    private func beginResolving(phase: FirstTradeCoachmarkPhase) {
+        activePhase = phase
+        resolveStartedAt = Date()
+        previousFrame = nil
+        lockedHole = nil
+        showsSpotlight = false
     }
 
     private func resetMeasurement() {
@@ -219,6 +326,7 @@ private struct FirstTradeDetailCoachmarkOverlay: View {
         resolveStartedAt = nil
         lockedHole = nil
         showsSpotlight = false
+        activePhase = nil
     }
 
     private func cardWidth(in container: CGSize) -> CGFloat {

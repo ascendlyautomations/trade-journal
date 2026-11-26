@@ -9,10 +9,12 @@ final class TradingRulesAnalyticsFreePreviewTests: XCTestCase {
             detailCache: DetailPresentationCache()
         )
         TraxsProPreviewSession.shared.endActivePreview(detailCache: DetailPresentationCache())
+        TradingRulesComplianceSessionStore.shared.reset()
+        TradingRulesCompliancePreferencesCache.resetAll()
         super.tearDown()
     }
 
-    func testEphemeralSampleSeedsCanonicalPreferences() {
+    func testEphemeralSampleBuildsAnalyticsWithoutOwnerStoreSeeding() async {
         let profileID = ProfileID("rules-free-preview")
         let cache = DetailPresentationCache()
 
@@ -28,13 +30,32 @@ final class TradingRulesAnalyticsFreePreviewTests: XCTestCase {
         }
 
         XCTAssertTrue(TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome)
-        XCTAssertNotNil(TradingRulesCompliancePreferencesCache.cachedContext(for: profileID))
-        XCTAssertGreaterThan(SessionOwnerTradesStore.shared.cached(for: profileID)?.count ?? 0, 0)
+        XCTAssertEqual(SessionOwnerTradesStore.shared.cached(for: profileID)?.count ?? 0, 0)
+
+        let accounts = DemoCanonicalDataset.accounts(owner: profileID)
+        let scope = PsychologyAnalyticsScopeResolver.resolve(
+            filter: TradingRulesAnalyticsPreviewSupport.sampleClientScopeFilter(accounts: accounts),
+            profileID: profileID,
+            accounts: accounts
+        )
+        let dependencies = TradingRulesComplianceLoadDependencies(
+            detailCache: cache,
+            tradesRepository: TradingRulesFreePreviewEmptyTradeRepository()
+        )
+        let output = await TradingRulesComplianceSnapshotBuilder.build(
+            profileID: profileID,
+            scope: scope,
+            accounts: accounts,
+            dependencies: dependencies,
+            injectedPreferences: TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID)
+        )
+        XCTAssertGreaterThan(output.scopedTradeCount, 0)
+        XCTAssertTrue(TradingRulesPlanTier.hasConfiguredFreeTierRules(context: output.preferencesContext))
     }
 
     func testPreviewIgnoresPersistedProductionAccountFilter() async {
         let profileID = ProfileID("rules-scope-isolation")
-        let cache = DetailPresentationCache()
+        let productionCache = DetailPresentationCache()
         let liveAccountID = TradingAccountID("11111111-1111-4111-8111-111111111111")
         DashboardScopeFilterPersistence.save(
             profileID: profileID,
@@ -54,16 +75,14 @@ final class TradingRulesAnalyticsFreePreviewTests: XCTestCase {
             )
         }
 
-        TradingRulesAnalyticsPreviewSupport.beginEphemeralSampleIfNeeded(
+        let (dependencies, preferenceContext) = beginTradingRulesPreviewIsolated(
             profileID: profileID,
-            detailCache: cache
+            productionCache: productionCache
         )
         defer {
-            TradingRulesAnalyticsPreviewSupport.endEphemeralSampleIfNeeded(
-                profileID: profileID,
-                detailCache: cache
-            )
-            TradingRulesComplianceSessionStore.shared.reset()
+            TraxsProPreviewSession.shared.endTradingRulesPreview(detailCache: productionCache)
+            TraxsProPreviewSession.shared.activePreviewEnvironment?.rulesPresentationStore.reset()
+        previewRulesStore().reset()
         }
 
         let scopeController = TradingRulesAnalyticsScopeController()
@@ -74,61 +93,52 @@ final class TradingRulesAnalyticsFreePreviewTests: XCTestCase {
         XCTAssertEqual(scopeController.accountFilter, .all)
         XCTAssertEqual(scopeController.dateRange, .oneYear)
 
-        let dependencies = TradingRulesComplianceLoadDependencies(
-            detailCache: cache,
-            tradesRepository: TradingRulesFreePreviewEmptyTradeRepository()
-        )
         let published = await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
             profileID: profileID,
-            dependencies: dependencies
+            dependencies: dependencies,
+            preferenceContext: preferenceContext
         )
         XCTAssertTrue(published)
-        guard let result = TradingRulesComplianceSessionStore.shared.result else {
+        guard let result = previewRulesStore().result else {
             XCTFail("Expected sample compliance result")
             return
         }
-        XCTAssertGreaterThan(TradingRulesComplianceSessionStore.shared.scopedTradeCount, 0)
+        let rulesStore = previewRulesStore()
+        XCTAssertGreaterThan(rulesStore.scopedTradeCount, 0)
         XCTAssertGreaterThan(result.score.evaluated, 0)
 
         scopeController.dateRange = .thirtyDays
         await scopeController.recomputeImmediately(dependencies: dependencies)
-        XCTAssertGreaterThan(TradingRulesComplianceSessionStore.shared.scopedTradeCount, 0)
-        XCTAssertGreaterThan(TradingRulesComplianceSessionStore.shared.result?.score.evaluated ?? 0, 0)
-        XCTAssertTrue(TradingRulesComplianceSessionStore.shared.hasConfiguredRules)
-        XCTAssertNotNil(TradingRulesComplianceSessionStore.shared.result)
+        XCTAssertGreaterThan(rulesStore.scopedTradeCount, 0)
+        XCTAssertGreaterThan(rulesStore.result?.score.evaluated ?? 0, 0)
+        XCTAssertTrue(rulesStore.hasConfiguredRules)
+        XCTAssertNotNil(rulesStore.result)
     }
 
     func testPublishBundledSampleSnapshotMarksSessionReady() async {
         let profileID = ProfileID("rules-sample-publish")
-        let cache = DetailPresentationCache()
-        let tradesRepository = TradingRulesFreePreviewEmptyTradeRepository()
-
-        TradingRulesAnalyticsPreviewSupport.beginEphemeralSampleIfNeeded(
+        let productionCache = DetailPresentationCache()
+        let (dependencies, preferenceContext) = beginTradingRulesPreviewIsolated(
             profileID: profileID,
-            detailCache: cache
+            productionCache: productionCache
         )
         defer {
-            TradingRulesAnalyticsPreviewSupport.endEphemeralSampleIfNeeded(
-                profileID: profileID,
-                detailCache: cache
-            )
-            TradingRulesComplianceSessionStore.shared.reset()
+            TraxsProPreviewSession.shared.endTradingRulesPreview(detailCache: productionCache)
+            TraxsProPreviewSession.shared.activePreviewEnvironment?.rulesPresentationStore.reset()
+        previewRulesStore().reset()
         }
 
-        let dependencies = TradingRulesComplianceLoadDependencies(
-            detailCache: cache,
-            tradesRepository: tradesRepository
-        )
         let published = await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
             profileID: profileID,
-            dependencies: dependencies
+            dependencies: dependencies,
+            preferenceContext: preferenceContext
         )
 
         XCTAssertTrue(published)
-        XCTAssertTrue(TradingRulesComplianceSessionStore.shared.ready)
-        XCTAssertEqual(TradingRulesComplianceSessionStore.shared.profileID, profileID)
-        XCTAssertTrue(TradingRulesComplianceSessionStore.shared.hasConfiguredRules)
-        XCTAssertNotNil(TradingRulesComplianceSessionStore.shared.result)
+        XCTAssertTrue(previewRulesStore().ready)
+        XCTAssertEqual(previewRulesStore().profileID, profileID)
+        XCTAssertTrue(previewRulesStore().hasConfiguredRules)
+        XCTAssertNotNil(previewRulesStore().result)
     }
 
     func testPreferencesCacheNeverFetchesProductionRulesInSampleMode() async {
@@ -171,25 +181,21 @@ final class TradingRulesAnalyticsFreePreviewTests: XCTestCase {
 
     func testTradingRulesTraxsProPreviewEntryPublishesConfiguredAnalytics() async {
         let profileID = ProfileID("rules-traxspro-preview")
-        let cache = DetailPresentationCache()
-        let detailCache = cache
-
-        TraxsProPreviewSession.shared.beginTradingRulesPreview(
-            detailCache: detailCache,
-            viewer: profileID
+        let productionCache = DetailPresentationCache()
+        let (dependencies, preferenceContext) = beginTradingRulesPreviewIsolated(
+            profileID: profileID,
+            productionCache: productionCache
         )
         defer {
-            TraxsProPreviewSession.shared.endTradingRulesPreview(detailCache: detailCache)
-            TradingRulesComplianceSessionStore.shared.reset()
+            TraxsProPreviewSession.shared.endTradingRulesPreview(detailCache: productionCache)
+            TraxsProPreviewSession.shared.activePreviewEnvironment?.rulesPresentationStore.reset()
+        previewRulesStore().reset()
         }
 
-        let dependencies = TradingRulesComplianceLoadDependencies(
-            detailCache: detailCache,
-            tradesRepository: TradingRulesFreePreviewEmptyTradeRepository()
-        )
         let published = await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
             profileID: profileID,
-            dependencies: dependencies
+            dependencies: dependencies,
+            preferenceContext: preferenceContext
         )
         XCTAssertTrue(published)
 
@@ -197,40 +203,54 @@ final class TradingRulesAnalyticsFreePreviewTests: XCTestCase {
         scopeController.hydrate(profileID: profileID, accounts: DemoCanonicalDataset.accounts(owner: profileID))
         await scopeController.recomputeImmediately(dependencies: dependencies)
 
-        XCTAssertTrue(TradingRulesComplianceSessionStore.shared.ready)
-        XCTAssertTrue(TradingRulesComplianceSessionStore.shared.hasConfiguredRules)
-        XCTAssertNotNil(TradingRulesComplianceSessionStore.shared.result)
-        XCTAssertGreaterThan(TradingRulesComplianceSessionStore.shared.result?.score.evaluated ?? 0, 0)
+        XCTAssertTrue(previewRulesStore().ready)
+        XCTAssertTrue(previewRulesStore().hasConfiguredRules)
+        XCTAssertNotNil(previewRulesStore().result)
+        XCTAssertGreaterThan(previewRulesStore().result?.score.evaluated ?? 0, 0)
     }
 
     func testDashboardPreviewEntryPublishesConfiguredAnalytics() async {
         let profileID = ProfileID("rules-dashboard-preview")
-        let cache = DetailPresentationCache()
+        let productionCache = DetailPresentationCache()
 
         TraxsProPreviewSession.shared.beginDashboardPreview(
-            detailCache: cache,
+            detailCache: productionCache,
             viewer: profileID
         )
         defer {
-            TraxsProPreviewSession.shared.endDashboardPreview(detailCache: cache)
-            TradingRulesComplianceSessionStore.shared.reset()
+            TraxsProPreviewSession.shared.endDashboardPreview(detailCache: productionCache)
+            TraxsProPreviewSession.shared.activePreviewEnvironment?.rulesPresentationStore.reset()
+        previewRulesStore().reset()
         }
 
+        guard let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+              preview.viewer == profileID
+        else {
+            XCTFail("missing preview environment")
+            return
+        }
+        _ = await TradingRulesCompliancePreferencesCache.load(
+            for: profileID,
+            repository: preview.data.tradingPreferences,
+            injected: nil
+        )
         XCTAssertNotNil(TradingRulesCompliancePreferencesCache.cachedContext(for: profileID))
-        XCTAssertGreaterThan(SessionOwnerTradesStore.shared.cached(for: profileID)?.count ?? 0, 0)
+        XCTAssertEqual(SessionOwnerTradesStore.shared.cached(for: profileID)?.count ?? 0, 0)
 
         let dependencies = TradingRulesComplianceLoadDependencies(
-            detailCache: cache,
-            tradesRepository: TradingRulesFreePreviewEmptyTradeRepository()
+            detailCache: preview.data.detailCache,
+            tradesRepository: preview.data.trades,
+            tradingPreferences: preview.data.tradingPreferences
         )
         let published = await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
             profileID: profileID,
-            dependencies: dependencies
+            dependencies: dependencies,
+            preferenceContext: preview.preferenceContext
         )
         XCTAssertTrue(published)
-        XCTAssertTrue(TradingRulesComplianceSessionStore.shared.hasConfiguredRules)
-        XCTAssertNotNil(TradingRulesComplianceSessionStore.shared.result)
-        XCTAssertGreaterThan(TradingRulesComplianceSessionStore.shared.scopedTradeCount, 0)
+        XCTAssertTrue(previewRulesStore().hasConfiguredRules)
+        XCTAssertNotNil(previewRulesStore().result)
+        XCTAssertGreaterThan(previewRulesStore().scopedTradeCount, 0)
     }
 
     func testTradeNavigationGuardInSampleMode() {
@@ -251,6 +271,35 @@ final class TradingRulesAnalyticsFreePreviewTests: XCTestCase {
         XCTAssertTrue(TradingRulesAnalyticsPreviewSupport.allowsTradeDetailNavigation(tradeID: sampleID))
         XCTAssertFalse(TradingRulesAnalyticsPreviewSupport.allowsTradeDetailNavigation(tradeID: foreignID))
     }
+}
+
+@MainActor
+private func previewRulesStore() -> TradingRulesComplianceSessionStore {
+    guard let preview = TraxsProPreviewSession.shared.activePreviewEnvironment else {
+        XCTFail("TraxsPro preview environment required")
+        return previewRulesStore()
+    }
+    return preview.rulesPresentationStore
+}
+
+@MainActor
+private func beginTradingRulesPreviewIsolated(
+    profileID: ProfileID,
+    productionCache: DetailPresentationCache
+) -> (dependencies: TradingRulesComplianceLoadDependencies, preferenceContext: PreferenceRuleContext) {
+    TraxsProPreviewSession.shared.beginTradingRulesPreview(
+        detailCache: productionCache,
+        viewer: profileID
+    )
+    guard let preview = TraxsProPreviewSession.shared.activePreviewEnvironment else {
+        fatalError("TraxsPro preview environment required")
+    }
+    let dependencies = TradingRulesComplianceLoadDependencies(
+        detailCache: preview.data.detailCache,
+        tradesRepository: preview.data.trades,
+        tradingPreferences: preview.data.tradingPreferences
+    )
+    return (dependencies, preview.preferenceContext)
 }
 
 private final class TradingRulesFreePreviewCountingPreferencesRepository: TradingPreferencesRepository,

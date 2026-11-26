@@ -1826,6 +1826,7 @@ export type Database = {
           id: string
           installation_id: string | null
           last_seen_at: string
+          performance_report_local_reminders_active: boolean
           platform: string
           updated_at: string
           user_id: string
@@ -1837,6 +1838,7 @@ export type Database = {
           id?: string
           installation_id?: string | null
           last_seen_at?: string
+          performance_report_local_reminders_active?: boolean
           platform?: string
           updated_at?: string
           user_id: string
@@ -1848,6 +1850,7 @@ export type Database = {
           id?: string
           installation_id?: string | null
           last_seen_at?: string
+          performance_report_local_reminders_active?: boolean
           platform?: string
           updated_at?: string
           user_id?: string
@@ -3439,6 +3442,8 @@ export type Database = {
           has_used_csv_import: boolean | null
           has_used_initial_import: boolean | null
           id: string
+          ios_contextual_tour_dismissed_version: number
+          ios_post_onboarding_plan_acknowledged_at: string | null
           is_banned: boolean
           is_beta_tester: boolean
           is_hidden_from_community: boolean
@@ -3506,6 +3511,8 @@ export type Database = {
           has_used_csv_import?: boolean | null
           has_used_initial_import?: boolean | null
           id: string
+          ios_contextual_tour_dismissed_version?: number
+          ios_post_onboarding_plan_acknowledged_at?: string | null
           is_banned?: boolean
           is_beta_tester?: boolean
           is_hidden_from_community?: boolean
@@ -3573,6 +3580,8 @@ export type Database = {
           has_used_csv_import?: boolean | null
           has_used_initial_import?: boolean | null
           id?: string
+          ios_contextual_tour_dismissed_version?: number
+          ios_post_onboarding_plan_acknowledged_at?: string | null
           is_banned?: boolean
           is_beta_tester?: boolean
           is_hidden_from_community?: boolean

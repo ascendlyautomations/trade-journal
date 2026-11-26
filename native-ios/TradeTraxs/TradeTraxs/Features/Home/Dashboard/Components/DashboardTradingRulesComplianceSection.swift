@@ -2,12 +2,24 @@ import SwiftUI
 
 /// Compact trading-rules adherence for the Home dashboard.
 struct DashboardTradingRulesComplianceSection: View {
-    @Bindable private var session = TradingRulesComplianceSessionStore.shared
+    @Bindable private var session: TradingRulesComplianceSessionStore
     var compliancePresentation: ProPremiumFeaturePresentation = .unrestricted
     var onOpenDetail: () -> Void
     var onOpenSettings: () -> Void
 
     @Environment(\.themeColors) private var colors
+
+    init(
+        compliancePresentation: ProPremiumFeaturePresentation = .unrestricted,
+        onOpenDetail: @escaping () -> Void,
+        onOpenSettings: @escaping () -> Void,
+        sessionStore: TradingRulesComplianceSessionStore
+    ) {
+        self.compliancePresentation = compliancePresentation
+        self.onOpenDetail = onOpenDetail
+        self.onOpenSettings = onOpenSettings
+        _session = Bindable(sessionStore)
+    }
 
     var body: some View {
         switch compliancePresentation {
@@ -38,6 +50,22 @@ struct DashboardTradingRulesComplianceSection: View {
             .padding(.horizontal, ExperienceSpacing.md)
         }
         .accessibilityIdentifier("dashboard.tradingRulesCompliance")
+        .onAppear {
+            logDashboardSectionState(reason: "onAppear")
+        }
+        .onChange(of: session.contentRevision) { _, _ in
+            logDashboardSectionState(reason: "contentRevision")
+        }
+    }
+
+    private func logDashboardSectionState(reason: String) {
+        let branch = RulesPreviewDebugLog.dashboardSectionBranch(
+            compliancePresentation: compliancePresentation,
+            session: session
+        )
+        RulesPreviewDebugLog.log(
+            "DashboardTradingRulesComplianceSection \(reason) presentation=\(compliancePresentation) branch=\(branch) \(RulesPreviewDebugLog.describe(session: session))"
+        )
     }
 
     private var sectionHeader: some View {

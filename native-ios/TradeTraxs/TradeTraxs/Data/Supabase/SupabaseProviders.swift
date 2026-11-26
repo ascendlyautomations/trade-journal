@@ -1323,6 +1323,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         case .reel: return "reel_comments"
         case .feedPost: return "comments"
         case .achievement: return "achievement_post_comments"
+        case .story: return "stories"
         }
     }
 
@@ -1333,6 +1334,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         case .reel: return "reel_id"
         case .feedPost: return "post_id"
         case .achievement: return "achievement_post_id"
+        case .story: return "story_id"
         }
     }
 

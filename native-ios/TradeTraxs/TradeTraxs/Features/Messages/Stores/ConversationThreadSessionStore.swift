@@ -71,7 +71,7 @@ final class ConversationThreadSessionStore {
     ) {
         guard !incoming.isEmpty else { return }
         let key = Self.cacheKey(viewerID: viewerID, conversationID: conversationID)
-        if var snapshot = snapshots[key] {
+        if var snapshot = restore(key: key) {
             let merged = ConversationMessageMerge.mergeMessages(
                 existing: snapshot.messages,
                 incoming: incoming,
@@ -113,10 +113,11 @@ final class ConversationThreadSessionStore {
         nextCursor: String?,
         hasMoreMessages: Bool
     ) {
-        let existing = snapshots[cacheKey]?.messages ?? []
+        let existing = restore(key: cacheKey)?.messages ?? []
         let merged = ConversationMessageMerge.reconcileServerFirstPage(
             existing: existing,
-            incoming: incoming
+            incoming: incoming,
+            dropOmittedInWindow: incoming.count >= Self.messageLimit
         )
         let priorGeneration = snapshots[cacheKey]?.contentGeneration ?? 0
         let snapshot = Snapshot(

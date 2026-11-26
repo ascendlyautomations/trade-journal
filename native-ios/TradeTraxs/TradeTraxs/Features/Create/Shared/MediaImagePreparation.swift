@@ -13,6 +13,72 @@ enum MediaImagePreparation {
     static let contentMaxLongEdge: CGFloat = 1440
     static let contentJPEGQuality: CGFloat = 0.85
 
+    static let contentPNGContentType = "image/png"
+    static let contentJPEGContentType = "image/jpeg"
+
+    struct ContentUploadPayload: Sendable {
+        let data: Data
+        let contentType: String
+
+        var fileExtension: String {
+            Self.fileExtension(for: contentType)
+        }
+
+        static func fileExtension(for contentType: String) -> String {
+            contentType == contentPNGContentType ? "png" : "jpg"
+        }
+    }
+
+    /// Encode content uploads: PNG when alpha is required, otherwise JPEG.
+    static func contentUploadData(from image: UIImage, logUpload: Bool = false) -> ContentUploadPayload? {
+        let normalized = MediaImageOrientation.normalized(image)
+        if imageHasAlpha(normalized) {
+            guard let data = pngData(from: normalized, maxDimension: contentMaxLongEdge), !data.isEmpty else {
+                return nil
+            }
+            #if DEBUG
+            if logUpload {
+                ImageUploadProbe.log(
+                    croppedImage: true,
+                    pixelSize: MediaImageOrientation.pixelSize(of: normalized),
+                    bytes: data.count
+                )
+            }
+            #endif
+            return ContentUploadPayload(data: data, contentType: contentPNGContentType)
+        }
+        guard let data = jpegData(from: normalized, logUpload: logUpload), !data.isEmpty else { return nil }
+        return ContentUploadPayload(data: data, contentType: contentJPEGContentType)
+    }
+
+    static func contentType(forUploadData data: Data) -> String {
+        guard data.count >= 4 else { return contentJPEGContentType }
+        if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return contentPNGContentType }
+        return contentJPEGContentType
+    }
+
+    static func fileExtension(forUploadData data: Data) -> String {
+        ContentUploadPayload.fileExtension(for: contentType(forUploadData: data))
+    }
+
+    static func imageHasAlpha(_ image: UIImage) -> Bool {
+        guard let cgImage = image.cgImage else { return false }
+        switch cgImage.alphaInfo {
+        case .first, .last, .premultipliedFirst, .premultipliedLast, .alphaOnly:
+            return true
+        case .noneSkipFirst, .noneSkipLast:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Lossless PNG, mild downscale when needed; preserves alpha.
+    static func pngData(from image: UIImage, maxDimension: CGFloat = contentMaxLongEdge) -> Data? {
+        let rendered = downscaledPixelImage(from: image, maxDimension: maxDimension, preserveAlpha: true)
+        return rendered.pngData()
+    }
+
     /// Mild downscale + JPEG quality so candle/text screenshots stay readable.
     static func jpegData(
         from image: UIImage,
@@ -20,16 +86,11 @@ enum MediaImagePreparation {
         quality: CGFloat = contentJPEGQuality,
         logUpload: Bool = false
     ) -> Data? {
-        let normalized = MediaImageOrientation.normalized(image)
-        let pixelSize = MediaImageOrientation.pixelSize(of: normalized)
-        let scale = min(1, maxDimension / max(pixelSize.width, pixelSize.height))
-        let target = CGSize(width: pixelSize.width * scale, height: pixelSize.height * scale)
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        let renderer = UIGraphicsImageRenderer(size: target, format: format)
-        let rendered = renderer.image { _ in
-            normalized.draw(in: CGRect(origin: .zero, size: target))
-        }
+        let rendered = downscaledPixelImage(
+            from: image,
+            maxDimension: maxDimension,
+            preserveAlpha: imageHasAlpha(image)
+        )
         let data = rendered.jpegData(compressionQuality: quality)
         #if DEBUG
         if logUpload {
@@ -128,6 +189,27 @@ enum MediaImagePreparation {
             normalized.draw(in: CGRect(x: originX, y: originY, width: drawW, height: drawH))
         }
         return rendered.jpegData(compressionQuality: reelPosterJPEGQuality)
+    }
+
+    private static func downscaledPixelImage(
+        from image: UIImage,
+        maxDimension: CGFloat,
+        preserveAlpha: Bool
+    ) -> UIImage {
+        let normalized = MediaImageOrientation.normalized(image)
+        let pixelSize = MediaImageOrientation.pixelSize(of: normalized)
+        let scale = min(1, maxDimension / max(pixelSize.width, pixelSize.height))
+        let target = CGSize(width: pixelSize.width * scale, height: pixelSize.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = !preserveAlpha
+        let renderer = UIGraphicsImageRenderer(size: target, format: format)
+        return renderer.image { context in
+            if preserveAlpha {
+                context.cgContext.clear(CGRect(origin: .zero, size: target))
+            }
+            normalized.draw(in: CGRect(origin: .zero, size: target))
+        }
     }
 }
 

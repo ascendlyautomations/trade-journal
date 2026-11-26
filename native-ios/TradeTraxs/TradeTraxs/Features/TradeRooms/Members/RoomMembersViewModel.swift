@@ -206,6 +206,7 @@ final class RoomMembersViewModel {
     }
 
     func canShowManageMember(_ item: RoomMemberItem) -> Bool {
+        if canManageModeratorStatus(for: item) { return true }
         if canManageTagsForMember(item) { return true }
         if canBanMember(item) || canRemoveMember(item) { return true }
         return false
@@ -355,19 +356,34 @@ final class RoomMembersViewModel {
         showsModeratorConfirmation = false
         isMutatingModerator = true
         defer { isMutatingModerator = false }
+        var rollbackTagIDs: Set<RoomMemberTagID>?
         do {
             _ = await tagStore.ensureDefaultTagsIfCanManage(
                 roomID: roomID,
                 canManage: canManageRoom,
                 repository: management
             )
+            guard let modTag = TradeRoomModeratorPromotion.moderatorTag(in: tagStore.tags(for: roomID)) else {
+                throw TradeRoomModeratorPromotionError.moderatorTagMissing
+            }
+            let baseline = Set(tagStore.tags(for: profileID, roomID: roomID).map(\.id))
+            rollbackTagIDs = baseline
+            let optimistic = TradeRoomModeratorPromotion.projectedTagIDs(
+                promoted: makeModerator,
+                baseline: baseline,
+                moderatorTagID: modTag.id
+            )
+            tagStore.setMemberTagIDs(optimistic, profileID: profileID, roomID: roomID)
+            applyCachedTagsToMembers()
+
             try await TradeRoomModeratorPromotion.setModerator(
                 promoted: makeModerator,
                 roomID: roomID,
                 profileID: profileID,
                 roomTags: tagStore.tags(for: roomID),
                 tagStore: tagStore,
-                management: management
+                management: management,
+                baselineMemberTagIDs: baseline
             )
             applyCachedTagsToMembers()
             SaveSuccessConfirmationCenter.shared.present(
@@ -375,6 +391,10 @@ final class RoomMembersViewModel {
             )
             ExperienceHaptics.play(.success)
         } catch {
+            if let rollbackTagIDs {
+                tagStore.setMemberTagIDs(rollbackTagIDs, profileID: profileID, roomID: roomID)
+                applyCachedTagsToMembers()
+            }
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
         }

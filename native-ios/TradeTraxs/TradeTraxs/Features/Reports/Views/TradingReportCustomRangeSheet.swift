@@ -12,7 +12,7 @@ struct TradingReportCustomRangeSheet: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.dismiss) private var dismiss
 
-  private let monthSymbols: [String] = {
+    private let monthSymbols: [String] = {
         Calendar.current.monthSymbols
     }()
 
@@ -25,13 +25,16 @@ struct TradingReportCustomRangeSheet: View {
                             Text(monthSymbols[month - 1]).tag(month)
                         }
                     }
+                    .tint(colors.accent)
                     Picker("Year", selection: $viewModel.draftCustomYear) {
                         ForEach(selectableYears, id: \.self) { year in
                             Text(String(year)).tag(year)
                         }
                     }
+                    .tint(colors.accent)
                 } header: {
                     Text("Quick select")
+                        .foregroundStyle(colors.secondaryText)
                 } footer: {
                     Text("Jump to a full calendar month, or fine-tune the exact dates below.")
                         .experienceStyle(.footnote, color: colors.secondaryText)
@@ -43,19 +46,15 @@ struct TradingReportCustomRangeSheet: View {
                     viewModel.applyQuickMonthSelection()
                 }
 
-                Section("Date range") {
-                    DatePicker(
-                        "Start Date",
-                        selection: customStartBinding,
-                        in: ...Date(),
-                        displayedComponents: .date
+                Section {
+                    ExperienceFormDateRangeFields(
+                        start: customStartBinding,
+                        end: customEndBinding,
+                        maximumDate: Date()
                     )
-                    DatePicker(
-                        "End Date",
-                        selection: customEndBinding,
-                        in: ...Date(),
-                        displayedComponents: .date
-                    )
+                } header: {
+                    Text("Date range")
+                        .foregroundStyle(colors.secondaryText)
                 }
 
                 if let message = viewModel.customRangeValidationMessage {
@@ -83,12 +82,14 @@ struct TradingReportCustomRangeSheet: View {
                     .listRowBackground(Color.clear)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(colors.backgroundPrimary.ignoresSafeArea())
+            .listSectionSeparatorTint(colors.separator)
+            .experienceTradeTraxsFormStyle(pageBackground: false)
+            .tint(colors.accent)
             .experienceNavigationTitle("Custom Range")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(colors.accent)
                 }
             }
         }

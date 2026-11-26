@@ -12,8 +12,11 @@ nonisolated enum LivePersonalDrawdownEngine {
         TradingAccountStartingBalancePolicy.resolvedStartingBalance(for: account)
     }
 
-    static func config(from account: TradingAccount) -> LivePersonalDrawdownConfig? {
-        guard PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) else { return nil }
+    static func config(
+        from account: TradingAccount,
+        eligibility: LivePersonalDrawdownAccountEligibility = .dashboardLivePersonal
+    ) -> LivePersonalDrawdownConfig? {
+        guard eligibility.supportsDrawdown(for: account) else { return nil }
         guard let stored = account.livePersonalDrawdown,
               let limit = stored.limitAmount,
               limit > 0
@@ -43,9 +46,10 @@ nonisolated enum LivePersonalDrawdownEngine {
     }
 
     static func gearDraft(
-        from account: TradingAccount
+        from account: TradingAccount,
+        eligibility: LivePersonalDrawdownAccountEligibility = .dashboardLivePersonal
     ) -> (limitDigits: String, limitType: LivePersonalDrawdownType, floorCapDigits: String) {
-        guard PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) else {
+        guard eligibility.supportsDrawdown(for: account) else {
             return ("", .fixed, "")
         }
         let stored = account.livePersonalDrawdown ?? LivePersonalDrawdownStored(limitAmount: nil, limitType: .fixed)
@@ -176,9 +180,10 @@ nonisolated enum LivePersonalDrawdownEngine {
     }
 
     static func wireDrawdownFields(
-        from account: TradingAccount
+        from account: TradingAccount,
+        eligibility: LivePersonalDrawdownAccountEligibility = .dashboardLivePersonal
     ) -> (maxDrawdown: Decimal?, drawdownTypeRaw: String?, floorCap: Decimal?) {
-        guard PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) else {
+        guard eligibility.supportsDrawdown(for: account) else {
             return (nil, nil, nil)
         }
         guard let stored = account.livePersonalDrawdown,
@@ -203,7 +208,8 @@ nonisolated enum LivePersonalDrawdownEngine {
         config: LivePersonalDrawdownConfig,
         lifetimeTrades: [Trade],
         ledgerEntries: [AccountPayoutEntry],
-        period: PeriodContext
+        period: PeriodContext,
+        includesBacktestTrades: Bool = false
     ) -> [LivePersonalDrawdownEquitySample] {
         guard let startingBalance = resolvedStartingBalance(for: account) else {
             return []
@@ -212,7 +218,8 @@ nonisolated enum LivePersonalDrawdownEngine {
         let allEvents = buildLifetimeTimeline(
             accountID: accountID,
             lifetimeTrades: lifetimeTrades,
-            ledgerEntries: ledgerEntries
+            ledgerEntries: ledgerEntries,
+            includesBacktestTrades: includesBacktestTrades
         )
 
         let periodStartMs = resolvePeriodStartMs(period)
@@ -323,10 +330,11 @@ nonisolated enum LivePersonalDrawdownEngine {
     private static func buildLifetimeTimeline(
         accountID: TradingAccountID,
         lifetimeTrades: [Trade],
-        ledgerEntries: [AccountPayoutEntry]
+        ledgerEntries: [AccountPayoutEntry],
+        includesBacktestTrades: Bool = false
     ) -> [TimelineEvent] {
         var events: [TimelineEvent] = []
-        for trade in lifetimeTrades where trade.accountID == accountID && trade.mode != TradeMode.backtest {
+        for trade in lifetimeTrades where trade.accountID == accountID && tradeMatchesEngine(trade, includesBacktestTrades: includesBacktestTrades) {
             let sortMs = Int64(trade.entryAt.timeIntervalSince1970 * 1000)
             events.append(
                 TimelineEvent(
@@ -446,7 +454,9 @@ nonisolated enum LivePersonalDrawdownEngine {
         to raw: Decimal,
         config: LivePersonalDrawdownConfig
     ) -> Decimal {
-        guard let cap = config.floorCap, cap > 0 else { return raw }
+        guard config.limitType == .trailing,
+              let cap = config.floorCap, cap > 0
+        else { return raw }
         return min(raw, cap)
     }
 
@@ -546,5 +556,12 @@ nonisolated enum LivePersonalDrawdownEngine {
         let comps = calendar.dateComponents([.year, .month, .day], from: date)
         let noon = calendar.date(from: DateComponents(year: comps.year, month: comps.month, day: comps.day, hour: 12)) ?? date
         return Int64(noon.timeIntervalSince1970 * 1000)
+    }
+
+    private static func tradeMatchesEngine(_ trade: Trade, includesBacktestTrades: Bool) -> Bool {
+        if includesBacktestTrades {
+            return trade.mode == .backtest
+        }
+        return trade.mode != .backtest
     }
 }

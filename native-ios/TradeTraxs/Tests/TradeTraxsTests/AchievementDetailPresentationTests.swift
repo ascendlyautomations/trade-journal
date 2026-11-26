@@ -41,9 +41,56 @@ final class AchievementDetailPresentationTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testCategoryContextLineFormatsKindAndAssociation() {
+        XCTAssertEqual(
+            AchievementDetailPresentation.categoryContextLine(
+                for: sample(kind: .propFirmPayout, firm: "Alpha Futures")
+            ),
+            "Prop Firm Payout - Alpha Futures"
+        )
+        XCTAssertEqual(
+            AchievementDetailPresentation.categoryContextLine(for: sample(kind: .milestone)),
+            "Milestone"
+        )
+        XCTAssertEqual(
+            AchievementDetailPresentation.categoryContextLine(
+                for: sample(kind: .liveTradingPayout, firm: "Personal Live")
+            ),
+            "Live Trading Payout"
+        )
+        XCTAssertEqual(
+            AchievementDetailPresentation.categoryContextLine(
+                for: sample(kind: .passedEvaluation, firm: "Topstep")
+            ),
+            "Evaluation Passed - Topstep"
+        )
+    }
+
+    func testPublicFirmLabelStripsAccountIdentifiers() {
+        let accountID = TradingAccountID("33333333-3333-3333-3333-333333333333")
+        XCTAssertNil(
+            AchievementDetailPresentation.publicFirmLabel(
+                for: sample(kind: .propFirmPayout, firm: accountID.rawValue, accountID: accountID)
+            )
+        )
+        XCTAssertNil(
+            AchievementDetailPresentation.publicFirmLabel(
+                for: sample(kind: .propFirmPayout, firm: "104582", accountID: nil)
+            )
+        )
+        XCTAssertEqual(
+            AchievementDetailPresentation.publicFirmLabel(
+                for: sample(kind: .propFirmPayout, firm: "Alpha Futures")
+            ),
+            "Alpha Futures"
+        )
+    }
+
     private func sample(
         kind: AchievementKind,
         firm: String? = nil,
+        accountID: TradingAccountID? = nil,
         value: Money? = nil,
         valueText: String? = nil
     ) -> Achievement {
@@ -57,7 +104,7 @@ final class AchievementDetailPresentationTests: XCTestCase {
             value: value,
             valueText: valueText,
             firm: firm,
-            accountID: nil,
+            accountID: accountID,
             image: nil,
             isPublic: true,
             isFeatured: false,

@@ -15,6 +15,7 @@ nonisolated enum CommentLikeSource: String, Sendable, CaseIterable {
         case .reel: return .reelComments
         case .feedPost: return .comments
         case .achievement: return .achievementPostComments
+        case .story: return .tradeComments
         }
     }
 }

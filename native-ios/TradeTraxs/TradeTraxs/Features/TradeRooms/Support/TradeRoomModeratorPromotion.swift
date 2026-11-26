@@ -9,35 +9,51 @@ enum TradeRoomModeratorPromotion {
         }
     }
 
+    static func projectedTagIDs(
+        promoted: Bool,
+        baseline: Set<RoomMemberTagID>,
+        moderatorTagID: RoomMemberTagID
+    ) -> Set<RoomMemberTagID> {
+        var updated = baseline
+        if promoted {
+            updated.insert(moderatorTagID)
+        } else {
+            updated.remove(moderatorTagID)
+        }
+        return updated
+    }
+
     static func setModerator(
         promoted: Bool,
         roomID: RoomID,
         profileID: ProfileID,
         roomTags: [RoomMemberTag],
         tagStore: SessionRoomMemberTagsStore,
-        management: RoomManagementRepository
+        management: RoomManagementRepository,
+        baselineMemberTagIDs: Set<RoomMemberTagID>? = nil
     ) async throws {
         guard let modTag = moderatorTag(in: roomTags) else {
             throw TradeRoomModeratorPromotionError.moderatorTagMissing
         }
-        let currentIDs = Set(tagStore.tags(for: profileID, roomID: roomID).map(\.id))
+        let baseline = baselineMemberTagIDs
+            ?? Set(tagStore.tags(for: profileID, roomID: roomID).map(\.id))
         if promoted {
-            guard !currentIDs.contains(modTag.id) else { return }
+            guard !baseline.contains(modTag.id) else { return }
             try await management.assignMemberTag(roomID: roomID, profileID: profileID, tagID: modTag.id)
-            var updated = currentIDs
-            updated.insert(modTag.id)
-            tagStore.setMemberTagIDs(updated, profileID: profileID, roomID: roomID)
         } else {
-            guard currentIDs.contains(modTag.id) else { return }
+            guard baseline.contains(modTag.id) else { return }
             try await management.removeMemberTagAssignment(
                 roomID: roomID,
                 profileID: profileID,
                 tagID: modTag.id
             )
-            var updated = currentIDs
-            updated.remove(modTag.id)
-            tagStore.setMemberTagIDs(updated, profileID: profileID, roomID: roomID)
         }
+        let updated = projectedTagIDs(
+            promoted: promoted,
+            baseline: baseline,
+            moderatorTagID: modTag.id
+        )
+        tagStore.setMemberTagIDs(updated, profileID: profileID, roomID: roomID)
     }
 }
 

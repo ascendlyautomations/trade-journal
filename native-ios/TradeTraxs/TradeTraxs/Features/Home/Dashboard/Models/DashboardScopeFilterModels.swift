@@ -9,6 +9,8 @@ nonisolated struct DashboardClientScopeFilter: Equatable, Sendable {
     var showPublicOnly: Bool
     /// Linked trading accounts, Profile Stats uses these before trade denormalization.
     var linkedAccountModes: [TradingAccountID: TradingAccountMode] = [:]
+    /// Loaded copy-trading groups for account filter matching (empty when not yet fetched).
+    var copyTradingGroups: [CopyTradingGroup] = []
 
     static let defaultAccountMode: ProfileStatisticsMetrics.Mode = .all
 
@@ -25,7 +27,9 @@ nonisolated struct DashboardClientScopeFilter: Equatable, Sendable {
     }
 
     var needsClientScopedTradeMetrics: Bool {
-        requiresLocalMetricsRecompute || requiresClientTradeScopeOverlay
+        requiresLocalMetricsRecompute
+            || requiresClientTradeScopeOverlay
+            || accountFilter.isCopyTradingScoped
     }
 }
 
@@ -339,29 +343,11 @@ nonisolated enum DashboardScopeFilterPersistence {
     }
 
     static func accountFilter(from key: String?) -> DashboardAccountFilter {
-        guard let key, key != "all", !key.isEmpty else { return .all }
-        let accountID = TradingAccountID(key)
-        if JournalSampleDataPolicy.isCanonicalAccount(id: accountID) {
-            return .all
-        }
-        if UUID(uuidString: key) == nil {
-            return .all
-        }
-        return .account(accountID)
+        DashboardAccountFilterCopyTradingSupport.filter(fromPersistenceKey: key)
     }
 
     static func accountFilterKey(for filter: DashboardAccountFilter) -> String {
-        switch filter {
-        case .all: return "all"
-        case .account(let id):
-            if JournalSampleDataPolicy.isCanonicalAccount(id: id) {
-                return "all"
-            }
-            if UUID(uuidString: id.rawValue) == nil {
-                return "all"
-            }
-            return id.rawValue
-        }
+        DashboardAccountFilterCopyTradingSupport.persistenceKey(for: filter)
     }
 
     static func load(profileID: ProfileID) -> Stored? {

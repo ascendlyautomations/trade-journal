@@ -178,7 +178,12 @@ struct ManageRoomView: View {
                 hubRow("Tags", systemImage: "tag") {
                     navigationSection = .tags
                 }
-                hubRow("Banned Members", systemImage: "hand.raised") {
+                hubRow(
+                    viewModel.bannedMemberCount > 0
+                        ? "Banned Members (\(viewModel.bannedMemberCount))"
+                        : "Banned Members",
+                    systemImage: "hand.raised"
+                ) {
                     navigationSection = .banned
                 }
                 hubRow("Delete Trade Room", systemImage: "gearshape") {
@@ -378,7 +383,8 @@ struct ManageRoomView: View {
         .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Members")
         .refreshable { await viewModel.refreshMembersAndBans() }
-        .sheet(item: $selectedMember) { member in
+        .sheet(item: $selectedMember) { snapshot in
+            let member = viewModel.managedMember(for: snapshot.profile.id) ?? snapshot
             manageRoomMemberSheet(member)
         }
         .roomMemberModerationConfirmations(
@@ -453,25 +459,17 @@ struct ManageRoomView: View {
             if viewModel.bans.isEmpty {
                 Text("No banned members")
                     .experienceStyle(.body, color: colors.tertiaryText)
+                    .experienceDashboardListRow()
             } else {
                 ForEach(viewModel.bans) { ban in
-                    HStack(spacing: ExperienceSpacing.md) {
-                        FollowListAvatarView(profile: ban.profile, imagePipeline: imagePipeline)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(ban.profile.displayName)
-                                .experienceStyle(.subheadline, color: colors.primaryText)
-                                .lineLimit(1)
-                            Text("@\(ban.profile.username)")
-                                .experienceStyle(.footnote, color: colors.secondaryText)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: ExperienceSpacing.xs)
-                        Button("Unban") {
-                            Task { await viewModel.unban(ban) }
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .disabled(!viewModel.canUnban(ban) || viewModel.isMutatingMember)
-                    }
+                    ManageRoomBannedMemberRow(
+                        ban: ban,
+                        imagePipeline: imagePipeline,
+                        canUnban: viewModel.canUnban(ban),
+                        isUnbanDisabled: viewModel.isMutatingMember,
+                        onOpenProfile: { viewModel.openProfile(ban.profile.id) },
+                        onRequestUnban: { viewModel.requestUnban(ban) }
+                    )
                     .experienceDashboardListRow()
                 }
             }
@@ -479,6 +477,23 @@ struct ManageRoomView: View {
         .experienceInsetGroupedListStyle(pageBackground: false)
         .experienceNavigationTitle("Banned Members")
         .refreshable { await viewModel.refreshMembersAndBans() }
+        .confirmationDialog(
+            "Are you sure you want to unban this user?",
+            isPresented: $viewModel.showsUnbanConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Unban") {
+                Task { await viewModel.confirmUnban() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelUnban()
+            }
+        }
+        .onChange(of: viewModel.showsUnbanConfirmation) { _, isPresented in
+            if !isPresented, viewModel.pendingUnban != nil {
+                viewModel.cancelUnban()
+            }
+        }
     }
 
     @ViewBuilder
@@ -518,9 +533,10 @@ struct ManageRoomView: View {
             moderatorDialogTitle: viewModel.moderatorConfirmationTitle,
             moderatorConfirmButtonTitle: viewModel.moderatorConfirmationButtonTitle,
             onConfirmModerator: {
+                let profileID = member.profile.id
                 Task {
                     await viewModel.confirmModeratorStatusChange()
-                    selectedMember = nil
+                    selectedMember = viewModel.managedMember(for: profileID)
                 }
             },
             onCancelModerator: { viewModel.cancelModeratorStatusChange() }
@@ -642,6 +658,44 @@ struct ManageRoomView: View {
         }
     }
 
+}
+
+private struct ManageRoomBannedMemberRow: View {
+    let ban: RoomBanRecord
+    let imagePipeline: any ImagePipeline
+    let canUnban: Bool
+    let isUnbanDisabled: Bool
+    let onOpenProfile: () -> Void
+    let onRequestUnban: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        HStack(spacing: ExperienceSpacing.md) {
+            Button(action: onOpenProfile) {
+                HStack(spacing: ExperienceSpacing.md) {
+                    FollowListAvatarView(profile: ban.profile, imagePipeline: imagePipeline)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ban.profile.displayName)
+                            .experienceStyle(.subheadline, color: colors.primaryText)
+                            .lineLimit(1)
+                        Text("@\(ban.profile.username)")
+                            .experienceStyle(.footnote, color: colors.secondaryText)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .buttonStyle(.experiencePlain)
+            .accessibilityIdentifier("tradeRooms.manage.banned.profile.\(ban.profile.id.rawValue)")
+
+            Button("Unban", action: onRequestUnban)
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.borderless)
+                .disabled(!canUnban || isUnbanDisabled)
+                .accessibilityIdentifier("tradeRooms.manage.banned.unban.\(ban.profile.id.rawValue)")
+        }
+    }
 }
 
 /// Shows the authoritative saved room image, an in-progress crop preview, or the empty placeholder.

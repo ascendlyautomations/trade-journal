@@ -121,6 +121,8 @@ extension VaultContentRef {
             return VaultContentRef(contentType: .reel, contentID: target.id)
         case .achievement:
             return VaultContentRef(contentType: .achievement, contentID: target.id)
+        case .story:
+            return nil
         }
     }
 }

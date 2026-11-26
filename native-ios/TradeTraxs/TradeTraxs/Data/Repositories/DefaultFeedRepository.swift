@@ -819,6 +819,26 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         )
     }
 
+    func storyInsights(id: StoryID) async throws -> StoryInsights {
+        struct Args: Encodable { var p_story_id: String }
+        let args = Args(p_story_id: id.rawValue)
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_story_insights",
+            parametersJSON: try JSONEncoder().encode(args)
+        )
+        return try StoryInsightsMapper.decode(from: data)
+    }
+
+    func recordStoryView(id: StoryID) async throws {
+        guard await session.currentUserID != nil else { return }
+        struct Args: Encodable { var p_story_id: String }
+        let args = Args(p_story_id: id.rawValue)
+        _ = try await supabase.database.rpcData(
+            functionName: "rpc_v1_story_record_view",
+            parametersJSON: try JSONEncoder().encode(args)
+        )
+    }
+
     /// True when another story, post, clip, or trade still points at this URL.
     /// A failed lookup is treated as shared so cleanup cannot delete someone else's media.
     private func storyMediaURLIsShared(_ url: String) async -> Bool {

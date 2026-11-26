@@ -362,7 +362,8 @@ struct TradeDetailView: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 TradeDetailCompactHeader(
                     trade: trade,
-                    accountLine: viewModel.accountSummaryLine
+                    accountLine: viewModel.accountSummaryLine,
+                    copyTradeOwnerDisplay: viewModel.copyTradeOwnerDisplay
                 )
                 TradeDetailQuickStatsContent(trade: trade)
                     .accessibilityIdentifier("detail.trade.quickStats")

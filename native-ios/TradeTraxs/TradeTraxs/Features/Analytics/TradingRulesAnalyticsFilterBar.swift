@@ -30,40 +30,30 @@ struct TradingRulesAnalyticsFilterBar: View {
     }
 
     private var accountMenu: some View {
-        OwnerAccountFilterDropdown(
+        let profileID = scope.profileID
+        let title = scope.accountMenuTitle
+        return OwnerAccountFilterDropdown(
             accounts: scope.accountsForMenu,
-            isAllAccountsSelected: {
-                if case .all = scope.accountFilter { return true }
-                return false
-            }(),
-            selectedAccountID: {
-                if case .account(let id) = scope.accountFilter { return id }
-                return nil
-            }(),
-            onSelectAll: { scope.setAccountFilter(.all) },
-            onSelectAccount: { scope.setAccountFilter(.account($0)) },
+            selectedFilter: scope.accountFilter,
+            copyGroups: OwnerAccountFilterMenuSupport.copyGroups(for: profileID),
+            isLoadingCopyGroups: OwnerAccountFilterMenuSupport.isLoadingCopyGroups(for: profileID),
+            onSelectFilter: { scope.setAccountFilter($0) },
             onManageAccounts: onManageAccounts,
+            onManageCopyGroups: { scope.openManageCopyTradingGroups() },
+            onRequestCopyGroups: {
+                OwnerAccountFilterMenuSupport.requestCopyGroupsLoad(profileID: profileID)
+            },
             accessibilityIdentifier: "tradingRulesAnalytics.account",
             boundary: .dashboard,
-            profileID: scope.profileID
+            profileID: profileID
         ) {
-            accountMenuLabel(selectedAccountTitle)
+            accountMenuLabel(title)
         }
         .accessibilityLabel("Account")
-        .accessibilityValue(selectedAccountTitle)
+        .accessibilityValue(title)
     }
 
-    private var selectedAccountTitle: String {
-        switch scope.accountFilter {
-        case .all:
-            return "All Accounts"
-        case .account(let id):
-            if let account = scope.accounts.first(where: { $0.id == id }) {
-                return scope.accountMenuTitle(for: account)
-            }
-            return "Account"
-        }
-    }
+    private var selectedAccountTitle: String { scope.accountMenuTitle }
 
     private var timePeriodButton: some View {
         Button {

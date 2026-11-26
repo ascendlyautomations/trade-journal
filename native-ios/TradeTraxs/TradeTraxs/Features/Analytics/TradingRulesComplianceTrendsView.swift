@@ -1,9 +1,21 @@
 import SwiftUI
 
 struct TradingRulesComplianceTrendsView: View {
-    @Bindable private var session = TradingRulesComplianceSessionStore.shared
+    @Bindable private var session: TradingRulesComplianceSessionStore
 
     @Environment(\.themeColors) private var colors
+
+    init(detailCache: DetailPresentationCache? = nil) {
+        if let detailCache {
+            _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
+        } else {
+            _session = Bindable(
+                TradingRulesCompliancePresentationStores.store(
+                    forPreviewUI: TraxsProPreviewSession.shared.activePreviewEnvironment != nil
+                )
+            )
+        }
+    }
 
     private static let trendsInfo = (
         title: "Compliance trends",

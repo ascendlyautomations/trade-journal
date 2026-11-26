@@ -23,6 +23,7 @@ struct ConversationBubbleView: View {
     var onSharedTradeTap: ((TradeID) -> Void)? = nil
     var onSharedContentTap: ((SharedContentReference) -> Void)? = nil
     var onSharedStoryTap: ((StoryShareMessageSupport.Payload) -> Void)? = nil
+    var onStoryReplyTap: ((StoryReplyMessageSupport.Payload) -> Void)? = nil
     var onSharedProfileTap: ((ProfileShareMessageSupport.Payload) -> Void)? = nil
     var isSelectionMode: Bool = false
     var isSelected: Bool = false
@@ -400,11 +401,31 @@ struct ConversationBubbleView: View {
     }
 
     private func storyReplyBubble(payload: StoryReplyMessageSupport.Payload) -> some View {
+        Group {
+            if isSelectionMode {
+                storyReplyBubbleContent(payload: payload)
+            } else {
+                storyReplyBubbleContent(
+                    payload: payload,
+                    onStoryPreviewTap: onStoryReplyTap.map { handler in
+                        { handler(payload) }
+                    }
+                )
+            }
+        }
+        .accessibilityIdentifier("conversation.bubble.storyReply")
+    }
+
+    private func storyReplyBubbleContent(
+        payload: StoryReplyMessageSupport.Payload,
+        onStoryPreviewTap: (() -> Void)? = nil
+    ) -> some View {
         StoryReplyMessageBubbleView(
             payload: payload,
             viewerProfileID: viewerProfileID,
             isOutgoing: item.isOutgoing,
-            imagePipeline: imagePipeline
+            imagePipeline: imagePipeline,
+            onStoryPreviewTap: onStoryPreviewTap
         )
     }
 

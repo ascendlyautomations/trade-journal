@@ -26,6 +26,7 @@ struct ManageAccountEditorView: View {
 
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
+    private let brokerLinkContext: BrokerAccountLinkContext?
     private let onCreateSubmit: ((TradingAccountDraft, LivePersonalDrawdownConfig?) async -> Bool)?
 
     init(
@@ -34,23 +35,35 @@ struct ManageAccountEditorView: View {
         draft: TradingAccountDraft,
         data: DataEnvironment? = nil,
         navigationCoordinator: NavigationCoordinator? = nil,
+        brokerLinkContext: BrokerAccountLinkContext? = nil,
         onCreateSubmit: ((TradingAccountDraft, LivePersonalDrawdownConfig?) async -> Bool)? = nil
     ) {
         self.viewModel = viewModel
         self.mode = mode
         self.data = data
         self.navigationCoordinator = navigationCoordinator
+        self.brokerLinkContext = brokerLinkContext
         self.onCreateSubmit = onCreateSubmit
         _draft = State(initialValue: draft)
         if case .edit(let account) = mode {
             _showInAccountDropdowns = State(initialValue: account.showInAccountDropdowns)
             _customPublicStatus = State(initialValue: account.customPublicStatus ?? "")
+            if account.mode == .backtest {
+                let gear = LivePersonalDrawdownEngine.gearDraft(
+                    from: account,
+                    eligibility: .backtestAccount
+                )
+                _liveDrawdownLimitDigits = State(initialValue: gear.limitDigits)
+                _liveDrawdownFloorCapDigits = State(initialValue: gear.floorCapDigits)
+                _liveDrawdownType = State(initialValue: gear.limitType)
+            }
         }
     }
 
     private var title: String {
         switch mode {
-        case .create: return "Add Account"
+        case .create:
+            return brokerLinkContext == nil ? "Add Account" : "Create & Link Account"
         case .edit: return "Edit Account"
         }
     }
@@ -60,8 +73,47 @@ struct ManageAccountEditorView: View {
         return nil
     }
 
+    /// Add Account type picker only; Edit Account keeps ``Backtest`` for existing backtest accounts.
+    private var addAccountBacktestTypeLabel: String {
+        guard case .create = mode else { return "Backtest" }
+        if ProAccessGate.shouldPresentPaywall(profileID: viewModel.viewerProfileID) {
+            return "Backtest (Pro)"
+        }
+        return "Backtest"
+    }
+
+    private var showsAccountValueInfo: Bool {
+        draft.category == .personal || draft.category == .broker || draft.category == .backtest
+    }
+
+    private static let accountValueInfoBody =
+        "Account Value is the starting balance for equity and drawdown tracking. "
+            + "Use the amount you began trading with, not current equity or imported P&L."
+
+    private static let enableDrawdownInfoBody =
+        "Informational drawdown floor on the Dashboard equity curve. "
+            + "You can change these settings later from the equity chart."
+
+    private static let backtestDrawdownInfoBody =
+        "Optional drawdown floor on the Backtest Lab equity curve. Requires Account Value when enabled."
+
     var body: some View {
         Form {
+            if let brokerLinkContext {
+                Section {
+                    BrokerDiscoveredAccountSummaryCard(
+                        provider: brokerLinkContext.provider,
+                        account: brokerLinkContext.account
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                } header: {
+                    Text("Broker account")
+                } footer: {
+                    Text("Finish setting up your TradeTraxs account to link it to this broker login.")
+                }
+            }
+
             if case .edit = mode {
                 Section {
                     Toggle("Display in Account Dropdowns", isOn: $showInAccountDropdowns)
@@ -79,7 +131,7 @@ struct ManageAccountEditorView: View {
                     Text("Personal").tag(TradingAccountCategory.personal)
                     Text("Broker").tag(TradingAccountCategory.broker)
                     Text("Prop Firm").tag(TradingAccountCategory.propFirm)
-                    Text("Backtest").tag(TradingAccountCategory.backtest)
+                    Text(addAccountBacktestTypeLabel).tag(TradingAccountCategory.backtest)
                 }
                 .manageAccountFormRow()
                 .onChange(of: draft.category) { previous, category in
@@ -107,7 +159,12 @@ struct ManageAccountEditorView: View {
                 .manageAccountFormRow()
 
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
-                    accountField("Account Value") {
+                    accountField(
+                        "Account Value",
+                        infoTitle: showsAccountValueInfo ? "Account Value" : nil,
+                        infoBody: showsAccountValueInfo ? Self.accountValueInfoBody : nil,
+                        infoAccessibilityID: showsAccountValueInfo ? "manageAccounts.accountValue.info" : nil
+                    ) {
                         TextField("0", text: $draft.sizeDigits.numericInput(.accountSize))
                             .keyboardType(.numberPad)
                             .accessibilityIdentifier("manageAccounts.size")
@@ -128,6 +185,119 @@ struct ManageAccountEditorView: View {
                         }
                     }
                     .manageAccountFormRow()
+                }
+
+                if showsBacktestDrawdownEditSection {
+                    accountField(
+                        "Drawdown",
+                        infoTitle: "Enable Drawdown",
+                        infoBody: Self.backtestDrawdownInfoBody,
+                        infoAccessibilityID: "manageAccounts.backtestDrawdown.info"
+                    ) {
+                        EmptyView()
+                    }
+                    .manageAccountFormRow()
+
+                    Picker("Drawdown Type", selection: $liveDrawdownType) {
+                        ForEach(LivePersonalDrawdownType.allCases, id: \.self) { kind in
+                            Text(kind.displayTitle).tag(kind)
+                        }
+                    }
+                    .manageAccountFormRow()
+                    .accessibilityIdentifier("manageAccounts.backtestDrawdown.type")
+
+                    if liveDrawdownType == .trailing {
+                        HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                            accountField("Max Drawdown") {
+                                NumericAdornedTextField(
+                                    placeholder: "0",
+                                    text: $liveDrawdownLimitDigits,
+                                    style: .unsignedCurrency,
+                                    adornment: .currencyPrefix
+                                )
+                                .accessibilityIdentifier("manageAccounts.backtestDrawdown.limit")
+                            }
+                            accountField("Trailing Drawdown Cap") {
+                                NumericAdornedTextField(
+                                    placeholder: "Optional",
+                                    text: $liveDrawdownFloorCapDigits,
+                                    style: .unsignedCurrency,
+                                    adornment: .currencyPrefix
+                                )
+                                .accessibilityIdentifier("manageAccounts.backtestDrawdown.floorCap")
+                            }
+                        }
+                        .manageAccountFormRow()
+                    } else {
+                        accountField("Max Drawdown") {
+                            NumericAdornedTextField(
+                                placeholder: "0",
+                                text: $liveDrawdownLimitDigits,
+                                style: .unsignedCurrency,
+                                adornment: .currencyPrefix
+                            )
+                            .accessibilityIdentifier("manageAccounts.backtestDrawdown.limit")
+                        }
+                        .manageAccountFormRow()
+                    }
+                }
+
+                if showsLiveDrawdownOnCreateSection {
+                    Toggle(isOn: $enableLiveDrawdownOnCreate) {
+                        accountFieldLabel(
+                            title: "Enable Drawdown",
+                            infoTitle: "Enable Drawdown",
+                            infoBody: Self.enableDrawdownInfoBody,
+                            infoAccessibilityID: "manageAccounts.liveDrawdown.enableInfo"
+                        )
+                    }
+                    .manageAccountFormRow()
+                    .accessibilityIdentifier("manageAccounts.liveDrawdown.enable")
+
+                    if enableLiveDrawdownOnCreate {
+                        Picker("Drawdown Type", selection: $liveDrawdownType) {
+                            ForEach(LivePersonalDrawdownType.allCases, id: \.self) { kind in
+                                Text(kind.displayTitle).tag(kind)
+                            }
+                        }
+                        .manageAccountFormRow()
+                        .accessibilityIdentifier("manageAccounts.liveDrawdown.type")
+
+                        if liveDrawdownType == .trailing {
+                            HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                                accountField("Max Drawdown") {
+                                    NumericAdornedTextField(
+                                        placeholder: "0",
+                                        text: $liveDrawdownLimitDigits,
+                                        style: .unsignedCurrency,
+                                        adornment: .currencyPrefix
+                                    )
+                                    .accessibilityIdentifier("manageAccounts.liveDrawdown.limit")
+                                }
+                                accountField("Trailing Drawdown Cap") {
+                                    NumericAdornedTextField(
+                                        placeholder: "Optional",
+                                        text: $liveDrawdownFloorCapDigits,
+                                        style: .unsignedCurrency,
+                                        adornment: .currencyPrefix
+                                    )
+                                    .accessibilityIdentifier("manageAccounts.liveDrawdown.floorCap")
+                                }
+                            }
+                            .manageAccountFormRow()
+                        } else {
+                            accountField("Max Drawdown") {
+                                NumericAdornedTextField(
+                                    placeholder: "0",
+                                    text: $liveDrawdownLimitDigits,
+                                    style: .unsignedCurrency,
+                                    adornment: .currencyPrefix
+                                )
+                                .accessibilityIdentifier("manageAccounts.liveDrawdown.limit")
+                            }
+                            .manageAccountFormRow()
+                        }
+                    }
                 }
 
                 if draft.category == .propFirm,
@@ -159,66 +329,6 @@ struct ManageAccountEditorView: View {
                 .manageAccountFormRow()
             } header: {
                 sectionHeader("Account")
-            } footer: {
-                if draft.category == .personal || draft.category == .broker {
-                    Text(
-                        "Account Value is the starting balance for equity and drawdown tracking. "
-                            + "Use the amount you began trading with, not current equity or imported P&L."
-                    )
-                    .experienceStyle(.footnote, color: colors.tertiaryText)
-                }
-            }
-
-            if showsLiveDrawdownOnCreateSection {
-                Section {
-                    Toggle("Enable Drawdown", isOn: $enableLiveDrawdownOnCreate)
-                        .accessibilityIdentifier("manageAccounts.liveDrawdown.enable")
-                        .manageAccountFormRow()
-
-                    if enableLiveDrawdownOnCreate {
-                        Picker("Drawdown Type", selection: $liveDrawdownType) {
-                            ForEach(LivePersonalDrawdownType.allCases, id: \.self) { kind in
-                                Text(kind.displayTitle).tag(kind)
-                            }
-                        }
-                        .manageAccountFormRow()
-                        .accessibilityIdentifier("manageAccounts.liveDrawdown.type")
-
-                        accountField("Max Drawdown") {
-                            NumericAdornedTextField(
-                                placeholder: "0",
-                                text: $liveDrawdownLimitDigits,
-                                style: .unsignedCurrency,
-                                adornment: .currencyPrefix
-                            )
-                            .accessibilityIdentifier("manageAccounts.liveDrawdown.limit")
-                        }
-                        .manageAccountFormRow()
-
-                        if liveDrawdownType == .trailing {
-                            accountField("Trailing Drawdown Cap") {
-                                NumericAdornedTextField(
-                                    placeholder: "Optional",
-                                    text: $liveDrawdownFloorCapDigits,
-                                    style: .unsignedCurrency,
-                                    adornment: .currencyPrefix
-                                )
-                                .accessibilityIdentifier("manageAccounts.liveDrawdown.floorCap")
-                            }
-                            .manageAccountFormRow()
-                        }
-                    }
-                } header: {
-                    sectionHeader("Drawdown Settings")
-                } footer: {
-                    if enableLiveDrawdownOnCreate {
-                        Text(
-                            "Informational drawdown floor on the Dashboard equity curve. "
-                                + "You can change these settings later from the equity chart."
-                        )
-                        .experienceStyle(.footnote, color: colors.tertiaryText)
-                    }
-                }
             }
 
             if draft.category == .propFirm {
@@ -432,14 +542,46 @@ struct ManageAccountEditorView: View {
             .padding(.top, -ExperienceSpacing.xxs)
     }
 
+    @ViewBuilder
+    private func accountFieldLabel(
+        title: String,
+        infoTitle: String? = nil,
+        infoBody: String? = nil,
+        infoAccessibilityID: String? = nil
+    ) -> some View {
+        HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
+            Text(title)
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
+            if let infoTitle, let infoBody {
+                AnalyticsMetricInfoButton(
+                    title: infoTitle,
+                    bodyText: infoBody,
+                    accessibilityID: infoAccessibilityID
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func accountField<Content: View>(
         _ title: String,
         caption: String? = nil,
+        infoTitle: String? = nil,
+        infoBody: String? = nil,
+        infoAccessibilityID: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(title)
-                .experienceStyle(.caption, color: colors.secondaryText)
+            accountFieldLabel(
+                title: title,
+                infoTitle: infoTitle,
+                infoBody: infoBody,
+                infoAccessibilityID: infoAccessibilityID
+            )
             content()
             if let caption {
                 Text(caption)
@@ -491,8 +633,14 @@ struct ManageAccountEditorView: View {
 
     private var showsLiveDrawdownOnCreateSection: Bool {
         guard case .create = mode else { return false }
+        if draft.category == .backtest { return true }
         guard draft.category == .personal || draft.category == .broker else { return false }
         return draft.mode == .live
+    }
+
+    private var showsBacktestDrawdownEditSection: Bool {
+        guard case .edit(let account) = mode else { return false }
+        return account.mode == .backtest
     }
 
     private enum LiveDrawdownCreateResolution {
@@ -501,8 +649,37 @@ struct ManageAccountEditorView: View {
         case invalid(String)
     }
 
+    private enum LiveDrawdownEditResolution {
+        case skip
+        case apply(LivePersonalDrawdownConfig)
+        case clear
+        case invalid(String)
+    }
+
+    private func resolveLiveDrawdownForEditBacktest() -> LiveDrawdownEditResolution {
+        switch LivePersonalDrawdownEngine.parseGearDraft(
+            limitDigits: liveDrawdownLimitDigits,
+            limitType: liveDrawdownType,
+            floorCapDigits: liveDrawdownFloorCapDigits,
+            includeFloorCapField: liveDrawdownType == .trailing,
+            limitPolicy: .clearWhenEmptyOrZero
+        ) {
+        case .success(nil):
+            return .clear
+        case .success(let config):
+            guard let config else { return .clear }
+            return .apply(config)
+        case .failure(let error):
+            return .invalid(error.message)
+        }
+    }
+
     private func resolveLiveDrawdownForCreate() -> LiveDrawdownCreateResolution {
-        guard showsLiveDrawdownOnCreateSection, enableLiveDrawdownOnCreate else {
+        guard showsLiveDrawdownOnCreateSection else { return .skip }
+        if draft.category != .backtest, !enableLiveDrawdownOnCreate {
+            return .skip
+        }
+        if draft.category == .backtest, !enableLiveDrawdownOnCreate {
             return .skip
         }
         switch LivePersonalDrawdownEngine.parseGearDraft(
@@ -544,6 +721,19 @@ struct ManageAccountEditorView: View {
             }
         case .edit(let account):
             ok = await viewModel.update(id: account.id, draft: draft)
+            if ok, account.mode == .backtest {
+                switch resolveLiveDrawdownForEditBacktest() {
+                case .skip:
+                    break
+                case .apply(let config):
+                    ok = await viewModel.applyLivePersonalDrawdown(accountID: account.id, config: config)
+                case .clear:
+                    ok = await viewModel.applyLivePersonalDrawdownClearing(accountID: account.id)
+                case .invalid(let message):
+                    viewModel.noteFormValidationError(message)
+                    ok = false
+                }
+            }
             if ok {
                 ok = await viewModel.updateInsightsSettings(
                     accountID: account.id,

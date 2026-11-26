@@ -191,6 +191,16 @@ import { usePlatformPresentation } from "@/app/components/platform/usePlatformPr
 import FeedRightRail from "@/app/components/feed/FeedRightRail"
 import { writeStoriesSession } from "@/lib/storiesSessionCache"
 import { excludeViewerOwnFeedItems } from "@/lib/feedViewerOwnership"
+import {
+  beginFeedRotatingSession,
+  feedContentKey,
+  getFeedRotatingSession,
+  markFeedRotatingV1Fallback,
+  isFeedRankCursor,
+  setFeedScanCursor,
+  resetFeedRotatingSessionForUser,
+} from "@/lib/feedRotatingSession"
+import { useFeedImpressionTracker } from "@/lib/feedImpressionTracker"
 
 const FeedPostOverlays = dynamic(
   () => import("../../components/feed/FeedPostOverlays")
@@ -280,6 +290,11 @@ function FeedPageContent() {
   const reelExhaustedRef = useRef(false)
   /** Backend V2 cursor for feed pages when backendV2.feed is ON. */
   const feedV2CursorRef = useRef<string | null>(null)
+  const [feedImpressionActive, setFeedImpressionActive] = useState(true)
+  const { observeCard: observeFeedImpression } = useFeedImpressionTracker({
+    active: feedImpressionActive,
+    supabase: user?.id ? supabase : null,
+  })
   const userIdRef = useRef<string | null>(null)
   userIdRef.current = user?.id ?? null
 
@@ -290,6 +305,17 @@ function FeedPageContent() {
       setBlockedListRevision((n) => n + 1)
     })
   }, [user?.id])
+
+  useEffect(() => {
+    const sync = () => {
+      setFeedImpressionActive(
+        document.visibilityState === "visible" && pathname.startsWith("/feed")
+      )
+    }
+    sync()
+    document.addEventListener("visibilitychange", sync)
+    return () => document.removeEventListener("visibilitychange", sync)
+  }, [pathname])
 
   useEffect(() => {
     return subscribeBlockedPeerList(() => {
@@ -1304,14 +1330,46 @@ function FeedPageContent() {
           }
           const cursor =
             currentPage === 0 ? null : feedV2CursorRef.current
+
+          const rotatingEnabled = isBackendV2Enabled("feedRotatingRank")
+          let rankSession: {
+            sessionSeed: string
+            rankFrozenAt: string
+            scanCursor: string | null
+          } | null = null
+          if (rotatingEnabled) {
+            if (currentPage === 0) {
+              beginFeedRotatingSession(userId, mode, contentType)
+            }
+            const session = getFeedRotatingSession(userId, mode, contentType)
+            if (session?.usingV2) {
+              rankSession = {
+                sessionSeed: session.sessionId,
+                rankFrozenAt: session.rankFrozenAt,
+                scanCursor: session.scanCursor,
+              }
+            }
+          }
+
           const result = await loadFeedBootstrapForUser(supabase, userId, {
             scope: mode,
             contentFilter: webContentToFilter(contentType),
             cursor,
             limit: FEED_PAGE_SIZE,
             caller: "feed.loadPosts",
+            rankSession,
           })
           if (!isActive()) return
+
+          if (result.rotatingRankFallback) {
+            feedV2CursorRef.current = null
+            pageRef.current = 0
+            setPage(0)
+            markFeedRotatingV1Fallback(userId, mode, contentType)
+            postsRef.current = []
+            setPosts([])
+            mergeBufferRef.current = []
+          }
 
           const bootstrap = result.bootstrap
           const followingIds = bootstrap.data.following_ids_echo.map(String)
@@ -1358,7 +1416,19 @@ function FeedPageContent() {
           }
 
           const list = feedBootstrapToFeedItems(bootstrap, userId)
-          feedV2CursorRef.current = bootstrap.data.next_cursor
+          if (rotatingEnabled && !result.rotatingRankFallback) {
+            const next = bootstrap.data.next_cursor
+            if (next && isFeedRankCursor(next)) {
+              feedV2CursorRef.current = next
+            } else if (next) {
+              feedV2CursorRef.current = null
+              setFeedScanCursor(userId, mode, contentType, next)
+            } else {
+              feedV2CursorRef.current = null
+            }
+          } else {
+            feedV2CursorRef.current = bootstrap.data.next_cursor
+          }
           const more = Boolean(bootstrap.data.page_meta.has_more)
           hasMoreRef.current = more
           setHasMore(more)
@@ -1369,7 +1439,9 @@ function FeedPageContent() {
           }
 
           const painted =
-            currentPage === 0 ? list : [...postsRef.current, ...list]
+            result.rotatingRankFallback || currentPage === 0
+              ? list
+              : [...postsRef.current, ...list]
           const { likesMap, commentCountsMap } =
             feedBootstrapEngagementMaps(bootstrap)
           const mergedLikes = { ...likesByPostRef.current, ...likesMap }
@@ -1706,6 +1778,9 @@ function FeedPageContent() {
     setCommentsByPost({})
     commentCountsByPostRef.current = {}
     feedV2CursorRef.current = null
+    if (userIdRef.current) {
+      resetFeedRotatingSessionForUser(userIdRef.current)
+    }
     commentsLoadedRef.current.clear()
     commentsLoadingRef.current.clear()
     setFeedEmptyState(null)
@@ -3503,6 +3578,7 @@ function FeedPageContent() {
                     onEditReel={handleStartEditReel}
                     onDeleteReel={requestDeleteReel}
                     onReplaceReelVideo={handleReplaceReelVideo}
+                    observeImpression={observeFeedImpression}
                   />
                 </div>
               </>
@@ -3524,6 +3600,7 @@ function FeedPageContent() {
                 onEditReel={handleStartEditReel}
                 onDeleteReel={requestDeleteReel}
                 onReplaceReelVideo={handleReplaceReelVideo}
+                observeImpression={observeFeedImpression}
               />
             )
           ) : null}

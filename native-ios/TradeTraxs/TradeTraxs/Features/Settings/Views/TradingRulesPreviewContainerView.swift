@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Full-screen TraxsPro Trading Rules Analytics preview, sample trades and preferences, no persistence.
 struct TradingRulesPreviewContainerView: View {
-    let data: DataEnvironment
+    let productionData: DataEnvironment
     let onDismiss: () -> Void
 
     @State private var navigationStore = NavigationStore()
@@ -10,8 +10,12 @@ struct TradingRulesPreviewContainerView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(data: DataEnvironment, onDismiss: @escaping () -> Void) {
-        self.data = data
+    private var previewData: DataEnvironment {
+        TraxsProPreviewSession.shared.activePreviewEnvironment?.data ?? productionData
+    }
+
+    init(productionData: DataEnvironment, onDismiss: @escaping () -> Void) {
+        self.productionData = productionData
         self.onDismiss = onDismiss
         let store = NavigationStore()
         store.sessionPhase = .authenticated
@@ -19,7 +23,7 @@ struct TradingRulesPreviewContainerView: View {
         _navigationCoordinator = State(initialValue: NavigationCoordinator(store: store))
         if let viewer = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) }) {
             TraxsProPreviewSession.shared.beginTradingRulesPreview(
-                detailCache: data.detailCache,
+                production: productionData,
                 viewer: viewer
             )
         }
@@ -29,7 +33,7 @@ struct TradingRulesPreviewContainerView: View {
         NavigationStack(path: homePath) {
             TradingRulesComplianceHomeRouteView(
                 navigationCoordinator: navigationCoordinator,
-                data: data
+                data: previewData
             )
             .environment(\.tabIsActive, true)
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -75,7 +79,7 @@ struct TradingRulesPreviewContainerView: View {
             if TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: tradeID) {
                 JournalTradeDetailView(
                     tradeID: tradeID,
-                    data: data,
+                    data: previewData,
                     navigationCoordinator: navigationCoordinator
                 )
             } else {
@@ -85,20 +89,20 @@ struct TradingRulesPreviewContainerView: View {
             TradingRulesRuleDetailView(
                 ruleIDRaw: ruleIDRaw,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: data.detailCache
+                detailCache: previewData.detailCache
             )
         case .tradingRulesDayDetail(let dayKey):
             TradingRulesDayDetailView(
                 dayKey: dayKey,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: data.detailCache
+                detailCache: previewData.detailCache
             )
         case .tradingRulesTrends:
-            TradingRulesComplianceTrendsView()
+            TradingRulesComplianceTrendsView(detailCache: previewData.detailCache)
         case .tradingRulesViolationHistory:
             TradingRulesViolationHistoryGroupsView(
                 navigationCoordinator: navigationCoordinator,
-                detailCache: data.detailCache
+                detailCache: previewData.detailCache
             )
         default:
             previewUnavailable(message: "Exit preview to use other parts of the app.")

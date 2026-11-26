@@ -28,10 +28,12 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         let (eligibleTrades, checkIns, loadedFingerprint, profileID) = try await loadInputs(forceNetwork: forceNetwork)
         let accounts = try await loadAccounts(for: profileID)
         let filters = await ReportsTradeScope.filtersFromSession()
+        let copyGroups = await copyTradingMenuGroups(profileID: profileID)
         let scopedTrades = ReportsTradeScope.scopedTrades(
             from: eligibleTrades,
             accounts: accounts,
-            filters: filters
+            filters: filters,
+            copyTradingGroups: copyGroups
         )
         let scopedCheckIns = ReportsTradeScope.scopedCheckIns(
             checkIns,
@@ -75,10 +77,12 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         let (eligibleTrades, checkIns, _, profileID) = try await loadInputs(forceNetwork: forceNetwork)
         let accounts = try await loadAccounts(for: profileID)
         let filters = await ReportsTradeScope.filtersFromSession()
+        let copyGroups = await copyTradingMenuGroups(profileID: profileID)
         let scopedTrades = ReportsTradeScope.scopedTrades(
             from: eligibleTrades,
             accounts: accounts,
-            filters: filters
+            filters: filters,
+            copyTradingGroups: copyGroups
         )
         let scopedCheckIns = ReportsTradeScope.scopedCheckIns(
             checkIns,
@@ -172,6 +176,12 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
             )
         } catch {
             return nil
+        }
+    }
+
+    private func copyTradingMenuGroups(profileID: ProfileID) async -> [CopyTradingGroup] {
+        await MainActor.run {
+            OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
         }
     }
 

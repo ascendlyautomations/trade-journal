@@ -62,6 +62,7 @@ struct SuggestedTradersView: View {
         .task {
             viewModel.loadIfNeeded()
         }
+        .experienceFormFocusSync($isSearchFocused)
         .accessibilityIdentifier("suggestedTraders.home")
     }
 
@@ -178,18 +179,21 @@ struct SuggestedTradersView: View {
 
     private var filterHeader: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            TextField("Search traders...", text: $viewModel.searchText)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($isSearchFocused)
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.vertical, 10)
-                .experienceFilterSearchField(cornerRadius: ExperienceRadius.sm)
-                .padding(.horizontal, ExperienceSpacing.md)
-                .onChange(of: viewModel.searchText) { _, _ in
-                    viewModel.searchChanged()
-                }
-                .accessibilityIdentifier("suggestedTraders.search")
+            ExperienceSearchField(
+                text: $viewModel.searchText,
+                placeholder: "Search traders...",
+                accessibilityIdentifier: "suggestedTraders.search",
+                cornerRadius: ExperienceRadius.sm,
+                showsSearchIcon: false,
+                showsClearButton: false,
+                showsTrailingCancelWhenActive: true,
+                isFocused: $isSearchFocused,
+                onCancel: cancelSearch
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+            .onChange(of: viewModel.searchText) { _, _ in
+                viewModel.searchChanged()
+            }
 
             SuggestedTraderCategoryFilterBar(
                 selected: viewModel.categoryTab,
@@ -198,6 +202,13 @@ struct SuggestedTradersView: View {
             .padding(.horizontal, ExperienceSpacing.md)
         }
         .padding(.vertical, ExperienceSpacing.sm)
+    }
+
+    private func cancelSearch() {
+        viewModel.searchText = ""
+        viewModel.searchChanged()
+        isSearchFocused = false
+        ExperienceKeyboard.dismissFormKeyboard()
     }
 
     private func traderRow(_ trader: ExploreTraderSuggestion, showsPagination: Bool) -> some View {

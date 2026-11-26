@@ -71,6 +71,8 @@ final class BrokerIntegrationsViewModel {
         isConnecting || isConnectingRithmic || isDisconnecting
     }
     private(set) var isRefreshingAccounts: Set<String> = []
+    /// Connections whose broker-account discovery has finished for the current refresh pass.
+    private var brokerAccountsLoadCompletedConnectionIds: Set<String> = []
     private(set) var importingMappingIds: Set<String> = []
     private(set) var actionMessage: String?
     private(set) var actionIsError = false
@@ -101,6 +103,9 @@ final class BrokerIntegrationsViewModel {
 
     private(set) var importReconnectPrompt: ImportReconnectPrompt?
     private(set) var importRetryPrompt: ImportReconnectPrompt?
+
+    /// Set after OAuth / Rithmic connect succeeds; cleared when the auto-link sheet is scheduled.
+    private(set) var shouldAttemptAutoLinkPrompt = false
 
     var isRithmicConnectUIAvailable: Bool {
         rithmicConnectCapabilitiesPhase == .loaded
@@ -136,18 +141,45 @@ final class BrokerIntegrationsViewModel {
         return unlinkedBrokerAccountsCount == 0
     }
 
-    func firstUnlinkedBrokerAccount() -> (provider: BrokerIntegrationProvider, connectionId: String, account: BrokerIntegrationAccount)? {
+    func firstUnlinkedBrokerAccount(
+        excludingMappingIDs: Set<String> = []
+    ) -> (provider: BrokerIntegrationProvider, connectionId: String, account: BrokerIntegrationAccount)? {
         for connection in tradovateConnections.filter({ $0.isActiveForBrokerUI && $0.connected }) {
-            if let account = accounts(for: connection.id).first(where: { !$0.hasTradetraxsMapping }) {
+            if let account = accounts(for: connection.id).first(where: {
+                !$0.hasTradetraxsMapping && !excludingMappingIDs.contains($0.id)
+            }) {
                 return (.tradovate, connection.id, account)
             }
         }
         for connection in rithmicConnections.filter({ $0.isActiveForBrokerUI && $0.connected }) {
-            if let account = accounts(for: connection.id).first(where: { !$0.hasTradetraxsMapping }) {
+            if let account = accounts(for: connection.id).first(where: {
+                !$0.hasTradetraxsMapping && !excludingMappingIDs.contains($0.id)
+            }) {
                 return (.rithmic, connection.id, account)
             }
         }
         return nil
+    }
+
+    func noteBrokerConnectSucceededForAutoLink() {
+        shouldAttemptAutoLinkPrompt = true
+    }
+
+    func clearAutoLinkPromptRequest() {
+        shouldAttemptAutoLinkPrompt = false
+    }
+
+    /// True while a post-connect auto-link pass is still fetching broker-side accounts.
+    var isDiscoveringBrokerAccountsAfterConnect: Bool {
+        guard shouldAttemptAutoLinkPrompt else { return false }
+        if !isRefreshingAccounts.isEmpty { return true }
+        let active = activeConnectedConnections()
+        guard !active.isEmpty else { return true }
+        return active.contains { !brokerAccountsLoadCompletedConnectionIds.contains($0.id) }
+    }
+
+    var brokerAccountsDiscoveryBusy: Bool {
+        !isRefreshingAccounts.isEmpty || isDiscoveringBrokerAccountsAfterConnect
     }
 
     private func activeConnectedConnections() -> [TradovateConnectionSummary] {
@@ -200,6 +232,7 @@ final class BrokerIntegrationsViewModel {
     private func performRefreshAll(announceChange: Bool) async {
         phase = .loaded
         importingMappingIds.removeAll()
+        brokerAccountsLoadCompletedConnectionIds.removeAll()
 
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.refreshTradovateConnections() }
@@ -207,10 +240,18 @@ final class BrokerIntegrationsViewModel {
             group.addTask { await self.refreshRithmicCapabilities() }
         }
 
+        pruneStaleAccountsByConnection()
         reconcileImportPromptsWithPersistedState()
         if announceChange {
             noteBrokerIntegrationChanged()
         }
+    }
+
+    private func pruneStaleAccountsByConnection() {
+        let validConnectionIds = Set(
+            (tradovateConnections + rithmicConnections).map(\.id)
+        )
+        accountsByConnection = accountsByConnection.filter { validConnectionIds.contains($0.key) }
     }
 
     private func reconcileImportPromptsWithPersistedState() {
@@ -249,7 +290,7 @@ final class BrokerIntegrationsViewModel {
             await loadAccountsInParallel(
                 provider: .tradovate,
                 connections: tradovateConnections.filter(\.isActiveForBrokerUI),
-                forceRefresh: false
+                forceRefresh: shouldAttemptAutoLinkPrompt
             )
         } catch {
             let category = TradovateConnectionDiagnostics.safeFailureCategory(for: error)
@@ -381,6 +422,7 @@ final class BrokerIntegrationsViewModel {
                 switch outcome {
                 case .success:
                     oauthErrorMessage = nil
+                    noteBrokerConnectSucceededForAutoLink()
                     await refreshAll()
                     presentMessage("Tradovate connected.", error: false)
                 case .cancelled:
@@ -446,6 +488,7 @@ final class BrokerIntegrationsViewModel {
                 rithmicSystemChoices = []
                 rithmicReconnectConnectionId = nil
                 showsRithmicConnectSheet = false
+                noteBrokerConnectSucceededForAutoLink()
                 await refreshAll()
                 if await resumeBrokerImportAfterRithmicReconnect(reconnectedConnectionId: reconnectedConnectionId) {
                     return
@@ -529,7 +572,10 @@ final class BrokerIntegrationsViewModel {
 
     func loadAccounts(provider: BrokerIntegrationProvider, connectionId: String, forceRefresh: Bool) async {
         isRefreshingAccounts.insert(connectionId)
-        defer { isRefreshingAccounts.remove(connectionId) }
+        defer {
+            isRefreshingAccounts.remove(connectionId)
+            brokerAccountsLoadCompletedConnectionIds.insert(connectionId)
+        }
         do {
             let payload: TradovateConnectionAccountsResponse
             switch provider {
@@ -1090,6 +1136,7 @@ final class BrokerIntegrationsViewModel {
     func handleOAuthDeepLink(status: String?, reason: String?) async {
         if status == "success" {
             oauthErrorMessage = nil
+            noteBrokerConnectSucceededForAutoLink()
             await refreshAll()
             presentMessage("Tradovate connected.", error: false)
         } else if status == "error" {

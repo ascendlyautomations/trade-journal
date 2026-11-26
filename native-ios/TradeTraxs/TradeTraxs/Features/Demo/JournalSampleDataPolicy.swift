@@ -13,10 +13,7 @@ nonisolated enum JournalSampleDataPolicy {
 
     /// Local Explore demo identity (bundled guest journal).
     static func usesCanonicalJournalData(for profileID: ProfileID) -> Bool {
-        if profileID == DemoExperienceSupport.profileID {
-            return true
-        }
-        return TraxsProPreviewRuntimeFlag.usesCanonicalJournalSampleData
+        profileID == DemoExperienceSupport.profileID
     }
 
     static var canonicalTradeIDs: Set<TradeID> {

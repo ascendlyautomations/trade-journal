@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Shared pinch/drag crop editor, WYSIWYG aspect-fill viewport; preview and export share one transform.
+/// Shared pinch/drag crop editor; preview and export share one transform.
 struct ImageCropEditorView: View {
     let sourceImage: UIImage
     let preset: ImageCropEditorPreset
@@ -55,7 +55,11 @@ struct ImageCropEditorView: View {
         MediaImageOrientation.aspectRatio(of: sourceImage)
     }
 
-    /// Aspect-fill pan/pinch for the selected 1:1, 4:5, or 16:9 frame.
+    private var viewportPolicy: ImageCropViewportPolicy {
+        preset.viewportPolicy
+    }
+
+    /// Pan/pinch for the selected 1:1, 4:5, or 16:9 frame.
     private var usesInteractiveCrop: Bool {
         FeedMediaLayout.requiresFillCrop(
             imageAspect: imageAspect,
@@ -151,8 +155,11 @@ struct ImageCropEditorView: View {
         .frame(maxWidth: .infinity)
         .frame(height: editorViewportHeightEstimate(forWidth: max(UIScreen.main.bounds.width - 32, 1)))
         .onPreferenceChange(CropViewportSizePreferenceKey.self) { size in
-            if size.width > 0, size.height > 0 {
-                activeViewportSize = size
+            guard size.width > 0, size.height > 0 else { return }
+            let needsInitialTransform = activeViewportSize.width <= 0
+            activeViewportSize = size
+            if needsInitialTransform {
+                applyDefaultTransform(for: size)
             }
         }
     }
@@ -214,7 +221,7 @@ struct ImageCropEditorView: View {
                             startUserScale: pinchSessionStartZoom,
                             startTranslation: pinchSessionStartTranslation,
                             magnification: magnification,
-                            maxUserScale: preset.maxZoom
+                            policy: viewportPolicy
                         )
                         #if DEBUG
                         CropTransformProbe.log(
@@ -256,7 +263,7 @@ struct ImageCropEditorView: View {
             viewportSize: viewportSize,
             userScale: transform.zoom,
             translation: transform.offset,
-            maxUserScale: preset.maxZoom
+            policy: viewportPolicy
         )
     }
 
@@ -270,15 +277,28 @@ struct ImageCropEditorView: View {
             viewportSize: viewportSize,
             userScale: userScale,
             translation: translation,
-            maxUserScale: preset.maxZoom
+            policy: viewportPolicy
         )
     }
 
+    private func applyDefaultTransform(for viewport: CGSize) {
+        guard viewport.width > 0, viewport.height > 0 else { return }
+        if preset.usesFreeContentZoom {
+            transform = ImageCropViewportMath.defaultContentTransform(
+                imagePixelSize: imagePixelSize,
+                viewportSize: viewport,
+                policy: viewportPolicy
+            )
+        } else {
+            transform = .default
+        }
+        panSessionStartTranslation = transform.offset
+        pinchSessionStartZoom = transform.zoom
+        pinchSessionStartTranslation = transform.offset
+    }
+
     private func resetTransform() {
-        transform = .default
-        panSessionStartTranslation = .zero
-        pinchSessionStartZoom = 1
-        pinchSessionStartTranslation = .zero
+        applyDefaultTransform(for: resolvedViewportSize())
         isPinchActive = false
     }
 
@@ -324,7 +344,8 @@ struct ImageCropEditorView: View {
             guard let exported = ImageCropRenderer.exportFeedCrop(
                 sourceImage: sourceImage,
                 aspectOption: aspectOption,
-                geometry: geometry
+                geometry: geometry,
+                policy: viewportPolicy
             ) else { return }
             onConfirmFeed(
                 ImageCropSelectionResult(

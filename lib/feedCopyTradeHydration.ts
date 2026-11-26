@@ -58,7 +58,7 @@ export async function hydrateCopyTradeFeedPosts<
     let query = client
       .from("trades")
       .select(
-        "id, user_id, trade_mode, mode, account_type, account_id, source_account_id, copied_account_ids, copy_trading_group_id, created_at, entry_time, trade_date, ticker"
+        "id, user_id, trade_mode, mode, account_type, account_id, account_mode, source_account_id, copied_account_ids, copy_trading_group_id, created_at, entry_time, trade_date, ticker, participating_account_modes"
       )
       .eq("user_id", sig.userId)
       .eq("trade_mode", "copy_traded")

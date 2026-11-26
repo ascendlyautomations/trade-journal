@@ -43,6 +43,9 @@ nonisolated enum DashboardAnalyticsMapper {
             let charts = accountCharts?[key]
             let bundle = composeAccountBundle(metrics: metricsPreset, charts: charts)
             return .account(bundle, metricsSource: .accountPresetMetrics)
+        case .copyTradingAll, .copyTradingGroup:
+            let scope = DashboardAccountFilterCopyTradingSupport.persistenceKey(for: accountFilter)
+            return .accountMetricsMissing(accountID: scope, preset: key)
         }
     }
 

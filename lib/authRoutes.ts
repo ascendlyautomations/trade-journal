@@ -55,6 +55,13 @@ export function isPreCheckoutRoute(pathname: string | null | undefined): boolean
   return matchesPrefix(pathname, PRE_CHECKOUT_ROUTE_PREFIXES)
 }
 
+/** Public SSR pages that skip the authenticated app document shell. */
+export function isMinimalPublicDocumentRoute(
+  pathname: string | null | undefined,
+): boolean {
+  return pathname === "/download"
+}
+
 /**
  * Signup → onboarding → checkout flow.
  * No marketing navbar, demo banner, or app header offset.
@@ -63,6 +70,7 @@ export function isStandaloneFlowRoute(pathname: string | null | undefined): bool
   if (!pathname) return false
   return (
     pathname === "/native" ||
+    isMinimalPublicDocumentRoute(pathname) ||
     isAuthRoute(pathname) ||
     isOnboardingRoute(pathname) ||
     isPreCheckoutRoute(pathname)

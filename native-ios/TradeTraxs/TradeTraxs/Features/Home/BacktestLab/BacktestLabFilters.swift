@@ -54,9 +54,15 @@ nonisolated enum BacktestLabFilters {
         _ filter: DashboardAccountFilter,
         eligibleAccounts: [TradingAccount]
     ) -> DashboardAccountFilter {
-        guard case .account(let id) = filter else { return .all }
-        guard eligibleAccounts.contains(where: { $0.id == id }) else { return .all }
-        return filter
+        switch filter {
+        case .copyTradingAll, .copyTradingGroup:
+            return .all
+        case .all:
+            return .all
+        case .account(let id):
+            guard eligibleAccounts.contains(where: { $0.id == id }) else { return .all }
+            return filter
+        }
     }
 
     static func apply(
@@ -66,6 +72,7 @@ nonisolated enum BacktestLabFilters {
         timeFilter: BacktestLabTimeFilter,
         customInterval: DateInterval?,
         backtestModeAccountIDs: Set<TradingAccountID> = [],
+        copyTradingGroups: [CopyTradingGroup] = [],
         now: Date = Date()
     ) -> [Trade] {
         var result = trades
@@ -75,8 +82,15 @@ nonisolated enum BacktestLabFilters {
                 return backtestModeAccountIDs.contains(accountID)
             }
         }
-        if case .account(let id) = accountFilter {
-            result = result.filter { $0.accountID == id }
+        result = result.filter {
+            DashboardAccountFilterCopyTradingSupport.matchesTrade(
+                $0,
+                filter: accountFilter,
+                copyGroups: copyTradingGroups
+            )
+        }
+        if DashboardAccountFilterCopyTradingSupport.shouldDedupeCopyMetrics(for: accountFilter) {
+            result = DashboardAccountFilterCopyTradingSupport.dedupeCopyTradedTradesForMetrics(result)
         }
         result = BacktestLabMetrics.filter(result, strategy: strategy)
         result = filterByTime(result, timeFilter: timeFilter, customInterval: customInterval, now: now)
@@ -96,6 +110,77 @@ nonisolated enum BacktestLabFilters {
             return "\(start) – \(end)"
         }
         return timeFilter.compactTitle
+    }
+
+    /// Applies account, strategy, and backtest account scope without time filtering (equity / drawdown lifetime).
+    static func lifetimeScopedTrades(
+        _ trades: [Trade],
+        accountFilter: DashboardAccountFilter,
+        strategy: String,
+        backtestModeAccountIDs: Set<TradingAccountID>,
+        copyTradingGroups: [CopyTradingGroup] = [],
+        now: Date = Date()
+    ) -> [Trade] {
+        apply(
+            trades,
+            accountFilter: accountFilter,
+            strategy: strategy,
+            timeFilter: .allTime,
+            customInterval: nil,
+            backtestModeAccountIDs: backtestModeAccountIDs,
+            copyTradingGroups: copyTradingGroups,
+            now: now
+        )
+    }
+
+    /// Chart / drawdown period window; `nil` = all time (still uses lifetime trades for opening balance).
+    static func resolvedChartInterval(
+        timeFilter: BacktestLabTimeFilter,
+        customInterval: DateInterval?,
+        now: Date = Date()
+    ) -> DateInterval? {
+        switch timeFilter {
+        case .allTime:
+            return nil
+        case .custom:
+            guard let customInterval else { return nil }
+            return DashboardScopeFilterSupport.normalizedCustomInterval(
+                start: customInterval.start,
+                end: customInterval.end
+            )
+        default:
+            guard let bounds = dayKeyBounds(for: timeFilter, customInterval: nil, now: now),
+                  let startKey = bounds.start,
+                  let endKey = bounds.end
+            else { return nil }
+            return civilDayInterval(startKey: startKey, endKey: endKey)
+        }
+    }
+
+    private static func civilDayInterval(startKey: String, endKey: String) -> DateInterval? {
+        guard let startComps = TradingCalendarDay.components(from: startKey),
+              let endComps = TradingCalendarDay.components(from: endKey)
+        else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TradingCalendarDay.timeZone
+        guard
+            let startDay = calendar.date(from: DateComponents(
+                year: startComps.year,
+                month: startComps.month,
+                day: startComps.day,
+                hour: 0,
+                minute: 0
+            )),
+            let endDay = calendar.date(from: DateComponents(
+                year: endComps.year,
+                month: endComps.month,
+                day: endComps.day,
+                hour: 23,
+                minute: 59,
+                second: 59
+            ))
+        else { return nil }
+        return DateInterval(start: startDay, end: endDay)
     }
 
     static func filterByTime(

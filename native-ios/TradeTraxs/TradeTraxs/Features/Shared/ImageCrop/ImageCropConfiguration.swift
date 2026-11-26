@@ -110,6 +110,55 @@ nonisolated enum ImageCropEditorPreset: Sendable {
     }
 
     var maxZoom: CGFloat { ImageCropMath.maxZoom }
+
+    /// Trades, posts, and achievements: fit-relative zoom with letterboxing. Avatar/room unchanged.
+    var usesFreeContentZoom: Bool {
+        switch self {
+        case .socialContent, .tradeScreenshot: return true
+        case .avatar, .room: return false
+        }
+    }
+
+    var viewportPolicy: ImageCropViewportPolicy {
+        usesFreeContentZoom ? .contentFree : .coverLocked
+    }
+}
+
+/// Pinch/pan rules for the crop viewport (preview and export).
+nonisolated struct ImageCropViewportPolicy: Equatable, Sendable {
+    enum Baseline: Equatable, Sendable {
+        /// User scale 1 = minimum cover (legacy avatar / room).
+        case aspectFill
+        /// User scale 1 = entire image fits in the frame (content uploads).
+        case aspectFit
+    }
+
+    var baseline: Baseline
+    var minUserScale: CGFloat
+    var maxUserScale: CGFloat
+    /// When the image is smaller than the viewport, allow pan instead of force-centering.
+    var allowsFreePanWhenLetterboxed: Bool
+    /// Composite the full viewport (gutters + image) for export WYSIWYG.
+    var usesCompositorExport: Bool
+
+    static let coverLocked = ImageCropViewportPolicy(
+        baseline: .aspectFill,
+        minUserScale: 1,
+        maxUserScale: ImageCropMath.maxZoom,
+        allowsFreePanWhenLetterboxed: false,
+        usesCompositorExport: false
+    )
+
+    static let contentFree = ImageCropViewportPolicy(
+        baseline: .aspectFit,
+        minUserScale: ImageCropViewportPolicy.contentMinZoom,
+        maxUserScale: ImageCropMath.maxZoom,
+        allowsFreePanWhenLetterboxed: true,
+        usesCompositorExport: true
+    )
+
+    /// Matches `StoryEditorViewModel` lower bound.
+    static let contentMinZoom: CGFloat = 0.15
 }
 
 nonisolated struct ImageCropTransform: Equatable, Sendable {

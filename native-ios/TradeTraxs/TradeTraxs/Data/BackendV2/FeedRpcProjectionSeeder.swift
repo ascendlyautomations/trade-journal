@@ -303,6 +303,14 @@ enum FeedRpcProjectionSeeder {
             ?? ISO8601.date(from: dto.created_at)
             ?? Date()
 
+        let accountID = dto.account_id.map { TradingAccountID($0) }
+        let sanitizedFirm = AchievementDetailPresentation.sanitizedStoredFirm(
+            raw: dto.firm,
+            accountID: accountID,
+            linkedAccountName: dto.account_name,
+            kind: kind
+        )
+
         return Achievement(
             id: AchievementID(id),
             ownerProfileID: ProfileID(owner),
@@ -312,8 +320,8 @@ enum FeedRpcProjectionSeeder {
             tier: AchievementTier(rawValue: (dto.tier ?? "").lowercased()) ?? .bronze,
             value: value,
             valueText: dto.value_text,
-            firm: dto.firm,
-            accountID: dto.account_id.map { TradingAccountID($0) },
+            firm: sanitizedFirm,
+            accountID: accountID,
             image: ContentImagePresentation.mediaReference(url: imageURL, crop: dto.image_crop),
             isPublic: dto.is_public ?? true,
             isFeatured: dto.is_featured ?? false,

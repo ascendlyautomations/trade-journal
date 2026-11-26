@@ -79,6 +79,15 @@ final class StoryReplyMessageSupportTests: XCTestCase {
         )
     }
 
+    func testProvisionalStoryMarksVideoFromURL() {
+        let payload = StoryReplyMessageSupport.decode(
+            from: samplePayloadJSON(imageURL: "https://cdn.example/story.mp4")
+        )!
+        let story = StoryReplyMessageSupport.provisionalStory(from: payload)
+        XCTAssertEqual(story.media.kind, .video)
+        XCTAssertTrue(StoryReplyMessageSupport.isVideoMediaURL(payload.storyImageURL))
+    }
+
     func testConversationInboxActivityPreviewForStoryReplyMessage() {
         let message = Message(
             id: MessageID("m-story"),

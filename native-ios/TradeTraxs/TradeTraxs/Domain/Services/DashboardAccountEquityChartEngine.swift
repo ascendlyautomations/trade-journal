@@ -51,11 +51,14 @@ nonisolated enum DashboardAccountEquityChartEngine {
         ledgerEntries: [AccountPayoutEntry],
         payoutCycles: [AccountPayoutCycle],
         period: PeriodContext,
-        granularityOverride: Granularity? = nil
+        granularityOverride: Granularity? = nil,
+        includesBacktestTrades: Bool = false
     ) -> [EquitySample] {
         let startingBalance = PropFirmMetrics.parseAccountSize(account.size)
         let accountID = account.id
-        let lifetime = lifetimeTrades.filter { $0.accountID == accountID && $0.mode != .backtest }
+        let lifetime = lifetimeTrades.filter {
+            $0.accountID == accountID && tradeMatchesEnginePolicy($0, includesBacktestTrades: includesBacktestTrades)
+        }
         guard !lifetime.isEmpty || !ledgerEntries.isEmpty || !payoutCycles.isEmpty else {
             if startingBalance > 0 {
                 return [EquitySample(date: period.now, equity: startingBalance, drawdownFloor: nil)]
@@ -120,9 +123,12 @@ nonisolated enum DashboardAccountEquityChartEngine {
         lifetimeTrades: [Trade],
         ledgerEntries: [AccountPayoutEntry],
         payoutCycles: [AccountPayoutCycle],
-        period: PeriodContext
+        period: PeriodContext,
+        includesBacktestTrades: Bool = false
     ) -> [EquitySample] {
-        let lifetime = lifetimeTrades.filter { $0.mode != .backtest }
+        let lifetime = lifetimeTrades.filter {
+            tradeMatchesEnginePolicy($0, includesBacktestTrades: includesBacktestTrades)
+        }
         let startingBalance = accounts.reduce(Decimal.zero) {
             $0 + PropFirmMetrics.parseAccountSize($1.size)
         }
@@ -198,6 +204,16 @@ nonisolated enum DashboardAccountEquityChartEngine {
                 payoutCycles: cycles,
                 period: period,
                 granularityOverride: .tradeLevel
+            )
+        case .copyTradingAll, .copyTradingGroup:
+            let accountIDs = Set(lifetimeTrades.compactMap(\.accountID))
+            let scopedAccounts = accounts.filter { accountIDs.contains($0.id) }
+            return computeAllAccountsEquitySeries(
+                accounts: scopedAccounts,
+                lifetimeTrades: lifetimeTrades,
+                ledgerEntries: ledgerEntries,
+                payoutCycles: payoutCycles,
+                period: period
             )
         }
     }
@@ -526,5 +542,12 @@ nonisolated enum DashboardAccountEquityChartEngine {
         let left = DashboardScopeFilterSupport.dashboardTradeFilterDate(for: lhs)
         let right = DashboardScopeFilterSupport.dashboardTradeFilterDate(for: rhs)
         return left < right
+    }
+
+    private static func tradeMatchesEnginePolicy(_ trade: Trade, includesBacktestTrades: Bool) -> Bool {
+        if includesBacktestTrades {
+            return trade.mode == .backtest
+        }
+        return trade.mode != .backtest
     }
 }

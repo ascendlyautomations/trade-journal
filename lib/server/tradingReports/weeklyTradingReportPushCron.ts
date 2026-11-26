@@ -3,6 +3,8 @@ import { isDemoUserId } from "@/lib/demo/constants"
 import { notify } from "@/lib/server/notifications/NotificationService"
 import { saturdayCurrentWeekReport } from "@/lib/tradingReports/tradingReportPeriods"
 import { isWeeklyTradingReportPushWindow } from "@/lib/server/tradingReports/weeklyTradingReportPushWindow"
+import { shouldSkipWeeklyTradingReportServerPushForUser } from "@/lib/server/tradingReports/weeklyTradingReportPushIosProSkip"
+import { loadTraxProEntitlementSnapshot } from "@/lib/traxProEntitlement"
 
 const WEEKLY_TITLE = "Your Weekly Trading Report is Ready"
 
@@ -39,6 +41,7 @@ export type WeeklyTradingReportPushResult = {
   pushRetried?: number
   pushPending?: number
   preferenceSkipped?: number
+  proSkipped?: number
   failed?: number
 }
 
@@ -49,10 +52,22 @@ async function notifyEligibleUser(
   | "sent"
   | "deduped"
   | "preferences"
+  | "pro_required"
+  | "ios_local"
   | "push_retried"
   | "push_pending"
   | "failed"
 > {
+  const entitlement = await loadTraxProEntitlementSnapshot(
+    supabaseServiceRole,
+    userId
+  )
+  if (!entitlement.ok || !entitlement.snapshot.traxProActive) {
+    return "pro_required"
+  }
+  if (await shouldSkipWeeklyTradingReportServerPushForUser(userId)) {
+    return "ios_local"
+  }
   const result = await notify({
     type: "trading_report",
     actorUserId: userId,
@@ -78,12 +93,16 @@ function tallyResult(
     pushRetried: number
     pushPending: number
     preferenceSkipped: number
+    proSkipped: number
+    iosLocalSkipped: number
     failed: number
   }
 ) {
   if (outcome === "failed") counts.failed += 1
   else if (outcome === "deduped") counts.deduped += 1
   else if (outcome === "preferences") counts.preferenceSkipped += 1
+  else if (outcome === "pro_required") counts.proSkipped += 1
+  else if (outcome === "ios_local") counts.iosLocalSkipped += 1
   else if (outcome === "push_retried") counts.pushRetried += 1
   else if (outcome === "push_pending") counts.pushPending += 1
   else counts.sent += 1
@@ -116,6 +135,8 @@ export async function runWeeklyTradingReportPushForUser(
     pushRetried: 0,
     pushPending: 0,
     preferenceSkipped: 0,
+    proSkipped: 0,
+    iosLocalSkipped: 0,
     failed: 0,
   }
   tallyResult(await notifyEligibleUser(userId, target), counts)
@@ -145,6 +166,8 @@ export async function runWeeklyTradingReportPushCron(
     pushRetried: 0,
     pushPending: 0,
     preferenceSkipped: 0,
+    proSkipped: 0,
+    iosLocalSkipped: 0,
     failed: 0,
   }
 

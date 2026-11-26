@@ -1,7 +1,16 @@
 import Foundation
 
+/// Owner Trades list + trade detail copy-trade context (display only).
+nonisolated struct CopyTradeOwnerJournalDisplay: Equatable, Sendable {
+    var headerTitle: String
+    var visibleAccountLines: [String]
+    var overflowSummary: String?
+}
+
 /// Copy-trade grouping + public summaries, mirrors web `copyTradePresentation.ts`.
 nonisolated enum CopyTradePresentation {
+    static let ownerVisibleAccountLineLimit = 2
+
     struct ModeCounts: Equatable, Sendable {
         var live = 0
         var funded = 0
@@ -182,6 +191,20 @@ nonisolated enum CopyTradePresentation {
     }
 
     /// Stable key for one copy-trade journal action (sibling rows share this).
+    static func batchKey(for trade: Trade) -> String? {
+        guard isCopyTraded(tradeMode: trade.mode) else { return nil }
+        let metadata = trade.copyTrade
+        return batchKey(
+            userID: trade.ownerProfileID.rawValue,
+            sourceAccountID: metadata?.sourceAccountID?.rawValue,
+            copiedAccountIDs: metadata?.copiedAccountIDs.map(\.rawValue) ?? [],
+            rowAccountID: trade.accountID?.rawValue,
+            ticker: trade.symbol.ticker,
+            entryAt: trade.entryAt,
+            createdAt: trade.createdAt
+        )
+    }
+
     static func batchKey(for item: TradeOwnerJournalSummary) -> String? {
         guard isCopyTraded(tradeMode: item.summary.mode) else { return nil }
         let metadata = item.copyTrade
@@ -270,6 +293,117 @@ nonisolated enum CopyTradePresentation {
             parts.append(suffix)
         }
         return parts.joined(separator: TradingAccountDisplay.separator)
+    }
+
+    static func copyTradingGroupName(
+        members: [TradeOwnerJournalSummary],
+        copyGroups: [CopyTradingGroup]
+    ) -> String? {
+        let groupID = mergedCopyMetadata(from: members)?.copyTradingGroupID?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let groupID, !groupID.isEmpty else { return nil }
+        let name = copyGroups.first(where: { $0.id == groupID })?.name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let name, !name.isEmpty else { return nil }
+        return name
+    }
+
+    static func ownerJournalHeaderTitle(
+        groupName: String?,
+        participatingAccountCount: Int
+    ) -> String {
+        let count = max(participatingAccountCount, 1)
+        var title = "Copy Traded X\(count)"
+        if let groupName, !groupName.isEmpty {
+            title += " (\(groupName))"
+        }
+        return title
+    }
+
+    /// `+2 Funded Accounts`, `+3 Evaluations`, or `+4 Accounts` for overflow rows (max two shown).
+    static func ownerOverflowAccountSummary(accountModes: [TradingAccountMode?]) -> String? {
+        let count = accountModes.count
+        guard count > 0 else { return nil }
+        let resolved = accountModes.compactMap { $0 }
+        guard resolved.count == count else {
+            return count == 1 ? "+1 Account" : "+\(count) Accounts"
+        }
+        let allFunded = resolved.allSatisfy { $0 == .funded }
+        if allFunded {
+            return count == 1 ? "+1 Funded Account" : "+\(count) Funded Accounts"
+        }
+        let allEval = resolved.allSatisfy { $0 == .evaluation }
+        if allEval {
+            return count == 1 ? "+1 Evaluation" : "+\(count) Evaluations"
+        }
+        return count == 1 ? "+1 Account" : "+\(count) Accounts"
+    }
+
+    static func ownerJournalDisplay(
+        members: [TradeOwnerJournalSummary],
+        accounts: [TradingAccount],
+        copyGroups: [CopyTradingGroup] = []
+    ) -> CopyTradeOwnerJournalDisplay? {
+        guard let first = members.first,
+              isCopyTraded(tradeMode: first.summary.mode)
+        else { return nil }
+
+        let orderedIDs = participatingAccountIDsForCopyGroup(members)
+        guard !orderedIDs.isEmpty else { return nil }
+
+        let groupName = copyTradingGroupName(members: members, copyGroups: copyGroups)
+        let allLines = participatingAccountLines(
+            orderedIDs: orderedIDs,
+            members: members,
+            accounts: accounts
+        )
+        let visible = Array(allLines.prefix(ownerVisibleAccountLineLimit))
+        let overflowIDs = Array(orderedIDs.dropFirst(ownerVisibleAccountLineLimit))
+        let modesByID = participatingAccountModesByID(from: members)
+        let accountByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
+        let overflowModes: [TradingAccountMode?] = overflowIDs.map { accountID in
+            if let account = accountByID[accountID] { return account.mode }
+            return accountMode(in: modesByID, for: accountID)
+                ?? members.first(where: { $0.accountID == accountID })?.summary.accountMode
+        }
+        let overflowSummary = ownerOverflowAccountSummary(accountModes: overflowModes)
+
+        return CopyTradeOwnerJournalDisplay(
+            headerTitle: ownerJournalHeaderTitle(
+                groupName: groupName,
+                participatingAccountCount: orderedIDs.count
+            ),
+            visibleAccountLines: visible,
+            overflowSummary: overflowSummary
+        )
+    }
+
+    static func participatingAccountLines(
+        orderedIDs: [TradingAccountID],
+        members: [TradeOwnerJournalSummary],
+        accounts: [TradingAccount]
+    ) -> [String] {
+        orderedIDs.map { accountID in
+            let member = members.first { $0.accountID == accountID }
+            return ownerJournalAccountLine(
+                accountID: accountID,
+                member: member,
+                accounts: accounts
+            )
+        }
+    }
+
+    static func ownerJournalMembers(
+        for trade: Trade,
+        ownerTrades: [Trade]
+    ) -> [TradeOwnerJournalSummary] {
+        guard isCopyTraded(tradeMode: trade.mode) else { return [] }
+        let journals = ownerTrades.map(TradeSummaryMapper.ownerJournal(fromListTrade:))
+        if let key = batchKey(for: trade) {
+            let siblings = journals.filter { batchKey(for: $0) == key }
+            if !siblings.isEmpty { return siblings }
+        }
+        return [TradeSummaryMapper.ownerJournal(fromListTrade: trade)]
     }
 
     /// Mode count segment only, `1 Live • 2 Funded` (Live → Funded → Eval → Sim → Backtest).

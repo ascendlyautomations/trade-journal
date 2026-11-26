@@ -327,10 +327,21 @@ nonisolated enum TradeHistoryLocalMatch {
         let filters = query.filters
         if trade.mode == .backtest { return false }
 
-        if case .account(let id) = filters.account,
-           !CopyTradePresentation.matchesParticipatingAccountFilter(trade: trade, accountID: id)
-        {
-            return false
+        switch filters.account {
+        case .all:
+            break
+        case .account(let id):
+            if !CopyTradePresentation.matchesParticipatingAccountFilter(trade: trade, accountID: id) {
+                return false
+            }
+        case .copyTradingAll, .copyTradingGroup:
+            if !DashboardAccountFilterCopyTradingSupport.matchesTrade(
+                trade,
+                filter: filters.account,
+                copyGroups: context.copyTradingGroups
+            ) {
+                return false
+            }
         }
 
         let bounds = filters.createdAtBounds()

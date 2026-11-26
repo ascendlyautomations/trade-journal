@@ -1611,13 +1611,15 @@ final class AddTradeViewModel {
         guard let viewerID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
-        let path = StorageOptimizedMedia.objectPath(prefix: viewerID.rawValue, fileExtension: "jpg")
+        let contentType = MediaImagePreparation.contentType(forUploadData: data)
+        let fileExtension = MediaImagePreparation.fileExtension(forUploadData: data)
+        let path = StorageOptimizedMedia.objectPath(prefix: viewerID.rawValue, fileExtension: fileExtension)
         let reference = try await uploadService.upload(
             UploadRequest(
                 bucket: StorageBucket.screenshots.rawValue,
                 path: path,
                 data: data,
-                contentType: "image/jpeg",
+                contentType: contentType,
                 purpose: .tradeScreenshot
             )
         )

@@ -12,7 +12,7 @@ struct CropViewportGeometry: Equatable {
         viewportSize: CGSize,
         userScale: CGFloat,
         translation: CGSize,
-        maxUserScale: CGFloat = ImageCropViewportMath.maxUserScale
+        policy: ImageCropViewportPolicy = .coverLocked
     ) {
         self.sourcePixelSize = sourcePixelSize
         self.viewportSize = viewportSize
@@ -21,7 +21,7 @@ struct CropViewportGeometry: Equatable {
             viewportSize: viewportSize,
             userScale: userScale,
             translation: translation,
-            maxUserScale: maxUserScale
+            policy: policy
         )
     }
 

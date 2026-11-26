@@ -86,6 +86,10 @@ struct BacktestLabView: View {
             guard !restrictsBacktestLab else { return }
             viewModel.handleAccountMutation()
         }
+        .onCopyTradingGroupsMutation {
+            guard !restrictsBacktestLab else { return }
+            viewModel.handleCopyTradingGroupsMutation()
+        }
         .confirmationDialog(
             "Delete this backtest?",
             isPresented: Binding(
@@ -115,6 +119,30 @@ struct BacktestLabView: View {
             set: { viewModel.showsCustomTimeSheet = $0 }
         )) {
             BacktestLabCustomTimeRangeSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $viewModel.showsEquityDrawdownSettings) {
+            if let account = viewModel.selectedAccount {
+                DashboardEquityDrawdownSettingsSheet(
+                    accountName: account.name,
+                    limitDigits: $viewModel.equityDrawdownLimitDraft,
+                    limitType: $viewModel.equityDrawdownTypeDraft,
+                    floorCapDigits: $viewModel.equityDrawdownFloorCapDraft,
+                    isSaving: viewModel.isSavingEquityDrawdownSettings,
+                    errorMessage: viewModel.equityDrawdownSettingsError,
+                    onSave: { Task { await viewModel.saveEquityDrawdownSettings() } },
+                    onCancel: viewModel.cancelEquityDrawdownSettings
+                )
+            }
+        }
+        .sheet(item: $viewModel.activeDrillDown) { drillDown in
+            BacktestLabDrillDownSheet(
+                title: drillDown.title,
+                items: viewModel.drillDownJournalItems,
+                imagePipeline: imagePipeline,
+                accountName: { viewModel.displayAccountTitle(for: $0) },
+                onSelect: { viewModel.openTrade($0) },
+                onDismiss: { viewModel.dismissDrillDown() }
+            )
         }
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
             entitlementGateRevision += 1
@@ -188,15 +216,121 @@ struct BacktestLabView: View {
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.top, ExperienceSpacing.xs)
 
-                BacktestLabMetricsGrid(snapshot: viewModel.metrics)
-
-                strategySection
-                    .padding(.horizontal, ExperienceSpacing.md)
+                if let summary = viewModel.dashboardSummary,
+                   summary.tradeCount > 0 || !viewModel.equityChartPoints.isEmpty
+                {
+                    dashboardAnalyticsContent(summary: summary)
+                } else if viewModel.filteredTrades.isEmpty {
+                    emptyAnalyticsPlaceholder
+                } else {
+                    ExperienceListSkeleton(style: .tradeCard, rowCount: 2)
+                }
 
                 tradesSection
                     .padding(.horizontal, ExperienceSpacing.md)
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
+        }
+    }
+
+  @ViewBuilder
+    private func dashboardAnalyticsContent(summary: DashboardChartMetrics.Summary) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            DashboardEquityHero(
+                summary: summary,
+                periodTitle: viewModel.timeMenuTitle,
+                title: viewModel.equityHeroTitle,
+                displayEquity: viewModel.equityHeroDisplayValue,
+                chartPoints: viewModel.equityChartPoints,
+                showsDrawdownSettings: viewModel.canConfigureEquityDrawdownSettings,
+                onDrawdownSettingsTap: { viewModel.openEquityDrawdownSettings() }
+            )
+
+            DashboardMetricStrip(chips: viewModel.metricChips)
+                .padding(.horizontal, ExperienceSpacing.md)
+
+            backtestPerformanceCardsGrid
+                .padding(.horizontal, ExperienceSpacing.md)
+
+            DashboardChartsSection(
+                summary: summary,
+                onBrowseWins: { viewModel.browseWins() },
+                onBrowseLosses: { viewModel.browseLosses() },
+                onBrowseSession: { viewModel.browseSession($0) },
+                onBrowseWeekday: { viewModel.browseWeekday(label: $0) },
+                onBrowseHour: { viewModel.browseHour(label: $0) },
+                onBrowseLong: { viewModel.browseLong() },
+                onBrowseShort: { viewModel.browseShort() },
+                onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) },
+                premiumChartsPresentation: .unrestricted
+            )
+
+            DashboardInsightsSection(presentation: viewModel.insightsPresentation)
+
+            BacktestLabLeaderboardSection(
+                title: "Strategy Performance",
+                rows: viewModel.strategyLeaderboard,
+                onSelect: { viewModel.browseStrategy(key: $0.key) }
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+
+            BacktestLabLeaderboardSection(
+                title: "Setup Tag Performance",
+                rows: viewModel.setupTagLeaderboard,
+                onSelect: { viewModel.browseSetupTag(key: $0.key) }
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+
+            BacktestLabLeaderboardSection(
+                title: "Instrument Performance",
+                rows: viewModel.instrumentLeaderboard,
+                onSelect: { viewModel.browseInstrument(key: $0.key) }
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+        }
+    }
+
+    private var emptyAnalyticsPlaceholder: some View {
+        ExperienceEmptyState(
+            icon: .chart,
+            title: "No backtest trades",
+            message: "Log trades on a Backtest account for strategy analytics."
+        )
+        .padding(.horizontal, ExperienceSpacing.md)
+    }
+
+    private var backtestPerformanceCardsGrid: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: ExperienceSpacing.xs),
+                GridItem(.flexible(), spacing: ExperienceSpacing.xs),
+            ],
+            spacing: ExperienceSpacing.xs
+        ) {
+            ForEach(viewModel.performanceCards) { chip in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(chip.label)
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                    Text(chip.value)
+                        .font(.system(.callout, design: .rounded).weight(.semibold).monospacedDigit())
+                        .foregroundStyle(backtestToneColor(chip.tone))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
+                .accessibilityIdentifier("backtest.lab.card.\(chip.id)")
+            }
+        }
+    }
+
+    private func backtestToneColor(_ tone: DashboardMetricTone) -> Color {
+        switch tone {
+        case .neutral: return colors.primaryText
+        case .positive: return colors.profit
+        case .negative: return colors.loss
         }
     }
 
@@ -221,22 +355,20 @@ struct BacktestLabView: View {
     }
 
     private var accountFilterMenu: some View {
-        OwnerAccountFilterDropdown(
+        let profileID = viewModel.ownerAccountsProfileID
+        return OwnerAccountFilterDropdown(
             accounts: viewModel.backtestAccountsForMenu,
-            isAllAccountsSelected: {
-                if case .all = viewModel.accountFilter { return true }
-                return false
-            }(),
-            selectedAccountID: {
-                if case .account(let id) = viewModel.accountFilter { return id }
-                return nil
-            }(),
-            onSelectAll: { viewModel.setAccountFilter(.all) },
-            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            selectedFilter: viewModel.accountFilter,
+            copyGroups: [],
+            isLoadingCopyGroups: false,
+            onSelectFilter: { viewModel.setAccountFilter($0) },
             onManageAccounts: { viewModel.openManageAccounts() },
+            onManageCopyGroups: {},
+            onRequestCopyGroups: {},
             accessibilityIdentifier: "backtest.lab.account",
+            includesCopyTradingMenu: false,
             boundary: .trades,
-            profileID: viewModel.ownerAccountsProfileID
+            profileID: profileID
         ) {
             filterCapsuleLabel(viewModel.accountMenuTitle)
         }
@@ -296,65 +428,6 @@ struct BacktestLabView: View {
     private func backtestSectionHeader(_ title: String) -> some View {
         Text(title)
             .experienceStyle(.headline, color: colors.primaryText)
-    }
-
-    private var strategyBreakdownGridColumns: [GridItem] {
-        [
-            GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-            GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-        ]
-    }
-
-    @ViewBuilder
-    private var strategySection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            backtestSectionHeader("Strategy Breakdown")
-
-            if viewModel.strategyBreakdown.isEmpty {
-                Text("No strategy labels yet. Add a strategy when logging backtest trades.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(ExperienceSpacing.md)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .experienceTradingRulesCard(prominence: .standard)
-            } else {
-                LazyVGrid(columns: strategyBreakdownGridColumns, spacing: ExperienceSpacing.sm) {
-                    ForEach(viewModel.strategyBreakdown) { row in
-                        strategyBreakdownCard(row)
-                    }
-                }
-                .accessibilityIdentifier("backtest.lab.strategyBreakdown.grid")
-            }
-        }
-    }
-
-    private func strategyBreakdownCard(_ row: BacktestLabMetrics.StrategyBreakdown) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(row.name)
-                .experienceStyle(.subheadline, color: colors.primaryText)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text("Trades: \(row.tradeCount)")
-                .experienceStyle(.caption, color: colors.secondaryText)
-            Text(String(format: "Win rate: %.1f%%", row.winRatePercent))
-                .experienceStyle(.caption, color: colors.secondaryText)
-            Text("P&L: \(TradeDisplay.pnlText(Money(amount: row.totalPnL)))")
-                .experienceStyle(.caption, color: theme.metricColor(
-                    for: NSDecimalNumber(decimal: row.totalPnL).doubleValue
-                ))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-            if let rr = row.averageRR {
-                Text("Avg R:R: \(TradeDisplay.compactRRText(Decimal(rr)) ?? "–")")
-                    .experienceStyle(.caption, color: colors.tertiaryText)
-            }
-        }
-        .padding(ExperienceSpacing.md)
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
-        .experienceTradingRulesCard(cornerRadius: ExperienceRadius.md)
     }
 
     @ViewBuilder

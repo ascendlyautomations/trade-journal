@@ -20,13 +20,16 @@ enum TradingRulesComplianceSessionLoader {
         dependencies: TradingRulesComplianceLoadDependencies,
         dashboardViewModel: DashboardViewModel?
     ) async -> TradingRulesComplianceLoadOutcome {
+        let presentationStore = TradingRulesCompliancePresentationStores.store(
+            detailCache: dependencies.detailCache
+        )
         guard let profileID = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) })
         else {
-            TradingRulesComplianceSessionStore.shared.reset()
+            presentationStore.reset()
             return .failed("Sign in to view trading rules analytics.")
         }
 
-        TradingRulesComplianceSessionStore.shared.clearIfProfileMismatch(profileID)
+        presentationStore.clearIfProfileMismatch(profileID)
 
         let usesBundledSample = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
         if !usesBundledSample,
@@ -36,10 +39,10 @@ enum TradingRulesComplianceSessionLoader {
             await dashboardViewModel.ensureTradingRulesComplianceForPresentation(
                 dependencies: dependencies
             )
-            if let message = TradingRulesComplianceSessionStore.shared.loadError {
+            if let message = presentationStore.loadError {
                 return .failed(message)
             }
-            if TradingRulesComplianceSessionStore.shared.insufficientScope {
+            if presentationStore.insufficientScope {
                 return .ready
             }
             return .ready
@@ -50,7 +53,11 @@ enum TradingRulesComplianceSessionLoader {
         }
 
         let task = Task { () -> TradingRulesComplianceLoadOutcome in
-            await performColdRefresh(dependencies: dependencies, profileID: profileID)
+            await performColdRefresh(
+                dependencies: dependencies,
+                profileID: profileID,
+                presentationStore: presentationStore
+            )
         }
         inFlightProfileID = profileID
         inFlightTask = task
@@ -63,9 +70,11 @@ enum TradingRulesComplianceSessionLoader {
 
     static func revealCachedSnapshotIfPossible(
         profileID: ProfileID,
+        detailCache: DetailPresentationCache,
         dashboardViewModel: DashboardViewModel? = nil
     ) -> Bool {
-        TradingRulesComplianceSessionStore.shared.clearIfProfileMismatch(profileID)
+        let presentationStore = TradingRulesCompliancePresentationStores.store(detailCache: detailCache)
+        presentationStore.clearIfProfileMismatch(profileID)
         let accounts = SessionAccountsStore.shared.cached(for: profileID) ?? []
         let linked = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
         let scope: PsychologyAnalyticsScopeResolver.Resolved
@@ -85,27 +94,31 @@ enum TradingRulesComplianceSessionLoader {
                 linkedAccountModes: linked
             )
         }
-        guard TradingRulesComplianceSessionStore.shared.matchesCachedPresentation(
+        guard presentationStore.matchesCachedPresentation(
             profileID: profileID,
             scopeFingerprint: scope.fingerprint
-        ), TradingRulesComplianceSessionStore.shared.ready
+        ), presentationStore.ready
         else {
             return false
         }
-        return !TradingRulesComplianceSessionStore.shared.insufficientScope
-            || TradingRulesComplianceSessionStore.shared.scopedTradeCount > 0
+        return !presentationStore.insufficientScope
+            || presentationStore.scopedTradeCount > 0
     }
 
     private static func performColdRefresh(
         dependencies: TradingRulesComplianceLoadDependencies,
-        profileID: ProfileID
+        profileID: ProfileID,
+        presentationStore: TradingRulesComplianceSessionStore
     ) async -> TradingRulesComplianceLoadOutcome {
         let usesBundledSample = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
         if !usesBundledSample {
             await SessionNetworkGate.shared.awaitReady()
         }
 
-        let accounts = await loadAccounts(profileID: profileID, dependencies: dependencies)
+        var accounts = await loadAccounts(profileID: profileID, dependencies: dependencies)
+        if usesBundledSample, accounts.isEmpty {
+            accounts = DemoCanonicalDataset.accounts(owner: profileID)
+        }
         let scope: PsychologyAnalyticsScopeResolver.Resolved
         if usesBundledSample {
             scope = PsychologyAnalyticsScopeResolver.resolve(
@@ -138,7 +151,7 @@ enum TradingRulesComplianceSessionLoader {
             injectedPreferences: injectedPreferences
         )
         guard TradingRulesComplianceRecomputeCoordinator.isCurrent(baseline) else {
-            if TradingRulesComplianceSessionStore.shared.ready {
+            if presentationStore.ready {
                 return .ready
             }
             if let preferencesError = output.preferencesError {
@@ -147,7 +160,7 @@ enum TradingRulesComplianceSessionLoader {
             return .ready
         }
         let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
-        let keptExistingRules = !TradingRulesComplianceSessionStore.shared.commit(
+        let keptExistingRules = !presentationStore.commit(
             output: output,
             profileID: profileID,
             scope: scope,
@@ -155,7 +168,7 @@ enum TradingRulesComplianceSessionLoader {
             inputFingerprint: nil,
             generation: token,
             preferencesUnavailable: output.preferencesContext == nil || output.preferencesError != nil
-        ) && TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID)
+        ) && presentationStore.retainsConfiguredRules(for: profileID)
         if keptExistingRules {
             return .ready
         }

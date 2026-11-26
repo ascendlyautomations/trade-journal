@@ -32,6 +32,12 @@ enum TradingRulesComplianceSnapshotBuilder {
         injectedPreferences: PreferenceRuleContext? = nil,
         dashboardInsights: DashboardInsightsPresentation? = nil
     ) async -> Output {
+        let previewChromeActive = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+        if previewChromeActive {
+            RulesPreviewDebugLog.log(
+                "SnapshotBuilder.build preview chrome active profileID=\(profileID.rawValue) \(RulesPreviewDebugLog.describe(scope: scope)) injectedPreferences=\(injectedPreferences != nil)"
+            )
+        }
         let preferenceOutcome = await TradingRulesCompliancePreferencesCache.load(
             for: profileID,
             repository: dependencies.tradingPreferences,
@@ -51,18 +57,34 @@ enum TradingRulesComplianceSnapshotBuilder {
             preferencesError = "Trading rules could not be loaded."
         }
 
-        var ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID) ?? []
+        var ownerTrades: [Trade]
         var tradesError: String?
-        var historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        var historyComplete: Bool
 
-        _ = SessionOwnerTradesStore.shared.hydrateFromDiskIfNeeded(
-            for: profileID,
-            detailCache: dependencies.detailCache
-        )
-        ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID) ?? ownerTrades
-        historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+            if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+               preview.viewer == profileID
+            {
+                ownerTrades = preview.trades
+            } else {
+                ownerTrades = DemoCanonicalDataset.trades()
+            }
+            historyComplete = true
+        } else {
+            ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID) ?? []
+            historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
 
-        if !historyComplete || ownerTrades.isEmpty {
+            _ = SessionOwnerTradesStore.shared.hydrateFromDiskIfNeeded(
+                for: profileID,
+                detailCache: dependencies.detailCache
+            )
+            ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID) ?? ownerTrades
+            historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        }
+
+        if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome,
+           !historyComplete || ownerTrades.isEmpty
+        {
             do {
                 ownerTrades = try await SessionOwnerTradesStore.shared.ensureCompleteAnalyticsSnapshot(
                     for: profileID,
@@ -195,7 +217,7 @@ enum TradingRulesComplianceSnapshotBuilder {
         )
         TradingRulesComplianceDiagnostics.logTimings(payload.timings, source: "cold_analytics")
 
-        return assembleOutput(
+        let built = assembleOutput(
             payload: payload,
             preferences: preferences,
             scopedTradeCount: scoped.count,
@@ -205,6 +227,12 @@ enum TradingRulesComplianceSnapshotBuilder {
             historyComplete: historyComplete,
             isAuthoritative: historyComplete
         )
+        if previewChromeActive {
+            RulesPreviewDebugLog.log(
+                "SnapshotBuilder.build completed \(RulesPreviewDebugLog.describe(output: built))"
+            )
+        }
+        return built
     }
 
     /// Dashboard quick pass over already-filtered trades (compute runs off the main actor).

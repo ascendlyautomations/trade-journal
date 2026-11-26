@@ -45,6 +45,30 @@ final class BacktestLabMetricsTests: XCTestCase {
         XCTAssertNil(snap.averageLoss)
     }
 
+    func testBacktestLabSanitizedAccountFilterRejectsCopyTradingScopes() {
+        let backtest = TradingAccount(
+            id: TradingAccountID("backtest-1"),
+            ownerProfileID: ProfileID("owner"),
+            name: "BT",
+            category: .backtest,
+            mode: .backtest,
+            size: nil,
+            isActive: true,
+            canAddTrades: true
+        )
+        XCTAssertEqual(
+            BacktestLabFilters.sanitizedAccountFilter(.copyTradingAll, eligibleAccounts: [backtest]),
+            .all
+        )
+        XCTAssertEqual(
+            BacktestLabFilters.sanitizedAccountFilter(
+                .copyTradingGroup("grp-1"),
+                eligibleAccounts: [backtest]
+            ),
+            .all
+        )
+    }
+
     func testBacktestLabFiltersAccountAndTime() {
         let accountA = TradingAccountID("acct-a")
         let accountB = TradingAccountID("acct-b")

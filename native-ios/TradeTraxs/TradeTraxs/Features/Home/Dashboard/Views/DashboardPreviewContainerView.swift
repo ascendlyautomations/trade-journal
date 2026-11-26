@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Isolated navigation stack for signed-in Free users exploring Dashboard premium analytics with sample data.
 struct DashboardPreviewContainerView: View {
-    let data: DataEnvironment
+    let productionData: DataEnvironment
     let onDismiss: () -> Void
 
     @State private var navigationStore = NavigationStore()
@@ -10,8 +10,12 @@ struct DashboardPreviewContainerView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(data: DataEnvironment, onDismiss: @escaping () -> Void) {
-        self.data = data
+  private var previewData: DataEnvironment {
+        TraxsProPreviewSession.shared.activePreviewEnvironment?.data ?? productionData
+    }
+
+    init(productionData: DataEnvironment, onDismiss: @escaping () -> Void) {
+        self.productionData = productionData
         self.onDismiss = onDismiss
         let store = NavigationStore()
         store.sessionPhase = .authenticated
@@ -19,7 +23,7 @@ struct DashboardPreviewContainerView: View {
         _navigationCoordinator = State(initialValue: NavigationCoordinator(store: store))
         if let viewer = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) }) {
             TraxsProPreviewSession.shared.beginDashboardPreview(
-                detailCache: data.detailCache,
+                production: productionData,
                 viewer: viewer
             )
         }
@@ -28,7 +32,7 @@ struct DashboardPreviewContainerView: View {
     var body: some View {
         NavigationStack(path: homePath) {
             DashboardHomeView(
-                data: data,
+                data: previewData,
                 navigationCoordinator: navigationCoordinator,
                 embeddedInTraxsProPreview: true
             )
@@ -76,7 +80,7 @@ struct DashboardPreviewContainerView: View {
             if TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: tradeID) {
                 JournalTradeDetailView(
                     tradeID: tradeID,
-                    data: data,
+                    data: previewData,
                     navigationCoordinator: navigationCoordinator
                 )
             } else {
@@ -85,43 +89,43 @@ struct DashboardPreviewContainerView: View {
         case .psychologyAnalytics:
             PsychologyAnalyticsHomeRouteView(
                 navigationCoordinator: navigationCoordinator,
-                data: data
+                data: previewData
             )
         case .tradingRulesAnalytics:
             TradingRulesComplianceHomeRouteView(
                 navigationCoordinator: navigationCoordinator,
-                data: data
+                data: previewData
             )
         case .tradingRulesRuleDetail(let ruleIDRaw):
             TradingRulesRuleDetailView(
                 ruleIDRaw: ruleIDRaw,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: data.detailCache
+                detailCache: previewData.detailCache
             )
         case .tradingRulesDayDetail(let dayKey):
             TradingRulesDayDetailView(
                 dayKey: dayKey,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: data.detailCache
+                detailCache: previewData.detailCache
             )
         case .tradingRulesTrends:
-            TradingRulesComplianceTrendsView()
+            TradingRulesComplianceTrendsView(detailCache: previewData.detailCache)
         case .tradingRulesViolationHistory:
             TradingRulesViolationHistoryGroupsView(
                 navigationCoordinator: navigationCoordinator,
-                detailCache: data.detailCache
+                detailCache: previewData.detailCache
             )
         case .tradingScorecard:
             TradingScorecardDetailView(
                 navigationCoordinator: navigationCoordinator,
-                data: data
+                data: previewData
             )
         case .checkInHistory:
-            CheckInHistoryView(data: data, navigationCoordinator: navigationCoordinator)
+            CheckInHistoryView(data: previewData, navigationCoordinator: navigationCoordinator)
         case .checkInDay(let dateKey):
             CheckInDayDetailView(
                 dateKey: dateKey,
-                data: data,
+                data: previewData,
                 navigationCoordinator: navigationCoordinator
             )
         case .psychologyCoach:

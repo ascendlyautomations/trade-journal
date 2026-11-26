@@ -144,6 +144,9 @@ struct TradingRulesComplianceHomeRouteView: View {
         .onOwnerAccountMutation {
             scopeController.handleAccountMutation(detailCache: data.detailCache)
         }
+        .onCopyTradingGroupsMutation {
+            scopeController.handleCopyTradingGroupsMutation()
+        }
         .onChange(of: analyticsStackDepth) { oldDepth, newDepth in
             if oldDepth == 0, newDepth == 1, isTradingRulesAnalyticsTop {
                 TradingRulesAnalyticsScrollStore.resetForFreshNavigation()
@@ -157,11 +160,9 @@ struct TradingRulesComplianceHomeRouteView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tradingPreferencesDidChange)) { _ in
-            if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome,
+            if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome,
                let profileID = activeProfileID
             {
-                _ = TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID)
-            } else if let profileID = activeProfileID {
                 TradingRulesCompliancePreferencesCache.invalidate(profileID: profileID)
             }
             TradingRulesComplianceRecomputeCoordinator.reset()
@@ -212,15 +213,19 @@ struct TradingRulesComplianceHomeRouteView: View {
         return false
     }
 
+    private var rulesPresentationStore: TradingRulesComplianceSessionStore {
+        TradingRulesCompliancePresentationStores.store(for: data)
+    }
+
     private var snapshotMatchesActiveViewer: Bool {
         guard let activeProfileID else { return false }
-        return TradingRulesComplianceSessionStore.shared.profileID == activeProfileID
-            && TradingRulesComplianceSessionStore.shared.ready
+        return rulesPresentationStore.profileID == activeProfileID
+            && rulesPresentationStore.ready
     }
 
     private func refreshAnalytics(forceReveal: Bool) async {
         guard let profileID = activeProfileID else {
-            TradingRulesComplianceSessionStore.shared.reset()
+            rulesPresentationStore.reset()
             loadOutcome = .failed("Sign in to view trading rules analytics.")
             return
         }
@@ -234,13 +239,17 @@ struct TradingRulesComplianceHomeRouteView: View {
         loadGeneration += 1
         let generation = loadGeneration
 
-        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome,
+           let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+           preview.viewer == profileID
+        {
             await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
                 profileID: profileID,
-                dependencies: loadDependencies
+                dependencies: loadDependencies,
+                preferenceContext: preview.preferenceContext
             )
             if snapshotMatchesActiveViewer {
-                presentationRevision = TradingRulesComplianceSessionStore.shared.contentRevision
+                presentationRevision = rulesPresentationStore.contentRevision
             }
         }
 
@@ -250,7 +259,7 @@ struct TradingRulesComplianceHomeRouteView: View {
                 detailCache: data.detailCache
             )
             if snapshotMatchesActiveViewer {
-                presentationRevision = TradingRulesComplianceSessionStore.shared.contentRevision
+                presentationRevision = rulesPresentationStore.contentRevision
             }
         }
 
@@ -263,7 +272,7 @@ struct TradingRulesComplianceHomeRouteView: View {
         )
         guard generation == loadGeneration else { return }
         loadOutcome = outcome
-        let nextRevision = TradingRulesComplianceSessionStore.shared.contentRevision
+        let nextRevision = rulesPresentationStore.contentRevision
         if nextRevision != presentationRevision {
             presentationRevision = nextRevision
         }

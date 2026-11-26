@@ -99,11 +99,10 @@ final class CheckInHistoryViewModel: ScreenLifecycle {
     }
 
     private func loadSampleCheckInHistory() async {
-        PsychologyAnalyticsPreviewSupport.seedCheckInHistorySessionIfNeeded()
-        let summaries = CheckInHistorySessionStore.shared.summaries
+        let summaries = PsychologyAnalyticsPreviewSupport.sampleCheckInSummaries()
         state.summaries = summaries
         state.didBootstrap = true
-        state.phase = summaries.isEmpty ? .loaded : .loaded
+        state.phase = .loaded
     }
 }
 

@@ -22,6 +22,8 @@ export type CopyTradeWireRow = {
   account_number?: unknown
   /** Profile copy linkage — authoritative `accounts.mode` for this row. */
   account_mode?: unknown
+  /** Public aggregate — modes for all participating accounts on one copy action. */
+  participating_account_modes?: unknown
   mode?: unknown
   created_at?: unknown
   entry_time?: unknown
@@ -116,9 +118,67 @@ export function copyTradeWireFromFeedPost(post: {
   return trade
 }
 
-export function accumulateCopyTradeModeCounts(
+function accountLookupKey(accountId: string): string {
+  return accountId.trim().toLowerCase()
+}
+
+function participatingAccountModesFromTrades(
   trades: readonly CopyTradeWireRow[]
-): CopyTradeModeCounts {
+): Map<string, keyof CopyTradeModeCounts> {
+  const out = new Map<string, keyof CopyTradeModeCounts>()
+  for (const trade of trades) {
+    const entries = trade.participating_account_modes
+    if (!Array.isArray(entries)) continue
+    for (const entry of entries) {
+      if (entry == null || typeof entry !== "object") continue
+      const row = entry as { account_id?: unknown; account_mode?: unknown }
+      const accountId = String(row.account_id ?? "").trim()
+      if (!accountId) continue
+      const key = accountLookupKey(accountId)
+      if (out.has(key)) continue
+      const modeKey = normalizeMode(row.account_mode)
+      if (!modeKey) continue
+      out.set(key, modeKey)
+    }
+  }
+  return out
+}
+
+function siblingAccountModesFromTrades(
+  trades: readonly CopyTradeWireRow[]
+): Map<string, keyof CopyTradeModeCounts> {
+  const out = new Map<string, keyof CopyTradeModeCounts>()
+  for (const trade of trades) {
+    const accountId = String(trade.account_id ?? "").trim()
+    if (!accountId) continue
+    const key = accountLookupKey(accountId)
+    if (out.has(key)) continue
+    const modeKey = normalizeMode(
+      trade.account_mode ?? trade.account_type ?? trade.mode
+    )
+    if (!modeKey) continue
+    out.set(key, modeKey)
+  }
+  return out
+}
+
+/** Mode counts for every participating account (payload first, then sibling rows). */
+export function modeCountsForParticipatingAccountsFromTrades(
+  trades: readonly CopyTradeWireRow[]
+): { counts: CopyTradeModeCounts; participatingAccountCount: number } {
+  const participating = new Set<string>()
+  const participatingKeys: string[] = []
+  for (const trade of trades) {
+    for (const id of copyTradeParticipatingAccountIds(trade)) {
+      const key = accountLookupKey(id)
+      if (participating.has(key)) continue
+      participating.add(key)
+      participatingKeys.push(key)
+    }
+  }
+
+  const payloadModes = participatingAccountModesFromTrades(trades)
+  const siblingModes = siblingAccountModesFromTrades(trades)
   const counts: CopyTradeModeCounts = {
     live: 0,
     funded: 0,
@@ -126,18 +186,23 @@ export function accumulateCopyTradeModeCounts(
     sim: 0,
     backtest: 0,
   }
-  const seenAccounts = new Set<string>()
-  for (const trade of trades) {
-    const accountId = String(trade.account_id ?? "").trim()
-    if (!accountId || seenAccounts.has(accountId)) continue
-    seenAccounts.add(accountId)
-    const modeKey = normalizeMode(
-      trade.account_mode ?? trade.account_type ?? trade.mode
-    )
+
+  for (const key of participatingKeys) {
+    const modeKey = payloadModes.get(key) ?? siblingModes.get(key)
     if (!modeKey) continue
     counts[modeKey] += 1
   }
-  return counts
+
+  return {
+    counts,
+    participatingAccountCount: participating.size,
+  }
+}
+
+export function accumulateCopyTradeModeCounts(
+  trades: readonly CopyTradeWireRow[]
+): CopyTradeModeCounts {
+  return modeCountsForParticipatingAccountsFromTrades(trades).counts
 }
 
 function modeCountLabel(mode: keyof CopyTradeModeCounts, count: number): string {
@@ -189,17 +254,11 @@ export function formatCopyTradePublicModeSummaryFromTrades(
   trades: readonly CopyTradeWireRow[]
 ): string | null {
   if (trades.length === 0) return null
-  const counts = accumulateCopyTradeModeCounts(trades)
-  const participating = new Set<string>()
-  for (const trade of trades) {
-    for (const id of copyTradeParticipatingAccountIds(trade)) {
-      participating.add(id)
-    }
-  }
-  const accountCount = participating.size
+  const { counts, participatingAccountCount } =
+    modeCountsForParticipatingAccountsFromTrades(trades)
   return formatCopyTradePublicModeSummary(
     counts,
-    accountCount > 0 ? accountCount : undefined
+    participatingAccountCount > 0 ? participatingAccountCount : undefined
   )
 }
 

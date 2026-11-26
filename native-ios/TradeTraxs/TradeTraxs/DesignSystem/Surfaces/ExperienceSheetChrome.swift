@@ -30,26 +30,17 @@ struct ExperienceSheetChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .environment(
+                \.experienceKeyboardDoneToolbarSuppressed,
+                !keyboardDoneToolbar
+            )
             .modifier(ExperienceThemedPresentationBackground(surface: .sheet))
             .presentationDetents(detents)
             .presentationDragIndicator(dragIndicator)
             .presentationCornerRadius(ExperienceRadius.sheet)
             .interactiveDismissDisabled(!interactiveDismiss)
             .experienceKeyboardDismissOnTapOutside()
-            .modifier(ConditionalKeyboardDoneToolbar(enabled: keyboardDoneToolbar))
-    }
-}
-
-private struct ConditionalKeyboardDoneToolbar: ViewModifier {
-    let enabled: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if enabled {
-            content.experienceKeyboardDoneToolbar()
-        } else {
-            content
-        }
+            .experienceKeyboardDoneToolbar()
     }
 }
 

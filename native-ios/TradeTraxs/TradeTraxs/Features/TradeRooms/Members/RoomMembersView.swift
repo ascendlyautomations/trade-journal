@@ -100,7 +100,8 @@ struct RoomMembersView: View {
                 }
             }
         }
-        .sheet(item: $selectedMember) { member in
+        .sheet(item: $selectedMember) { snapshot in
+            let member = viewModel.members.first(where: { $0.id == snapshot.id }) ?? snapshot
             memberManagementSheet(member)
         }
         .sheet(item: $memberForTags) { member in
@@ -200,9 +201,10 @@ struct RoomMembersView: View {
             moderatorDialogTitle: viewModel.moderatorConfirmationTitle,
             moderatorConfirmButtonTitle: viewModel.moderatorConfirmationButtonTitle,
             onConfirmModerator: {
+                let profileID = member.id
                 Task {
                     await viewModel.confirmModeratorStatusChange()
-                    selectedMember = nil
+                    selectedMember = viewModel.members.first(where: { $0.id == profileID })
                 }
             },
             onCancelModerator: { viewModel.cancelModeratorStatusChange() }

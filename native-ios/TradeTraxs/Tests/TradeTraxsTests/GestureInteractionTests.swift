@@ -16,12 +16,8 @@ final class GestureInteractionTests: XCTestCase {
         XCTAssertNil(modifier.onSingleTap)
     }
 
-    func testStoriesDoNotExposeLikeTargets() {
-        // Stories have no InteractionContentKind — double-tap Like must not be invented.
-        let kinds: [InteractionContentKind] = [
-            .trade, .profilePost, .reel, .feedPost, .achievement,
-        ]
-        XCTAssertFalse(kinds.map(\.rawValue).contains("story"))
-        XCTAssertEqual(kinds.count, 5)
+    func testStoryLikeUsesDedicatedInteractionKind() {
+        XCTAssertEqual(InteractionTarget.story(StoryID("s1")).kind, .story)
+        XCTAssertEqual(ContentLikeTable.from(.story).rawValue, "story_likes")
     }
 }

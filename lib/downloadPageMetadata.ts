@@ -14,6 +14,23 @@ export const IOS_APP_STORE_DOWNLOAD_URL =
 export const DOWNLOAD_PAGE_METADATA: Metadata = {
   title: { absolute: DOWNLOAD_PAGE_TITLE },
   description: DOWNLOAD_PAGE_DESCRIPTION,
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      {
+        url: DOWNLOAD_OG_IMAGE_PATH,
+        type: "image/png",
+        sizes: `${DOWNLOAD_OG_IMAGE_SIZE}x${DOWNLOAD_OG_IMAGE_SIZE}`,
+      },
+    ],
+    apple: [
+      {
+        url: DOWNLOAD_OG_IMAGE_PATH,
+        sizes: `${DOWNLOAD_OG_IMAGE_SIZE}x${DOWNLOAD_OG_IMAGE_SIZE}`,
+        type: "image/png",
+      },
+    ],
+  },
   alternates: {
     canonical: "/download",
   },

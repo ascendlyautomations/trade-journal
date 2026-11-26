@@ -147,13 +147,9 @@ final class AuthenticationCoordinator {
     }
 
     func signInWithApple(credential: AppleIDCredentialPayload) async throws {
-        let likelyNewAccount = credential.fullName != nil || credential.email != nil
-        try await performSignIn(
-            flow: likelyNewAccount ? .newAccountRegistration : .returningUser,
-            operation: {
-                try await self.authenticationManager.signInWithApple(credential: credential)
-            }
-        )
+        try await performSignIn(flow: .returningUser, operation: {
+            try await self.authenticationManager.signInWithApple(credential: credential)
+        })
     }
 
     func signInWithGoogle() async throws {
@@ -475,7 +471,7 @@ final class AuthenticationCoordinator {
                 correlation: correlation,
                 generation: generation
             )
-            if flow == .newAccountRegistration {
+            if flow == .newAccountRegistration || lifecycle == .signUp {
                 postSignupTransition.beginCreatingAccount()
                 if let gatePhase = profileOnboardingGate?.phase {
                     postSignupTransition.releaseCoverIfAuthenticatedDestinationReady(gatePhase: gatePhase)
@@ -485,9 +481,7 @@ final class AuthenticationCoordinator {
             navigation.coordinator.markAuthenticated(
                 applyingDeferred: navigation.consumeDeferredAuthenticatedSnapshot()
             )
-            if flow == .newAccountRegistration {
-                profileOnboardingGate?.resolveIfNeeded()
-            }
+            profileOnboardingGate?.resolveIfNeeded()
             AuthFlowTracer.trace(
                 "root.authenticated",
                 phase: .authenticated,

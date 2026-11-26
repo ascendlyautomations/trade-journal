@@ -14,6 +14,9 @@ enum TraxProEntitlementRefreshAction {
                         name: .billingEntitlementsDidRefresh,
                         object: refreshed
                     )
+                    Task {
+                        await PerformanceReportReminderCoordinator.shared.reconcile(profileID: profileID)
+                    }
                 }
             } catch {
                 // Keep last-known snapshot; the verification UI stays until a later refresh succeeds.

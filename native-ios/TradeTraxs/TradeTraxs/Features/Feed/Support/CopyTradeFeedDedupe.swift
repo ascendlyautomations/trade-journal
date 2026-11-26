@@ -230,8 +230,15 @@ nonisolated enum CopyTradeFeedDedupe {
     }
 
     private static func publicModeSummary(for members: [CopyTradeFeedLinkage]) -> String? {
-        CopyTradePresentation.publicAcrossAccountsSummary(
-            for: members.map { $0.ownerJournalMember() }
+        var mergedModes: [TradingAccountID: TradingAccountMode] = [:]
+        for member in members {
+            for (accountID, mode) in member.participatingAccountModesByID where mergedModes[accountID] == nil {
+                mergedModes[accountID] = mode
+            }
+        }
+        return CopyTradePresentation.publicAcrossAccountsSummary(
+            for: members.map { $0.ownerJournalMember() },
+            accountModesByID: mergedModes
         )
     }
 

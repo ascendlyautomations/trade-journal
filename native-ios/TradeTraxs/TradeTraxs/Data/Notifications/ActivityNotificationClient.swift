@@ -26,6 +26,7 @@ nonisolated enum ActivityNotificationJSON {
         case profilePost(profilePostId: String)
         case achievementPost(achievementPostId: String)
         case reel(reelId: String)
+        case story(storyId: String)
         case comment(
             commentId: String,
             commentSource: String,
@@ -43,6 +44,7 @@ nonisolated enum ActivityNotificationJSON {
             case profilePostId
             case achievementPostId
             case reelId
+            case storyId
             case commentId
             case commentSource
         }
@@ -66,6 +68,9 @@ nonisolated enum ActivityNotificationJSON {
             case .reel(let reelId):
                 try container.encode("reel", forKey: .kind)
                 try container.encode(reelId, forKey: .reelId)
+            case .story(let storyId):
+                try container.encode("story", forKey: .kind)
+                try container.encode(storyId, forKey: .storyId)
             case .comment(
                 let commentId,
                 let commentSource,
@@ -98,6 +103,8 @@ nonisolated enum ActivityNotificationJSON {
                 return .achievementPost(achievementPostId: contentID)
             case .reel:
                 return .reel(reelId: contentID)
+            case .story:
+                return .story(storyId: contentID)
             }
         }
 
@@ -118,6 +125,7 @@ nonisolated enum ActivityNotificationJSON {
                 case .profilePost: profilePostId = parent.id
                 case .achievement: achievementPostId = parent.id
                 case .reel: reelId = parent.id
+                case .story: break
                 }
             }
             return .comment(
@@ -263,6 +271,8 @@ nonisolated struct ActivityNotificationClient: Sendable {
             return achievementPostId
         case .reel(let reelId):
             return reelId
+        case .story(let storyId):
+            return storyId
         case .comment(let commentId, _, _, _, _, _, _):
             return commentId
         }

@@ -56,7 +56,6 @@ struct TradingAnalyticsPreferencesView: View {
         preferencesScroll
             .scrollDismissesKeyboard(.interactively)
             .experienceScreenBackground()
-            .experienceKeyboardDoneToolbar()
             .experienceFormKeyboard(focus: $focusedField)
             .experienceNavigationTitle("Trading Rules")
             .toolbar {

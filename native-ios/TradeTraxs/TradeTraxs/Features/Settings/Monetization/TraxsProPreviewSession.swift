@@ -2,14 +2,14 @@ import Foundation
 import Observation
 
 extension Notification.Name {
-    /// Fired when a TraxsPro preview that routes journal reads through bundled sample data ends.
+    /// Fired when a TraxsPro preview that routed journal reads through bundled sample data ends.
     /// The live Home ``DashboardViewModel`` should restore owner scope and chart hydration.
     static let traxsProCanonicalJournalPreviewDidEnd = Notification.Name(
         "traxspro.canonicalJournalPreview.didEnd"
     )
 }
 
-/// Cross-actor preview flag, readable from repositories without hopping to the main actor.
+/// Cross-actor preview flag, readable for UI / monetization policy only — not for repository routing.
 nonisolated enum TraxsProPreviewRuntimeFlag {
     nonisolated(unsafe) static var isReportsPreviewActive = false
     nonisolated(unsafe) static var isDashboardPreviewActive = false
@@ -17,6 +17,7 @@ nonisolated enum TraxsProPreviewRuntimeFlag {
     nonisolated(unsafe) static var isTradingRulesPreviewActive = false
     nonisolated(unsafe) static var isBacktestLabPreviewActive = false
 
+    @available(*, deprecated, message: "Use TraxsProPreviewDataEnvironment instead of global journal routing.")
     static var usesCanonicalJournalSampleData: Bool {
         isReportsPreviewActive || isDashboardPreviewActive || isTradingRulesPreviewActive
     }
@@ -34,9 +35,10 @@ final class TraxsProPreviewSession {
     private(set) var isTradingRulesPreviewActive = false
     private(set) var isBacktestLabPreviewActive = false
     private(set) var activeFeature: TraxsProPreviewFeature?
-    private var seededTradeIDs: [TradeID] = []
+    private(set) var activePreviewEnvironment: TraxsProPreviewDataEnvironment?
+
+    private var previewGeneration: UInt64 = 0
     private var previewSeededSessionCheckIns = false
-    private var tradingRulesPreviewViewerID: ProfileID?
 
     private init() {}
 
@@ -48,202 +50,156 @@ final class TraxsProPreviewSession {
             || isBacktestLabPreviewActive
     }
 
-  /// Seeds demo trades into the detail cache for report / dashboard drill-down. Does not touch ``SessionOwnerTradesStore``.
-    func beginReportsPreview(detailCache: DetailPresentationCache, viewer: ProfileID? = nil) {
+    func bumpPreviewGeneration() -> UInt64 {
+        previewGeneration &+= 1
+        return previewGeneration
+    }
+
+    func previewData(for feature: TraxsProPreviewFeature) -> DataEnvironment? {
+        guard activePreviewEnvironment?.feature == feature else { return nil }
+        return activePreviewEnvironment?.data
+    }
+
+    func beginReportsPreview(production: DataEnvironment, viewer: ProfileID) {
         guard !isAnyPreviewActive else { return }
         isReportsPreviewActive = true
         activeFeature = .reports
         TraxsProPreviewRuntimeFlag.isReportsPreviewActive = true
         refreshRollingJournalForPreview()
-        let trades = DemoCanonicalDataset.trades()
-        seededTradeIDs = trades.map(\.id)
-        if let viewer {
-            DemoCanonicalDataset.seedDetailCache(detailCache, viewer: viewer)
-            seedPreviewCheckIns(for: viewer, trades: trades)
-        } else {
-            DemoCanonicalDataset.seedDetailCache(detailCache)
-        }
+        finishActivatingPreview(
+            TraxsProPreviewDataEnvironment.make(
+                from: production,
+                viewer: viewer,
+                feature: .reports
+            )
+        )
     }
 
-    func beginDashboardPreview(detailCache: DetailPresentationCache, viewer: ProfileID) {
-        guard !isAnyPreviewActive else { return }
+    func beginDashboardPreview(production: DataEnvironment, viewer: ProfileID) {
+        guard !isAnyPreviewActive else {
+            RulesPreviewDebugLog.log("beginDashboardPreview skipped: another preview is active")
+            return
+        }
+        RulesPreviewDebugLog.log("beginDashboardPreview viewer=\(viewer.rawValue)")
         isDashboardPreviewActive = true
         activeFeature = .dashboard
         TraxsProPreviewRuntimeFlag.isDashboardPreviewActive = true
         refreshRollingJournalForPreview()
-        let trades = DemoCanonicalDataset.trades()
-        seededTradeIDs = trades.map(\.id)
-        DemoCanonicalDataset.seedDetailCache(detailCache, viewer: viewer)
-        seedPreviewCheckIns(for: viewer, trades: trades)
-        TradingRulesAnalyticsPreviewSupport.seedJournalAndPreferences(
-            profileID: viewer,
-            detailCache: detailCache,
-            seedDetailCacheTrades: false
+        finishActivatingPreview(
+            TraxsProPreviewDataEnvironment.make(
+                from: production,
+                viewer: viewer,
+                feature: .dashboard
+            )
         )
     }
 
     /// Expense tracker preview uses in-memory sample rows only, no journal or Supabase seeds.
-    func beginExpenseTrackerPreview() {
+    func beginExpenseTrackerPreview(production: DataEnvironment, viewer: ProfileID) {
         guard !isAnyPreviewActive else { return }
         isExpenseTrackerPreviewActive = true
         activeFeature = .expenseTracker
         TraxsProPreviewRuntimeFlag.isExpenseTrackerPreviewActive = true
+        finishActivatingPreview(
+            TraxsProPreviewDataEnvironment.make(
+                from: production,
+                viewer: viewer,
+                feature: .expenseTracker
+            )
+        )
     }
 
-    /// Trading Rules Analytics preview, canonical trades, accounts, and sample rule preferences.
-    /// Backtest Lab preview uses in-memory backtest trades only (no Supabase or live journal mixing).
-    func beginBacktestLabPreview(detailCache: DetailPresentationCache, viewer: ProfileID) {
+    func beginBacktestLabPreview(production: DataEnvironment, viewer: ProfileID) {
         guard !isAnyPreviewActive else { return }
         isBacktestLabPreviewActive = true
         activeFeature = .backtestLab
         TraxsProPreviewRuntimeFlag.isBacktestLabPreviewActive = true
-        let trades = BacktestLabPreviewSampleData.trades(owner: viewer)
-        seededTradeIDs = trades.map(\.id)
-        BacktestLabPreviewSampleData.seedDetailCache(detailCache, owner: viewer)
+        let env = TraxsProPreviewDataEnvironment.make(
+            from: production,
+            viewer: viewer,
+            feature: .backtestLab
+        )
+        env.seedBacktestDetailCache()
+        finishActivatingPreview(env)
     }
 
-    func endBacktestLabPreview(detailCache: DetailPresentationCache) {
+    func endBacktestLabPreview() {
         guard isBacktestLabPreviewActive else { return }
-        tearDownBacktestLabPreview(detailCache: detailCache)
+        tearDownPreviewFlags()
     }
 
-    func beginTradingRulesPreview(detailCache: DetailPresentationCache, viewer: ProfileID) {
+    func beginTradingRulesPreview(production: DataEnvironment, viewer: ProfileID) {
         guard !isAnyPreviewActive else { return }
         isTradingRulesPreviewActive = true
         activeFeature = .tradingRules
         TraxsProPreviewRuntimeFlag.isTradingRulesPreviewActive = true
-        tradingRulesPreviewViewerID = viewer
         refreshRollingJournalForPreview()
-        let trades = DemoCanonicalDataset.trades()
-        seededTradeIDs = trades.map(\.id)
-        DemoCanonicalDataset.seedDetailCache(detailCache, viewer: viewer)
-        seedPreviewCheckIns(for: viewer, trades: trades)
-        TradingRulesAnalyticsPreviewSupport.seedJournalAndPreferences(
-            profileID: viewer,
-            detailCache: detailCache,
-            seedDetailCacheTrades: false
+        finishActivatingPreview(
+            TraxsProPreviewDataEnvironment.make(
+                from: production,
+                viewer: viewer,
+                feature: .tradingRules
+            )
         )
     }
 
-    func endTradingRulesPreview(detailCache: DetailPresentationCache) {
+    func endTradingRulesPreview() {
         guard isTradingRulesPreviewActive else { return }
-        tearDownTradingRulesPreview(detailCache: detailCache)
+        tearDownPreviewFlags()
     }
 
-    /// Ends preview and removes only demo trade seeds from the detail cache.
-    func endReportsPreview(detailCache: DetailPresentationCache) {
+    func endReportsPreview() {
         guard isReportsPreviewActive else { return }
-        tearDownPreview(detailCache: detailCache)
+        tearDownPreviewFlags()
     }
 
-    func endDashboardPreview(detailCache: DetailPresentationCache) {
+    func endDashboardPreview() {
         guard isDashboardPreviewActive else { return }
-        tearDownPreview(detailCache: detailCache)
+        tearDownPreviewFlags()
     }
 
     func endExpenseTrackerPreview() {
         guard isExpenseTrackerPreviewActive else { return }
-        isExpenseTrackerPreviewActive = false
-        TraxsProPreviewRuntimeFlag.isExpenseTrackerPreviewActive = false
-        if activeFeature == .expenseTracker {
-            activeFeature = nil
-        }
+        tearDownPreviewFlags()
     }
 
-    func endActivePreview(detailCache: DetailPresentationCache) {
+    func endActivePreview() {
         guard isAnyPreviewActive else { return }
-        tearDownPreview(detailCache: detailCache)
+        tearDownPreviewFlags()
     }
 
-    private func tearDownPreview(detailCache: DetailPresentationCache) {
-        if isBacktestLabPreviewActive {
-            tearDownBacktestLabPreview(detailCache: detailCache)
-            return
-        }
-        let canonicalJournalPreviewWasActive = TraxsProPreviewRuntimeFlag.usesCanonicalJournalSampleData
+    private func tearDownPreviewFlags() {
         isReportsPreviewActive = false
         isDashboardPreviewActive = false
         isExpenseTrackerPreviewActive = false
         isTradingRulesPreviewActive = false
+        isBacktestLabPreviewActive = false
         TraxsProPreviewRuntimeFlag.isReportsPreviewActive = false
         TraxsProPreviewRuntimeFlag.isDashboardPreviewActive = false
         TraxsProPreviewRuntimeFlag.isExpenseTrackerPreviewActive = false
         TraxsProPreviewRuntimeFlag.isTradingRulesPreviewActive = false
-        activeFeature = nil
-        tradingRulesPreviewViewerID = nil
-        for id in seededTradeIDs {
-            detailCache.removeTrade(id: id)
-        }
-        seededTradeIDs = []
-        clearPreviewSessionCheckInsIfNeeded()
-        if canonicalJournalPreviewWasActive {
-            notifyCanonicalJournalPreviewDidEnd()
-        }
-    }
-
-    private func notifyCanonicalJournalPreviewDidEnd() {
-        NotificationCenter.default.post(name: .traxsProCanonicalJournalPreviewDidEnd, object: nil)
-    }
-
-    private func tearDownBacktestLabPreview(detailCache: DetailPresentationCache) {
-        isBacktestLabPreviewActive = false
         TraxsProPreviewRuntimeFlag.isBacktestLabPreviewActive = false
-        if activeFeature == .backtestLab {
-            activeFeature = nil
-        }
-        for id in seededTradeIDs {
-            detailCache.removeTrade(id: id)
-        }
-        seededTradeIDs = []
+        activeFeature = nil
+        activePreviewEnvironment?.invalidateGeneration()
+        activePreviewEnvironment = nil
+        previewSeededSessionCheckIns = false
+        RulesPreviewDebugLog.log("tearDownPreviewFlags clearing preview presentation stores")
+        TradingRulesCompliancePresentationStores.clearPreview()
+        TradingScorecardPresentationStores.clearPreview()
+    }
+
+    private func finishActivatingPreview(_ environment: TraxsProPreviewDataEnvironment) {
+        activePreviewEnvironment = environment
+        TradingRulesCompliancePresentationStores.bindPreview(environment.rulesPresentationStore)
+        TradingScorecardPresentationStores.bindPreview(environment.scorecardPresentationStore)
+        RulesPreviewDebugLog.log(
+            "finishActivatingPreview \(RulesPreviewDebugLog.describe(environment))"
+        )
     }
 
     private func refreshRollingJournalForPreview() {
         DemoRollingJournal.shared.invalidateCache()
         _ = DemoRollingJournal.shared.trades(forceRebuild: true)
-    }
-
-    private func seedPreviewCheckIns(for viewer: ProfileID, trades: [Trade]) {
-        let checkIns = DemoCanonicalDataset.checkIns()
-        guard let start = checkIns.map(\.checkInDate).min(),
-              let end = checkIns.map(\.checkInDate).max()
-        else { return }
-        let eligible = trades.filter { $0.mode != .backtest }
-        SessionDailyCheckInsStore.shared.seed(checkIns, for: viewer, range: (start, end))
-        CheckInHistorySessionStore.shared.update(
-            summaries: CheckInHistoryAggregator.buildSummaries(checkIns: checkIns, trades: eligible),
-            checkIns: checkIns,
-            trades: eligible
-        )
-        previewSeededSessionCheckIns = true
-    }
-
-    private func clearPreviewSessionCheckInsIfNeeded() {
-        guard previewSeededSessionCheckIns else { return }
-        SessionDailyCheckInsStore.shared.invalidate()
-        CheckInHistorySessionStore.shared.invalidate()
-        previewSeededSessionCheckIns = false
-    }
-
-    private func tearDownTradingRulesPreview(detailCache: DetailPresentationCache) {
-        let canonicalJournalPreviewWasActive = TraxsProPreviewRuntimeFlag.usesCanonicalJournalSampleData
-        isTradingRulesPreviewActive = false
-        TraxsProPreviewRuntimeFlag.isTradingRulesPreviewActive = false
-        if activeFeature == .tradingRules {
-            activeFeature = nil
-        }
-        if let viewer = tradingRulesPreviewViewerID {
-            SessionOwnerTradesStore.shared.invalidate(profileID: viewer)
-            TradingRulesCompliancePreferencesCache.invalidate(profileID: viewer)
-            TradingRulesComplianceSessionStore.shared.reset()
-        }
-        tradingRulesPreviewViewerID = nil
-        for id in seededTradeIDs {
-            detailCache.removeTrade(id: id)
-        }
-        seededTradeIDs = []
-        if canonicalJournalPreviewWasActive {
-            notifyCanonicalJournalPreviewDidEnd()
-        }
     }
 }
 

@@ -32,6 +32,31 @@ test("account filter matches any participating copy account", () => {
   assert.equal(tradeMatchesParticipatingAccountFilter(trade, "z"), false)
 })
 
+test("public mode summary uses participating_account_modes when sibling rows are partial", () => {
+  const base = {
+    user_id: "u1",
+    trade_mode: "copy_traded",
+    source_account_id: "a",
+    copied_account_ids: ["b", "c"],
+    ticker: "NQ",
+    entry_time: "2026-01-01T12:00:00Z",
+  }
+  const line = formatCopyTradePublicModeSummaryFromTrades([
+    {
+      ...base,
+      id: "t1",
+      account_id: "a",
+      account_mode: "live",
+      participating_account_modes: [
+        { account_id: "a", account_mode: "live" },
+        { account_id: "b", account_mode: "funded" },
+        { account_id: "c", account_mode: "funded" },
+      ],
+    },
+  ])
+  assert.equal(line, "Copy Traded across 3 accounts • 1 Live • 2 Funded")
+})
+
 test("public mode summary from grouped siblings counts each account mode", () => {
   const base = {
     user_id: "u1",

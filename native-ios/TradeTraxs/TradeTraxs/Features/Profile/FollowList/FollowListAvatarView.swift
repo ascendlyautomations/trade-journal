@@ -59,26 +59,16 @@ struct FollowListAvatarView: View {
     }
 
     private func load() async {
-        guard let reference = profile.avatar else {
-            image = nil
-            return
-        }
-
-        let request = ImageRequest(
-            reference: reference,
-            purpose: .profileAvatar,
-            maxPixelSize: maxPixelSize,
-            auditSurface: debugSurface,
-            auditMediaID: profile.id.rawValue
-        )
         guard let cacheKey = ProfileAvatarDisplayCache.cacheKey(
             profile: profile,
             maxPixelSize: maxPixelSize
         ) else {
+            image = nil
             return
         }
 
-        if image != nil {
+        if let ui = ProfileAvatarDisplayCache.uiImage(forKey: cacheKey) {
+            image = Image(uiImage: ui)
             #if DEBUG
             ProfileAvatarLoadDiagnostics.log(
                 surface: debugSurface,
@@ -89,6 +79,20 @@ struct FollowListAvatarView: View {
             #endif
             return
         }
+
+        image = nil
+
+        guard let reference = profile.avatar else {
+            return
+        }
+
+        let request = ImageRequest(
+            reference: reference,
+            purpose: .profileAvatar,
+            maxPixelSize: maxPixelSize,
+            auditSurface: debugSurface,
+            auditMediaID: profile.id.rawValue
+        )
 
         if let cached = await imagePipeline.bestCachedImageDataWithTier(for: request) {
             applyLoadedData(

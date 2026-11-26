@@ -68,6 +68,12 @@ export type FeedBootstrapInput = {
   contentFilter?: FeedContentFilterV1
   cursor?: string | null
   limit?: number
+  /** Rotating rank session (rpc_v2_feed_bootstrap). */
+  rankSession?: {
+    sessionSeed: string
+    rankFrozenAt: string
+    scanCursor: string | null
+  } | null
 }
 
 function mapKindToFeedKind(kind: FeedItemKindV1): FeedItem["feedKind"] {
@@ -432,6 +438,41 @@ export class FeedRpcBootstrapRepository implements FeedBootstrapProviding {
   }
 }
 
+export class FeedRpcV2BootstrapRepository implements FeedBootstrapProviding {
+  private readonly client: BackendV2RpcClient
+
+  constructor(supabase: SupabaseClient) {
+    this.client = new BackendV2RpcClient({
+      transport: createSupabaseBackendV2Transport(supabase),
+    })
+  }
+
+  async loadFeedBootstrap(input: FeedBootstrapInput): Promise<FeedBootstrapV1> {
+    const rank = input.rankSession
+    if (!rank) {
+      throw new Error("FeedRpcV2BootstrapRepository requires rankSession")
+    }
+    const args: Record<string, unknown> = {
+      p_scope: input.scope,
+      p_content_filter: input.contentFilter ?? "all",
+      p_limit: input.limit ?? FEED_PAGE_SIZE,
+      p_session_seed: rank.sessionSeed,
+      p_rank_frozen_at: rank.rankFrozenAt,
+      p_scan_cursor: rank.scanCursor,
+    }
+    if (input.cursor) args.p_cursor = input.cursor
+    return this.client.callKnown(
+      BackendV2RpcNames.feedV2,
+      decodeFeedBootstrapV1,
+      {
+        args,
+        flagName: "backendV2.feedRotatingRank",
+        cacheMiss: true,
+      }
+    )
+  }
+}
+
 export type FeedBootstrapLoadResult = {
   bootstrap: FeedBootstrapV1
   source: "rpc" | "rest" | "cache"
@@ -440,6 +481,8 @@ export type FeedBootstrapLoadResult = {
   durationMs: number
   payloadBytes: number
   cacheHit: boolean
+  /** v2 failed; caller must drop rank cursor and incompatible pagination state. */
+  rotatingRankFallback?: boolean
 }
 
 export async function loadFeedBootstrapForUser(
@@ -448,6 +491,7 @@ export async function loadFeedBootstrapForUser(
   options: FeedBootstrapInput & {
     force?: boolean
     caller?: string
+    rankSession?: FeedBootstrapInput["rankSession"]
   }
 ): Promise<FeedBootstrapLoadResult> {
   const uid = userId.trim()
@@ -460,11 +504,13 @@ export async function loadFeedBootstrapForUser(
   const contentFilter = options.contentFilter ?? "all"
   const cursor = options.cursor?.trim() || null
   const limit = options.limit ?? FEED_PAGE_SIZE
+  const rankSessionSeed = options.rankSession?.sessionSeed ?? null
   const key = feedBootstrapCacheKey({
     userId: uid,
     scope,
     contentFilter,
     cursor,
+    rankSessionSeed,
   })
 
   if (options.force) {
@@ -504,18 +550,52 @@ export async function loadFeedBootstrapForUser(
       }
     }
 
-    const rpcRepo = new FeedRpcBootstrapRepository(client)
     const restRepo = new FeedRestBootstrapRepository(client, uid)
     const input: FeedBootstrapInput = {
       scope,
       contentFilter,
       cursor,
       limit,
+      rankSession: options.rankSession ?? null,
     }
 
-    const { value: rpc, ms } = await measureAsync(() =>
-      rpcRepo.loadFeedBootstrap(input)
-    )
+    const useRotating =
+      isBackendV2Enabled("feedRotatingRank") && Boolean(options.rankSession)
+
+    let rpc: FeedBootstrapV1
+    let ms: number
+    let rotatingRankFallback = false
+
+    if (useRotating) {
+      const v2Repo = new FeedRpcV2BootstrapRepository(client)
+      try {
+        const measured = await measureAsync(() => v2Repo.loadFeedBootstrap(input))
+        rpc = measured.value
+        ms = measured.ms
+      } catch (err) {
+        console.warn(
+          "[backendV2.feed] rpc_v2_feed_bootstrap failed, falling back to v1",
+          err
+        )
+        rotatingRankFallback = true
+        const measured = await measureAsync(() =>
+          new FeedRpcBootstrapRepository(client).loadFeedBootstrap({
+            scope,
+            contentFilter,
+            cursor: null,
+            limit,
+          })
+        )
+        rpc = measured.value
+        ms = measured.ms
+      }
+    } else {
+      const measured = await measureAsync(() =>
+        new FeedRpcBootstrapRepository(client).loadFeedBootstrap(input)
+      )
+      rpc = measured.value
+      ms = measured.ms
+    }
 
     let dualRunMismatches = 0
     const dualRun =
@@ -565,6 +645,7 @@ export async function loadFeedBootstrapForUser(
       durationMs: ms,
       payloadBytes,
       cacheHit: false,
+      rotatingRankFallback,
     }
   })
 }

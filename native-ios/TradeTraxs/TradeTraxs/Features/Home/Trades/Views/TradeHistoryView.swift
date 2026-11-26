@@ -111,7 +111,7 @@ struct TradeHistoryView: View {
                 } label: {
                     Image(systemName: "clock.arrow.circlepath")
                 }
-                .contextualTourTarget(.tradesBacktest)
+                .firstTradeBacktestCoachmarkAnchor()
                 .accessibilityLabel("Backtest Lab")
                 .accessibilityIdentifier("trades.backtest")
             }
@@ -126,11 +126,27 @@ struct TradeHistoryView: View {
         .task {
             viewModel.loadIfNeeded()
         }
+        .onChange(of: viewModel.phase, initial: true) { _, phase in
+            let store = FirstTradeDetailCoachmarkStore.shared
+            guard store.backtestCoachmarkActive else { return }
+            switch phase {
+            case .loaded:
+                store.noteTradesJournalReadyForBacktestCoachmark()
+            case .idle, .loading:
+                store.resetTradesJournalReadyForBacktestCoachmark()
+            case .failed:
+                break
+            }
+        }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             viewModel.handleJournalMutation()
         }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.handleAccountMutation()
+        }
+        .onChange(of: CopyTradingGroupsMutationStore.shared.revision) { _, _ in
+            OwnerAccountFilterDropdownController.shared.dismiss()
+            viewModel.handleCopyTradingGroupsMutation()
         }
         .confirmationDialog(
             "Delete this trade?",
@@ -311,7 +327,7 @@ struct TradeHistoryView: View {
                     TradeJournalCard(
                         item: item,
                         accountName: viewModel.displayAccountTitle(for: item.accountID),
-                        copyParticipatingAccountLines: displayItem.copyParticipatingAccountLines,
+                        copyTradeOwnerDisplay: displayItem.copyTradeOwnerDisplay,
                         contentLayout: .tradesList,
                         imagePipeline: imagePipeline,
                         onOpen: { viewModel.openTrade(item) },

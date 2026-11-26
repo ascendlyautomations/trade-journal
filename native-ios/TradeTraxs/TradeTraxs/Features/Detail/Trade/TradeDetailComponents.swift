@@ -21,6 +21,7 @@ private enum TradeDetailLayout {
 struct TradeDetailCompactHeader: View {
     let trade: Trade
     var accountLine: String?
+    var copyTradeOwnerDisplay: CopyTradeOwnerJournalDisplay?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
@@ -69,7 +70,10 @@ struct TradeDetailCompactHeader: View {
                 }
             }
 
-            if let accountLine, !accountLine.isEmpty {
+            if let copyTradeOwnerDisplay {
+                CopyTradeOwnerJournalContextView(display: copyTradeOwnerDisplay)
+                    .padding(.top, ExperienceSpacing.xxs)
+            } else if let accountLine, !accountLine.isEmpty {
                 Text(accountLine)
                     .experienceStyle(.caption2, color: colors.tertiaryText)
                     .lineLimit(1)

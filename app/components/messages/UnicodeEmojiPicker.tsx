@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import "emoji-picker-element"
 
 type EmojiClickEvent = CustomEvent<{ unicode: string }>
 
@@ -27,28 +26,39 @@ export default function UnicodeEmojiPicker({
     const host = hostRef.current
     if (!host) return
 
-    const picker = document.createElement("emoji-picker") as HTMLElement & {
-      classList: DOMTokenList
-    }
-    if (theme === "dark") {
-      picker.classList.add("dark")
-    }
-    picker.setAttribute(
-      "style",
-      "width: 100%; height: min(420px, 55vh); --background: transparent; --border-color: transparent;"
-    )
+    let picker: (HTMLElement & { classList: DOMTokenList }) | null = null
+    let onEmoji: ((event: Event) => void) | null = null
+    let cancelled = false
 
-    const onEmoji = (event: Event) => {
-      const detail = (event as EmojiClickEvent).detail
-      const unicode = detail?.unicode?.trim()
-      if (unicode) onPickRef.current(unicode)
-    }
+    void import("emoji-picker-element").then(() => {
+      if (cancelled || !host) return
 
-    picker.addEventListener("emoji-click", onEmoji)
-    host.replaceChildren(picker)
+      picker = document.createElement("emoji-picker") as HTMLElement & {
+        classList: DOMTokenList
+      }
+      if (theme === "dark") {
+        picker.classList.add("dark")
+      }
+      picker.setAttribute(
+        "style",
+        "width: 100%; height: min(420px, 55vh); --background: transparent; --border-color: transparent;"
+      )
+
+      onEmoji = (event: Event) => {
+        const detail = (event as EmojiClickEvent).detail
+        const unicode = detail?.unicode?.trim()
+        if (unicode) onPickRef.current(unicode)
+      }
+
+      picker.addEventListener("emoji-click", onEmoji)
+      host.replaceChildren(picker)
+    })
 
     return () => {
-      picker.removeEventListener("emoji-click", onEmoji)
+      cancelled = true
+      if (picker && onEmoji) {
+        picker.removeEventListener("emoji-click", onEmoji)
+      }
       host.replaceChildren()
     }
   }, [theme])

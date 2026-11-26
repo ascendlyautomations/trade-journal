@@ -51,15 +51,22 @@ nonisolated enum TradingReportGenerator {
         trades: [Trade],
         interval: DateInterval,
         filters: TradingReportFilters,
+        copyTradingGroups: [CopyTradingGroup] = [],
         now: Date = Date(),
         preferences: PreferenceRuleContext? = nil
     ) -> TradingReport {
         let inputs = trades.map { DashboardChartMetrics.Input(trade: $0, accountType: nil) }
+        let scope = DashboardClientScopeFilter(
+            accountFilter: filters.accountFilter,
+            dateRange: .all,
+            customInterval: interval,
+            accountMode: filters.accountMode,
+            showPublicOnly: false,
+            copyTradingGroups: copyTradingGroups
+        )
         let scoped = DashboardChartMetrics.filteredTrades(
             from: inputs,
-            accountFilter: filters.accountFilter,
-            accountMode: filters.accountMode,
-            interval: interval,
+            scope: scope,
             now: now
         )
         let bounds = TradingReportPeriods.customBounds(interval: interval)

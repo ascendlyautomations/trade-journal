@@ -61,6 +61,7 @@ enum TextInputFocusGuard {
             || name.contains("TextView")
             || name.contains("TextEditor")
             || name.contains("TextLayout")
+            || name.contains("BioTextViewContainer")
     }
 
     private static func activeWindow() -> UIWindow? {

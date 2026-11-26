@@ -28,7 +28,7 @@ final class TradingRulesComplianceSessionStore {
         ready && result != nil && !isAuthoritative
     }
 
-    private init() {}
+    init() {}
 
     /// Publishes only when `generation` is still the latest coordinator token.
     /// A missing or failed preference load cannot replace a configured-rules snapshot for the same profile.
@@ -42,13 +42,24 @@ final class TradingRulesComplianceSessionStore {
         generation: UInt64,
         preferencesUnavailable: Bool
     ) -> Bool {
-        guard TradingRulesComplianceRecomputeCoordinator.isCurrent(generation) else { return false }
+        guard TradingRulesComplianceRecomputeCoordinator.isCurrent(generation) else {
+            RulesPreviewDebugLog.log(
+                "commit rejected stale generation=\(generation) store=\(RulesPreviewDebugLog.storeID(self))"
+            )
+            return false
+        }
         if preferencesUnavailable,
            !output.hasConfiguredRules,
            retainsConfiguredRules(for: profileID)
         {
+            RulesPreviewDebugLog.log(
+                "commit rejected preserve configured rules profileID=\(profileID.rawValue) store=\(RulesPreviewDebugLog.storeID(self))"
+            )
             return false
         }
+        RulesPreviewDebugLog.log(
+            "commit accept generation=\(generation) store=\(RulesPreviewDebugLog.storeID(self)) \(RulesPreviewDebugLog.describe(output: output))"
+        )
         publish(
             output: output,
             profileID: profileID,
@@ -68,6 +79,9 @@ final class TradingRulesComplianceSessionStore {
         inputFingerprint: String? = nil,
         generation: UInt64 = 0
     ) {
+        RulesPreviewDebugLog.log(
+            "publish(output) store=\(RulesPreviewDebugLog.storeID(self)) generation=\(generation) ready=\(ready) \(RulesPreviewDebugLog.describe(output: output))"
+        )
         let error = output.preferencesError ?? output.tradesError
         self.ready = ready
         self.profileID = profileID
@@ -100,6 +114,9 @@ final class TradingRulesComplianceSessionStore {
         generation: UInt64 = 0,
         isAuthoritative: Bool = true
     ) {
+        RulesPreviewDebugLog.log(
+            "publish(manual) store=\(RulesPreviewDebugLog.storeID(self)) generation=\(generation) ready=\(ready) hasConfiguredRules=\(hasConfiguredRules) insufficientScope=\(insufficientScope) result=\(result == nil ? "nil" : "present")"
+        )
         self.ready = ready
         self.profileID = profileID
         self.scopeFingerprint = scopeFingerprint
@@ -118,6 +135,9 @@ final class TradingRulesComplianceSessionStore {
     }
 
     func reset() {
+        RulesPreviewDebugLog.log(
+            "reset store=\(RulesPreviewDebugLog.storeID(self)) \(RulesPreviewDebugLog.describe(session: self))"
+        )
         result = nil
         eligibility = nil
         personalInsights = []

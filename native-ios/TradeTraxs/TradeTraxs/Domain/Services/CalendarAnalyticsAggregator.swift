@@ -5,7 +5,8 @@ nonisolated enum CalendarAnalyticsAggregator {
     static func filteredRows(
         _ rows: [AnalyticsDailyStatRowV1],
         accountFilter: DashboardAccountFilter,
-        modeFilter: String?
+        modeFilter: String?,
+        copyTradingGroups: [CopyTradingGroup] = []
     ) -> [AnalyticsDailyStatRowV1] {
         rows.filter { row in
             if let modeFilter, row.mode_effective != modeFilter { return false }
@@ -15,6 +16,17 @@ nonisolated enum CalendarAnalyticsAggregator {
                 return true
             case .account(let id):
                 return row.account_id == id.rawValue
+            case .copyTradingAll:
+                let linked = DashboardAccountFilterCopyTradingSupport.linkedAccountIDs(from: copyTradingGroups)
+                guard let accountID = row.account_id, linked.contains(accountID) else { return false }
+                return true
+            case .copyTradingGroup(let groupID):
+                let linked = DashboardAccountFilterCopyTradingSupport.accountIDs(
+                    forGroupID: groupID,
+                    groups: copyTradingGroups
+                )
+                guard let accountID = row.account_id, linked.contains(accountID) else { return false }
+                return true
             }
         }
     }
@@ -71,9 +83,15 @@ nonisolated enum CalendarAnalyticsAggregator {
         rows: [AnalyticsDailyStatRowV1],
         accountFilter: DashboardAccountFilter,
         modeFilter: String? = nil,
+        copyTradingGroups: [CopyTradingGroup] = [],
         todayKey: String? = AnalyticsCalendarDay.todayKey()
     ) -> TradingCalendarMonth {
-        let scoped = filteredRows(rows, accountFilter: accountFilter, modeFilter: modeFilter)
+        let scoped = filteredRows(
+            rows,
+            accountFilter: accountFilter,
+            modeFilter: modeFilter,
+            copyTradingGroups: copyTradingGroups
+        )
         let monthDays = daySummaries(from: scoped).filter {
             $0.key.hasPrefix(String(format: "%04d-%02d-", year, month))
         }
@@ -137,6 +155,7 @@ nonisolated enum CalendarAnalyticsAggregator {
         rows: [AnalyticsDailyStatRowV1],
         accountFilter: DashboardAccountFilter,
         modeFilter: String? = nil,
+        copyTradingGroups: [CopyTradingGroup] = [],
         now: Date = Date()
     ) -> TradingYearOverview {
         let current = CalendarMonthID.current(now: now)
@@ -154,7 +173,8 @@ nonisolated enum CalendarAnalyticsAggregator {
                 month: month,
                 rows: rows,
                 accountFilter: accountFilter,
-                modeFilter: modeFilter
+                modeFilter: modeFilter,
+                copyTradingGroups: copyTradingGroups
             )
             let isFuture = year > current.year || (year == current.year && month > current.month)
             let summary = built.monthSummary

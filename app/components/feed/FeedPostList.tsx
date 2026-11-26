@@ -26,6 +26,10 @@ type FeedPostListProps = {
   onEditReel?: (post: any) => void
   onDeleteReel?: (post: any) => void
   onReplaceReelVideo?: (post: any) => void
+  observeImpression?: (
+    el: HTMLElement | null,
+    post: { id: string; feedKind?: string }
+  ) => void
 }
 
 function FeedPostList({
@@ -45,6 +49,7 @@ function FeedPostList({
   onEditReel,
   onDeleteReel,
   onReplaceReelVideo,
+  observeImpression,
 }: FeedPostListProps) {
   const firstMediaPostId = useMemo(
     () =>
@@ -64,27 +69,36 @@ function FeedPostList({
     <div className="contents">
       {posts.map((post) => {
         const pid = String(post.id)
+        const impressionRef = (el: HTMLDivElement | null) => {
+          observeImpression?.(el, {
+            id: pid,
+            feedKind: post.feedKind,
+          })
+        }
 
         if (post.feedKind === "profile") {
           return (
-            <FeedProfilePostCard
-              key={`profile-${pid}`}
-              post={post}
-              user={user}
-              likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
-              likeBusy={!!likeBusyByPost[pid]}
-              commentCount={commentCountsByPost[pid] ?? 0}
-              mediaPriority={String(firstMediaPostId) === pid}
-              onSelectPost={onSelectPost}
-              onOpenComments={onOpenComments}
-              onToggleLike={onToggleLike}
-              onSharePost={onSharePost}
-            />
+            <div key={`profile-wrap-${pid}`} ref={impressionRef} className="contents">
+              <FeedProfilePostCard
+                key={`profile-${pid}`}
+                post={post}
+                user={user}
+                likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
+                likeBusy={!!likeBusyByPost[pid]}
+                commentCount={commentCountsByPost[pid] ?? 0}
+                mediaPriority={String(firstMediaPostId) === pid}
+                onSelectPost={onSelectPost}
+                onOpenComments={onOpenComments}
+                onToggleLike={onToggleLike}
+                onSharePost={onSharePost}
+              />
+            </div>
           )
         }
 
         if (post.feedKind === "achievement") {
           return (
+            <div key={`achievement-wrap-${pid}`} ref={impressionRef} className="contents">
             <FeedAchievementPostCard
               key={`achievement-${pid}`}
               post={post}
@@ -98,6 +112,7 @@ function FeedPostList({
               onToggleLike={onToggleLike}
               onSharePost={onSharePost}
             />
+            </div>
           )
         }
 
@@ -105,6 +120,7 @@ function FeedPostList({
           const canManageReel =
             user?.id != null && String(user.id) === String(post.user_id)
           return (
+            <div key={`reel-wrap-${pid}`} ref={impressionRef} className="contents">
             <FeedReelCard
               key={`reel-${pid}`}
               post={post}
@@ -125,10 +141,12 @@ function FeedPostList({
               onToggleLike={onToggleLike}
               onSharePost={onSharePost}
             />
+            </div>
           )
         }
 
         return (
+          <div key={`trade-wrap-${pid}`} ref={impressionRef} className="contents">
           <FeedPostCard
             key={`trade-${pid}`}
             post={post}
@@ -143,6 +161,7 @@ function FeedPostList({
             onToggleLike={onToggleLike}
             onSharePost={onSharePost}
           />
+          </div>
         )
       })}
     </div>

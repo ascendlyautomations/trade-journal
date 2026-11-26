@@ -25,6 +25,7 @@ struct AppRootView: View {
     @Bindable private var gettingStartedStore = GettingStartedStore.shared
     @Bindable private var passwordRecovery = PasswordRecoveryModel.shared
     @Bindable private var planSelectionCoordinator = PostOnboardingPlanSelectionCoordinator.shared
+    @Bindable private var welcomeCoordinator = PostOnboardingWelcomeCoordinator.shared
     @State private var isLaunchBootstrapping = true
 
     var body: some View {
@@ -103,11 +104,21 @@ struct AppRootView: View {
             fullScreenContent(destination)
                 .applyThemeEnvironment(themeManager.themeEnvironment)
                 .experienceThemedPresentationBackground(fullScreen: true)
+                .environment(
+                    \.experienceKeyboardDoneToolbarSuppressed,
+                    storyViewerSuppressesKeyboardDoneToolbar(destination)
+                )
         }
         .onAppear {
             themeManager.updateInterfaceStyle(colorScheme)
             NavigationCoordinatorProxy.openManageAccounts = {
                 navigation.coordinator.pushHome(.settings(.tradingAccounts))
+            }
+            OwnerAccountFilterDropdownCopyTradingBridge.repositoryFactory = {
+                DefaultCopyTradingGroupRepository(
+                    supabase: appEnvironment.data.supabase,
+                    session: appEnvironment.data.session
+                )
             }
             if authenticationLifecycle.initialRestoreCompleted
                 || authenticationManager.state.authFlowPhase == .unauthenticated
@@ -299,7 +310,7 @@ struct AppRootView: View {
         switch gatePhase {
         case .idle, .resolving:
             break
-        case .required, .brokerOnboarding, .complete:
+        case .required, .brokerOnboarding, .planSelection, .complete:
             postSignupTransition.finishBootstrapTransition()
         case .failed(let message):
             postSignupTransition.failBootstrap(
@@ -357,6 +368,16 @@ struct AppRootView: View {
                     gateStore: profileOnboardingGate
                 )
 
+            case .planSelection:
+                PostOnboardingPlanSelectionView(
+                    data: appEnvironment.data,
+                    navigationCoordinator: navigation.coordinator,
+                    onContinueFree: {
+                        profileOnboardingGate.markPlanSelectionFinished()
+                    }
+                )
+                .interactiveDismissDisabled(true)
+
             case .complete:
                 mainAuthenticatedShell
 
@@ -400,7 +421,6 @@ struct AppRootView: View {
         )
         .ownerAccountFilterDropdownOverlay()
         .demoExperienceShellChrome()
-        .experienceKeyboardDoneToolbar()
         .id(launchController.demoSnapshotRevision)
     }
 
@@ -415,11 +435,21 @@ struct AppRootView: View {
             authenticationCoordinator: authenticationCoordinator,
             currentUserProfile: currentUserProfile
         )
+        .environment(
+            \.experienceKeyboardDoneToolbarSuppressed,
+            navigation.store.presentedSheet != nil
+                || navigation.store.presentedFullScreen != nil
+        )
         .onAppear {
             DeepLinkLaunchTrace.event("shell.ready", detail: "main")
-            planSelectionCoordinator.noteAccountContext(
-                userID: currentUserProfile.profile?.id.rawValue,
-                accountCreatedAt: currentUserProfile.profile?.createdAt
+            let userID = currentUserProfile.profile?.id.rawValue
+            let createdAt = currentUserProfile.profile?.createdAt
+            planSelectionCoordinator.noteAccountContext(userID: userID, accountCreatedAt: createdAt)
+            welcomeCoordinator.noteAccountContext(userID: userID)
+            welcomeCoordinator.reevaluatePresentation(
+                blockingModalPresented: navigation.store.presentedSheet != nil
+                    || navigation.store.presentedFullScreen != nil
+                    || planSelectionCoordinator.isPresented
             )
         }
         .id(authenticationManager.state.session?.userID.rawValue ?? "signed-out")
@@ -433,6 +463,8 @@ struct AppRootView: View {
                         && navigation.store.paths.home.isEmpty,
                     feedRootActive: navigation.store.selectedTab == .feed
                         && navigation.store.paths.feed.isEmpty,
+                    messagesRootActive: navigation.store.selectedTab == .messages
+                        && navigation.store.paths.messages.isEmpty,
                     profileRootActive: navigation.store.selectedTab == .profile
                         && navigation.store.paths.profile.isEmpty,
                     settingsHomeActive: navigation.store.selectedTab == .profile
@@ -448,6 +480,8 @@ struct AppRootView: View {
                         && navigation.store.presentedFullScreen == nil
                         && contentReportPresenter.activeRequest == nil
                         && !thirdPartyAIConsentPresenter.isPresented
+                        && !planSelectionCoordinator.isPresented
+                        && !welcomeCoordinator.isPresented
                 )
             )
         )
@@ -465,6 +499,15 @@ struct AppRootView: View {
                 blockingModalPresented: navigation.store.presentedSheet != nil
                     || navigation.store.presentedFullScreen != nil
                     || planSelectionCoordinator.isPresented
+                    || welcomeCoordinator.isPresented
+            )
+            welcomeCoordinator.handleShellGatesChanged(
+                tourPhase: phase,
+                tourOverlayVisible: ContextualTourCoordinator.shared.showsOverlay,
+                blockingModalPresented: navigation.store.presentedSheet != nil
+                    || navigation.store.presentedFullScreen != nil
+                    || planSelectionCoordinator.isPresented
+                    || welcomeCoordinator.isPresented
             )
             guard !planSelectionCoordinator.defersPostTourNavigation(
                 userID: currentUserProfile.profile?.id.rawValue
@@ -478,6 +521,13 @@ struct AppRootView: View {
                 userID: currentUserProfile.profile?.id.rawValue,
                 accountCreatedAt: currentUserProfile.profile?.createdAt
             )
+            welcomeCoordinator.noteAccountContext(userID: currentUserProfile.profile?.id.rawValue)
+        }
+        .onChange(of: currentUserProfile.profile?.createdAt) { _, createdAt in
+            planSelectionCoordinator.noteAccountContext(
+                userID: currentUserProfile.profile?.id.rawValue,
+                accountCreatedAt: createdAt
+            )
         }
         .onChange(of: navigation.store.presentedSheet) { _, _ in
             planSelectionCoordinator.handleShellGatesChanged(
@@ -486,6 +536,15 @@ struct AppRootView: View {
                 blockingModalPresented: navigation.store.presentedSheet != nil
                     || navigation.store.presentedFullScreen != nil
                     || planSelectionCoordinator.isPresented
+                    || welcomeCoordinator.isPresented
+            )
+            welcomeCoordinator.handleShellGatesChanged(
+                tourPhase: ContextualTourCoordinator.shared.phase,
+                tourOverlayVisible: ContextualTourCoordinator.shared.showsOverlay,
+                blockingModalPresented: navigation.store.presentedSheet != nil
+                    || navigation.store.presentedFullScreen != nil
+                    || planSelectionCoordinator.isPresented
+                    || welcomeCoordinator.isPresented
             )
         }
         .fullScreenCover(isPresented: $planSelectionCoordinator.isPresented) {
@@ -500,6 +559,19 @@ struct AppRootView: View {
                     }
                 }
             )
+        }
+        .fullScreenCover(isPresented: $welcomeCoordinator.isPresented) {
+            PostOnboardingWelcomeView(
+                onTakeTour: {
+                    welcomeCoordinator.takeTour(navigationCoordinator: navigation.coordinator)
+                },
+                onMaybeLater: {
+                    welcomeCoordinator.maybeLater()
+                }
+            )
+            .onAppear {
+                welcomeCoordinator.prepareDashboardIfNeeded(navigationCoordinator: navigation.coordinator)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .postOnboardingPlanSelectionDidDismiss)) { _ in
             if ContextualTourCoordinator.shared.consumeOpenTradingRulesAfterCompletion() {
@@ -695,9 +767,10 @@ struct AppRootView: View {
         NavigationStack {
             Group {
                 switch destination {
-                case .storyViewer(let storyID):
+                case .storyViewer(let storyID, let context):
                     FeedStoryViewerView(
                         storyID: storyID,
+                        entryContext: context,
                         data: appEnvironment.data,
                         onClose: { navigation.coordinator.dismissFullScreen() }
                     )
@@ -735,7 +808,7 @@ struct AppRootView: View {
                         data: appEnvironment.data,
                         onPublished: { story in
                             navigation.coordinator.dismissFullScreen()
-                            navigation.coordinator.present(fullScreen: .storyViewer(story.id))
+                            navigation.coordinator.present(fullScreen: .storyViewer(story.id, .feedCarousel))
                         },
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
@@ -779,8 +852,7 @@ struct AppRootView: View {
             }
         }
         .experienceProtectedFormDismiss(fullScreenRequiresProtectedFormDismiss(destination))
-        .experienceKeyboardDismissOnTapOutside()
-        .experienceKeyboardDoneToolbar()
+        .modifier(FullScreenCoverKeyboardModifier(destination: destination))
     }
 
     private func requiresProtectedFormDismiss(_ destination: SheetDestination) -> Bool {
@@ -790,6 +862,11 @@ struct AppRootView: View {
         default:
             return false
         }
+    }
+
+    private func storyViewerSuppressesKeyboardDoneToolbar(_ destination: FullScreenDestination) -> Bool {
+        if case .storyViewer = destination { return true }
+        return false
     }
 
     private func fullScreenRequiresProtectedFormDismiss(_ destination: FullScreenDestination) -> Bool {
@@ -825,6 +902,9 @@ struct AppRootView: View {
         case .feed:
             navigation.coordinator.selectTab(.feed)
             navigation.coordinator.popToRoot(.feed)
+        case .messages:
+            navigation.coordinator.selectTab(.messages)
+            navigation.coordinator.popToRoot(.messages)
         case .profile:
             if navigation.store.selectedTab != .profile {
                 navigation.coordinator.selectTab(.profile)
@@ -835,18 +915,8 @@ struct AppRootView: View {
         case .settings:
             navigation.coordinator.selectTab(.profile)
             navigation.coordinator.pushProfileSettingsHome(source: "appWalkthrough")
-        case .payouts, .expenseTracker:
+        case .payouts, .expenseTracker, .trades:
             break
-        case .trades:
-            navigation.coordinator.selectTab(.home)
-            if navigation.store.paths.home.last != .trades {
-                if navigation.store.paths.home.isEmpty {
-                    navigation.coordinator.pushHome(.trades)
-                } else {
-                    navigation.coordinator.popToRoot(.home)
-                    navigation.coordinator.pushHome(.trades)
-                }
-            }
         }
     }
 
@@ -894,6 +964,22 @@ struct AppRootView: View {
         case .upgrade: return "TraxsPro"
         case .mediaViewer: return "Media"
         case .storyViewer: return "Story"
+        }
+    }
+}
+
+/// Story reply uses Return = Send and its own keyboard lift; other full-screen forms keep Done + tap-outside dismiss.
+private struct FullScreenCoverKeyboardModifier: ViewModifier {
+    let destination: FullScreenDestination
+
+    func body(content: Content) -> some View {
+        if case .storyViewer = destination {
+            content
+                .environment(\.experienceKeyboardDoneToolbarSuppressed, true)
+        } else {
+            content
+                .experienceKeyboardDismissOnTapOutside()
+                .experienceKeyboardDoneToolbar()
         }
     }
 }

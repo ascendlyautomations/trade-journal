@@ -46,8 +46,15 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
     /// Compact chip descriptors for the active filter strip (sort excluded).
     func activeChips(accountTitle: (TradingAccountID) -> String?) -> [TradeHistoryFilterChip] {
         var chips: [TradeHistoryFilterChip] = []
-        if case .account(let id) = account {
+        switch account {
+        case .all:
+            break
+        case .account(let id):
             chips.append(.init(id: "account", title: accountTitle(id) ?? "Account"))
+        case .copyTradingAll:
+            chips.append(.init(id: "account", title: "All Copy Trading Accounts"))
+        case .copyTradingGroup:
+            chips.append(.init(id: "account", title: "Copy Trading Group"))
         }
         if dateRange != .allTime {
             chips.append(.init(id: "date", title: dateRange.title))
@@ -327,6 +334,7 @@ nonisolated enum TradeHistorySort: String, CaseIterable, Identifiable, Hashable,
 nonisolated struct TradeHistoryMatchContext: Hashable, Sendable {
     var accountTitles: [TradingAccountID: String] = [:]
     var accountModes: [TradingAccountID: TradingAccountMode] = [:]
+    var copyTradingGroups: [CopyTradingGroup] = []
 
     func accountTitle(for accountID: TradingAccountID?) -> String? {
         guard let accountID else { return nil }

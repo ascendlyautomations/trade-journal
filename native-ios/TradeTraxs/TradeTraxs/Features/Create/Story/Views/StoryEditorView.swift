@@ -249,6 +249,7 @@ struct StoryEditorView: View {
             onPostStory?(rendered)
         }
         .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.xs)
         .padding(.bottom, ExperienceSpacing.md)
     }
 
@@ -265,7 +266,8 @@ struct StoryEditorView: View {
                         overlay: overlay,
                         canvasSize: canvasSize,
                         isSelected: viewModel.canvas.selectedTextID == overlay.id,
-                        transformsEnabled: !viewModel.isEditingText,
+                        isGloballyEditingText: viewModel.isEditingText,
+                        allowsManipulation: true,
                         onSelect: {
                             viewModel.selectText(overlay.id)
                         },
@@ -532,7 +534,10 @@ struct StoryTextOverlayView: View {
     let overlay: StoryTextOverlay
     let canvasSize: CGSize
     let isSelected: Bool
-    let transformsEnabled: Bool
+    /// Bottom text field + styling chrome is up (keyboard may be visible).
+    let isGloballyEditingText: Bool
+    /// Editor canvases enable gestures; playback previews leave this off.
+    var allowsManipulation: Bool = false
     let onSelect: () -> Void
     let onMove: (CGPoint) -> Void
     let onScale: (CGFloat) -> Void
@@ -545,9 +550,15 @@ struct StoryTextOverlayView: View {
     @State private var dragStartCenter: CGPoint?
     @State private var scaleStart: CGFloat?
     @State private var rotationStart: CGFloat?
-    @State private var measuredTextSize: CGSize = .zero
 
     @Environment(\.themeColors) private var colors
+
+    /// Selected overlay: Instagram-style move / pinch / twist even while the caption field is active.
+    private var manipulationEnabled: Bool { allowsManipulation && isSelected }
+    /// Unselected overlays stay passive while another caption is being edited.
+    private var selectionDragEnabled: Bool {
+        allowsManipulation && !isGloballyEditingText && !isSelected
+    }
 
     var body: some View {
         let center = CGPoint(
@@ -594,21 +605,6 @@ struct StoryTextOverlayView: View {
                         .fill(overlay.backgroundStyle.swiftUIFill)
                     }
                 }
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear
-                            .onAppear { measuredTextSize = proxy.size }
-                            .onChange(of: proxy.size) { _, newSize in
-                                measuredTextSize = newSize
-                            }
-                            .onChange(of: overlay.text) { _, _ in
-                                measuredTextSize = proxy.size
-                            }
-                            .onChange(of: overlay.scale) { _, _ in
-                                measuredTextSize = proxy.size
-                            }
-                    }
-                }
         }
         .frame(width: hitSize.width, height: hitSize.height)
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -620,20 +616,27 @@ struct StoryTextOverlayView: View {
         }
         .rotationEffect(.radians(Double(overlay.rotationRadians)))
         .position(center)
-        .highPriorityGesture(transformsEnabled ? dragGesture : nil)
-        .simultaneousGesture(isSelected ? pinchGesture : nil)
-        .simultaneousGesture(transformsEnabled && isSelected ? rotationGesture : nil)
+        .gesture(manipulationEnabled ? combinedManipulationGesture : nil)
+        .gesture(selectionDragEnabled ? selectionDragGesture : nil)
         .simultaneousGesture(
-            transformsEnabled
+            manipulationEnabled && !isGloballyEditingText
                 ? TapGesture(count: 2).onEnded { onEdit() }
                 : nil
         )
+        .onChange(of: overlay.id) { _, _ in
+            resetGestureBaselines()
+        }
     }
 
+    /// Matches renderer / playback sizing so the hit target does not jump when selection or draft text changes.
     private var manipulationHitSize: CGSize {
+        let content = StoryTextOverlayLayout.measuredBlock(
+            for: overlay,
+            canvasWidth: canvasSize.width
+        ).contentSize
         let padded = CGSize(
-            width: measuredTextSize.width + StoryTextTransformMetrics.hitPadding * 2,
-            height: measuredTextSize.height + StoryTextTransformMetrics.hitPadding * 2
+            width: content.width + StoryTextTransformMetrics.hitPadding * 2,
+            height: content.height + StoryTextTransformMetrics.hitPadding * 2
         )
         return CGSize(
             width: max(padded.width, StoryTextTransformMetrics.minimumHitSize.width),
@@ -641,39 +644,76 @@ struct StoryTextOverlayView: View {
         )
     }
 
+    private var combinedManipulationGesture: some Gesture {
+        SimultaneousGesture(
+            SimultaneousGesture(dragGesture, pinchGesture),
+            rotationGesture
+        )
+    }
+
+    private func resetGestureBaselines() {
+        dragStartCenter = nil
+        scaleStart = nil
+        rotationStart = nil
+    }
+
+    private var selectionDragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                handleDragChanged(value, reportsTrash: true)
+            }
+            .onEnded { value in
+                handleDragEnded(value, selectOnTap: true)
+            }
+    }
+
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                onSelect()
-                if dragStartCenter == nil {
-                    dragStartCenter = overlay.normalizedCenter
-                    onOverlayDragBegan?()
-                }
-                guard let start = dragStartCenter else { return }
-                let clamped = clampedNormalizedCenter(
-                    CGPoint(
-                        x: start.x + value.translation.width / max(canvasSize.width, 1),
-                        y: start.y + value.translation.height / max(canvasSize.height, 1)
-                    )
-                )
-                onMove(clamped)
-                onOverlayDragLocation?(canvasPoint(for: clamped))
+                handleDragChanged(value, reportsTrash: true)
             }
             .onEnded { value in
-                let moved = hypot(value.translation.width, value.translation.height) >= 4
-                if let start = dragStartCenter, moved {
-                    let clamped = clampedNormalizedCenter(
-                        CGPoint(
-                            x: start.x + value.translation.width / max(canvasSize.width, 1),
-                            y: start.y + value.translation.height / max(canvasSize.height, 1)
-                        )
-                    )
-                    onOverlayDragEnded?(canvasPoint(for: clamped))
-                } else {
-                    onSelect()
-                }
-                dragStartCenter = nil
+                handleDragEnded(value, selectOnTap: false)
             }
+    }
+
+    private func handleDragChanged(_ value: DragGesture.Value, reportsTrash: Bool) {
+        if !isSelected {
+            onSelect()
+        }
+        if dragStartCenter == nil {
+            dragStartCenter = overlay.normalizedCenter
+            if reportsTrash {
+                onOverlayDragBegan?()
+            }
+        }
+        guard let start = dragStartCenter else { return }
+        let clamped = clampedNormalizedCenter(
+            CGPoint(
+                x: start.x + value.translation.width / max(canvasSize.width, 1),
+                y: start.y + value.translation.height / max(canvasSize.height, 1)
+            )
+        )
+        onMove(clamped)
+        if reportsTrash {
+            onOverlayDragLocation?(canvasPoint(for: clamped))
+        }
+    }
+
+    private func handleDragEnded(_ value: DragGesture.Value, selectOnTap: Bool) {
+        let moved = hypot(value.translation.width, value.translation.height) >= 4
+        if let start = dragStartCenter, moved {
+            let clamped = clampedNormalizedCenter(
+                CGPoint(
+                    x: start.x + value.translation.width / max(canvasSize.width, 1),
+                    y: start.y + value.translation.height / max(canvasSize.height, 1)
+                )
+            )
+            onOverlayDragEnded?(canvasPoint(for: clamped))
+        } else if selectOnTap {
+            onSelect()
+        }
+        dragStartCenter = nil
     }
 
     private func canvasPoint(for normalizedCenter: CGPoint) -> CGPoint {
@@ -703,7 +743,6 @@ struct StoryTextOverlayView: View {
     private var pinchGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                onSelect()
                 if scaleStart == nil {
                     scaleStart = overlay.scale
                 }
@@ -717,7 +756,6 @@ struct StoryTextOverlayView: View {
     private var rotationGesture: some Gesture {
         RotationGesture()
             .onChanged { angle in
-                onSelect()
                 if rotationStart == nil {
                     rotationStart = overlay.rotationRadians
                 }

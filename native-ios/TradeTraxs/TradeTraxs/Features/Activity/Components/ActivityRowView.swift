@@ -13,13 +13,14 @@ struct ActivityRowView: View {
             HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
                 avatar
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(row.primaryText)
-                            .experienceStyle(.body, color: colors.primaryText)
-                            .fontWeight(row.isUnread ? .semibold : .regular)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Text(row.primaryText)
+                        .experienceStyle(.body, color: colors.primaryText)
+                        .fontWeight(row.isUnread ? .semibold : .regular)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
                     if let secondary = row.secondaryText {
                         Text(secondary)
                             .experienceStyle(.caption, color: colors.secondaryText)

@@ -10,6 +10,7 @@ struct DashboardImportTradesSection: View {
     @State private var showsConnectBrokerSheet = false
     @State private var linkTarget: BrokerIntegrationLinkTarget?
     @State private var createLinkTarget: BrokerIntegrationCreateLinkTarget?
+    @State private var linkPromptGate = BrokerIntegrationLinkPromptGate()
     @State private var importFlow = BrokerImportFlowModel()
     @State private var brokerViewModel: BrokerIntegrationsViewModel?
     @State private var manageAccountsViewModel: ManageAccountsViewModel?
@@ -112,6 +113,12 @@ struct DashboardImportTradesSection: View {
                 }
             }
         }
+        .brokerIntegrationAutoLinkPromptIfReady(
+            viewModel: brokerViewModel,
+            gate: linkPromptGate,
+            linkTarget: $linkTarget,
+            createLinkTarget: $createLinkTarget
+        )
         .experienceSheetChrome()
         .sheet(isPresented: $showsConnectBrokerSheet) {
             if let brokerViewModel {
@@ -124,12 +131,6 @@ struct DashboardImportTradesSection: View {
                 await brokerViewModel?.refreshAll(announceChange: false)
                 store.refresh(fromUserAction: false)
             }
-        }
-        .onChange(of: brokerViewModel?.unlinkedBrokerAccountsCount) { _, _ in
-            promptLinkingIfNeeded()
-        }
-        .onChange(of: brokerViewModel?.hasActiveConnectedBroker) { _, _ in
-            promptLinkingIfNeeded()
         }
         .fullScreenCover(isPresented: $importFlow.isPresented) {
             BrokerImportProgressView(
@@ -404,20 +405,10 @@ struct DashboardImportTradesSection: View {
                 data: data,
                 linkTarget: $linkTarget,
                 createLinkTarget: $createLinkTarget,
+                linkPromptGate: linkPromptGate,
                 showsImportedTradesReview: false
             )
         }
-    }
-
-    private func promptLinkingIfNeeded() {
-        guard let brokerViewModel else { return }
-        guard linkTarget == nil, createLinkTarget == nil else { return }
-        guard let next = brokerViewModel.firstUnlinkedBrokerAccount() else { return }
-        linkTarget = BrokerIntegrationLinkTarget(
-            provider: next.provider,
-            connectionId: next.connectionId,
-            account: next.account
-        )
     }
 
     private func ensureBrokerViewModel() {

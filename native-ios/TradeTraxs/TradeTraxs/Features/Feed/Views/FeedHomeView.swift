@@ -111,6 +111,7 @@ struct FeedHomeView: View {
         }
         .task(id: tabIsActive) {
             guard tabIsActive else {
+                FeedImpressionVisibility.feedSurfaceActive = false
                 preserveListScrollOffset()
                 ContextualTourCoordinator.shared.setFeedChromeReady(false)
                 syncFeedPlaybackSurfaceActive(reason: "tabChanged")
@@ -124,6 +125,7 @@ struct FeedHomeView: View {
                 )
                 return
             }
+            FeedImpressionVisibility.feedSurfaceActive = true
             syncFeedPlaybackSurfaceActive(reason: "tabActive")
             ActiveScreenBootstrapPriorityGate.feed.setScreenActive(true)
             defer { ActiveScreenBootstrapPriorityGate.feed.setScreenActive(false) }
@@ -277,8 +279,9 @@ struct FeedHomeView: View {
                         navigationEnvironment.coordinator.open(.feed(.explore))
                     } label: {
                         Image(systemName: "magnifyingglass")
-                            .contextualTourTarget(.feedExplore)
                     }
+                    .contextualTourTarget(.feedExplore)
+                    .contextualTourGlobalFrame(.feedExplore)
                     .accessibilityLabel("Explore")
                     .accessibilityIdentifier("feed.explore")
                 }
@@ -287,8 +290,9 @@ struct FeedHomeView: View {
                         navigationEnvironment.coordinator.open(.feed(.rooms))
                     } label: {
                         Image(systemName: "person.3")
-                            .contextualTourTarget(.feedTradeRooms)
                     }
+                    .contextualTourTarget(.feedTradeRooms)
+                    .contextualTourGlobalFrame(.feedTradeRooms)
                     .accessibilityLabel("Trade Rooms")
                     .accessibilityIdentifier("feed.rooms")
                 }

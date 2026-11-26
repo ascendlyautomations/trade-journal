@@ -88,51 +88,46 @@ struct RithmicConnectSheet: View {
     }
 
     private var fieldsCard: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            systemField
+        ExperienceCard {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                systemField
 
-            if locksUsername, !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                    Text("Username")
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                    Text(username)
-                        .experienceStyle(.body, color: colors.primaryText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, ExperienceSpacing.md)
-                        .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-                        .background(colors.surfaceSecondary)
-                        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous))
+                if locksUsername, !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        Text("Username")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                        Text(username)
+                            .experienceStyle(.body, color: colors.primaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, ExperienceSpacing.md)
+                            .frame(minHeight: ExperienceAccessibility.minTouchTarget)
+                            .background(colors.surfaceSecondary)
+                            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous))
+                    }
+                    .accessibilityIdentifier("brokerIntegrations.rithmic.username")
+                } else {
+                    AuthTextField(
+                        title: "Username",
+                        text: $username,
+                        kind: .email,
+                        textContentType: .username,
+                        submitLabel: .next
+                    )
+                    .accessibilityIdentifier("brokerIntegrations.rithmic.username")
                 }
-                .accessibilityIdentifier("brokerIntegrations.rithmic.username")
-            } else {
-                AuthTextField(
-                    title: "Username",
-                    text: $username,
-                    kind: .email,
-                    textContentType: .username,
-                    submitLabel: .next
-                )
-                .accessibilityIdentifier("brokerIntegrations.rithmic.username")
-            }
 
-            AuthTextField(
-                title: "Password",
-                text: $password,
-                kind: .password,
-                isSecureVisible: $isPasswordVisible,
-                textContentType: .password,
-                submitLabel: .done
-            ) {
-                submitIfValid()
+                AuthTextField(
+                    title: "Password",
+                    text: $password,
+                    kind: .password,
+                    isSecureVisible: $isPasswordVisible,
+                    textContentType: .password,
+                    submitLabel: .done
+                ) {
+                    submitIfValid()
+                }
+                .accessibilityIdentifier("brokerIntegrations.rithmic.password")
             }
-            .accessibilityIdentifier("brokerIntegrations.rithmic.password")
-        }
-        .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary)
-        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                .stroke(colors.border, lineWidth: ExperienceBorder.thin)
         }
         .allowsHitTesting(!isBusy)
         .opacity(isBusy ? ExperienceOpacity.disabled : ExperienceOpacity.opaque)

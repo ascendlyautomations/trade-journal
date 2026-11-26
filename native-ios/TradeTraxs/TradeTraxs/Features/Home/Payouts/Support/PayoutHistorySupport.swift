@@ -291,6 +291,17 @@ nonisolated enum PayoutHistorySupport {
             break
         case .account(let id):
             guard item.accountID == id else { return false }
+        case .copyTradingAll:
+            let linked = DashboardAccountFilterCopyTradingSupport.linkedAccountIDs(
+                from: scope.copyTradingGroups
+            )
+            guard linked.contains(item.accountID.rawValue) else { return false }
+        case .copyTradingGroup(let groupID):
+            let linked = DashboardAccountFilterCopyTradingSupport.accountIDs(
+                forGroupID: groupID,
+                groups: scope.copyTradingGroups
+            )
+            guard linked.contains(item.accountID.rawValue) else { return false }
         }
         return matchesDashboardDate(item.date, scope: scope, now: now)
     }

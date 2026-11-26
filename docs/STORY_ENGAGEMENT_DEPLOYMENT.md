@@ -4,6 +4,7 @@ Backend migrations:
 
 - `20261125130000_story_engagement.sql` — likes, views, insights RPC, retention, storage gate, notifications
 - `20261125140000_activity_bootstrap_story_id.sql` — `story_id` on activity bootstrap notifications
+- `20261125233000_story_engagement_backend_audit.sql` — insights `reply_count`, story-reply index, `story_likes` Realtime (optional if `20261125231500` already applied — prefer `233000` only)
 
 Apply **in order** on staging, then production. Regenerate `lib/database.types.ts` after apply if your workflow requires it.
 

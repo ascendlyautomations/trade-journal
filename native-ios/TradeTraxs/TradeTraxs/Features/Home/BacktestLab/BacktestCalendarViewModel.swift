@@ -52,7 +52,8 @@ final class BacktestCalendarViewModel {
             strategy: selectedStrategy,
             timeFilter: .allTime,
             customInterval: nil,
-            backtestModeAccountIDs: BacktestLabFilters.backtestModeAccountIDs(from: accounts)
+            backtestModeAccountIDs: BacktestLabFilters.backtestModeAccountIDs(from: accounts),
+            copyTradingGroups: []
         )
     }
 
@@ -69,15 +70,11 @@ final class BacktestCalendarViewModel {
     }
 
     var accountMenuTitle: String {
-        switch accountFilter {
-        case .all:
-            return "All Accounts"
-        case .account(let id):
-            if let account = accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.ownerDropdownLine(for: account)
-            }
-            return "Account"
-        }
+        OwnerAccountFilterMenuSupport.menuTitle(
+            filter: accountFilter,
+            accounts: BacktestLabFilters.eligibleBacktestAccounts(accounts),
+            profileID: profileID
+        )
     }
 
     var ownerAccountsProfileID: ProfileID? { profileID }
@@ -88,11 +85,12 @@ final class BacktestCalendarViewModel {
             if case .account(let id) = accountFilter { return id }
             return nil
         }()
-        return OwnerAccountDropdownSupport.menuAccounts(
+        let menu = OwnerAccountDropdownSupport.menuAccounts(
             profileID: profileID,
             fallback: eligible,
             preservingSelection: selectedID
         )
+        return BacktestLabFilters.eligibleBacktestAccounts(menu)
     }
 
     func loadIfNeeded() {
@@ -123,9 +121,16 @@ final class BacktestCalendarViewModel {
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
-        guard accountFilter != filter else { return }
+        let eligible = BacktestLabFilters.eligibleBacktestAccounts(accounts)
+        let resolved = OwnerAccountMutationSync.reconciledAccountFilter(
+            filter,
+            accounts: eligible,
+            profileID: profileID
+        )
+        let sanitized = BacktestLabFilters.sanitizedAccountFilter(resolved, eligibleAccounts: eligible)
+        guard accountFilter != sanitized else { return }
         ExperienceHaptics.play(.selection)
-        accountFilter = filter
+        accountFilter = sanitized
         syncSessionStore()
     }
 
@@ -154,6 +159,20 @@ final class BacktestCalendarViewModel {
         ExperienceHaptics.play(.selection)
         syncSessionStore()
         navigationCoordinator.pushHome(.backtestTradingDay(dayKey))
+    }
+
+    func handleCopyTradingGroupsMutation() {
+        guard let profileID else { return }
+        let eligible = BacktestLabFilters.eligibleBacktestAccounts(accounts)
+        let resolved = OwnerAccountMutationSync.reconciledAccountFilter(
+            accountFilter,
+            accounts: eligible,
+            profileID: profileID
+        )
+        let sanitized = BacktestLabFilters.sanitizedAccountFilter(resolved, eligibleAccounts: eligible)
+        guard accountFilter != sanitized else { return }
+        accountFilter = sanitized
+        syncSessionStore()
     }
 
     func handleAccountMutation() {
@@ -195,6 +214,8 @@ final class BacktestCalendarViewModel {
                 allTrades = try await backtests
                 accounts = try await loadedAccounts
             }
+            let eligible = BacktestLabFilters.eligibleBacktestAccounts(accounts)
+            accountFilter = BacktestLabFilters.sanitizedAccountFilter(accountFilter, eligibleAccounts: eligible)
             syncSessionStore()
             phase = .loaded
         } catch {

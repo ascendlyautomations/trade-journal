@@ -41,20 +41,20 @@ final class TraxsProPreviewTests: XCTestCase {
         TraxsProPreviewSession.shared.endReportsPreview(detailCache: cache)
     }
 
-    func testJournalPolicyUsesCanonicalDataDuringActivePreview() {
-        let viewer = ProfileID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-        XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: viewer))
+    func testJournalPolicyUsesCanonicalDataOnlyForExploreDemoProfile() {
+        let signedInViewer = ProfileID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: signedInViewer))
 
         let cache = DetailPresentationCache()
-        TraxsProPreviewSession.shared.beginReportsPreview(detailCache: cache)
-        XCTAssertTrue(JournalSampleDataPolicy.usesCanonicalJournalData(for: viewer))
-
+        TraxsProPreviewSession.shared.beginReportsPreview(detailCache: cache, viewer: signedInViewer)
+        XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: signedInViewer))
         TraxsProPreviewSession.shared.endReportsPreview(detailCache: cache)
-        TraxsProPreviewSession.shared.beginDashboardPreview(detailCache: cache, viewer: viewer)
-        XCTAssertTrue(JournalSampleDataPolicy.usesCanonicalJournalData(for: viewer))
 
+        TraxsProPreviewSession.shared.beginDashboardPreview(detailCache: cache, viewer: signedInViewer)
+        XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: signedInViewer))
         TraxsProPreviewSession.shared.endDashboardPreview(detailCache: cache)
-        XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: viewer))
+
+        XCTAssertTrue(JournalSampleDataPolicy.usesCanonicalJournalData(for: DemoExperienceSupport.profileID))
     }
 
     func testShouldRestrictTradingReportsCatalogBypassedOnlyInPreview() {
@@ -99,17 +99,21 @@ final class TraxsProPreviewTests: XCTestCase {
         TraxsProPreviewSession.shared.endDashboardPreview(detailCache: cache)
     }
 
-    func testExitPreviewRemovesSeededTradesButNotArbitraryCache() {
+    func testPreviewDoesNotSeedProductionDetailCache() {
         let cache = DetailPresentationCache()
         let owned = ProfileTradeFixtures.samples(owner: ProfileID("dev.preview.owner")).first
         if let owned {
             cache.seed(owned)
         }
 
-        TraxsProPreviewSession.shared.beginReportsPreview(detailCache: cache)
+        let viewer = ProfileID("dev.preview.owner")
+        TraxsProPreviewSession.shared.beginReportsPreview(detailCache: cache, viewer: viewer)
         let demoID = DemoCanonicalDataset.trades().first?.id
         if let demoID {
-            XCTAssertNotNil(cache.trade(id: demoID))
+            XCTAssertNil(cache.trade(id: demoID), "bundled trades belong in the preview cache only")
+            XCTAssertNotNil(
+                TraxsProPreviewSession.shared.activePreviewEnvironment?.data.detailCache.trade(id: demoID)
+            )
         }
         TraxsProPreviewSession.shared.endReportsPreview(detailCache: cache)
 
@@ -235,14 +239,20 @@ final class TraxsProPreviewTests: XCTestCase {
         TraxsProPreviewSession.shared.beginDashboardPreview(detailCache: cache, viewer: profileID)
         defer { TraxsProPreviewSession.shared.endDashboardPreview(detailCache: cache) }
 
+        guard let previewData = TraxsProPreviewSession.shared.activePreviewEnvironment?.data else {
+            XCTFail("expected isolated preview data environment")
+            return
+        }
+
         let viewModel = DashboardViewModel(
             home: TraxsProPreviewTestsStubHomeRepository(),
-            trades: TraxsProPreviewTestsEmptyTradeRepository(),
+            trades: previewData.trades,
             achievements: TraxsProPreviewTestsEmptyAchievementRepository(),
-            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
+            dailyCheckIns: previewData.dailyCheckIns,
             session: TraxsProPreviewTestsStubSession(userID: freeUserID),
-            detailCache: cache,
+            detailCache: previewData.detailCache,
             navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            tradingPreferences: previewData.tradingPreferences,
             loadsTraxsProPreviewSampleOnly: true
         )
         viewModel.loadIfNeeded()
@@ -332,7 +342,10 @@ final class TraxsProPreviewTests: XCTestCase {
         let sampleID = BacktestLabPreviewSampleData.trades(owner: profileID).first?.id
         if let sampleID {
             XCTAssertTrue(TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: sampleID))
-            XCTAssertNotNil(cache.trade(id: sampleID))
+            XCTAssertNil(cache.trade(id: sampleID))
+            XCTAssertNotNil(
+                TraxsProPreviewSession.shared.activePreviewEnvironment?.data.detailCache.trade(id: sampleID)
+            )
         }
 
         TraxsProPreviewSession.shared.endBacktestLabPreview(detailCache: cache)
@@ -379,7 +392,7 @@ final class TraxsProPreviewTests: XCTestCase {
         TraxsProPreviewSession.shared.endDashboardPreview(detailCache: cache)
     }
 
-    func testDashboardRestoreAfterPreviewExitSupportsRapidAccountSwitch() {
+    func testDashboardRestoreAfterPreviewExitSupportsRapidAccountSwitch() async {
         SessionViewerGate.shared.resetForTesting()
         SessionViewerGate.shared.bind(freeUserID)
         BackendV2FeatureFlags.setFlagForTests(.dashboardAnalyticsV3, enabled: true)
@@ -461,30 +474,21 @@ final class TraxsProPreviewTests: XCTestCase {
         let tokenBeforePreview = DashboardAnalyticsAccountChartsCoordinator.currentSelectionToken()
 
         TraxsProPreviewSession.shared.beginDashboardPreview(detailCache: cache, viewer: profileID)
-        XCTAssertTrue(JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID))
+        XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID))
         DashboardAnalyticsAccountChartsStore.shared.markFailed(
             accountID: DemoCanonicalDataset.evaluationAccountID,
             revision: 0,
             nonRetryable: true
         )
 
-        var previewEndNotified = false
-        let observer = NotificationCenter.default.addObserver(
-            forName: .traxsProCanonicalJournalPreviewDidEnd,
-            object: nil,
-            queue: .main
-        ) { _ in
-            previewEndNotified = true
-        }
-        defer { NotificationCenter.default.removeObserver(observer) }
-
-        TraxsProPreviewSession.shared.endDashboardPreview(detailCache: cache)
+        TraxsProPreviewCoordinator.shared.dismissPreview(detailCache: cache)
         XCTAssertFalse(JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID))
-        XCTAssertTrue(previewEndNotified)
 
+        await viewModel.refreshAfterTraxsProPreviewDismissed(profileID: profileID)
         viewModel.restoreAfterCanonicalJournalPreviewEnded()
-        XCTAssertEqual(viewModel.tradeInputs.count, 1)
-        XCTAssertFalse(JournalSampleDataPolicy.isCanonicalTrade(id: viewModel.tradeInputs[0].trade.id))
+        let ownerScoped = viewModel.complianceScopedTradesForRules()
+        XCTAssertEqual(ownerScoped.count, 1)
+        XCTAssertFalse(JournalSampleDataPolicy.isCanonicalTrade(id: ownerScoped[0].id))
 
         viewModel.setAccountFilter(.account(accountB))
         XCTAssertEqual(viewModel.accountFilter, .account(accountB))

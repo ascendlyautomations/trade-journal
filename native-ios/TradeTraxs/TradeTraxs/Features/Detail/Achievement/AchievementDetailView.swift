@@ -160,10 +160,6 @@ struct AchievementDetailView: View {
                         .padding(.top, ExperienceSpacing.sm)
                         .padding(.bottom, ExperienceSpacing.md)
 
-                        achievementHeadlineBlock(achievement)
-                            .padding(.horizontal, ExperienceSpacing.lg)
-                            .padding(.bottom, ExperienceSpacing.sm)
-
                         if achievementHasAttachedImage(achievement) {
                             InteractiveImageView(
                                 mediaID: achievement.id.rawValue,
@@ -187,6 +183,15 @@ struct AchievementDetailView: View {
                             achievementEngagementBar(achievement, scrollProxy: proxy)
                                 .padding(.horizontal, ExperienceSpacing.lg)
                                 .padding(.top, ExperienceSpacing.xxs)
+
+                            PublicAchievementContentStack(
+                                achievement: achievement,
+                                showsInlineNotes: true,
+                                showsFeaturedTag: true
+                            )
+                            .padding(.horizontal, ExperienceSpacing.lg)
+                            .padding(.top, ExperienceSpacing.sm)
+                            .accessibilityIdentifier("detail.achievement.content")
                         }
 
                         achievementBody(
@@ -200,7 +205,7 @@ struct AchievementDetailView: View {
                             .padding(
                                 .top,
                                 achievementHasAttachedImage(achievement)
-                                    ? ExperienceSpacing.xs
+                                    ? ExperienceSpacing.md
                                     : ExperienceSpacing.sm
                             )
                             .padding(.bottom, ExperienceSpacing.xl)
@@ -233,12 +238,13 @@ struct AchievementDetailView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             if !showsMediaEngagement {
-                achievementTextContent(achievement)
+                PublicAchievementContentStack(
+                    achievement: achievement,
+                    showsInlineNotes: true,
+                    showsFeaturedTag: true
+                )
+                .accessibilityIdentifier("detail.achievement.content")
                 achievementEngagementBar(achievement, scrollProxy: scrollProxy)
-            }
-
-            if showsMediaEngagement {
-                achievementTextContent(achievement)
             }
 
             CommentsSectionView(
@@ -277,11 +283,6 @@ struct AchievementDetailView: View {
         return !image.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    @ViewBuilder
-    private func achievementTextContent(_ achievement: Achievement) -> some View {
-        AchievementDetailMetadataSection(achievement: achievement)
-    }
-
     private func vaultRef(for achievement: Achievement) -> VaultContentRef {
         vaultRef(forAchievementID: achievement.id)
     }
@@ -301,24 +302,6 @@ struct AchievementDetailView: View {
     private func engagementTarget(for achievement: Achievement) -> InteractionTarget {
         data.detailCache.feedEngagementTarget(forAchievement: achievement.id)
             ?? .achievement(achievement.id)
-    }
-
-    @ViewBuilder
-    private func achievementMetadataTags(_ achievement: Achievement) -> some View {
-        if achievement.isFeatured {
-            ExperienceTag(title: "Featured", tone: .success)
-        }
-    }
-
-    @ViewBuilder
-    private func achievementHeadlineBlock(_ achievement: Achievement) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            achievementMetadataTags(achievement)
-            PublicAchievementHeadlineRow(achievement: achievement)
-                .accessibilityIdentifier("detail.achievement.headline")
-            PublicAchievementMetaChipRow(achievement: achievement)
-                .accessibilityIdentifier("detail.achievement.badges")
-        }
     }
 
 }

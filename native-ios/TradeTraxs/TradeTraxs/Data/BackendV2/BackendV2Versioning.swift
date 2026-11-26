@@ -9,6 +9,8 @@ nonisolated enum BackendV2Versioning {
         case dashboard = "rpc_v1_dashboard_bootstrap"
         case viewerSyncState = "rpc_v1_viewer_sync_state"
         case feed = "rpc_v1_feed_bootstrap"
+        case feedV2 = "rpc_v2_feed_bootstrap"
+        case feedRecordImpressions = "rpc_v1_feed_record_impressions"
         case profile = "rpc_v1_profile_bootstrap"
         case profileTabTrades = "rpc_v1_profile_tab_trades"
         case profileTabTradesV2 = "rpc_v1_profile_tab_trades_v2"

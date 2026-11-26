@@ -299,4 +299,85 @@ final class ImageCropMathTests: XCTestCase {
         XCTAssertTrue(transform.offset.width.isFinite)
         XCTAssertTrue(transform.offset.height.isFinite)
     }
+
+    func testContentPolicyAllowsZoomBelowCover() {
+        let sourcePixels = CGSize(width: 1179, height: 2556)
+        let viewport = FeedMediaLayout.editorViewportSize(
+            containerWidth: 390,
+            imagePixelSize: sourcePixels,
+            aspectOption: .portrait
+        )
+        let coverZoom = ImageCropViewportMath.coverZoomMultiplier(
+            imagePixelSize: sourcePixels,
+            viewportSize: viewport,
+            policy: .contentFree
+        )
+        XCTAssertGreaterThan(coverZoom, 1)
+
+        let fitLayout = ImageCropViewportMath.layout(
+            imagePixelSize: sourcePixels,
+            viewportSize: viewport,
+            userScale: 1,
+            translation: .zero,
+            policy: .contentFree
+        )
+        XCTAssertLessThanOrEqual(fitLayout.displayWidth, viewport.width)
+        XCTAssertLessThanOrEqual(fitLayout.displayHeight, viewport.height)
+
+        let zoomedOut = ImageCropViewportMath.layout(
+            imagePixelSize: sourcePixels,
+            viewportSize: viewport,
+            userScale: 0.5,
+            translation: .zero,
+            policy: .contentFree
+        )
+        XCTAssertLessThan(zoomedOut.displayWidth, fitLayout.displayWidth)
+    }
+
+    func testContentLetterboxPanDoesNotForceCenter() {
+        let sourcePixels = CGSize(width: 800, height: 1200)
+        let viewport = CGSize(width: 300, height: 375)
+        let layout = ImageCropViewportMath.layout(
+            imagePixelSize: sourcePixels,
+            viewportSize: viewport,
+            userScale: 1,
+            translation: CGSize(width: 40, height: -30),
+            policy: .contentFree
+        )
+        let centeredX = (viewport.width - layout.displayWidth) / 2
+        XCTAssertNotEqual(layout.origin.x, centeredX, accuracy: 0.5)
+    }
+
+    func testContentCompositorExportMatchesViewportAspect() {
+        let sourcePixels = CGSize(width: 1179, height: 2556)
+        let viewport = FeedMediaLayout.editorViewportSize(
+            containerWidth: 390,
+            imagePixelSize: sourcePixels,
+            aspectOption: .portrait
+        )
+        let geometry = CropViewportGeometry(
+            sourcePixelSize: sourcePixels,
+            viewportSize: viewport,
+            userScale: 1,
+            translation: .zero,
+            policy: .contentFree
+        )
+        let pixels = CGSize(width: 48, height: 48)
+        let solid = UIGraphicsImageRenderer(size: pixels).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(origin: .zero, size: pixels))
+        }
+        let exported = ImageCropCompositor.compositeViewport(
+            sourceImage: solid,
+            aspectOption: .portrait,
+            geometry: geometry
+        )
+        XCTAssertNotNil(exported)
+        let outputPixels = MediaImageOrientation.pixelSize(of: exported!)
+        let actualAspect = outputPixels.width / max(outputPixels.height, 1)
+        XCTAssertEqual(actualAspect, 4.0 / 5.0, accuracy: 0.02)
+        XCTAssertTrue(MediaImagePreparation.imageHasAlpha(exported!))
+        let payload = MediaImagePreparation.contentUploadData(from: exported!)
+        XCTAssertEqual(payload?.contentType, MediaImagePreparation.contentPNGContentType)
+    }
 }

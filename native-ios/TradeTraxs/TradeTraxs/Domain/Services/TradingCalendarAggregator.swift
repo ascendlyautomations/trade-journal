@@ -2,20 +2,37 @@ import Foundation
 
 /// Pure aggregation, web Calendar `dailyData` / week totals / monthly stats subset.
 nonisolated enum TradingCalendarAggregator {
+    private static func scopedTradesForAggregation(
+        from trades: [Trade],
+        accountFilter: DashboardAccountFilter,
+        copyTradingGroups: [CopyTradingGroup]
+    ) -> [Trade] {
+        let matched = trades.filter {
+            DashboardAccountFilterCopyTradingSupport.matchesTrade(
+                $0,
+                filter: accountFilter,
+                copyGroups: copyTradingGroups
+            )
+        }
+        guard DashboardAccountFilterCopyTradingSupport.shouldDedupeCopyMetrics(for: accountFilter) else {
+            return matched
+        }
+        return DashboardAccountFilterCopyTradingSupport.dedupeCopyTradedTradesForMetrics(matched)
+    }
+
     /// Groups trades into futures trading days, filtering by account.
     static func daySummaries(
         from trades: [Trade],
-        accountFilter: DashboardAccountFilter
+        accountFilter: DashboardAccountFilter,
+        copyTradingGroups: [CopyTradingGroup] = []
     ) -> [String: TradingDaySummary] {
         var buckets: [String: (pnl: Decimal, wins: Int, losses: Int, be: Int, grossProfit: Decimal, grossLoss: Decimal, ids: [TradeID], accounts: Set<TradingAccountID>)] = [:]
 
-        for trade in trades {
-            switch accountFilter {
-            case .all:
-                break
-            case .account(let id):
-                guard trade.accountID == id else { continue }
-            }
+        for trade in scopedTradesForAggregation(
+            from: trades,
+            accountFilter: accountFilter,
+            copyTradingGroups: copyTradingGroups
+        ) {
             // Exclude backtest from calendar performance (Dashboard parity).
             if trade.mode == .backtest { continue }
 
@@ -62,9 +79,10 @@ nonisolated enum TradingCalendarAggregator {
         month: Int,
         trades: [Trade],
         accountFilter: DashboardAccountFilter,
+        copyTradingGroups: [CopyTradingGroup] = [],
         todayKey: String? = TradingCalendarDay.todayKey()
     ) -> TradingCalendarMonth {
-        let allDays = daySummaries(from: trades, accountFilter: accountFilter)
+        let allDays = daySummaries(from: trades, accountFilter: accountFilter, copyTradingGroups: copyTradingGroups)
         let prefix = String(format: "%04d-%02d-", year, month)
         let monthDays = allDays.filter { $0.key.hasPrefix(prefix) }
 
@@ -75,7 +93,14 @@ nonisolated enum TradingCalendarAggregator {
             todayKey: todayKey
         )
         let weeks = weekSummaries(from: cells)
-        let summary = monthSummary(year: year, month: month, days: monthDays, trades: trades, accountFilter: accountFilter)
+        let summary = monthSummary(
+            year: year,
+            month: month,
+            days: monthDays,
+            trades: trades,
+            accountFilter: accountFilter,
+            copyTradingGroups: copyTradingGroups
+        )
 
         return TradingCalendarMonth(
             year: year,
@@ -204,19 +229,19 @@ nonisolated enum TradingCalendarAggregator {
         month: Int,
         days: [String: TradingDaySummary],
         trades: [Trade],
-        accountFilter: DashboardAccountFilter
+        accountFilter: DashboardAccountFilter,
+        copyTradingGroups: [CopyTradingGroup] = []
     ) -> TradingMonthSummary {
         let values = Array(days.values)
         let net = values.reduce(Decimal(0)) { $0 + $1.netPnL }
         let tradeCount = values.reduce(0) { $0 + $1.tradeCount }
         var wins = 0
         var losses = 0
-        for trade in trades {
-            switch accountFilter {
-            case .all: break
-            case .account(let id):
-                guard trade.accountID == id else { continue }
-            }
+        for trade in scopedTradesForAggregation(
+            from: trades,
+            accountFilter: accountFilter,
+            copyTradingGroups: copyTradingGroups
+        ) {
             if trade.mode == .backtest { continue }
             guard let key = TradingCalendarDay.key(for: trade),
                   key.hasPrefix(String(format: "%04d-%02d-", year, month))
@@ -254,14 +279,15 @@ nonisolated enum TradingCalendarAggregator {
     static func trades(
         for dayKey: String,
         from trades: [Trade],
-        accountFilter: DashboardAccountFilter
+        accountFilter: DashboardAccountFilter,
+        copyTradingGroups: [CopyTradingGroup] = []
     ) -> [Trade] {
         trades.filter { trade in
-            switch accountFilter {
-            case .all: break
-            case .account(let id):
-                guard trade.accountID == id else { return false }
-            }
+            guard DashboardAccountFilterCopyTradingSupport.matchesTrade(
+                trade,
+                filter: accountFilter,
+                copyGroups: copyTradingGroups
+            ) else { return false }
             if trade.mode == .backtest { return false }
             return TradingCalendarDay.key(for: trade) == dayKey
         }
@@ -273,6 +299,7 @@ nonisolated enum TradingCalendarAggregator {
         year: Int,
         trades: [Trade],
         accountFilter: DashboardAccountFilter,
+        copyTradingGroups: [CopyTradingGroup] = [],
         now: Date = Date()
     ) -> TradingYearOverview {
         let current = CalendarMonthID.current(now: now)
@@ -289,7 +316,8 @@ nonisolated enum TradingCalendarAggregator {
                 year: year,
                 month: month,
                 trades: trades,
-                accountFilter: accountFilter
+                accountFilter: accountFilter,
+                copyTradingGroups: copyTradingGroups
             )
             let isFuture = year > current.year || (year == current.year && month > current.month)
             let summary = built.monthSummary

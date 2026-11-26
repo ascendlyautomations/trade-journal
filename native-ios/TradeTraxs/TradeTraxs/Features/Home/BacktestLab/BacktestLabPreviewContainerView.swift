@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Isolated navigation stack for signed-in Free users exploring Backtest Lab with sample data.
 struct BacktestLabPreviewContainerView: View {
-    let data: DataEnvironment
+    let productionData: DataEnvironment
     let onDismiss: () -> Void
 
     @State private var navigationStore = NavigationStore()
@@ -10,8 +10,12 @@ struct BacktestLabPreviewContainerView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(data: DataEnvironment, onDismiss: @escaping () -> Void) {
-        self.data = data
+    private var previewData: DataEnvironment {
+        TraxsProPreviewSession.shared.activePreviewEnvironment?.data ?? productionData
+    }
+
+    init(productionData: DataEnvironment, onDismiss: @escaping () -> Void) {
+        self.productionData = productionData
         self.onDismiss = onDismiss
         let store = NavigationStore()
         store.sessionPhase = .authenticated
@@ -19,7 +23,7 @@ struct BacktestLabPreviewContainerView: View {
         _navigationCoordinator = State(initialValue: NavigationCoordinator(store: store))
         if let viewer = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) }) {
             TraxsProPreviewSession.shared.beginBacktestLabPreview(
-                detailCache: data.detailCache,
+                production: productionData,
                 viewer: viewer
             )
         }
@@ -28,7 +32,7 @@ struct BacktestLabPreviewContainerView: View {
     var body: some View {
         NavigationStack(path: homePath) {
             BacktestLabView(
-                data: data,
+                data: previewData,
                 navigationCoordinator: navigationCoordinator,
                 embeddedInTraxsProPreview: true
             )
@@ -73,14 +77,14 @@ struct BacktestLabPreviewContainerView: View {
         switch route {
         case .backtestCalendar:
             BacktestCalendarView(
-                data: data,
+                data: previewData,
                 navigationCoordinator: navigationCoordinator,
                 embeddedInTraxsProPreview: true
             )
         case .backtestTradingDay(let dayKey):
             BacktestTradingDayDetailView(
                 dayKey: dayKey,
-                data: data,
+                data: previewData,
                 navigationCoordinator: navigationCoordinator,
                 embeddedInTraxsProPreview: true
             )
@@ -88,7 +92,7 @@ struct BacktestLabPreviewContainerView: View {
             if TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: tradeID) {
                 JournalTradeDetailView(
                     tradeID: tradeID,
-                    data: data,
+                    data: previewData,
                     navigationCoordinator: navigationCoordinator
                 )
             } else {

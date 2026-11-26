@@ -75,6 +75,12 @@ final class ActivityNotificationClientTests: XCTestCase {
         XCTAssertEqual(reel.kind, "reel")
         XCTAssertEqual(reel.body["reelId"] as? String, "r1")
 
+        let story = try jsonObject(
+            encoder.encode(ActivityNotificationJSON.LikeEnvelope(target: .story(storyId: "s1")))
+        )
+        XCTAssertEqual(story.kind, "story")
+        XCTAssertEqual(story.body["storyId"] as? String, "s1")
+
         let comment = try jsonObject(
             encoder.encode(
                 ActivityNotificationJSON.LikeEnvelope(
@@ -113,6 +119,10 @@ final class ActivityNotificationClientTests: XCTestCase {
         XCTAssertEqual(
             encodedKind(.content(.reel(ReelID("r1")), contentID: "r1")),
             "reel"
+        )
+        XCTAssertEqual(
+            encodedKind(.content(.story(StoryID("s1")), contentID: "s1")),
+            "story"
         )
     }
 

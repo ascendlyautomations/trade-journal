@@ -5,9 +5,19 @@ enum TradingRulesAnalyticsPreviewSupport {
     private(set) static var ephemeralSampleActive = false
 
     static var showsSampleDataChrome: Bool {
-        TraxsProPreviewSession.shared.isTradingRulesPreviewActive
-            || TraxsProPreviewSession.shared.isDashboardPreviewActive
-            || ephemeralSampleActive
+        TraxsProPreviewSession.shared.isAnyPreviewActive || ephemeralSampleActive
+    }
+
+    /// Free-tier rules analytics chrome on the live Home stack — does not seed production session stores.
+    static func beginEphemeralSampleIfNeeded(profileID: ProfileID, detailCache: DetailPresentationCache) {
+        _ = (profileID, detailCache)
+        guard !TraxsProPreviewSession.shared.isAnyPreviewActive else { return }
+        ephemeralSampleActive = true
+    }
+
+    static func endEphemeralSampleIfNeeded(profileID: ProfileID?, detailCache: DetailPresentationCache) {
+        _ = (profileID, detailCache)
+        ephemeralSampleActive = false
     }
 
     static func allowsTradeDetailNavigation(tradeID: TradeID) -> Bool {
@@ -15,68 +25,16 @@ enum TradingRulesAnalyticsPreviewSupport {
         return TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: tradeID)
     }
 
-    static func beginEphemeralSampleIfNeeded(profileID: ProfileID, detailCache: DetailPresentationCache) {
-        guard !TraxsProPreviewSession.shared.isAnyPreviewActive else { return }
-        guard !ephemeralSampleActive else { return }
-        ephemeralSampleActive = true
-        seedCanonicalSample(profileID: profileID, detailCache: detailCache)
-    }
-
-    static func endEphemeralSampleIfNeeded(profileID: ProfileID?, detailCache: DetailPresentationCache) {
-        guard ephemeralSampleActive else { return }
-        ephemeralSampleActive = false
-        guard let profileID else { return }
-        SessionOwnerTradesStore.shared.invalidate(profileID: profileID)
-        TradingRulesCompliancePreferencesCache.invalidate(profileID: profileID)
-        TradingRulesComplianceSessionStore.shared.reset()
-        for id in DemoCanonicalDataset.trades().map(\.id) {
-            detailCache.removeTrade(id: id)
-        }
-    }
-
-    /// Sample trading rules + journal stores for analytics preview (never persisted to Supabase).
-    static func seedJournalAndPreferences(
-        profileID: ProfileID,
-        detailCache: DetailPresentationCache,
-        seedDetailCacheTrades: Bool = true
-    ) {
-        let trades = DemoCanonicalDataset.trades()
-        let accounts = DemoCanonicalDataset.accounts(owner: profileID)
-        if seedDetailCacheTrades {
-            DemoCanonicalDataset.seedDetailCache(detailCache, viewer: profileID)
-        }
-        SessionAccountsStore.shared.invalidate(profileID: profileID)
-        SessionAccountsStore.shared.seed(accounts, for: profileID, detailCache: detailCache, kind: .rest)
-        SessionOwnerTradesStore.shared.seed(
-            trades,
-            for: profileID,
-            detailCache: detailCache,
-            historyComplete: true,
-            totalTradeCount: trades.count
-        )
-        storeResolvedPreferenceContext(for: profileID)
-    }
-
-    /// Returns and caches demo rule preferences for the active preview session.
-    @discardableResult
     static func resolvedPreferenceContext(for profileID: ProfileID) -> PreferenceRuleContext {
-        if let cached = TradingRulesCompliancePreferencesCache.cachedContext(for: profileID) {
-            return cached
+        if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+           preview.viewer == profileID
+        {
+            return preview.preferenceContext
         }
-        let demo = DemoCanonicalDataset.previewPreferenceContext(for: profileID)
-        TradingRulesCompliancePreferencesCache.store(demo, for: profileID)
-        return demo
+        return DemoCanonicalDataset.previewPreferenceContext(for: profileID)
     }
 
-    private static func storeResolvedPreferenceContext(for profileID: ProfileID) {
-        _ = resolvedPreferenceContext(for: profileID)
-    }
-
-    private static func seedCanonicalSample(profileID: ProfileID, detailCache: DetailPresentationCache) {
-        seedJournalAndPreferences(profileID: profileID, detailCache: detailCache)
-    }
-
-    /// Fixed 1Y / all-accounts scope for bundled sample analytics (matches ``TradingRulesAnalyticsScopeController/applyTraxsProPreviewScopeDefaults()``).
+    /// Fixed 1Y / all-accounts scope for bundled sample analytics.
     static func sampleClientScopeFilter(accounts: [TradingAccount]) -> DashboardClientScopeFilter {
         DashboardClientScopeFilter(
             accountFilter: .all,
@@ -88,42 +46,85 @@ enum TradingRulesAnalyticsPreviewSupport {
         )
     }
 
-    /// Builds compliance from seeded demo trades + preferences only (no dashboard or network hydration).
+    /// Builds compliance from preview-environment demo trades + preferences only.
     @discardableResult
     static func publishBundledSampleSnapshot(
         profileID: ProfileID,
-        dependencies: TradingRulesComplianceLoadDependencies
+        dependencies: TradingRulesComplianceLoadDependencies,
+        preferenceContext: PreferenceRuleContext,
+        dashboardScopeFilter: DashboardClientScopeFilter? = nil
     ) async -> Bool {
-        guard showsSampleDataChrome else { return false }
-        let accounts = SessionAccountsStore.shared.cached(for: profileID)
-            ?? dependencies.detailCache.accounts(for: profileID)
-            ?? []
-        guard !accounts.isEmpty else { return false }
+        RulesPreviewDebugLog.log(
+            "publishBundledSampleSnapshot enter profileID=\(profileID.rawValue) showsSampleDataChrome=\(showsSampleDataChrome)"
+        )
+        guard showsSampleDataChrome else {
+            RulesPreviewDebugLog.log("publishBundledSampleSnapshot guard fail: showsSampleDataChrome=false")
+            return false
+        }
+        guard let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+              preview.viewer == profileID
+        else {
+            RulesPreviewDebugLog.log(
+                "publishBundledSampleSnapshot guard fail: previewEnvironment missing or viewer mismatch env=\(RulesPreviewDebugLog.describe(TraxsProPreviewSession.shared.activePreviewEnvironment))"
+            )
+            return false
+        }
+        let generation = preview.generation
+        RulesPreviewDebugLog.log(
+            "publishBundledSampleSnapshot active env \(RulesPreviewDebugLog.describe(preview)) \(RulesPreviewDebugLog.describeConfiguredRules(context: preferenceContext))"
+        )
 
+        let accounts = preview.accounts
+        guard !accounts.isEmpty else {
+            RulesPreviewDebugLog.log("publishBundledSampleSnapshot guard fail: preview.accounts empty")
+            return false
+        }
+
+        let filter = dashboardScopeFilter ?? sampleClientScopeFilter(accounts: accounts)
+        RulesPreviewDebugLog.log(
+            "publishBundledSampleSnapshot inputs trades=\(preview.trades.count) accounts=\(accounts.count) \(RulesPreviewDebugLog.describe(scopeFilter: filter))"
+        )
         let scope = PsychologyAnalyticsScopeResolver.resolve(
-            filter: sampleClientScopeFilter(accounts: accounts),
+            filter: filter,
             profileID: profileID,
             accounts: accounts
         )
-        let injected = resolvedPreferenceContext(for: profileID)
         let output = await TradingRulesComplianceSnapshotBuilder.build(
             profileID: profileID,
             scope: scope,
             accounts: accounts,
             dependencies: dependencies,
-            injectedPreferences: injected,
+            injectedPreferences: preferenceContext,
             dashboardInsights: nil
         )
-        let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
-        return TradingRulesComplianceSessionStore.shared.commit(
+        RulesPreviewDebugLog.log(
+            "publishBundledSampleSnapshot builder \(RulesPreviewDebugLog.describe(output: output)) \(RulesPreviewDebugLog.describe(scope: scope))"
+        )
+        guard let active = TraxsProPreviewSession.shared.activePreviewEnvironment,
+              active.viewer == profileID,
+              active.isCurrentGeneration(generation)
+        else {
+            RulesPreviewDebugLog.log(
+                "publishBundledSampleSnapshot guard fail: stale generation wanted=\(generation) env=\(RulesPreviewDebugLog.describe(TraxsProPreviewSession.shared.activePreviewEnvironment))"
+            )
+            return false
+        }
+        let presentationStore = TradingRulesCompliancePresentationStores.store(forPreviewUI: true)
+        RulesPreviewDebugLog.log(
+            "publishBundledSampleSnapshot publishing to store=\(RulesPreviewDebugLog.storeID(presentationStore)) envRulesStore=\(RulesPreviewDebugLog.storeID(active.rulesPresentationStore)) sameInstance=\(presentationStore === active.rulesPresentationStore) generation=\(generation)"
+        )
+        presentationStore.publish(
             output: output,
             profileID: profileID,
             scope: scope,
             ready: true,
             inputFingerprint: nil,
-            generation: token,
-            preferencesUnavailable: false
+            generation: generation
         )
+        RulesPreviewDebugLog.log(
+            "publishBundledSampleSnapshot published \(RulesPreviewDebugLog.describe(session: presentationStore))"
+        )
+        return true
     }
 }
 

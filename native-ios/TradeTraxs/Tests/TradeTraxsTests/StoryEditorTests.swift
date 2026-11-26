@@ -56,6 +56,34 @@ final class StoryEditorTests: XCTestCase {
     }
 
     @MainActor
+    func testTextOverlayTransformsPersistThroughEditMode() {
+        let viewModel = StoryEditorViewModel(sourceImage: makeSolidImage(size: CGSize(width: 100, height: 100)))
+        viewModel.beginAddingText()
+        guard let id = viewModel.canvas.selectedTextID else {
+            XCTFail("Expected overlay")
+            return
+        }
+        viewModel.updateDraftText("Sticker")
+        let center = CGPoint(x: 0.22, y: 0.61)
+        viewModel.updateOverlayPosition(id: id, normalizedCenter: center)
+        viewModel.updateOverlayScale(id: id, scale: 1.75)
+        viewModel.updateOverlayRotation(id: id, radians: 0.4)
+        viewModel.finishEditingText()
+
+        viewModel.selectText(id)
+        viewModel.beginEditingSelectedText()
+        XCTAssertTrue(viewModel.isEditingText)
+
+        let overlay = viewModel.canvas.textOverlays.first { $0.id == id }
+        XCTAssertNotNil(overlay)
+        XCTAssertEqual(overlay?.normalizedCenter.x ?? 0, center.x, accuracy: 0.001)
+        XCTAssertEqual(overlay?.normalizedCenter.y ?? 0, center.y, accuracy: 0.001)
+        XCTAssertEqual(overlay?.scale ?? 0, 1.75, accuracy: 0.001)
+        XCTAssertEqual(overlay?.rotationRadians ?? 0, 0.4, accuracy: 0.001)
+        XCTAssertEqual(overlay?.text, "Sticker")
+    }
+
+    @MainActor
     func testOverlayScaleClampsToEditorBounds() {
         let viewModel = StoryEditorViewModel(sourceImage: makeSolidImage(size: CGSize(width: 100, height: 100)))
         viewModel.beginAddingText()

@@ -7,6 +7,7 @@ nonisolated enum ContentLikeTable: String, Sendable, CaseIterable {
     case profilePostLikes = "profile_post_likes"
     case achievementPostLikes = "achievement_post_likes"
     case feedPostLikes = "likes"
+    case storyLikes = "story_likes"
 
     static func from(_ kind: InteractionContentKind) -> ContentLikeTable {
         switch kind {
@@ -15,6 +16,7 @@ nonisolated enum ContentLikeTable: String, Sendable, CaseIterable {
         case .reel: return .reelLikes
         case .feedPost: return .feedPostLikes
         case .achievement: return .achievementPostLikes
+        case .story: return .storyLikes
         }
     }
 
@@ -25,6 +27,7 @@ nonisolated enum ContentLikeTable: String, Sendable, CaseIterable {
         case .profilePostLikes: return "profile_post_id"
         case .achievementPostLikes: return "achievement_post_id"
         case .feedPostLikes: return "post_id"
+        case .storyLikes: return "story_id"
         }
     }
 
@@ -35,6 +38,7 @@ nonisolated enum ContentLikeTable: String, Sendable, CaseIterable {
         case .profilePostLikes: return .profilePost
         case .achievementPostLikes: return .achievement
         case .feedPostLikes: return .feedPost
+        case .storyLikes: return .story
         }
     }
 }

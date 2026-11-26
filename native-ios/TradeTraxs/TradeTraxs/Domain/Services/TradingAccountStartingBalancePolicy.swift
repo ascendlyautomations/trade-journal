@@ -7,26 +7,46 @@ nonisolated enum TradingAccountStartingBalancePolicy {
     static let liveLedgerMessage =
         "Account Value is required for equity and drawdown tracking. Enter the balance you started with."
 
-    /// Create gate for Personal / Broker / Prop Firm (Backtest may omit size).
-    static func requiresStartingBalanceOnCreate(_ draft: TradingAccountDraft) -> Bool {
+    /// Create gate for Personal / Broker / Prop Firm (Backtest may omit size unless drawdown is enabled).
+    static func requiresStartingBalanceOnCreate(
+        _ draft: TradingAccountDraft,
+        livePersonalDrawdown: LivePersonalDrawdownConfig? = nil
+    ) -> Bool {
         switch draft.category {
         case .personal, .broker, .propFirm:
             return true
         case .backtest:
-            return false
+            guard let config = livePersonalDrawdown, config.limitAmount > 0 else { return false }
+            return true
         }
     }
 
     /// Save gate when the account uses manual-ledger live equity (`account_size` is the baseline).
-    static func requiresStartingBalanceOnSave(_ draft: TradingAccountDraft) -> Bool {
+    static func requiresStartingBalanceOnSave(
+        _ draft: TradingAccountDraft,
+        drawdownConfiguredOnAccount account: TradingAccount? = nil
+    ) -> Bool {
         switch draft.category {
         case .personal, .broker:
             return true
         case .propFirm:
             return true
         case .backtest:
+            if let account,
+               let limit = account.livePersonalDrawdown?.limitAmount,
+               limit > 0
+            {
+                return true
+            }
             return false
         }
+    }
+
+    static func requiresStartingBalanceForBacktestDrawdown(
+        draft: TradingAccountDraft,
+        enableDrawdown: Bool
+    ) -> Bool {
+        draft.category == .backtest && enableDrawdown
     }
 
     static func parsedPositiveAmount(from sizeDigits: String) -> Decimal? {

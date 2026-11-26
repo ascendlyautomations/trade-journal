@@ -62,25 +62,32 @@ final class ReportsScreenViewModel: ScreenLifecycle {
     }
 
     var accountFilterTitle: String {
-        switch filters.accountFilter {
-        case .all: return "All Accounts"
-        case .account(let id):
-            if let account = accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.ownerDropdownLine(for: account)
-            }
-            return "Account"
-        }
+        OwnerAccountFilterMenuSupport.menuTitle(
+            filter: filters.accountFilter,
+            accounts: accounts,
+            profileID: profileID
+        )
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
+        let resolved = OwnerAccountMutationSync.reconciledAccountFilter(
+            filter,
+            accounts: accounts,
+            profileID: profileID
+        )
+        guard filters.accountFilter != resolved else { return }
         ExperienceHaptics.play(.selection)
-        filters.accountFilter = filter
-        TradingReportSessionStore.shared.filters.accountFilter = filter
+        filters.accountFilter = resolved
+        TradingReportSessionStore.shared.filters.accountFilter = resolved
         Task { await refresh() }
     }
 
     func openManageAccounts() {
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
+    }
+
+    func openManageCopyTradingGroups() {
+        navigationCoordinator.pushHome(.settings(.copyTradingAccounts))
     }
 
     func handleAccountMutation() {
@@ -92,6 +99,13 @@ final class ReportsScreenViewModel: ScreenLifecycle {
         accounts = loaded.filter(\.isActive)
         OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
         sanitizeAccountFilter()
+    }
+
+    func handleCopyTradingGroupsMutation() {
+        let previous = filters.accountFilter
+        sanitizeAccountFilter()
+        guard filters.accountFilter != previous else { return }
+        Task { await refresh() }
     }
 
     func syncFiltersFromSession() {
@@ -327,9 +341,12 @@ final class ReportsScreenViewModel: ScreenLifecycle {
             profileID = ProfileID(userID.rawValue)
         }
         guard let profileID else { return }
-        if TraxsProPreviewSupport.isReportsPreviewActive
-            || JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
-            accounts = DemoCanonicalDataset.accounts().filter(\.isActive)
+        if TraxsProPreviewSupport.isReportsPreviewActive, let trades {
+            do {
+                accounts = try await trades.accounts(for: profileID).filter(\.isActive)
+            } catch {
+                accounts = DemoCanonicalDataset.accounts(owner: profileID).filter(\.isActive)
+            }
             return
         }
         guard accounts.isEmpty, let trades else { return }
@@ -342,9 +359,10 @@ final class ReportsScreenViewModel: ScreenLifecycle {
     }
 
     private func sanitizeAccountFilter() {
-        let sanitized = DashboardAccountScopePolicy.sanitizedFilter(
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
             filters.accountFilter,
-            accounts: accounts
+            accounts: accounts,
+            profileID: profileID
         )
         guard sanitized != filters.accountFilter else { return }
         filters.accountFilter = sanitized

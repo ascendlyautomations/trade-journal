@@ -16,8 +16,10 @@ struct ProfileStatisticsRow: View {
                     label: metric.label,
                     isLoading: isLoading
                 )
+                .frame(maxWidth: .infinity, alignment: .center)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, ExperienceSpacing.xs)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("profile.statisticsRow")

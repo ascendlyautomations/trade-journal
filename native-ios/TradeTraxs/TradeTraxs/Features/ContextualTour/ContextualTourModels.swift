@@ -9,6 +9,7 @@ enum ContextualTourID: String, Codable, Hashable, Sendable {
 enum ContextualTourSurface: String, Equatable, Sendable {
     case dashboard
     case feed
+    case messages
     case profile
     case settings
     case payouts
@@ -39,11 +40,15 @@ enum ContextualTourStepRole: Equatable, Sendable {
 }
 
 /// A real control the spotlight measures. Never a hard-coded coordinate.
-enum ContextualTourTargetID: String, Hashable, Sendable {
+enum ContextualTourTargetID: String, CaseIterable, Hashable, Sendable {
+    case mainTabHome
+    case mainTabFeed
+    case mainTabCreate
+    case mainTabMessages
+    case mainTabProfile
     case dashboardAccountAndDates
     case dashboardPerformance
     case dashboardTrades
-    case tradesBacktest
     case dashboardReports
     case dashboardWithdrawals
     case dashboardCalendar
@@ -53,6 +58,7 @@ enum ContextualTourTargetID: String, Hashable, Sendable {
     case feedExplore
     case profileIdentity
     case profileTradeRoom
+    case profileSettings
     case settingsAppearance
     case settingsTradingRules
     case payoutsHistory
@@ -60,6 +66,25 @@ enum ContextualTourTargetID: String, Hashable, Sendable {
     case expenseTrackerIncome
     case expenseTrackerAnalytics
     case expenseTrackerExport
+}
+
+extension ContextualTourTargetID {
+    var mainTabIdentifier: TabIdentifier? {
+        switch self {
+        case .mainTabHome: return .home
+        case .mainTabFeed: return .feed
+        case .mainTabCreate: return .create
+        case .mainTabMessages: return .messages
+        case .mainTabProfile: return .profile
+        default: return nil
+        }
+    }
+
+    var isMainTabBarTarget: Bool { mainTabIdentifier != nil }
+
+    var prefersWalkthroughCardAboveSpotlight: Bool {
+        isMainTabBarTarget
+    }
 }
 
 struct ContextualTourStep: Equatable, Sendable {
@@ -121,115 +146,118 @@ enum ContextualTourCatalog {
 
     private static let walkthroughSteps: [ContextualTourStep] = [
         ContextualTourStep(
+            target: .mainTabHome,
+            title: "Home tab — Your Dashboard",
+            message: "View your trading performance, journal, and analytics in one place.",
+            surface: .dashboard
+        ),
+        ContextualTourStep(
             target: .dashboardAccountAndDates,
-            title: "Accounts & timeframe",
-            message: "Pick which account and period the Dashboard uses.",
+            title: "Accounts & Timeframe",
+            message: "Choose which trading accounts and dates to analyze.",
             surface: .dashboard
         ),
         ContextualTourStep(
             target: .dashboardPerformance,
-            title: "Equity curve",
-            message: "See how your account has performed over time.",
+            title: "Trading Performance",
+            message: "Track your account's performance over time.",
             surface: .dashboard
         ),
         ContextualTourStep(
             target: .dashboardTrades,
-            title: "Trades",
-            message: "Review your full trade journal.",
+            title: "Your Trade Journal",
+            message: "Review and manage your recorded trades.",
             surface: .dashboard
         ),
         ContextualTourStep(
-            target: .tradesBacktest,
-            title: "Backtest",
-            message: "Open your backtesting journal here to review simulated trades.",
-            surface: .trades,
-            presentsIfUnmeasured: true
-        ),
-        ContextualTourStep(
             target: .dashboardReports,
-            title: "Reports",
-            message: "Weekly and monthly performance breakdowns.",
+            title: "Performance Reports",
+            message: "Review weekly and monthly trading performance.",
             surface: .dashboard
         ),
         ContextualTourStep(
             target: .dashboardWithdrawals,
-            title: "Withdrawals",
-            message: "Track live and prop-firm payouts.",
+            title: "Withdrawals & Expenses",
+            message: "Track payouts, prop firm expenses, and business expenses.",
             surface: .dashboard
         ),
         ContextualTourStep(
             target: .dashboardCalendar,
-            title: "Calendar",
-            message: "Review performance day by day.",
-            surface: .dashboard,
-            presentsIfUnmeasured: true
+            title: "Trading Calendar",
+            message: "Review your trading performance day by day.",
+            surface: .dashboard
         ),
         ContextualTourStep(
-            title: "Continue to Feed",
-            message: "",
-            surface: .dashboard,
-            role: .sectionContinue
+            target: .mainTabFeed,
+            title: "Feed tab — Trading Community",
+            message: "Connect with traders and discover shared trades, posts, and clips.",
+            surface: .dashboard
         ),
         ContextualTourStep(
             target: .feedContentFilters,
-            title: "Feed filters",
-            message: "Filter by trades, posts, clips, and more.",
-            surface: .feed,
-            presentsIfUnmeasured: true
+            title: "Feed Filters",
+            message: "Choose which types of content appear in your feed.",
+            surface: .feed
         ),
         ContextualTourStep(
             target: .feedTradeRooms,
             title: "Trade Rooms",
-            message: "Chat and trade with your communities.",
-            surface: .feed,
-            presentsIfUnmeasured: true
+            message: "Join trading communities, voice chats, and live streams.",
+            surface: .feed
         ),
         ContextualTourStep(
             target: .feedExplore,
             title: "Explore",
-            message: "Find traders and content across TradeTraxs.",
-            surface: .feed,
-            presentsIfUnmeasured: true
+            message: "Discover traders, content, and leaderboards.",
+            surface: .feed
         ),
         ContextualTourStep(
-            title: "Continue to Profile",
-            message: "",
-            surface: .feed,
-            role: .sectionContinue
+            target: .mainTabCreate,
+            title: "Create tab — Create & Journal",
+            message: "Log trades, record withdrawals, and share posts, clips, and stories.",
+            surface: .feed
+        ),
+        ContextualTourStep(
+            target: .mainTabMessages,
+            title: "Messages tab — Messages",
+            message: "Access private messages, group conversations, and Trade Room chats.",
+            surface: .feed
+        ),
+        ContextualTourStep(
+            target: .mainTabProfile,
+            title: "Profile tab — Your Profile",
+            message: "Access your personal trading profile.",
+            surface: .feed
         ),
         ContextualTourStep(
             target: .profileIdentity,
-            title: "Profile",
-            message: "Your identity, social info, and trading stats.",
-            surface: .profile,
-            presentsIfUnmeasured: true
+            title: "Profile header — Your Trading Identity",
+            message: "Display your bio, trading statistics, and social information.",
+            surface: .profile
         ),
         ContextualTourStep(
             target: .profileTradeRoom,
             title: "Your Trade Room",
-            message: "Your community space for market discussion.",
-            surface: .profile,
-            presentsIfUnmeasured: true
+            message: "Build your own trading community.",
+            surface: .profile
         ),
         ContextualTourStep(
-            title: "Continue to Settings",
-            message: "",
-            surface: .profile,
-            role: .sectionContinue
+            target: .profileSettings,
+            title: "Settings button — Settings",
+            message: "Manage your accounts, preferences, and TradeTraxs experience.",
+            surface: .profile
         ),
         ContextualTourStep(
             target: .settingsAppearance,
             title: "Appearance",
             message: "Choose System, Light, or Dark mode.",
-            surface: .settings,
-            presentsIfUnmeasured: true
+            surface: .settings
         ),
         ContextualTourStep(
             target: .settingsTradingRules,
             title: "Trading Rules",
-            message: "Set limits and discipline targets, then measure compliance from your journal.",
-            surface: .settings,
-            presentsIfUnmeasured: true
+            message: "Set trading limits and measure how consistently you follow them.",
+            surface: .settings
         ),
         ContextualTourStep(
             title: "Trading Rules",

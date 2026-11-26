@@ -1,5 +1,46 @@
 import UIKit
 
+/// Composites the crop viewport for WYSIWYG content uploads (transparent gutters + image placement).
+enum ImageCropCompositor {
+    static func compositeViewport(
+        sourceImage: UIImage,
+        aspectOption: ImageCropAspectOption,
+        geometry: CropViewportGeometry,
+        outputWidth: CGFloat = ImageCropEditorPreset.socialContent.outputWidth,
+        maxOutputDimension: CGFloat = ImageCropRenderer.defaultMaxOutputDimension
+    ) -> UIImage? {
+        let pixelSize = MediaImageOrientation.pixelSize(of: sourceImage)
+        guard pixelSize.width > 0, pixelSize.height > 0 else { return nil }
+
+        let aspectRatio = aspectOption.aspectRatio(for: pixelSize)
+        let frame = ImageCropFrameSize(outputWidth: outputWidth, aspectRatio: aspectRatio)
+        let viewport = geometry.viewportSize
+        guard viewport.width > 0, viewport.height > 0 else { return nil }
+
+        let layout = geometry.layout
+        let scaleX = frame.width / viewport.width
+        let scaleY = frame.height / viewport.height
+        let drawRect = CGRect(
+            x: layout.origin.x * scaleX,
+            y: layout.origin.y * scaleY,
+            width: layout.displayWidth * scaleX,
+            height: layout.displayHeight * scaleY
+        )
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = false
+
+        let canvasSize = CGSize(width: frame.width, height: frame.height)
+        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
+        let composed = renderer.image { context in
+            context.cgContext.clear(CGRect(origin: .zero, size: canvasSize))
+            sourceImage.draw(in: drawRect)
+        }
+        return ImageCropRenderer.downscaleIfNeeded(composed, maxDimension: maxOutputDimension)
+    }
+}
+
 /// Exports the exact visible crop from the editor into a new upright UIImage at source-pixel resolution.
 enum ImageCropRenderer {
     /// Default cap, mild downscale only when the crop exceeds this on its longest edge.
@@ -11,7 +52,7 @@ enum ImageCropRenderer {
         aspectOption: ImageCropAspectOption,
         viewportSize: CGSize,
         transform: ImageCropTransform,
-        maxUserScale: CGFloat = ImageCropMath.maxZoom,
+        policy: ImageCropViewportPolicy = .contentFree,
         maxOutputDimension: CGFloat = defaultMaxOutputDimension
     ) -> UIImage? {
         let normalized = MediaImageOrientation.normalized(sourceImage)
@@ -45,13 +86,14 @@ enum ImageCropRenderer {
             viewportSize: viewportSize,
             userScale: transform.zoom,
             translation: transform.offset,
-            maxUserScale: maxUserScale
+            policy: policy
         )
 
         return exportFeedCrop(
             sourceImage: normalized,
             aspectOption: aspectOption,
             geometry: geometry,
+            policy: policy,
             maxOutputDimension: maxOutputDimension
         )
     }
@@ -61,6 +103,7 @@ enum ImageCropRenderer {
         sourceImage: UIImage,
         aspectOption: ImageCropAspectOption,
         geometry: CropViewportGeometry,
+        policy: ImageCropViewportPolicy = .contentFree,
         maxOutputDimension: CGFloat = defaultMaxOutputDimension
     ) -> UIImage? {
         let normalized = MediaImageOrientation.normalized(sourceImage)
@@ -87,33 +130,57 @@ enum ImageCropRenderer {
             return normalized
         }
 
-        let beforeClamp = geometry.sourceRectBeforeClamp
-        let afterClamp = geometry.sourcePixelCropRect()
+        let output: UIImage?
+        if policy.usesCompositorExport {
+            output = ImageCropCompositor.compositeViewport(
+                sourceImage: normalized,
+                aspectOption: aspectOption,
+                geometry: geometry,
+                maxOutputDimension: maxOutputDimension
+            )
+        } else {
+            let afterClamp = geometry.sourcePixelCropRect()
+            output = cropSourcePixels(
+                normalized,
+                cropRect: afterClamp,
+                maxOutputDimension: maxOutputDimension
+            )
+        }
 
-        guard let output = cropSourcePixels(
-            normalized,
-            cropRect: afterClamp,
-            maxOutputDimension: maxOutputDimension
-        ) else { return nil }
+        guard let output else { return nil }
 
         #if DEBUG
-        let pixelRect = afterClamp.pixelIntegralClamped(to: pixelSize)
-        CropGeometryProbe.logPreview(geometry)
-        CropGeometryProbe.logExport(
-            geometry: geometry,
-            beforeClamp: beforeClamp,
-            afterClamp: afterClamp,
-            pixelRect: pixelRect,
-            outputPixels: MediaImageOrientation.pixelSize(of: output)
-        )
-        CropExportProbe.log(
-            mode: aspectOption,
-            sourcePixels: pixelSize,
-            viewport: geometry.viewportSize,
-            layout: geometry.layout,
-            sourceCropRect: afterClamp,
-            output: output
-        )
+        if policy.usesCompositorExport {
+            CropGeometryProbe.logPreview(geometry)
+            CropExportProbe.log(
+                mode: aspectOption,
+                sourcePixels: pixelSize,
+                viewport: geometry.viewportSize,
+                layout: geometry.layout,
+                sourceCropRect: nil,
+                output: output
+            )
+        } else {
+            let beforeClamp = geometry.sourceRectBeforeClamp
+            let afterClamp = geometry.sourcePixelCropRect()
+            let pixelRect = afterClamp.pixelIntegralClamped(to: pixelSize)
+            CropGeometryProbe.logPreview(geometry)
+            CropGeometryProbe.logExport(
+                geometry: geometry,
+                beforeClamp: beforeClamp,
+                afterClamp: afterClamp,
+                pixelRect: pixelRect,
+                outputPixels: MediaImageOrientation.pixelSize(of: output)
+            )
+            CropExportProbe.log(
+                mode: aspectOption,
+                sourcePixels: pixelSize,
+                viewport: geometry.viewportSize,
+                layout: geometry.layout,
+                sourceCropRect: afterClamp,
+                output: output
+            )
+        }
         CropExportProbe.assertExpectedAspect(mode: aspectOption, output: output)
         #endif
         return output
@@ -139,7 +206,7 @@ enum ImageCropRenderer {
             viewportSize: viewport,
             userScale: transform.zoom,
             translation: transform.offset,
-            maxUserScale: preset.maxZoom
+            policy: .coverLocked
         )
 
         let sourceCropRect = ImageCropViewportMath.sourcePixelCrop(
@@ -223,7 +290,7 @@ enum ImageCropRenderer {
         return downscaleIfNeeded(cropped, maxDimension: maxOutputDimension)
     }
 
-    private static func downscaleIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+    static func downscaleIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
         let pixelSize = MediaImageOrientation.pixelSize(of: image)
         let longest = max(pixelSize.width, pixelSize.height)
         guard longest.isFinite, longest > maxDimension,
@@ -240,9 +307,12 @@ enum ImageCropRenderer {
         else { return image }
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
-        format.opaque = false
+        format.opaque = !MediaImagePreparation.imageHasAlpha(image)
         let renderer = UIGraphicsImageRenderer(size: target, format: format)
-        return renderer.image { _ in
+        return renderer.image { context in
+            if !format.opaque {
+                context.cgContext.clear(CGRect(origin: .zero, size: target))
+            }
             image.draw(in: CGRect(origin: .zero, size: target))
         }
     }

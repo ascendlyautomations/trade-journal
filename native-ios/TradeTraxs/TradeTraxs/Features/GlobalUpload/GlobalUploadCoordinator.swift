@@ -775,8 +775,13 @@ final class GlobalUploadCoordinator {
                 var imageURL = checkpoint.uploadedImagePublicURL
                 if imageURL == nil, let imageData = spec.imageData {
                     updateJob(jobID) { $0.phase = .uploading; $0.progress = 0.05 }
+                    let contentType = MediaImagePreparation.contentType(forUploadData: imageData)
+                    let fileExtension = MediaImagePreparation.fileExtension(forUploadData: imageData)
                     let path = checkpoint.imageStoragePath
-                        ?? StorageOptimizedMedia.objectPath(prefix: spec.authorID.rawValue, fileExtension: "jpg")
+                        ?? StorageOptimizedMedia.objectPath(
+                            prefix: spec.authorID.rawValue,
+                            fileExtension: fileExtension
+                        )
                     checkpoint.imageStoragePath = path
                     persistPostRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                     let ref = try await UploadProgressContext.$jobID.withValue(jobID) {
@@ -785,7 +790,7 @@ final class GlobalUploadCoordinator {
                                 bucket: StorageBucket.profilePosts.rawValue,
                                 path: path,
                                 data: imageData,
-                                contentType: "image/jpeg",
+                                contentType: contentType,
                                 purpose: .postImage,
                                 cacheControl: StorageCacheControl.immutableMaxAge
                             )
@@ -1147,9 +1152,11 @@ final class GlobalUploadCoordinator {
                 imageRef = MediaReference(id: publicURL, kind: .image, altText: nil)
             } else if let imageData = spec.imageData, !imageData.isEmpty {
                 updateJob(jobID) { $0.phase = .uploading; $0.progress = 0.05 }
+                let contentType = MediaImagePreparation.contentType(forUploadData: imageData)
+                let fileExtension = MediaImagePreparation.fileExtension(forUploadData: imageData)
                 let path = StorageOptimizedMedia.objectPath(
                     prefix: "\(spec.authorID.rawValue)/achievements",
-                    fileExtension: "jpg"
+                    fileExtension: fileExtension
                 )
                 let reference = try await UploadProgressContext.$jobID.withValue(jobID) {
                     try await services.uploadService.upload(
@@ -1157,7 +1164,7 @@ final class GlobalUploadCoordinator {
                             bucket: StorageBucket.screenshots.rawValue,
                             path: path,
                             data: imageData,
-                            contentType: "image/jpeg",
+                            contentType: contentType,
                             purpose: .postImage
                         )
                     )
@@ -1383,8 +1390,13 @@ final class GlobalUploadCoordinator {
                let screenshotData = spec.screenshotData
             {
                 await UploadProgressRelay.shared.setActiveSegment(jobID: jobID, segmentID: "screenshot")
+                let contentType = MediaImagePreparation.contentType(forUploadData: screenshotData)
+                let fileExtension = MediaImagePreparation.fileExtension(forUploadData: screenshotData)
                 let path = checkpoint.uploadedScreenshotStoragePath
-                    ?? StorageOptimizedMedia.objectPath(prefix: spec.authorID.rawValue, fileExtension: "jpg")
+                    ?? StorageOptimizedMedia.objectPath(
+                        prefix: spec.authorID.rawValue,
+                        fileExtension: fileExtension
+                    )
                 checkpoint.uploadedScreenshotStoragePath = path
                 persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                 let reference = try await UploadProgressContext.$jobID.withValue(jobID) {
@@ -1393,7 +1405,7 @@ final class GlobalUploadCoordinator {
                             bucket: StorageBucket.screenshots.rawValue,
                             path: path,
                             data: screenshotData,
-                            contentType: "image/jpeg",
+                            contentType: contentType,
                             purpose: .tradeScreenshot
                         )
                     )

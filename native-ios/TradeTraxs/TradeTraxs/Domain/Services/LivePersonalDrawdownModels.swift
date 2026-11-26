@@ -1,5 +1,22 @@
 import Foundation
 
+/// Which account kinds may use personal drawdown gear + equity floors.
+nonisolated enum LivePersonalDrawdownAccountEligibility: Sendable, Hashable {
+    /// Dashboard live personal / broker manual ledger (unchanged default).
+    case dashboardLivePersonal
+    /// Backtest Lab accounts (`accounts.mode == backtest`).
+    case backtestAccount
+
+    func supportsDrawdown(for account: TradingAccount) -> Bool {
+        switch self {
+        case .dashboardLivePersonal:
+            return PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account)
+        case .backtestAccount:
+            return account.mode == .backtest
+        }
+    }
+}
+
 /// Web `LivePersonalDrawdownType`, fixed vs trailing personal floor on live accounts.
 nonisolated enum LivePersonalDrawdownType: String, Sendable, Hashable, CaseIterable, Codable {
     case fixed

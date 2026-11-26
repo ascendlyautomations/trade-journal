@@ -55,6 +55,7 @@ struct CommentComposerView: View {
                 .onChange(of: focused) { _, isFocused in
                     viewModel.maintainKeyboardScrollAnchor = isFocused
                 }
+                .experienceKeyboardExcludesDoneToolbarWhenFocused(focused)
                 .accessibilityIdentifier("interaction.comment.composer")
                 .experienceTextInputProbe(
                     screen: "comments",

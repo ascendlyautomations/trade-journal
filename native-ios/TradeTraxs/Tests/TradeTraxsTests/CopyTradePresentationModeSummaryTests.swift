@@ -2,6 +2,43 @@ import XCTest
 @testable import TradeTraxs
 
 final class CopyTradePresentationModeSummaryTests: XCTestCase {
+    func testOwnerOverflowFundedEvalAndMixedSummaries() {
+        XCTAssertEqual(
+            CopyTradePresentation.ownerOverflowAccountSummary(accountModes: [.funded, .funded]),
+            "+2 Funded Accounts"
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.ownerOverflowAccountSummary(accountModes: [.funded]),
+            "+1 Funded Account"
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.ownerOverflowAccountSummary(accountModes: [.evaluation, .evaluation, .evaluation]),
+            "+3 Evaluations"
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.ownerOverflowAccountSummary(accountModes: [.evaluation]),
+            "+1 Evaluation"
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.ownerOverflowAccountSummary(accountModes: [.funded, .evaluation]),
+            "+2 Accounts"
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.ownerOverflowAccountSummary(accountModes: [.live]),
+            "+1 Account"
+        )
+    }
+
+    func testOwnerJournalHeaderTitleIncludesGroupName() {
+        XCTAssertEqual(
+            CopyTradePresentation.ownerJournalHeaderTitle(groupName: nil, participatingAccountCount: 2),
+            "Copy Traded X2"
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.ownerJournalHeaderTitle(groupName: "My Group", participatingAccountCount: 3),
+            "Copy Traded X3 (My Group)"
+        )
+    }
     private let profileID = ProfileID("11111111-1111-1111-1111-111111111111")
     private let sourceID = TradingAccountID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
     private let copyB = TradingAccountID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
@@ -55,6 +92,24 @@ final class CopyTradePresentationModeSummaryTests: XCTestCase {
         ]
         let line = CopyTradePresentation.publicAcrossAccountsSummary(for: members)
         XCTAssertEqual(line, "Copy Traded across 4 accounts • 1 Live • 2 Funded • 1 Eval")
+    }
+
+    func testThreeAccountsOneLiveTwoFundedFromParticipatingModesPayload() {
+        let payloadMetadata = CopyTradeJournalMetadata(
+            sourceAccountID: sourceID,
+            copiedAccountIDs: [copyB, copyC],
+            copyTradingGroupID: "group-feed",
+            participatingAccountModesByID: [
+                sourceID: .live,
+                copyB: .funded,
+                copyC: .funded,
+            ]
+        )
+        let members = [
+            journalRow(id: "feed-1", account: sourceID, mode: .live, metadata: payloadMetadata),
+        ]
+        let line = CopyTradePresentation.publicAcrossAccountsSummary(for: members)
+        XCTAssertEqual(line, "Copy Traded across 3 accounts • 1 Live • 2 Funded")
     }
 
     func testSingleRowParticipatingModesPayloadProducesCanonicalSummary() {

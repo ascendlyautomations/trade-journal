@@ -113,6 +113,7 @@ struct ReportsScreenView: View {
         }
         .accessibilityIdentifier("reports.home")
         .onOwnerAccountMutation { viewModel.handleAccountMutation() }
+        .onCopyTradingGroupsMutation { viewModel.handleCopyTradingGroupsMutation() }
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
             entitlementGateRevision += 1
         }
@@ -216,21 +217,20 @@ struct ReportsScreenView: View {
     }
 
     private var accountFilterMenu: some View {
-        OwnerAccountFilterDropdown(
+        let profileID = viewModel.profileID
+        return OwnerAccountFilterDropdown(
             accounts: viewModel.accountsForMenu,
-            isAllAccountsSelected: {
-                if case .all = viewModel.filters.accountFilter { return true }
-                return false
-            }(),
-            selectedAccountID: {
-                if case .account(let id) = viewModel.filters.accountFilter { return id }
-                return nil
-            }(),
-            onSelectAll: { viewModel.setAccountFilter(.all) },
-            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            selectedFilter: viewModel.filters.accountFilter,
+            copyGroups: OwnerAccountFilterMenuSupport.copyGroups(for: profileID),
+            isLoadingCopyGroups: OwnerAccountFilterMenuSupport.isLoadingCopyGroups(for: profileID),
+            onSelectFilter: { viewModel.setAccountFilter($0) },
             onManageAccounts: { viewModel.openManageAccounts() },
+            onManageCopyGroups: { viewModel.openManageCopyTradingGroups() },
+            onRequestCopyGroups: {
+                OwnerAccountFilterMenuSupport.requestCopyGroupsLoad(profileID: profileID)
+            },
             accessibilityIdentifier: "reports.home.account",
-            profileID: viewModel.profileID,
+            profileID: profileID,
             detailCache: data?.detailCache
         ) {
             HStack(spacing: 4) {

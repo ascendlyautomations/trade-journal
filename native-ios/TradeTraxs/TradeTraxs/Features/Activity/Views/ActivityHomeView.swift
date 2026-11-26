@@ -112,113 +112,143 @@ struct ActivityHomeView: View {
     }
 
     private var listContent: some View {
+        activityList
+            .listSectionSpacing(ActivityInboxLayout.sectionSpacing)
+            .contentMargins(.top, ActivityInboxLayout.listTopContentMargin, for: .scrollContent)
+            .experiencePlainListStyle()
+    }
+
+    private var activityList: some View {
         List {
-            if viewModel.pendingFollowRequestCount > 0 {
-                Section {
-                    ActivityFollowRequestsBanner(
-                        count: viewModel.pendingFollowRequestCount,
-                        action: { viewModel.openFollowRequests() }
-                    )
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                }
-            }
+            activityFollowRequestsSection
+            activityNotificationSections
+            activityLoadingMoreSection
+        }
+    }
 
-            ForEach(viewModel.sections) { section in
-                Section {
-                    ForEach(section.rows) { row in
-                        ActivityRowView(
-                            row: row,
-                            imagePipeline: imagePipeline,
-                            onSelect: { viewModel.open(row) },
-                            onSelectActor: row.usesTradeTraxsBrandAvatar
-                                ? nil
-                                : row.notification.actorProfileID.map { id in
-                                    { viewModel.openActor(id) }
-                                }
-                        )
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(colors.backgroundPrimary)
-                        .listRowSeparator(.hidden)
-                        .onAppear {
-                            viewModel.loadMoreIfNeeded(currentID: row.id)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                viewModel.delete(row: row)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                            if row.isUnread {
-                                Button {
-                                    viewModel.markRead(row: row)
-                                } label: {
-                                    Label("Mark as Read", systemImage: "envelope.open")
-                                }
-                                .tint(colors.info)
-                            }
-                        }
-                        .contextMenu {
-                            Button {
-                                viewModel.open(row)
-                            } label: {
-                                Label("Open", systemImage: "arrow.up.right.square")
-                            }
-                            if !row.usesTradeTraxsBrandAvatar,
-                               let actorID = row.notification.actorProfileID
-                            {
-                                Button {
-                                    viewModel.openActor(actorID)
-                                } label: {
-                                    Label("View Profile", systemImage: "person.crop.circle")
-                                }
-                            }
-                            if row.isUnread {
-                                Button {
-                                    viewModel.markRead(row: row)
-                                } label: {
-                                    Label("Mark as Read", systemImage: "envelope.open")
-                                }
-                            } else {
-                                Button {
-                                    viewModel.markUnread(row: row)
-                                } label: {
-                                    Label("Mark as Unread", systemImage: "envelope.badge")
-                                }
-                            }
-                            Button(role: .destructive) {
-                                viewModel.delete(row: row)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        } preview: {
-                            ActivityRowView(
-                                row: row,
-                                imagePipeline: imagePipeline,
-                                onSelect: {},
-                                onSelectActor: nil
-                            )
-                            .frame(width: 320)
-                            .padding(.vertical, ExperienceSpacing.xs)
-                        }
-                    }
-                } header: {
-                    Text(section.section.rawValue)
-                }
-            }
-
-            if viewModel.isLoadingMore {
-                Section {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
+    @ViewBuilder
+    private var activityFollowRequestsSection: some View {
+        if viewModel.pendingFollowRequestCount > 0 {
+            Section {
+                ActivityFollowRequestsBanner(
+                    count: viewModel.pendingFollowRequestCount,
+                    action: { viewModel.openFollowRequests() }
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
         }
-        .listSectionSpacing(ActivityInboxLayout.sectionSpacing)
-        .contentMargins(.top, ActivityInboxLayout.listTopContentMargin, for: .scrollContent)
-        .experiencePlainListStyle()
+    }
+
+    @ViewBuilder
+    private var activityNotificationSections: some View {
+        ForEach(viewModel.sections) { section in
+            Section {
+                ForEach(section.rows) { row in
+                    ActivityInboxRowListItem(
+                        row: row,
+                        colors: colors,
+                        imagePipeline: imagePipeline,
+                        onOpen: { viewModel.open(row) },
+                        onOpenActor: { viewModel.openActor($0) },
+                        onDelete: { viewModel.delete(row: row) },
+                        onMarkRead: { viewModel.markRead(row: row) },
+                        onMarkUnread: { viewModel.markUnread(row: row) },
+                        onAppear: { viewModel.loadMoreIfNeeded(currentID: row.id) }
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(colors.backgroundPrimary)
+                    .listRowSeparator(.hidden)
+                }
+            } header: {
+                Text(section.section.rawValue)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var activityLoadingMoreSection: some View {
+        if viewModel.isLoadingMore {
+            Section {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+        }
+    }
+
+}
+
+private struct ActivityInboxRowListItem: View {
+    let row: ActivityRowModel
+    let colors: SemanticColorPalette
+    let imagePipeline: any ImagePipeline
+    let onOpen: () -> Void
+    let onOpenActor: (ProfileID) -> Void
+    let onDelete: () -> Void
+    let onMarkRead: () -> Void
+    let onMarkUnread: () -> Void
+    let onAppear: () -> Void
+
+    var body: some View {
+        ActivityRowView(
+            row: row,
+            imagePipeline: imagePipeline,
+            onSelect: onOpen,
+            onSelectActor: row.usesTradeTraxsBrandAvatar
+                ? nil
+                : row.notification.actorProfileID.map { id in
+                    { onOpenActor(id) }
+                }
+        )
+        .onAppear(perform: onAppear)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+            if row.isUnread {
+                Button(action: onMarkRead) {
+                    Label("Mark as Read", systemImage: "envelope.open")
+                }
+                .tint(colors.info)
+            }
+        }
+        .contextMenu {
+            Button(action: onOpen) {
+                Label("Open", systemImage: "arrow.up.right.square")
+            }
+            if !row.usesTradeTraxsBrandAvatar,
+               let actorID = row.notification.actorProfileID
+            {
+                Button {
+                    onOpenActor(actorID)
+                } label: {
+                    Label("View Profile", systemImage: "person.crop.circle")
+                }
+            }
+            if row.isUnread {
+                Button(action: onMarkRead) {
+                    Label("Mark as Read", systemImage: "envelope.open")
+                }
+            } else {
+                Button(action: onMarkUnread) {
+                    Label("Mark as Unread", systemImage: "envelope.badge")
+                }
+            }
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+        } preview: {
+            ActivityRowView(
+                row: row,
+                imagePipeline: imagePipeline,
+                onSelect: {},
+                onSelectActor: nil
+            )
+            .frame(width: 320)
+            .padding(.vertical, ExperienceSpacing.xs)
+        }
     }
 }

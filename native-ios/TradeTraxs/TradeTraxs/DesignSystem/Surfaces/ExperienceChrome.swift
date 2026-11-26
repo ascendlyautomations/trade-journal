@@ -28,6 +28,7 @@ struct ExperienceAppChromeModifier: ViewModifier {
             }
         }
         .experienceKeyboardDismissOnTapOutside()
+        .experienceKeyboardDoneToolbar()
     }
 }
 

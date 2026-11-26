@@ -15,16 +15,13 @@ struct SwipeToDismissModifier: ViewModifier {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dragOffset: CGFloat = 0
+    @State private var isCommittingDismiss = false
 
     func body(content: Content) -> some View {
         content
             .offset(y: max(0, dragOffset))
             .opacity(dismissProgressOpacity)
             .simultaneousGesture(dismissGesture)
-            .animation(
-                ExperienceMotion.preferred(MotionSpring.snappy.animation, reduceMotion: reduceMotion),
-                value: dragOffset
-            )
     }
 
     private var dismissProgressOpacity: Double {
@@ -36,7 +33,7 @@ struct SwipeToDismissModifier: ViewModifier {
     private var dismissGesture: some Gesture {
         DragGesture(minimumDistance: 16, coordinateSpace: .local)
             .onChanged { value in
-                guard isEnabled else { return }
+                guard isEnabled, !isCommittingDismiss else { return }
                 // Prefer downward intent, ignore mostly-horizontal drags (paging / scrub).
                 let horizontal = abs(value.translation.width)
                 let vertical = value.translation.height
@@ -51,6 +48,8 @@ struct SwipeToDismissModifier: ViewModifier {
                     dragOffset = 0
                     return
                 }
+                guard !isCommittingDismiss else { return }
+
                 let vertical = value.translation.height
                 let horizontal = abs(value.translation.width)
                 let velocityY = value.predictedEndTranslation.height - value.translation.height
@@ -60,22 +59,7 @@ struct SwipeToDismissModifier: ViewModifier {
                     && (vertical >= distanceThreshold || velocityY >= velocityThreshold)
 
                 if shouldDismiss {
-                    if reduceMotion {
-                        dragOffset = 0
-                        onDismiss()
-                    } else {
-                        ExperienceMotion.withAnimation(
-                            MotionCurve.easeIn.animation(duration: .fast),
-                            reduceMotion: false
-                        ) {
-                            dragOffset = UIScreen.main.bounds.height
-                        }
-                        Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 120_000_000)
-                            onDismiss()
-                            dragOffset = 0
-                        }
-                    }
+                    commitDismiss(initialVelocity: max(velocityY, 0))
                 } else {
                     ExperienceMotion.withAnimation(
                         MotionSpring.snappy.animation,
@@ -85,6 +69,51 @@ struct SwipeToDismissModifier: ViewModifier {
                     }
                 }
             }
+    }
+
+    private func commitDismiss(initialVelocity: CGFloat) {
+        if reduceMotion {
+            finishDismissWithoutPresentationAnimation()
+            return
+        }
+
+        isCommittingDismiss = true
+        let travelDistance = dismissTravelDistance
+        let remaining = max(0, travelDistance - dragOffset)
+        let duration = dismissSlideDuration(remaining: remaining, velocity: initialVelocity)
+
+        withAnimation(.easeOut(duration: duration)) {
+            dragOffset = travelDistance
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            finishDismissWithoutPresentationAnimation()
+        }
+    }
+
+    private var dismissTravelDistance: CGFloat {
+        let screenHeight = UIScreen.main.bounds.height
+        return screenHeight > 0 ? screenHeight : 900
+    }
+
+    /// Critically damped slide — no spring overshoot. Shorter when the finger already carried most of the travel.
+    private func dismissSlideDuration(remaining: CGFloat, velocity: CGFloat) -> TimeInterval {
+        let minimumDuration: TimeInterval = 0.2
+        let maximumDuration: TimeInterval = 0.34
+        let referenceSpeed: CGFloat = 1_400
+        let speed = max(velocity, referenceSpeed * 0.35)
+        let estimate = TimeInterval(remaining / speed)
+        return min(maximumDuration, max(minimumDuration, estimate))
+    }
+
+    private func finishDismissWithoutPresentationAnimation() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            onDismiss()
+        }
+        isCommittingDismiss = false
     }
 }
 

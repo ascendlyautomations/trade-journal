@@ -16,32 +16,34 @@ struct TradeRoomInboxRowView: View {
                     Text(item.room.name)
                         .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.85)
                     if item.isMuted {
-                        Image(systemName: "bell.slash.fill")
-                            .font(.caption2)
+                        Text("Muted")
+                            .font(.caption2.weight(.semibold))
                             .foregroundStyle(colors.tertiaryText)
-                            .accessibilityLabel("Muted")
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(colors.fillSecondary, in: Capsule())
                     }
                     Spacer(minLength: 4)
                     if let timestamp = item.timestamp {
                         Text(MessagesInboxSupport.relativeTimestamp(timestamp))
-                            .experienceStyle(.caption, color: item.unreadCount > 0 ? colors.accent : colors.tertiaryText)
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
                             .lineLimit(1)
                     }
-                }
-                HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if !showsMessagePreview {
-                            roomMetadataLine
-                        }
-                        previewLine
+                    if item.unreadCount > 0 {
+                        Text(item.unreadCount > 99 ? "99+" : "\(item.unreadCount)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(colors.onAccent)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(colors.accent, in: Capsule())
                     }
-                    Spacer(minLength: 4)
-                    trailingBadges
                 }
+                roomMetadataLine
+                previewLine
             }
         }
+        .padding(.vertical, MessagesInboxLayout.rowVerticalPadding)
         .contentShape(Rectangle())
         .task(id: item.room.image?.id) {
             await loadLogo()
@@ -50,12 +52,6 @@ struct TradeRoomInboxRowView: View {
             label: "\(item.room.name). \(item.preview)",
             identifier: "messages.room.\(item.id.rawValue)"
         )
-    }
-
-    private var showsMessagePreview: Bool {
-        let trimmed = item.preview.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        return trimmed != "No messages yet"
     }
 
     @ViewBuilder
@@ -79,26 +75,14 @@ struct TradeRoomInboxRowView: View {
 
     @ViewBuilder
     private var previewLine: some View {
-        if showsMessagePreview {
+        let trimmed = item.preview.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, trimmed != "No messages yet" {
             Text(item.preview)
                 .experienceStyle(
                     item.unreadCount > 0 ? .subheadline : .footnote,
                     color: item.unreadCount > 0 ? colors.primaryText : colors.secondaryText
                 )
-                .lineLimit(1)
-        }
-    }
-
-    @ViewBuilder
-    private var trailingBadges: some View {
-        if item.unreadCount > 0 {
-            Text(item.unreadCount > 99 ? "99+" : "\(item.unreadCount)")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(colors.onAccent)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(colors.accent, in: Capsule())
-                .accessibilityLabel("\(item.unreadCount) unread")
+                .lineLimit(2)
         }
     }
 

@@ -35,16 +35,16 @@ final class PostOnboardingPlanSelectionTests: XCTestCase {
         XCTAssertFalse(coordinator.defersPostTourNavigation(userID: userID))
     }
 
-    func testExistingUserEligibleWhenWalkthroughNotRequired() {
+    func testWebCompleteUserDoesNotSeeMainShellPlanSheet() {
         let coordinator = PostOnboardingPlanSelectionCoordinator.shared
-        let oldAccount = ContextualTourLaunch.accountCreatedAtCutoff.addingTimeInterval(-86_400)
-        coordinator.noteAccountContext(userID: userID, accountCreatedAt: oldAccount)
-        coordinator.handleShellGatesChanged(
-            tourPhase: .idle,
-            tourOverlayVisible: false,
-            blockingModalPresented: false
+        NativeIosOnboardingSessionStore.apply(
+            session: SessionProfileV1(
+                id: userID,
+                onboarding_completed: true
+            )
         )
-        XCTAssertTrue(coordinator.isPresented)
-        coordinator.markCompletedAndDismiss()
+        coordinator.noteAccountContext(userID: userID, accountCreatedAt: Date())
+        coordinator.reevaluatePresentation(blockingModalPresented: false)
+        XCTAssertFalse(coordinator.isPresented)
     }
 }

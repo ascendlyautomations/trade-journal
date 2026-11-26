@@ -1,6 +1,7 @@
 import SwiftUI
 
 /// Permanent Home tab root, Apple Fitness / Stocks style analytics cockpit.
+@MainActor
 struct DashboardHomeView: View {
     @State private var viewModel: DashboardViewModel
     @State private var activityStore = ActivityInboxStore.shared
@@ -91,7 +92,11 @@ struct DashboardHomeView: View {
 
     var body: some View {
         applyDashboardNotificationModifiers(
-            to: applyDashboardLifecycleModifiers(to: dashboardRoot)
+            to: applyDashboardTourModifiers(
+                to: applyDashboardTabLifecycleModifiers(
+                    to: applyDashboardDataMutationModifiers(to: dashboardRoot)
+                )
+            )
         )
     }
 
@@ -150,6 +155,7 @@ struct DashboardHomeView: View {
                 .accessibilityLabel("Calendar")
                 .accessibilityIdentifier("dashboard.calendar")
                 .contextualTourTarget(.dashboardCalendar)
+                .contextualTourGlobalFrame(.dashboardCalendar)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -186,7 +192,44 @@ struct DashboardHomeView: View {
     }
 
     @ViewBuilder
-    private func applyDashboardLifecycleModifiers<Content: View>(to content: Content) -> some View {
+    private func applyDashboardDataMutationModifiers<Content: View>(to content: Content) -> some View {
+        content
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            viewModel.handleJournalMutation()
+        }
+        .onChange(of: ContentMutationStore.shared.revision) { _, _ in
+            viewModel.handleContentMutation()
+        }
+        .onChange(of: TraderDailyCheckInStore.shared.todayCheckIn?.updatedAt) { _, _ in
+            if let checkIn = TraderDailyCheckInStore.shared.todayCheckIn {
+                SessionDailyCheckInsStore.shared.upsert(checkIn)
+                viewModel.handleCheckInMutation()
+            }
+        }
+        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            viewModel.handleAccountMutation()
+            brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
+        }
+        .onChange(of: CopyTradingGroupsMutationStore.shared.revision) { _, _ in
+            OwnerAccountFilterDropdownController.shared.dismiss()
+            viewModel.handleCopyTradingGroupsMutation()
+        }
+        .onChange(of: withdrawalsHistory.ledgerEntryCount()) { _, _ in
+            viewModel.syncAfterWithdrawalStoreMutation()
+        }
+        .onChange(of: withdrawalsHistory.completedPropCycleCount()) { _, _ in
+            viewModel.syncAfterWithdrawalStoreMutation()
+        }
+        .onChange(of: withdrawalsHistory.achievementPayouts.count) { _, _ in
+            viewModel.syncAfterWithdrawalStoreMutation()
+        }
+        .onChange(of: BrokerIntegrationMutationStore.shared.revision) { _, _ in
+            brokerImportEligibilityStore.refresh(fromUserAction: true)
+        }
+    }
+
+    @ViewBuilder
+    private func applyDashboardTabLifecycleModifiers<Content: View>(to content: Content) -> some View {
         content
         .onChange(of: SessionViewerGate.shared.epoch) { _, _ in
             viewModel.loadIfNeeded()
@@ -209,34 +252,6 @@ struct DashboardHomeView: View {
             guard tabIsActive else { return }
             guard phase == .loaded || viewModel.summary != nil else { return }
             startDeferredDashboardBootstrapIfNeeded()
-        }
-        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
-            viewModel.handleJournalMutation()
-        }
-        .onChange(of: ContentMutationStore.shared.revision) { _, _ in
-            viewModel.handleContentMutation()
-        }
-        .onChange(of: TraderDailyCheckInStore.shared.todayCheckIn?.updatedAt) { _, _ in
-            if let checkIn = TraderDailyCheckInStore.shared.todayCheckIn {
-                SessionDailyCheckInsStore.shared.upsert(checkIn)
-                viewModel.handleCheckInMutation()
-            }
-        }
-        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
-            viewModel.handleAccountMutation()
-            brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
-        }
-        .onChange(of: withdrawalsHistory.ledgerEntryCount()) { _, _ in
-            viewModel.syncAfterWithdrawalStoreMutation()
-        }
-        .onChange(of: withdrawalsHistory.completedPropCycleCount()) { _, _ in
-            viewModel.syncAfterWithdrawalStoreMutation()
-        }
-        .onChange(of: withdrawalsHistory.achievementPayouts.count) { _, _ in
-            viewModel.syncAfterWithdrawalStoreMutation()
-        }
-        .onChange(of: BrokerIntegrationMutationStore.shared.revision) { _, _ in
-            brokerImportEligibilityStore.refresh(fromUserAction: true)
         }
         .onChange(of: tabIsActive, initial: true) { _, isActive in
             if !isActive {
@@ -268,14 +283,22 @@ struct DashboardHomeView: View {
             TradingRulesCompliancePresentationBridge.bind(viewModel)
             ContextualTourCoordinator.shared.setDashboardAnalyticsReady(dashboardTourAnalyticsReady)
         }
-        .onChange(of: dashboardTourAnalyticsReady) { _, ready in
-            ContextualTourCoordinator.shared.setDashboardAnalyticsReady(ready)
-        }
         .onChange(of: viewModel.listScrollPresentationEpoch) { _, _ in
             scrollAnchor.resetToTop()
         }
+    }
+
+    @ViewBuilder
+    private func applyDashboardTourModifiers<Content: View>(to content: Content) -> some View {
+        content
+        .onChange(of: dashboardTourAnalyticsReady) { _, ready in
+            ContextualTourCoordinator.shared.setDashboardAnalyticsReady(ready)
+        }
         .onChange(of: dashboardTourAnalyticsDebugLine, initial: true) { _, line in
             ContextualTourDebug.log(line)
+        }
+        .onChange(of: gettingStartedStore.shouldShowDashboardCard) { _, _ in
+            ContextualTourCoordinator.shared.noteScrollTargetLayoutChanged()
         }
         .accessibilityIdentifier("dashboard.home")
     }
@@ -305,10 +328,6 @@ struct DashboardHomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .tradingRulesComplianceOwnerTradesChanged)) { notification in
             viewModel.handleTradingRulesOwnerTradesChangedNotification(notification)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .traxsProCanonicalJournalPreviewDidEnd)) { _ in
-            guard !embeddedInTraxsProPreview else { return }
-            viewModel.restoreAfterCanonicalJournalPreviewEnded()
-        }
     }
 
     @ViewBuilder
@@ -334,6 +353,11 @@ struct DashboardHomeView: View {
             .padding(.top, ExperienceSpacing.xs)
             .padding(.bottom, ExperienceSpacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { _, _ in
+                let tour = ContextualTourCoordinator.shared
+                guard tour.phase == .measuring, tour.spotlightTarget == .dashboardAccountAndDates else { return }
+                tour.noteScrollTargetLayoutChanged()
+            }
             .accessibilityIdentifier("dashboard.filters")
     }
 
@@ -444,15 +468,18 @@ struct DashboardHomeView: View {
             DashboardScorecardDisplayCopy.sectionTitle,
             info: "The ring is the overall score for this filter once the sample is large enough. It blends consistency, risk, discipline, and psychology."
         )
-        DashboardTradingScorecardSection(showsTitle: false) {
-            viewModel.openTradingScorecard()
-        }
+        DashboardTradingScorecardSection(
+            showsTitle: false,
+            onOpenDetail: { viewModel.openTradingScorecard() },
+            sessionStore: TradingScorecardPresentationStores.store(forPreviewUI: true)
+        )
         .padding(.bottom, ExperienceSpacing.lg)
 
         DashboardTradingRulesComplianceSection(
             compliancePresentation: premiumAnalyticsPresentation,
             onOpenDetail: { viewModel.openTradingRulesAnalytics() },
-            onOpenSettings: { viewModel.openTradingRulesSettings() }
+            onOpenSettings: { viewModel.openTradingRulesSettings() },
+            sessionStore: TradingRulesCompliancePresentationStores.store(forPreviewUI: true)
         )
         .padding(.bottom, ExperienceSpacing.xl)
 
@@ -533,15 +560,18 @@ struct DashboardHomeView: View {
             DashboardScorecardDisplayCopy.sectionTitle,
             info: "The ring is the overall score for this filter once the sample is large enough. It blends consistency, risk, discipline, and psychology. The lines under it show how often tagged trades followed the plan, how often that held after a loss, and check-ins on trading days."
         )
-        DashboardTradingScorecardSection(showsTitle: false) {
-            viewModel.openTradingScorecard()
-        }
+        DashboardTradingScorecardSection(
+            showsTitle: false,
+            onOpenDetail: { viewModel.openTradingScorecard() },
+            sessionStore: TradingScorecardSessionStore.shared
+        )
         .padding(.bottom, ExperienceSpacing.lg)
 
         DashboardTradingRulesComplianceSection(
             compliancePresentation: premiumAnalyticsPresentation,
             onOpenDetail: { viewModel.openTradingRulesAnalytics() },
-            onOpenSettings: { viewModel.openTradingRulesSettings() }
+            onOpenSettings: { viewModel.openTradingRulesSettings() },
+            sessionStore: TradingRulesComplianceSessionStore.shared
         )
         .padding(.bottom, ExperienceSpacing.xl)
 
@@ -631,14 +661,15 @@ struct DashboardHomeView: View {
         .dashboardHorizontalLock()
         .scrollPosition(scrollAnchor.binding)
         .scrollBounceBehavior(.basedOnSize)
-        .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
-            guard let target else { return }
+        .onChange(of: ContextualTourCoordinator.shared.scrollGeneration) { _, _ in
+            guard let target = ContextualTourCoordinator.shared.scrollTarget else { return }
             let anchor = ContextualTourGeometry.scrollAnchor(for: target)
+            let scroll = { proxy.scrollTo(target, anchor: anchor) }
             if reduceMotion {
-                proxy.scrollTo(target, anchor: anchor)
+                scroll()
             } else {
                 withAnimation(ExperienceMotion.navigation) {
-                    proxy.scrollTo(target, anchor: anchor)
+                    scroll()
                 }
             }
         }
@@ -774,6 +805,11 @@ struct DashboardHomeView: View {
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.sm)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { _, _ in
+            let tour = ContextualTourCoordinator.shared
+            guard tour.phase == .measuring, tour.spotlightTarget == .dashboardPerformance else { return }
+            tour.noteScrollTargetLayoutChanged()
+        }
     }
 
     @ViewBuilder
@@ -862,6 +898,17 @@ enum DashboardTabModelStore {
         retainedScrollAnchor?.resetToTop()
     }
 
+    static func recoverProductionDashboardAfterPreview(
+        production: DataEnvironment,
+        viewer: ProfileID
+    ) {
+        guard let model = retained else { return }
+        model.restoreAfterCanonicalJournalPreviewEnded()
+        Task {
+            await model.refreshAfterTraxsProPreviewDismissed(profileID: viewer)
+        }
+    }
+
     #if DEBUG
     static func clearForTesting() {
         retained = nil
@@ -919,4 +966,5 @@ private extension View {
             .clipped()
     }
 }
+
 

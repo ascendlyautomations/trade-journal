@@ -194,9 +194,25 @@ final class TradeDetailViewModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Owner copy-trade context (journal detail), shared with Trades list cards.
+    var copyTradeOwnerDisplay: CopyTradeOwnerJournalDisplay? {
+        guard experience == .journal, isOwner, let trade, trade.mode == .copyTraded else { return nil }
+        let profileID = trade.ownerProfileID
+        let accounts = cache.accounts(for: profileID) ?? []
+        let history = SessionOwnerTradesStore.shared.cached(for: profileID) ?? []
+        let members = CopyTradePresentation.ownerJournalMembers(for: trade, ownerTrades: history)
+        let copyGroups = OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
+        return CopyTradePresentation.ownerJournalDisplay(
+            members: members,
+            accounts: accounts,
+            copyGroups: copyGroups
+        )
+    }
+
     /// Owner journal subtitle, `Name • AccountNumber • Funded` (full number, not masked).
     var accountSummaryLine: String? {
         guard experience == .journal, isOwner else { return accountIdentityLine }
+        if copyTradeOwnerDisplay != nil { return nil }
         var parts: [String] = []
         if let accountName, !accountName.isEmpty {
             parts.append(accountName)

@@ -149,7 +149,7 @@ final class LivePersonalDrawdownCalculationTests: XCTestCase {
         XCTAssertTrue(samples.isEmpty)
     }
 
-    func testFixedFloorCapClampsDisplayedFloorWithoutMovingBaseline() throws {
+    func testFixedDrawdownIgnoresFloorCap() throws {
         let account = liveAccount(size: 50_000, drawdownLimit: 2_000, drawdownType: .fixed, floorCap: 48_500)
         let config = try XCTUnwrap(LivePersonalDrawdownEngine.config(from: account))
         let trades = [trade(pnl: 5_000, at: "2024-06-01T14:00:00Z")]
@@ -170,7 +170,7 @@ final class LivePersonalDrawdownCalculationTests: XCTestCase {
         XCTAssertEqual(samples[1].equity, 55_000)
         XCTAssertEqual(samples[1].drawdownFloor, 48_000)
         XCTAssertEqual(samples.last?.equity, 53_500)
-        XCTAssertEqual(samples.last?.drawdownFloor, 48_500)
+        XCTAssertEqual(samples.last?.drawdownFloor, 51_500)
     }
 
     func testTrailingFloorCapStopsRisingAtConfiguredCap() throws {

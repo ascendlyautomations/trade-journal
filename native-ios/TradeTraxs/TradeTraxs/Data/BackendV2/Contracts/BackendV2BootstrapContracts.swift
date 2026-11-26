@@ -120,6 +120,8 @@ nonisolated struct SessionProfileV1: Codable, Sendable, Equatable {
     var has_email_password: Bool?
     /// `profiles.created_at`. Absent on older cached payloads, do not invent "now".
     var created_at: String? = nil
+    var ios_contextual_tour_dismissed_version: Int? = nil
+    var ios_post_onboarding_plan_acknowledged: Bool? = nil
 }
 
 nonisolated struct DashboardAccountV1: Codable, Sendable, Equatable {

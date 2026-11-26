@@ -13,7 +13,7 @@ final class TradingScorecardSessionStore {
     /// Early psychology cards for detail visuals (same builder as dashboard psych section).
     private(set) var psychologyInsightCards: [PsychologyInsightCard] = []
 
-    private init() {}
+    init() {}
 
     func publish(
         ready: Bool,

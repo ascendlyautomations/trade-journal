@@ -2,6 +2,21 @@ import Foundation
 
 /// Yearly + month drill-down Performance Reports, reuses ``DashboardChartMetrics``.
 nonisolated enum TradingYearlyReportGenerator {
+    private static func reportScope(
+        filters: TradingReportFilters,
+        interval: DateInterval,
+        copyTradingGroups: [CopyTradingGroup]
+    ) -> DashboardClientScopeFilter {
+        DashboardClientScopeFilter(
+            accountFilter: filters.accountFilter,
+            dateRange: .all,
+            customInterval: interval,
+            accountMode: filters.accountMode,
+            showPublicOnly: false,
+            copyTradingGroups: copyTradingGroups
+        )
+    }
+
     static func availableYears(
         from trades: [Trade],
         now: Date = Date(),
@@ -14,6 +29,7 @@ nonisolated enum TradingYearlyReportGenerator {
         year: Int,
         trades: [Trade],
         filters: TradingReportFilters,
+        copyTradingGroups: [CopyTradingGroup] = [],
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> TradingYearlyReport {
@@ -22,18 +38,19 @@ nonisolated enum TradingYearlyReportGenerator {
         let inputs = trades.map {
             DashboardChartMetrics.Input(trade: $0, accountType: nil)
         }
+        let scope = reportScope(
+            filters: filters,
+            interval: interval,
+            copyTradingGroups: copyTradingGroups
+        )
         let scopedTrades = DashboardChartMetrics.filteredTrades(
             from: inputs,
-            accountFilter: filters.accountFilter,
-            accountMode: filters.accountMode,
-            interval: interval,
+            scope: scope,
             now: now
         )
         let summary = DashboardChartMetrics.compute(
             from: inputs,
-            accountFilter: filters.accountFilter,
-            accountMode: filters.accountMode,
-            interval: interval,
+            scope: scope,
             payoutTotal: nil,
             now: now
         )
@@ -47,6 +64,7 @@ nonisolated enum TradingYearlyReportGenerator {
             year: year,
             trades: trades,
             filters: filters,
+            copyTradingGroups: copyTradingGroups,
             now: now,
             calendar: calendar
         )
@@ -96,6 +114,7 @@ nonisolated enum TradingYearlyReportGenerator {
         ref: TradingReportMonthRef,
         trades: [Trade],
         filters: TradingReportFilters,
+        copyTradingGroups: [CopyTradingGroup] = [],
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> TradingReport {
@@ -109,11 +128,14 @@ nonisolated enum TradingYearlyReportGenerator {
         let inputs = trades.map {
             DashboardChartMetrics.Input(trade: $0, accountType: nil)
         }
+        let scope = reportScope(
+            filters: filters,
+            interval: interval,
+            copyTradingGroups: copyTradingGroups
+        )
         let scopedTrades = DashboardChartMetrics.filteredTrades(
             from: inputs,
-            accountFilter: filters.accountFilter,
-            accountMode: filters.accountMode,
-            interval: interval,
+            scope: scope,
             now: now
         )
         let metrics = TradingReportGeneratorMetricsBridge.buildMetrics(
@@ -146,6 +168,7 @@ nonisolated enum TradingYearlyReportGenerator {
         year: Int,
         trades: [Trade],
         filters: TradingReportFilters,
+        copyTradingGroups: [CopyTradingGroup],
         now: Date,
         calendar: Calendar
     ) -> [TradingYearlyMonthRow] {
@@ -170,11 +193,14 @@ nonisolated enum TradingYearlyReportGenerator {
                 calendar: calendar
             )
             let interval = DateInterval(start: bounds.start, end: bounds.end)
+            let scope = reportScope(
+                filters: filters,
+                interval: interval,
+                copyTradingGroups: copyTradingGroups
+            )
             let summary = DashboardChartMetrics.compute(
                 from: inputs,
-                accountFilter: filters.accountFilter,
-                accountMode: filters.accountMode,
-                interval: interval,
+                scope: scope,
                 payoutTotal: nil,
                 now: now
             )

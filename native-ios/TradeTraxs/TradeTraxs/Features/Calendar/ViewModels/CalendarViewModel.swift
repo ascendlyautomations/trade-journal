@@ -64,14 +64,15 @@ final class CalendarViewModel {
     }
 
     var accountFilterTitle: String {
-        switch accountFilter {
-        case .all: return "All Accounts"
-        case .account(let id):
-            if let account = accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.ownerDropdownLine(for: account)
-            }
-            return accountNames[id] ?? "Account"
-        }
+        OwnerAccountFilterMenuSupport.menuTitle(
+            filter: accountFilter,
+            accounts: accounts,
+            profileID: profileID
+        )
+    }
+
+    var menuCopyTradingGroups: [CopyTradingGroup] {
+        OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
     }
 
     /// Compact label for the Calendar toolbar account trigger (display only).
@@ -244,6 +245,42 @@ final class CalendarViewModel {
         }
     }
 
+    func handleCopyTradingGroupsMutation() {
+        guard let profileID else { return }
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
+            accountFilter,
+            accounts: accounts,
+            profileID: profileID
+        )
+        if sanitized != accountFilter {
+            accountFilter = sanitized
+        }
+        if usesCopyTradingMetricsDedupe {
+            recompute()
+            recomputeYearOverview()
+            Task {
+                await loadVisibleMonth(forceNetwork: false)
+                if displayScope == .year {
+                    await loadVisibleYear(forceNetwork: false)
+                }
+            }
+        } else if usesCalendarAnalyticsV2 {
+            recomputeAnalyticsV2()
+            if let payload = analyticsV2YearMemory[visibleYear] {
+                yearOverview = CalendarAnalyticsAggregator.buildYearOverview(
+                    year: visibleYear,
+                    rows: payload.days,
+                    accountFilter: accountFilter,
+                    modeFilter: analyticsV2ModeFilter,
+                    copyTradingGroups: menuCopyTradingGroups
+                )
+            }
+        } else {
+            recompute()
+            recomputeYearOverview()
+        }
+    }
+
     func handleAccountMutation() {
         guard let profileID else { return }
         guard let loaded = OwnerAccountMutationSync.sessionAccounts(
@@ -254,7 +291,11 @@ final class CalendarViewModel {
         accountNames = OwnerAccountMutationSync.accountNamesMap(from: loaded)
         hasLoadedAccounts = true
         OwnerAccountMutationSync.seedDetailCacheIfNeeded(loaded, profileID: profileID, detailCache: detailCache)
-        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(accountFilter, accounts: loaded)
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
+            accountFilter,
+            accounts: loaded,
+            profileID: profileID
+        )
         if sanitized != accountFilter {
             accountFilter = sanitized
         }
@@ -325,9 +366,25 @@ final class CalendarViewModel {
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
-        guard accountFilter != filter else { return }
+        let resolved = OwnerAccountMutationSync.reconciledAccountFilter(
+            filter,
+            accounts: accounts,
+            profileID: profileID
+        )
+        guard accountFilter != resolved else { return }
         ExperienceHaptics.play(.selection)
-        accountFilter = filter
+        accountFilter = resolved
+        if usesCopyTradingMetricsDedupe {
+            recompute()
+            recomputeYearOverview()
+            Task {
+                await loadVisibleMonth(forceNetwork: false)
+                if displayScope == .year {
+                    await loadVisibleYear(forceNetwork: false)
+                }
+            }
+            return
+        }
         if usesCalendarAnalyticsV2 {
             recomputeAnalyticsV2()
             logGRDBAccountFilterLocalIfNeeded()
@@ -336,7 +393,8 @@ final class CalendarViewModel {
                     year: visibleYear,
                     rows: payload.days,
                     accountFilter: accountFilter,
-                    modeFilter: analyticsV2ModeFilter
+                    modeFilter: analyticsV2ModeFilter,
+                    copyTradingGroups: menuCopyTradingGroups
                 )
             }
         } else {
@@ -348,6 +406,11 @@ final class CalendarViewModel {
     func openManageAccounts() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
+    }
+
+    func openManageCopyTradingGroups() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.pushHome(.settings(.copyTradingAccounts))
     }
 
     func selectDay(_ dayKey: String) {
@@ -370,14 +433,16 @@ final class CalendarViewModel {
         TradingCalendarAggregator.trades(
             for: dayKey,
             from: allTrades,
-            accountFilter: accountFilter
+            accountFilter: accountFilter,
+            copyTradingGroups: menuCopyTradingGroups
         )
     }
 
     func daySummary(for dayKey: String) -> TradingDaySummary? {
         month?.days[dayKey] ?? TradingCalendarAggregator.daySummaries(
             from: allTrades,
-            accountFilter: accountFilter
+            accountFilter: accountFilter,
+            copyTradingGroups: menuCopyTradingGroups
         )[dayKey]
     }
 
@@ -516,12 +581,24 @@ final class CalendarViewModel {
 
     /// When analytical calendar RPC/GRDB is authoritative, never fall through to raw trade SELECT.
     private var blocksLegacyRawTradeNetworkFetch: Bool {
-        usesCalendarAnalyticsV2
+        if usesCopyTradingMetricsDedupe {
+            return false
+        }
+        return usesCalendarAnalyticsV2
             || (BackendV2FeatureFlags.isEnabled(.calendar) && rpc != nil)
     }
 
+    /// Daily stat rows cannot dedupe copy-trade fan-out; trade-based aggregation is required.
+    private var usesCopyTradingMetricsDedupe: Bool {
+        DashboardAccountFilterCopyTradingSupport.shouldDedupeCopyMetrics(for: accountFilter)
+    }
+
+    private var prefersAnalyticsV2CalendarPresentation: Bool {
+        usesCalendarAnalyticsV2 && !usesCopyTradingMetricsDedupe
+    }
+
     private func loadVisibleMonth(forceNetwork: Bool = false) async {
-        if usesCalendarAnalyticsV2 {
+        if prefersAnalyticsV2CalendarPresentation {
             await loadVisibleMonthAnalyticsV2(forceNetwork: forceNetwork)
             return
         }
@@ -710,7 +787,8 @@ final class CalendarViewModel {
         yearOverview = TradingCalendarAggregator.buildYearOverview(
             year: id.year,
             trades: samples,
-            accountFilter: accountFilter
+            accountFilter: accountFilter,
+            copyTradingGroups: menuCopyTradingGroups
         )
     }
 
@@ -730,7 +808,8 @@ final class CalendarViewModel {
                 year: visibleMonth.year,
                 month: visibleMonth.month,
                 trades: scopedTrades,
-                accountFilter: accountFilter
+                accountFilter: accountFilter,
+                copyTradingGroups: menuCopyTradingGroups
             )
         }
     }
@@ -740,7 +819,8 @@ final class CalendarViewModel {
         yearOverview = TradingCalendarAggregator.buildYearOverview(
             year: visibleYear,
             trades: trades,
-            accountFilter: accountFilter
+            accountFilter: accountFilter,
+            copyTradingGroups: menuCopyTradingGroups
         )
     }
 
@@ -756,12 +836,13 @@ final class CalendarViewModel {
         yearOverview = TradingCalendarAggregator.buildYearOverview(
             year: year,
             trades: trades,
-            accountFilter: accountFilter
+            accountFilter: accountFilter,
+            copyTradingGroups: menuCopyTradingGroups
         )
     }
 
     func loadVisibleYear(forceNetwork: Bool = false) async {
-        if usesCalendarAnalyticsV2 {
+        if prefersAnalyticsV2CalendarPresentation {
             await loadVisibleYearAnalyticsV2(forceNetwork: forceNetwork)
             return
         }
@@ -896,13 +977,18 @@ extension CalendarViewModel {
     }
 
     func recomputeAnalyticsV2() {
+        if usesCopyTradingMetricsDedupe {
+            recompute()
+            return
+        }
         guard let payload = analyticsV2Payload else { return }
         let built = CalendarAnalyticsAggregator.buildMonth(
             year: visibleMonth.year,
             month: visibleMonth.month,
             rows: payload.days,
             accountFilter: accountFilter,
-            modeFilter: analyticsV2ModeFilter
+            modeFilter: analyticsV2ModeFilter,
+            copyTradingGroups: menuCopyTradingGroups
         )
         month = built
         CalendarAnalyticsSessionStore.shared.publishMonth(
@@ -1034,7 +1120,8 @@ extension CalendarViewModel {
                 year: year,
                 rows: payload.days,
                 accountFilter: accountFilter,
-                modeFilter: analyticsV2ModeFilter
+                modeFilter: analyticsV2ModeFilter,
+                copyTradingGroups: menuCopyTradingGroups
             )
             return
         }
@@ -1066,7 +1153,8 @@ extension CalendarViewModel {
                 year: year,
                 rows: payload.days,
                 accountFilter: accountFilter,
-                modeFilter: analyticsV2ModeFilter
+                modeFilter: analyticsV2ModeFilter,
+                copyTradingGroups: menuCopyTradingGroups
             )
             AnalyticsShadowWriter.ingestCalendarDailyRangeIfNeeded(
                 viewerID: profileID,
@@ -1256,12 +1344,7 @@ extension CalendarViewModel {
         payloadBytes: Int?,
         elapsedMs: Int
     ) {
-        let accountLabel: String = {
-            switch accountFilter {
-            case .all: return "all"
-            case .account(let id): return id.rawValue
-            }
-        }()
+        let accountLabel = DashboardAccountFilterCopyTradingSupport.persistenceKey(for: accountFilter)
         CalendarAnalyticsV2Probe.logDailyRange(
             reason: reason,
             startDate: startDate,
@@ -1289,12 +1372,7 @@ extension CalendarViewModel {
     ) {
         let elapsed = started.map { Int(Date().timeIntervalSince($0) * 1000) }
             ?? monthProbeStart.map { Int(Date().timeIntervalSince($0) * 1000) } ?? 0
-        let accountLabel: String = {
-            switch accountFilter {
-            case .all: return "all"
-            case .account(let id): return id.rawValue
-            }
-        }()
+        let accountLabel = DashboardAccountFilterCopyTradingSupport.persistenceKey(for: accountFilter)
         CalendarAnalyticsV2Probe.logMonth(
             source: source,
             month: visibleMonth.cacheKey,
@@ -1398,7 +1476,8 @@ extension CalendarViewModel {
             year: year,
             rows: payload.days,
             accountFilter: accountFilter,
-            modeFilter: analyticsV2ModeFilter
+            modeFilter: analyticsV2ModeFilter,
+            copyTradingGroups: menuCopyTradingGroups
         )
 
         CalendarAnalyticsGRDBProbe.logRender(
@@ -1428,10 +1507,7 @@ extension CalendarViewModel {
     }
 
     var grdbAccountLogLabel: String {
-        switch accountFilter {
-        case .all: return "all"
-        case .account(let id): return id.rawValue
-        }
+        DashboardAccountFilterCopyTradingSupport.persistenceKey(for: accountFilter)
     }
 
     var grdbModeLogLabel: String {

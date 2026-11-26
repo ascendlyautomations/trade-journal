@@ -106,7 +106,7 @@ enum ProfilePinnedPreviewBuilder {
         ProfilePinnedPreview(
             kindLabel: "Achievement",
             title: achievement.title,
-            subtitle: achievement.firm ?? achievement.kind.displayName,
+            subtitle: AchievementDetailPresentation.categoryContextLine(for: achievement),
             imageURL: achievement.image?.id,
             body: achievement.description,
             valueText: achievement.value.map { TradeDisplay.pnlText($0) } ?? achievement.valueText

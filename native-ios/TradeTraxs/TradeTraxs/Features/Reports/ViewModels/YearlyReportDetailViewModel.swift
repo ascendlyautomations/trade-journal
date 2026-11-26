@@ -55,14 +55,11 @@ final class YearlyReportDetailViewModel: ScreenLifecycle {
     }
 
     var accountFilterTitle: String {
-        switch state.filters.accountFilter {
-        case .all: return "All Accounts"
-        case .account(let id):
-            if let account = state.accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.ownerDropdownLine(for: account)
-            }
-            return "Account"
-        }
+        OwnerAccountFilterMenuSupport.menuTitle(
+            filter: state.filters.accountFilter,
+            accounts: state.accounts,
+            profileID: state.profileID
+        )
     }
 
     func bootstrapIfNeeded() async {
@@ -88,11 +85,17 @@ final class YearlyReportDetailViewModel: ScreenLifecycle {
     func unsubscribeRealtime() {}
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
+        let resolved = OwnerAccountMutationSync.reconciledAccountFilter(
+            filter,
+            accounts: state.accounts,
+            profileID: state.profileID
+        )
+        guard state.filters.accountFilter != resolved else { return }
         ExperienceHaptics.play(.selection)
         var next = state
-        next.filters.accountFilter = filter
+        next.filters.accountFilter = resolved
         state = next
-        TradingReportSessionStore.shared.filters.accountFilter = filter
+        TradingReportSessionStore.shared.filters.accountFilter = resolved
         Task { await reloadReport(forceNetwork: false) }
     }
 
@@ -109,6 +112,10 @@ final class YearlyReportDetailViewModel: ScreenLifecycle {
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
     }
 
+    func openManageCopyTradingGroups() {
+        navigationCoordinator.pushHome(.settings(.copyTradingAccounts))
+    }
+
     func handleAccountMutation(detailCache: DetailPresentationCache?) {
         guard let profileID = state.profileID else { return }
         guard let loaded = OwnerAccountMutationSync.sessionAccounts(
@@ -119,7 +126,8 @@ final class YearlyReportDetailViewModel: ScreenLifecycle {
         next.accounts = loaded.filter(\.isActive)
         let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
             next.filters.accountFilter,
-            accounts: loaded
+            accounts: loaded,
+            profileID: profileID
         )
         if sanitized != next.filters.accountFilter {
             next.filters.accountFilter = sanitized

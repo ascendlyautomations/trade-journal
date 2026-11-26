@@ -26,9 +26,14 @@ enum OwnerAccountMutationSync {
 
     static func reconciledAccountFilter(
         _ filter: DashboardAccountFilter,
-        accounts: [TradingAccount]
+        accounts: [TradingAccount],
+        profileID: ProfileID? = nil
     ) -> DashboardAccountFilter {
-        DashboardAccountScopePolicy.sanitizedFilter(filter, accounts: accounts)
+        OwnerAccountFilterDropdownCopyTradingBridge.reconciledFilter(
+            filter,
+            accounts: accounts,
+            profileID: profileID
+        )
     }
 
     static func accountNamesMap(from accounts: [TradingAccount]) -> [TradingAccountID: String] {

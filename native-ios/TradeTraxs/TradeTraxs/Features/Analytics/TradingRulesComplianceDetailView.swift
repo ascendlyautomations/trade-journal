@@ -8,7 +8,7 @@ struct TradingRulesComplianceDetailView: View {
         case freeSamplePreview
     }
 
-    @Bindable private var session = TradingRulesComplianceSessionStore.shared
+    @Bindable private var session: TradingRulesComplianceSessionStore
     @Bindable var scopeController: TradingRulesAnalyticsScopeController
     var scrollAnchor: FeedListScrollAnchor
     let navigationCoordinator: NavigationCoordinator
@@ -19,6 +19,25 @@ struct TradingRulesComplianceDetailView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.stackNavigation) private var stackNavigation
+
+    init(
+        scopeController: TradingRulesAnalyticsScopeController,
+        scrollAnchor: FeedListScrollAnchor,
+        navigationCoordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache,
+        loadDependencies: TradingRulesComplianceLoadDependencies,
+        presentation: AnalyticsPresentation = .fullAnalytics,
+        onRetry: @escaping () -> Void
+    ) {
+        _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
+        _scopeController = Bindable(scopeController)
+        self.scrollAnchor = scrollAnchor
+        self.navigationCoordinator = navigationCoordinator
+        self.detailCache = detailCache
+        self.loadDependencies = loadDependencies
+        self.presentation = presentation
+        self.onRetry = onRetry
+    }
 
     private var allowsInteractiveDrillDown: Bool {
         presentation == .fullAnalytics || presentation == .freeSamplePreview

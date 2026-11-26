@@ -7,6 +7,7 @@ nonisolated enum InteractionDTO {
         var reel_id: String?
         var post_id: String?
         var achievement_post_id: String?
+        var story_id: String?
         var user_id: String?
     }
 
@@ -16,6 +17,7 @@ nonisolated enum InteractionDTO {
         var reel_id: String?
         var post_id: String?
         var achievement_post_id: String?
+        var story_id: String?
     }
 
     struct CommentLikeRow: Codable, Sendable {

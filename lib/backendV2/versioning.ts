@@ -12,6 +12,8 @@ export const BackendV2RpcNames = {
   session: "rpc_v1_session_bootstrap",
   dashboard: "rpc_v1_dashboard_bootstrap",
   feed: "rpc_v1_feed_bootstrap",
+  feedV2: "rpc_v2_feed_bootstrap",
+  feedRecordImpressions: "rpc_v1_feed_record_impressions",
   profile: "rpc_v1_profile_bootstrap",
   profileTabTrades: "rpc_v1_profile_tab_trades",
   /** Phase 8B — TradeSummary items; native presentation still uses V1 until cutover. */

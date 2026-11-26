@@ -14,9 +14,8 @@ struct ProfileHeaderView: View {
         Group {
             if let profile = store.profile {
                 loadedHeader(profile)
-            } else if store.showsHeaderLoadingPresentation {
+            } else             if store.showsHeaderLoadingPresentation {
                 ProfileHeaderSkeleton()
-                    .contextualTourTarget(.profileIdentity)
             } else {
                 errorState
             }
@@ -75,17 +74,22 @@ struct ProfileHeaderView: View {
             if store.isOwner, ExploreModeSupport.isActive {
                 GuestModeShowcaseProfileBanner()
             }
-            profileIdentityAndStats(profile, stats: stats)
 
-            if let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
-                Text(bio)
-                    .font(.system(.subheadline, design: .default))
-                    .foregroundStyle(colors.primaryText)
-                    .lineSpacing(3)
-                    .lineLimit(ProfileBioPolicy.maximumLines)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("profile.bio")
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                profileIdentityAndStats(profile, stats: stats)
+
+                if let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
+                    Text(bio)
+                        .font(.system(.subheadline, design: .default))
+                        .foregroundStyle(colors.primaryText)
+                        .lineSpacing(3)
+                        .lineLimit(ProfileBioPolicy.maximumLines)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("profile.bio")
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contextualTourTarget(.profileIdentity)
 
             ProfileActionRow(
                 mode: viewModel.actionMode,
@@ -134,7 +138,6 @@ struct ProfileHeaderView: View {
                 contentLocked: store.isContentLocked
             ))
         }
-        .contextualTourTarget(.profileIdentity)
     }
 
     /// Avatar + name / username / metadata / followers as one identity block.

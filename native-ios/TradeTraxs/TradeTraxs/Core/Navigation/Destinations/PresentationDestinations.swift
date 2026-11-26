@@ -29,7 +29,7 @@ enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
     case withdrawal
     case upgrade
     case mediaViewer(MediaViewerContext)
-    case storyViewer(StoryID)
+    case storyViewer(StoryID, StoryViewerEntryContext)
 
     var id: String {
         switch self {
@@ -44,7 +44,15 @@ enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
         case .withdrawal: return "withdrawal"
         case .upgrade: return "upgrade"
         case .mediaViewer(let context): return "mediaViewer.\(context.id)"
-        case .storyViewer(let id): return "storyViewer.\(id.rawValue)"
+        case .storyViewer(let id, let context):
+            switch context {
+            case .feedCarousel:
+                return "storyViewer.\(id.rawValue).feed"
+            case .profile(let authorID):
+                return "storyViewer.\(id.rawValue).profile.\(authorID.rawValue)"
+            case .dmReferencedStory:
+                return "storyViewer.\(id.rawValue).dm"
+            }
         }
     }
 }

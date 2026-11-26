@@ -46,25 +46,25 @@ struct TradeHistoryFilterBar: View {
     }
 
     private var accountMenu: some View {
-        OwnerAccountFilterDropdown(
+        let profileID = viewModel.ownerAccountsProfileID
+        let title = viewModel.accountMenuTitle
+        return OwnerAccountFilterDropdown(
             accounts: viewModel.accountsForMenu,
-            isAllAccountsSelected: {
-                if case .all = viewModel.filters.account { return true }
-                return false
-            }(),
-            selectedAccountID: {
-                if case .account(let id) = viewModel.filters.account { return id }
-                return nil
-            }(),
-            onSelectAll: { viewModel.setAccountFilter(.all) },
-            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            selectedFilter: viewModel.filters.account,
+            copyGroups: OwnerAccountFilterMenuSupport.copyGroups(for: profileID),
+            isLoadingCopyGroups: OwnerAccountFilterMenuSupport.isLoadingCopyGroups(for: profileID),
+            onSelectFilter: { viewModel.setAccountFilter($0) },
             onManageAccounts: { viewModel.openManageAccounts() },
+            onManageCopyGroups: { viewModel.openManageCopyTradingGroups() },
+            onRequestCopyGroups: {
+                OwnerAccountFilterMenuSupport.requestCopyGroupsLoad(profileID: profileID)
+            },
             accessibilityIdentifier: "trades.account",
             boundary: .trades,
-            profileID: viewModel.ownerAccountsProfileID
+            profileID: profileID
         ) {
             HStack(spacing: 4) {
-                Text(viewModel.accountMenuTitle)
+                Text(title)
                     .experienceStyle(.footnote, color: colors.primaryText)
                     .lineLimit(1)
                 ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.secondaryText)

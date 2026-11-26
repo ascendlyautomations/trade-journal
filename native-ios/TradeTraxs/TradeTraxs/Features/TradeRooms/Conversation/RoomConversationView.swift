@@ -803,6 +803,14 @@ struct RoomConversationView: View {
                                         coordinator: navigationCoordinator
                                     )
                                 },
+                                onStoryReplyTap: { payload in
+                                    guard let data else { return }
+                                    StoryReplyNavigation.open(
+                                        payload: payload,
+                                        cache: data.detailCache,
+                                        coordinator: navigationCoordinator
+                                    )
+                                },
                                 onSharedProfileTap: { payload in
                                     guard let data else { return }
                                     ProfileShareNavigation.open(

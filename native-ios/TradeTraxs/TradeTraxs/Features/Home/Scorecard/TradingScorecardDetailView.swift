@@ -1,11 +1,17 @@
 import SwiftUI
 
 struct TradingScorecardDetailView: View {
-    @Bindable private var session = TradingScorecardSessionStore.shared
+    @Bindable private var session: TradingScorecardSessionStore
     let navigationCoordinator: NavigationCoordinator
     let data: DataEnvironment
 
     @Environment(\.themeColors) private var colors
+
+    init(navigationCoordinator: NavigationCoordinator, data: DataEnvironment) {
+        self.navigationCoordinator = navigationCoordinator
+        self.data = data
+        _session = Bindable(TradingScorecardPresentationStores.store(for: data))
+    }
     @State private var restrictsPremiumPsychology = false
     @State private var entitlementGateRevision = 0
 

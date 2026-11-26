@@ -47,6 +47,7 @@ test("public, auth, and onboarding paths do not take an appearance", () => {
     "/contact",
     "/copyright",
     "/native",
+    "/download",
     "/demo",
   ]) {
     assert.equal(shouldApplyWebAppearance(path), false, path)

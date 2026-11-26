@@ -64,6 +64,10 @@ struct BacktestCalendarView: View {
             guard !restrictsBacktestLab else { return }
             viewModel.handleAccountMutation()
         }
+        .onCopyTradingGroupsMutation {
+            guard !restrictsBacktestLab else { return }
+            viewModel.handleCopyTradingGroupsMutation()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
             entitlementGateRevision += 1
         }
@@ -156,22 +160,20 @@ struct BacktestCalendarView: View {
     }
 
     private var accountFilterMenu: some View {
-        OwnerAccountFilterDropdown(
+        let profileID = viewModel.ownerAccountsProfileID
+        return OwnerAccountFilterDropdown(
             accounts: viewModel.backtestAccountsForMenu,
-            isAllAccountsSelected: {
-                if case .all = viewModel.accountFilter { return true }
-                return false
-            }(),
-            selectedAccountID: {
-                if case .account(let id) = viewModel.accountFilter { return id }
-                return nil
-            }(),
-            onSelectAll: { viewModel.setAccountFilter(.all) },
-            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            selectedFilter: viewModel.accountFilter,
+            copyGroups: [],
+            isLoadingCopyGroups: false,
+            onSelectFilter: { viewModel.setAccountFilter($0) },
             onManageAccounts: { viewModel.openManageAccounts() },
+            onManageCopyGroups: {},
+            onRequestCopyGroups: {},
             accessibilityIdentifier: "backtest.calendar.account",
+            includesCopyTradingMenu: false,
             boundary: .trades,
-            profileID: viewModel.ownerAccountsProfileID
+            profileID: profileID
         ) {
             filterCapsuleLabel(viewModel.accountMenuTitle)
         }

@@ -6,12 +6,22 @@ enum DashboardScorecardDisplayCopy {
 
 /// Compact visual scorecard card for the Home dashboard (native-first; not web layout).
 struct DashboardTradingScorecardSection: View {
-    @Bindable private var session = TradingScorecardSessionStore.shared
+    @Bindable private var session: TradingScorecardSessionStore
     /// When false, the dashboard section header supplies the title.
     var showsTitle: Bool = true
     var onOpenDetail: () -> Void
 
     @Environment(\.themeColors) private var colors
+
+    init(
+        showsTitle: Bool = true,
+        onOpenDetail: @escaping () -> Void,
+        sessionStore: TradingScorecardSessionStore
+    ) {
+        self.showsTitle = showsTitle
+        self.onOpenDetail = onOpenDetail
+        _session = Bindable(sessionStore)
+    }
 
     var body: some View {
         Group {

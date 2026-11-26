@@ -21,7 +21,7 @@ enum SocialPresentationTargetMatching {
             if case .achievement(_, let achievement) = entry, achievement.id.rawValue == target.id {
                 return true
             }
-        case .feedPost, .profilePost, .reel:
+        case .feedPost, .profilePost, .reel, .story:
             break
         }
         return false
@@ -37,6 +37,8 @@ enum SocialPresentationTargetMatching {
             return state.clips.contains { $0.id.rawValue == target.id }
         case .achievement:
             return state.achievements.contains { $0.id.rawValue == target.id }
+        case .story:
+            return false
         }
     }
 }

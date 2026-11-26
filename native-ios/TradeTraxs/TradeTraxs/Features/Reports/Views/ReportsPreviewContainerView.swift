@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Isolated navigation stack for signed-in Free users exploring Reports with sample data.
 struct ReportsPreviewContainerView: View {
-    let data: DataEnvironment
+    let productionData: DataEnvironment
     let onDismiss: () -> Void
 
     @State private var navigationStore = NavigationStore()
@@ -10,8 +10,12 @@ struct ReportsPreviewContainerView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    init(data: DataEnvironment, onDismiss: @escaping () -> Void) {
-        self.data = data
+    private var previewData: DataEnvironment {
+        TraxsProPreviewSession.shared.activePreviewEnvironment?.data ?? productionData
+    }
+
+    init(productionData: DataEnvironment, onDismiss: @escaping () -> Void) {
+        self.productionData = productionData
         self.onDismiss = onDismiss
         let store = NavigationStore()
         store.sessionPhase = .authenticated
@@ -22,7 +26,7 @@ struct ReportsPreviewContainerView: View {
     var body: some View {
         NavigationStack(path: homePath) {
             ReportsScreenView(
-                data: data,
+                data: previewData,
                 navigationCoordinator: navigationCoordinator,
                 embeddedInTraxsProPreview: true
             )
@@ -45,11 +49,14 @@ struct ReportsPreviewContainerView: View {
         .environment(\.traxsProPreviewReadOnly, true)
         .onAppear {
             navigationStore.sessionPhase = .authenticated
-            let viewer = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
-            TraxsProPreviewSession.shared.beginReportsPreview(
-                detailCache: data.detailCache,
-                viewer: viewer
-            )
+            if let viewer = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) }),
+               !TraxsProPreviewSession.shared.isReportsPreviewActive
+            {
+                TraxsProPreviewSession.shared.beginReportsPreview(
+                    production: productionData,
+                    viewer: viewer
+                )
+            }
         }
         .accessibilityIdentifier("traxspro.preview.reports.container")
     }
@@ -73,14 +80,14 @@ struct ReportsPreviewContainerView: View {
         case .report(let reportID):
             ReportsPreviewReportDetailRouteView(
                 reportID: reportID,
-                data: data,
+                data: previewData,
                 navigationCoordinator: navigationCoordinator
             )
         case .tradeDetail(let tradeID):
             if TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: tradeID) {
                 JournalTradeDetailView(
                     tradeID: tradeID,
-                    data: data,
+                    data: previewData,
                     navigationCoordinator: navigationCoordinator
                 )
             } else {

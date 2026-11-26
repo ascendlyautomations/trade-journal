@@ -192,6 +192,7 @@ final class CalendarDayDetailLoader {
     private let detailCache: DetailPresentationCache
     private let rpc: (any RPCClient)?
     private var hasLoaded = false
+    private var viewerProfileID: ProfileID?
 
     init(
         dayKey: String,
@@ -250,6 +251,7 @@ final class CalendarDayDetailLoader {
             }
             return
         }
+        viewerProfileID = profileID
 
         if let loaded = SessionAccountsStore.shared.cached(for: profileID)
             ?? detailCache.accounts(for: profileID)
@@ -426,10 +428,12 @@ final class CalendarDayDetailLoader {
 
     private func apply(_ trades: [Trade], source: String) {
         let filter = CalendarAnalyticsSessionStore.shared.accountFilter
+        let copyGroups = OwnerAccountFilterMenuSupport.copyGroups(for: viewerProfileID)
         let filtered = TradingCalendarAggregator.trades(
             for: dayKey,
             from: trades,
-            accountFilter: filter
+            accountFilter: filter,
+            copyTradingGroups: copyGroups
         )
         dayTrades = filtered.map(TradeSummaryMapper.summary(fromPartialListTrade:))
         for summary in dayTrades {
@@ -440,7 +444,8 @@ final class CalendarDayDetailLoader {
         #endif
         summary = TradingCalendarAggregator.daySummaries(
             from: trades,
-            accountFilter: filter
+            accountFilter: filter,
+            copyTradingGroups: copyGroups
         )[dayKey]
     }
 

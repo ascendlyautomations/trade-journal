@@ -125,35 +125,41 @@ nonisolated struct DefaultCopyTradingGroupRepository: CopyTradingGroupRepository
     }
 
     func delete(userID: ProfileID, groupID: String) async throws {
-        try await requireSession(userID)
-        let owned: [GroupIDRow] = try await supabase.database.select(
-            GroupIDRow.self,
-            from: "copy_trading_groups",
-            query: [
-                SupabaseQuery.select("id"),
-                SupabaseQuery.eq("id", groupID),
-                SupabaseQuery.eq("user_id", userID.rawValue),
-            ]
-        )
-        guard owned.contains(where: { $0.id == groupID }) else {
-            throw CopyTradingGroupFailure.notFound
+        do {
+            try await requireSession(userID)
+            let owned: [GroupIDRow] = try await supabase.database.select(
+                GroupIDRow.self,
+                from: "copy_trading_groups",
+                query: [
+                    SupabaseQuery.select("id"),
+                    SupabaseQuery.eq("id", groupID),
+                    SupabaseQuery.eq("user_id", userID.rawValue),
+                ]
+            )
+            guard owned.contains(where: { $0.id == groupID }) else {
+                throw CopyTradingGroupFailure.notFound
+            }
+            // Historical trades stay. `copy_trading_group_id` is cleared; accounts and broker rows are untouched.
+            try await supabase.database.update(
+                UnlinkTradesFromGroup(),
+                table: "trades",
+                query: [
+                    SupabaseQuery.eq("copy_trading_group_id", groupID),
+                    SupabaseQuery.eq("user_id", userID.rawValue),
+                ]
+            )
+            try await supabase.database.delete(
+                from: "copy_trading_groups",
+                query: [
+                    SupabaseQuery.eq("id", groupID),
+                    SupabaseQuery.eq("user_id", userID.rawValue),
+                ]
+            )
+        } catch let failure as CopyTradingGroupFailure {
+            throw failure
+        } catch {
+            throw mapDeleteError(error)
         }
-        // Historical trades stay. `copy_trading_group_id` is cleared; accounts and broker rows are untouched.
-        try await supabase.database.update(
-            UnlinkTradesFromGroup(),
-            table: "trades",
-            query: [
-                SupabaseQuery.eq("copy_trading_group_id", groupID),
-                SupabaseQuery.eq("user_id", userID.rawValue),
-            ]
-        )
-        try await supabase.database.delete(
-            from: "copy_trading_groups",
-            query: [
-                SupabaseQuery.eq("id", groupID),
-                SupabaseQuery.eq("user_id", userID.rawValue),
-            ]
-        )
     }
 
     private func requireSession(_ userID: ProfileID) async throws {
@@ -191,7 +197,22 @@ nonisolated struct DefaultCopyTradingGroupRepository: CopyTradingGroupRepository
         if text.localizedCaseInsensitiveContains("TRAXPRO_COPY_TRADING_REQUIRED") {
             return .message("TRAXPRO_COPY_TRADING_REQUIRED")
         }
+        if text.localizedCaseInsensitiveContains("ACCOUNT_READ_ONLY") {
+            return .message(
+                "Couldn't update trades for this group. Try again after the latest app update, or contact support."
+            )
+        }
         return .message("Couldn't save this copy trading group.")
+    }
+
+    private func mapDeleteError(_ error: Error) -> CopyTradingGroupFailure {
+        let mapped = mapWriteError(error)
+        switch mapped {
+        case .message(let text) where text == "Couldn't save this copy trading group.":
+            return .message("Couldn't delete this copy trading group.")
+        default:
+            return mapped
+        }
     }
 }
 

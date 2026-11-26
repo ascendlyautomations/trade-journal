@@ -128,6 +128,22 @@ enum StoryShareNavigation {
             cache.seed(StoryShareMessageSupport.provisionalStory(from: payload))
         }
         ExperienceHaptics.play(.selection)
-        coordinator?.present(fullScreen: .storyViewer(storyID))
+        coordinator?.present(fullScreen: .storyViewer(storyID, .dmReferencedStory))
+    }
+}
+
+enum StoryReplyNavigation {
+    @MainActor
+    static func open(
+        payload: StoryReplyMessageSupport.Payload,
+        cache: DetailPresentationCache,
+        coordinator: NavigationCoordinator?
+    ) {
+        let storyID = StoryID(payload.storyID)
+        if cache.story(id: storyID) == nil {
+            cache.seed(StoryReplyMessageSupport.provisionalStory(from: payload))
+        }
+        ExperienceHaptics.play(.selection)
+        coordinator?.present(fullScreen: .storyViewer(storyID, .dmReferencedStory))
     }
 }

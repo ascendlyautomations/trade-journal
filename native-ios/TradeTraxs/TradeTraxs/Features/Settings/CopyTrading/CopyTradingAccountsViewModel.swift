@@ -158,6 +158,7 @@ final class CopyTradingAccountsViewModel {
             }
             self.editor = nil
             await refresh()
+            await notifyCopyGroupsChanged(deletedGroupID: nil, userID: userID)
             return true
         } catch let failure as CopyTradingGroupFailure {
             if ProLimitPresentation.presentUpgradeIfProGate(failure) {
@@ -185,8 +186,10 @@ final class CopyTradingAccountsViewModel {
         defer { isSaving = false }
         do {
             try await groupsRepository.delete(userID: userID, groupID: groupToDelete.id)
+            let deletedID = groupToDelete.id
             self.pendingDelete = nil
             await refresh()
+            await notifyCopyGroupsChanged(deletedGroupID: deletedID, userID: userID)
         } catch let failure as CopyTradingGroupFailure {
             if ProLimitPresentation.presentUpgradeIfProGate(failure) {
                 return
@@ -222,5 +225,10 @@ final class CopyTradingAccountsViewModel {
         case .message(let text):
             return text
         }
+    }
+
+    private func notifyCopyGroupsChanged(deletedGroupID: String?, userID: ProfileID) async {
+        await OwnerAccountFilterDropdownCopyTradingBridge.reloadGroupsAfterMutation(profileID: userID)
+        CopyTradingGroupsMutationStore.shared.noteGroupsChanged(deletedGroupID: deletedGroupID)
     }
 }

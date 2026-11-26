@@ -362,12 +362,35 @@ nonisolated enum DashboardEquityChartSeries {
 nonisolated enum DashboardAccountFilter: Hashable, Sendable {
     case all
     case account(TradingAccountID)
+    /// Every account linked to any copy-trading group.
+    case copyTradingAll
+    /// Trades for accounts in the group (metrics dedupe copy batches).
+    case copyTradingGroup(String)
 
     var title: String {
         switch self {
         case .all: return "All Accounts"
         case .account: return "Account"
+        case .copyTradingAll: return "All Copy Trading Accounts"
+        case .copyTradingGroup: return "Copy Trading Group"
         }
+    }
+
+    var isCopyTradingScoped: Bool {
+        switch self {
+        case .copyTradingAll, .copyTradingGroup: return true
+        case .all, .account: return false
+        }
+    }
+
+    var selectedAccountID: TradingAccountID? {
+        if case .account(let id) = self { return id }
+        return nil
+    }
+
+    var isAllAccountsSelection: Bool {
+        if case .all = self { return true }
+        return false
     }
 }
 

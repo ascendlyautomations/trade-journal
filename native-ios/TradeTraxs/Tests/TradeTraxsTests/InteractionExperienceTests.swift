@@ -110,12 +110,14 @@ final class InteractionExperienceTests: XCTestCase {
         let reel = InteractionTarget.reel(ReelID("r1"))
         let feed = InteractionTarget.feedPost(PostID("f1"))
         let achievement = InteractionTarget.achievement(AchievementID("a1"))
+        let story = InteractionTarget.story(StoryID("s1"))
 
         XCTAssertEqual(trade.kind, .trade)
         XCTAssertEqual(post.kind, .profilePost)
         XCTAssertEqual(reel.kind, .reel)
         XCTAssertEqual(feed.kind, .feedPost)
         XCTAssertEqual(achievement.kind, .achievement)
+        XCTAssertEqual(story.kind, .story)
         XCTAssertNotEqual(trade, post)
         XCTAssertNotEqual(achievement, feed)
     }

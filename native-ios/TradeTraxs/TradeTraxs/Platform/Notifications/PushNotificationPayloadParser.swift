@@ -5,7 +5,8 @@ import Foundation
 /// Reuses the existing server payload shape from `lib/server/push/apns.ts`:
 /// `href`, `type`, `conversationId`, `roomId`, `roomSlug`, `followRequestId`, `aps.badge`.
 enum PushNotificationPayloadParser {
-    static func parse(userInfo: [AnyHashable: Any]) -> NotificationDestination {
+    static func parse(userInfo: [AnyHashable: Any], deliveryDate: Date? = nil) -> NotificationDestination {
+        let referenceDate = deliveryDate ?? Date()
         let strings = stringMap(from: userInfo)
         let type = (strings["type"] ?? strings["notificationType"] ?? "").lowercased()
         let href = strings["href"]
@@ -71,11 +72,24 @@ enum PushNotificationPayloadParser {
             pathID(from: href, prefix: "profile"),
             pathID(from: href, prefix: "u")
         ).map { ProfileID($0) }
-        let reportID = firstNonEmpty(
-            strings["reportId"],
-            strings["report_id"],
-            hrefQuery["report"]
-        ).map { ReportID($0) }
+        let reportID: ReportID? = {
+            if let reminder = strings[PerformanceReportReminderPeriodResolution.userInfoKey],
+               let kind = PerformanceReportReminderPeriodResolution.Kind(rawValue: reminder)
+            {
+                return PerformanceReportReminderPeriodResolution.resolvedReportID(
+                    kind: kind,
+                    referenceDate: referenceDate
+                )
+            }
+            if let explicit = firstNonEmpty(
+                strings["reportId"],
+                strings["report_id"],
+                hrefQuery["report"]
+            ) {
+                return ReportID(explicit)
+            }
+            return nil
+        }()
         let commentID = firstNonEmpty(
             strings["commentId"],
             strings["comment_id"]

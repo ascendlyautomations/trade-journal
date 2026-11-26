@@ -109,4 +109,28 @@ nonisolated enum StoryReplyMessageSupport {
         let trimmed = payload.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    static func isVideoMediaURL(_ raw: String) -> Bool {
+        let path = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !path.isEmpty else { return false }
+        for ext in [".mp4", ".mov", ".m4v", ".webm"] where path.contains(ext) {
+            return true
+        }
+        return false
+    }
+
+    /// Ephemeral seed for story viewer navigation when feed cache misses the row.
+    static func provisionalStory(from payload: Payload) -> Story {
+        let mediaID = payload.storyImageURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let kind: MediaKind = isVideoMediaURL(mediaID) ? .video : .image
+        return Story(
+            id: StoryID(payload.storyID),
+            authorProfileID: ProfileID(payload.storyOwnerID),
+            media: MediaReference(id: mediaID, kind: kind, altText: nil),
+            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: Date(),
+            viewerHasSeen: true
+        )
+    }
+
 }

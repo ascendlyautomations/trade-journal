@@ -3,7 +3,7 @@ import Foundation
 
 /// Fixed crop viewport layout, single source of truth for editor preview + export.
 nonisolated struct ImageCropViewportLayout: Equatable {
-    /// Minimum aspect-fill scale (viewport points per source pixel).
+    /// Base scale for the active policy (fit or fill); viewport points per source pixel at userScale 1.
     let baseFillScale: CGFloat
     /// User zoom multiplier on top of base fill (1 = minimum cover).
     let userScale: CGFloat
@@ -28,7 +28,7 @@ nonisolated struct ImageCropViewportLayout: Equatable {
     )
 }
 
-/// Authoritative aspect-fill crop math, preview and export both use this.
+/// Crop viewport layout math; preview and export both use this.
 nonisolated enum ImageCropViewportMath {
     static let minUserScale: CGFloat = 1
     static let maxUserScale: CGFloat = ImageCropMath.maxZoom
@@ -43,35 +43,90 @@ nonisolated enum ImageCropViewportMath {
         )
     }
 
+    static func baseFitScale(imagePixelSize: CGSize, viewportSize: CGSize) -> CGFloat {
+        guard finitePositive(imagePixelSize.width), finitePositive(imagePixelSize.height),
+              finitePositive(viewportSize.width), finitePositive(viewportSize.height)
+        else { return 1 }
+        return min(
+            viewportSize.width / imagePixelSize.width,
+            viewportSize.height / imagePixelSize.height
+        )
+    }
+
+    /// User scale that reproduces aspect-fill framing when the baseline is aspect-fit.
+    static func coverZoomMultiplier(
+        imagePixelSize: CGSize,
+        viewportSize: CGSize,
+        policy: ImageCropViewportPolicy = .coverLocked
+    ) -> CGFloat {
+        guard policy.baseline == .aspectFit else { return 1 }
+        let fit = baseFitScale(imagePixelSize: imagePixelSize, viewportSize: viewportSize)
+        let fill = baseFillScale(imagePixelSize: imagePixelSize, viewportSize: viewportSize)
+        guard fit.isFinite, fit > 0, fill.isFinite else { return 1 }
+        let cover = fill / fit
+        return min(max(cover, policy.minUserScale), policy.maxUserScale)
+    }
+
+    /// Opening transform for content uploads — starts at cover but can pinch out to fit / smaller.
+    static func defaultContentTransform(
+        imagePixelSize: CGSize,
+        viewportSize: CGSize,
+        policy: ImageCropViewportPolicy = .contentFree
+    ) -> ImageCropTransform {
+        ImageCropTransform(
+            zoom: coverZoomMultiplier(
+                imagePixelSize: imagePixelSize,
+                viewportSize: viewportSize,
+                policy: policy
+            ),
+            offset: .zero
+        )
+    }
+
+    static func baseScale(
+        imagePixelSize: CGSize,
+        viewportSize: CGSize,
+        policy: ImageCropViewportPolicy
+    ) -> CGFloat {
+        switch policy.baseline {
+        case .aspectFill:
+            return baseFillScale(imagePixelSize: imagePixelSize, viewportSize: viewportSize)
+        case .aspectFit:
+            return baseFitScale(imagePixelSize: imagePixelSize, viewportSize: viewportSize)
+        }
+    }
+
     static func layout(
         imagePixelSize: CGSize,
         viewportSize: CGSize,
         userScale: CGFloat,
         translation: CGSize,
-        maxUserScale: CGFloat = maxUserScale
+        policy: ImageCropViewportPolicy = .coverLocked
     ) -> ImageCropViewportLayout {
         // Infinity passes `> 0`, then `viewport / infinity` is 0 and `infinity * 0` is NaN.
         guard finitePositive(imagePixelSize.width), finitePositive(imagePixelSize.height),
               viewportSize.width.isFinite, viewportSize.height.isFinite
         else { return .empty }
 
-        let safeUserScale = userScale.isFinite ? userScale : minUserScale
+        let minUser = policy.minUserScale
+        let maxUser = policy.maxUserScale
+        let safeUserScale = userScale.isFinite ? userScale : minUser
         let safeTranslation = CGSize(
             width: translation.width.isFinite ? translation.width : 0,
             height: translation.height.isFinite ? translation.height : 0
         )
-        let base = baseFillScale(imagePixelSize: imagePixelSize, viewportSize: viewportSize)
-        let clampedUser = min(max(safeUserScale, minUserScale), maxUserScale)
+        let base = baseScale(imagePixelSize: imagePixelSize, viewportSize: viewportSize, policy: policy)
+        let clampedUser = min(max(safeUserScale, minUser), maxUser)
         let total = base * clampedUser
         let displayWidth = imagePixelSize.width * total
         let displayHeight = imagePixelSize.height * total
 
         let clampedOrigin = clampedOrigin(
-            imagePixelSize: imagePixelSize,
             viewportSize: viewportSize,
             displayWidth: displayWidth,
             displayHeight: displayHeight,
-            translation: safeTranslation
+            translation: safeTranslation,
+            policy: policy
         )
 
         let centeredX = (viewportSize.width - displayWidth) / 2
@@ -100,14 +155,14 @@ nonisolated enum ImageCropViewportMath {
         viewportSize: CGSize,
         userScale: CGFloat,
         translation: CGSize,
-        maxUserScale: CGFloat = maxUserScale
+        policy: ImageCropViewportPolicy = .coverLocked
     ) -> ImageCropTransform {
         let resolved = layout(
             imagePixelSize: imagePixelSize,
             viewportSize: viewportSize,
             userScale: userScale,
             translation: translation,
-            maxUserScale: maxUserScale
+            policy: policy
         )
         return ImageCropTransform(zoom: resolved.userScale, offset: resolved.translation)
     }
@@ -120,14 +175,14 @@ nonisolated enum ImageCropViewportMath {
         startUserScale: CGFloat,
         startTranslation: CGSize,
         magnification: CGFloat,
-        maxUserScale: CGFloat = maxUserScale
+        policy: ImageCropViewportPolicy = .coverLocked
     ) -> ImageCropTransform {
         let startLayout = layout(
             imagePixelSize: imagePixelSize,
             viewportSize: viewportSize,
             userScale: startUserScale,
             translation: startTranslation,
-            maxUserScale: maxUserScale
+            policy: policy
         )
 
         guard magnification.isFinite,
@@ -140,7 +195,9 @@ nonisolated enum ImageCropViewportMath {
         let imageFractionX = (anchor.x - startLayout.origin.x) / startLayout.displayWidth
         let imageFractionY = (anchor.y - startLayout.origin.y) / startLayout.displayHeight
 
-        let newUserScale = min(max(startUserScale * magnification, minUserScale), maxUserScale)
+        let minUser = policy.minUserScale
+        let maxUser = policy.maxUserScale
+        let newUserScale = min(max(startUserScale * magnification, minUser), maxUser)
         let base = startLayout.baseFillScale
         let newDisplayWidth = imagePixelSize.width * base * newUserScale
         let newDisplayHeight = imagePixelSize.height * base * newUserScale
@@ -152,7 +209,8 @@ nonisolated enum ImageCropViewportMath {
             viewportSize: viewportSize,
             displayWidth: newDisplayWidth,
             displayHeight: newDisplayHeight,
-            proposedOrigin: CGPoint(x: originX, y: originY)
+            proposedOrigin: CGPoint(x: originX, y: originY),
+            policy: policy
         )
 
         let centeredX = (viewportSize.width - newDisplayWidth) / 2
@@ -215,11 +273,11 @@ nonisolated enum ImageCropViewportMath {
     // MARK: - Private
 
     private static func clampedOrigin(
-        imagePixelSize: CGSize,
         viewportSize: CGSize,
         displayWidth: CGFloat,
         displayHeight: CGFloat,
-        translation: CGSize
+        translation: CGSize,
+        policy: ImageCropViewportPolicy
     ) -> CGPoint {
         let centeredX = (viewportSize.width - displayWidth) / 2 + translation.width
         let centeredY = (viewportSize.height - displayHeight) / 2 + translation.height
@@ -227,7 +285,8 @@ nonisolated enum ImageCropViewportMath {
             viewportSize: viewportSize,
             displayWidth: displayWidth,
             displayHeight: displayHeight,
-            proposedOrigin: CGPoint(x: centeredX, y: centeredY)
+            proposedOrigin: CGPoint(x: centeredX, y: centeredY),
+            policy: policy
         )
     }
 
@@ -235,7 +294,8 @@ nonisolated enum ImageCropViewportMath {
         viewportSize: CGSize,
         displayWidth: CGFloat,
         displayHeight: CGFloat,
-        proposedOrigin: CGPoint
+        proposedOrigin: CGPoint,
+        policy: ImageCropViewportPolicy
     ) -> CGPoint {
         var originX = proposedOrigin.x
         var originY = proposedOrigin.y
@@ -244,12 +304,18 @@ nonisolated enum ImageCropViewportMath {
 
         if displayWidth > vw {
             originX = min(0, max(vw - displayWidth, originX))
+        } else if policy.allowsFreePanWhenLetterboxed {
+            let maxX = vw - displayWidth
+            originX = min(maxX, max(0, originX))
         } else {
             originX = (vw - displayWidth) / 2
         }
 
         if displayHeight > vh {
             originY = min(0, max(vh - displayHeight, originY))
+        } else if policy.allowsFreePanWhenLetterboxed {
+            let maxY = vh - displayHeight
+            originY = min(maxY, max(0, originY))
         } else {
             originY = (vh - displayHeight) / 2
         }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Device-local, per-viewer completion for the one-time first-trade detail coachmark.
+/// Device-local, per-viewer completion for the one-time Trades journal coachmarks (trade detail + backtest).
 enum FirstTradeDetailCoachmarkPersistence {
     private static let keyPrefix = "hasSeenFirstTradeDetailCoachmark."
 

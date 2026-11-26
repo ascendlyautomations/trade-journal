@@ -7,6 +7,7 @@ struct ProfileOnboardingView: View {
     @State private var cropSourceImage: UIImage?
     @State private var photoPickerLoadID = UUID()
     @FocusState private var usernameFieldFocused: Bool
+    @State private var bioEditorActive = false
     @Environment(\.themeColors) private var colors
     let imagePipeline: any ImagePipeline
     let onSignOut: () -> Void
@@ -80,15 +81,20 @@ struct ProfileOnboardingView: View {
             .experienceFormScrollKeyboard()
         }
         .experienceScreenBackground()
-        .experienceKeyboardDismissOnTapOutside()
         .experienceProtectedFormDismiss()
         .experienceFormKeyboard(isFocused: $usernameFieldFocused)
+        .experienceKeyboardRequiresDoneToolbarWhenFocused(bioEditorActive)
         .onAppear {
             viewModel.applySignupNamePrefillIfBlank()
         }
         .onChange(of: viewModel.usernameError) { _, error in
             if error != nil {
                 usernameFieldFocused = true
+            }
+        }
+        .onChange(of: usernameFieldFocused) { _, focused in
+            if focused {
+                bioEditorActive = false
             }
         }
         .onChange(of: photoItem) { _, item in
@@ -317,7 +323,14 @@ struct ProfileOnboardingView: View {
                 text: $viewModel.bio,
                 placeholder: "Optional: tell traders about yourself",
                 minHeight: 44,
-                maxHeight: 88
+                maxHeight: 88,
+                onEditingBegan: {
+                    usernameFieldFocused = false
+                    bioEditorActive = true
+                },
+                onEditingEnded: {
+                    bioEditorActive = false
+                }
             )
             .padding(.vertical, ExperienceSpacing.xxs)
             .frame(maxWidth: .infinity, alignment: .topLeading)

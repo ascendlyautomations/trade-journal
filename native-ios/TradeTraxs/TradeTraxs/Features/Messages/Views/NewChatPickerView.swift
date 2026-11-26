@@ -347,13 +347,14 @@ struct NewChatPickerView: View {
     }
 
     private var groupAvatarPicker: some View {
-        PhotosPicker(
+        let avatarPreview = viewModel.groupAvatarPreview
+        return PhotosPicker(
             selection: $groupPhotoItem,
             matching: MediaPickerPolicy.imageOnly.matching,
             preferredItemEncoding: .compatible
         ) {
             ZStack {
-                if let preview = viewModel.groupAvatarPreview {
+                if let preview = avatarPreview {
                     Image(uiImage: preview)
                         .resizable()
                         .scaledToFill()

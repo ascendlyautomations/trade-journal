@@ -46,6 +46,7 @@ struct PublicTradeMetaChipRow: View {
     private let summary: TradeSummary?
     private let showsQuantity: Bool
     private let showsSession: Bool
+    private let showsRiskReward: Bool
     private let layout: LayoutStyle
     /// Profile grouped copy line, replaces per-row account badge (`copyTradePublicModeSummary`).
     private let copyTradeGroupedModeSummary: String?
@@ -56,6 +57,7 @@ struct PublicTradeMetaChipRow: View {
         trade: Trade,
         showsQuantity: Bool = true,
         showsSession: Bool = true,
+        showsRiskReward: Bool = true,
         layout: LayoutStyle = .horizontalScroll,
         accountProviderName: String? = nil
     ) {
@@ -63,6 +65,7 @@ struct PublicTradeMetaChipRow: View {
         self.summary = nil
         self.showsQuantity = showsQuantity
         self.showsSession = showsSession
+        self.showsRiskReward = showsRiskReward
         self.layout = layout
         self.copyTradeGroupedModeSummary = nil
         self.accountProviderName = accountProviderName
@@ -72,6 +75,7 @@ struct PublicTradeMetaChipRow: View {
         summary: TradeSummary,
         showsQuantity: Bool = true,
         showsSession: Bool = true,
+        showsRiskReward: Bool = true,
         layout: LayoutStyle = .horizontalScroll,
         copyTradeGroupedModeSummary: String? = nil,
         accountProviderName: String? = nil
@@ -80,6 +84,7 @@ struct PublicTradeMetaChipRow: View {
         self.summary = summary
         self.showsQuantity = showsQuantity
         self.showsSession = showsSession
+        self.showsRiskReward = showsRiskReward
         self.layout = layout
         self.copyTradeGroupedModeSummary = copyTradeGroupedModeSummary
         self.accountProviderName = accountProviderName
@@ -123,7 +128,7 @@ struct PublicTradeMetaChipRow: View {
             {
                 PublicTradeMetaChip(title: accountCaption, tone: .info)
             }
-            if trade.riskReward != nil {
+            if showsRiskReward, trade.riskReward != nil {
                 PublicTradeMetaChip(title: TradeDisplay.rrText(trade.riskReward), tone: .info)
             }
             if let points = TradeDisplay.pointsText(trade.points) {
@@ -170,7 +175,7 @@ struct PublicTradeMetaChipRow: View {
             {
                 PublicTradeMetaChip(title: accountCaption, tone: .info)
             }
-            if summary.riskReward != nil {
+            if showsRiskReward, summary.riskReward != nil {
                 PublicTradeMetaChip(title: TradeDisplay.rrText(summary.riskReward), tone: .info)
             }
             if let points = TradeDisplay.pointsText(summary.points) {
@@ -489,68 +494,72 @@ private enum TradeExecutionEntryExitTypography {
 
 // MARK: - Public achievement cards (feed + detail)
 
-/// Achievement title + optional payout/milestone on the right, matches ``PublicTradeHeadlineRow``.
-struct PublicAchievementHeadlineRow: View {
+/// Shared achievement copy hierarchy: category → title → amount → optional notes.
+struct PublicAchievementContentStack: View {
     let achievement: Achievement
+    var showsInlineNotes: Bool = false
+    var showsFeaturedTag: Bool = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            if showsFeaturedTag, achievement.isFeatured {
+                ExperienceTag(title: "Featured", tone: .success)
+            }
+
+            Text(AchievementDetailPresentation.categoryContextLine(for: achievement))
+                .font(ExperienceTypography.subheadline.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .accessibilityIdentifier("achievement.category.context")
+
             Text(achievement.title)
                 .font(ExperienceTypography.headline)
                 .foregroundStyle(colors.primaryText)
-                .lineLimit(2)
+                .lineLimit(3)
                 .multilineTextAlignment(.leading)
                 .minimumScaleFactor(0.82)
-                .layoutPriority(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("achievement.title")
 
-            Spacer(minLength: ExperienceSpacing.xs)
-
-            if let trailing = AchievementDetailPresentation.headlineTrailingAmount(for: achievement) {
-                Text(trailing.text)
+            if let amount = AchievementDetailPresentation.primaryAmountDisplay(for: achievement) {
+                Text(amount.text)
                     .font(ExperienceTypography.headline.monospacedDigit())
-                    .foregroundStyle(trailingAmountColor(trailing))
+                    .foregroundStyle(amountColor(amount))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
-                    .accessibilityIdentifier("achievement.headline.trailingAmount")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("achievement.primaryAmount")
+            }
+
+            if showsInlineNotes, let notes = normalizedNotes {
+                Text(notes)
+                    .experienceStyle(.body, color: colors.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("achievement.notes")
             }
         }
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
     }
 
-    private func trailingAmountColor(_ trailing: (text: String, usesMetricColor: Bool)) -> Color {
-        guard trailing.usesMetricColor, let value = achievement.value else {
-            return colors.secondaryText
+    private var normalizedNotes: String? {
+        let trimmed = achievement.description?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func amountColor(_ amount: (text: String, usesMetricColor: Bool)) -> Color {
+        guard amount.usesMetricColor, let value = achievement.value else {
+            return colors.primaryText
         }
         return theme.metricColor(
             for: NSDecimalNumber(decimal: value.amount).doubleValue
         )
-    }
-}
-
-/// Achievement kind + account/firm chips, matches ``PublicTradeMetaChipRow`` feed styling.
-struct PublicAchievementMetaChipRow: View {
-    let achievement: Achievement
-
-    var body: some View {
-        let titles = AchievementDetailPresentation.metaChipTitles(for: achievement)
-        if titles.isEmpty {
-            EmptyView()
-        } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: PublicTradeMetaChipRowLayout.chipSpacing) {
-                    ForEach(titles, id: \.self) { title in
-                        PublicTradeMetaChip(title: title, tone: .info)
-                    }
-                }
-            }
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("achievement.meta.chips")
-        }
     }
 }
 

@@ -47,6 +47,62 @@ final class CopyTradingAccountsTests: XCTestCase {
         XCTAssertTrue(CopyTradingGroupDeletionEffect.unlinksCopyTradingGroupID)
     }
 
+    func testStandaloneMenuAccountsHideCopyLinkedRows() {
+        let linkedA = TradingAccountID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        let linkedB = TradingAccountID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        let solo = TradingAccountID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+        let accounts = [
+            account(id: linkedA, name: "Linked A"),
+            account(id: linkedB, name: "Linked B"),
+            account(id: solo, name: "Solo"),
+        ]
+        let groups = [
+            CopyTradingGroup(
+                id: "group-1",
+                name: "Alpha",
+                accountIDs: [linkedA.rawValue, linkedB.rawValue],
+                createdAt: "",
+                updatedAt: ""
+            ),
+        ]
+        let menu = DashboardAccountFilterCopyTradingSupport.standaloneMenuAccounts(
+            from: accounts,
+            copyGroups: groups,
+            preservingSelection: nil
+        )
+        XCTAssertEqual(menu.map(\.id), [solo])
+    }
+
+    func testSanitizedFilterDropsDeletedCopyGroup() {
+        let accounts = [account(id: TradingAccountID("solo"), name: "Solo")]
+        let sanitized = DashboardAccountFilterCopyTradingSupport.sanitizedFilter(
+            .copyTradingGroup("removed-group"),
+            accounts: accounts,
+            copyGroups: []
+        )
+        XCTAssertEqual(sanitized, .all)
+    }
+
+    func testSanitizedFilterMigratesLinkedAccountToCopyScope() {
+        let linked = TradingAccountID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        let accounts = [account(id: linked, name: "Linked")]
+        let groups = [
+            CopyTradingGroup(
+                id: "group-1",
+                name: "Alpha",
+                accountIDs: [linked.rawValue],
+                createdAt: "",
+                updatedAt: ""
+            ),
+        ]
+        let sanitized = DashboardAccountFilterCopyTradingSupport.sanitizedFilter(
+            .account(linked),
+            accounts: accounts,
+            copyGroups: groups
+        )
+        XCTAssertEqual(sanitized, .copyTradingGroup("group-1"))
+    }
+
     func testCopyTradingDeepLinkLandsUnderManageAccounts() {
         let parser = DeepLinkParser()
         let destination = parser.parse(url: URL(string: "tradetraxs://settings/copy-trading-groups")!)
@@ -55,5 +111,19 @@ final class CopyTradingAccountsTests: XCTestCase {
         }
         XCTAssertEqual(routes, [.home, .tradingAccounts, .copyTradingAccounts])
         XCTAssertEqual(SettingsRoute.copyTradingAccounts.title, "Copy Trading Accounts")
+    }
+
+    private func account(id: TradingAccountID, name: String) -> TradingAccount {
+        TradingAccount(
+            id: id,
+            ownerProfileID: ProfileID("11111111-1111-1111-1111-111111111111"),
+            name: name,
+            category: .personal,
+            mode: .funded,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
     }
 }

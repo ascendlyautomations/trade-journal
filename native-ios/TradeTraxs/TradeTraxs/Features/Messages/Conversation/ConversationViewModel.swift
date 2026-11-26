@@ -1972,9 +1972,11 @@ final class ConversationViewModel {
         let beforeCount = messages.count
         let beforeOldest = messages.first?.id.rawValue
         let beforeNewest = messages.last?.id.rawValue
+        let treatAsFullServerPage = incoming.count >= ConversationThreadSessionStore.messageLimit
         let reconciled = ConversationMessageMerge.reconcileServerFirstPage(
             existing: messages,
-            incoming: incoming
+            incoming: incoming,
+            dropOmittedInWindow: treatAsFullServerPage
         )
         let filtered = filterSuppressed(reconciled)
         if beforeCount > 0, filtered.isEmpty {

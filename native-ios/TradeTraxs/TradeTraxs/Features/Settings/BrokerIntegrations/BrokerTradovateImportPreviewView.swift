@@ -24,20 +24,24 @@ struct BrokerTradovateImportPreviewView: View {
 
     private var previewList: some View {
         List {
-                Section {
-                    Text("These trades were reconstructed from your broker fills. Dollar P&L is calculated on the server. After you import, you can add journal details on the next screen.")
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            Section {
+                Text("These trades were reconstructed from your broker fills. Dollar P&L is calculated on the server. After you import, you can add journal details on the next screen.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                Section("Review Imported Trades") {
-                    ForEach(trades) { trade in
+            Section("Trades") {
+                ForEach(trades) { trade in
+                    ExperienceCard {
                         tradeRow(trade)
-                            .accessibilityIdentifier("brokerImport.preview.\(trade.lifecycleKey)")
                     }
+                    .brokerIntegrationsCardListRow()
+                    .accessibilityIdentifier("brokerImport.preview.\(trade.lifecycleKey)")
                 }
             }
+        }
         .experienceInsetGroupedListStyle(pageBackground: false)
+        .listSectionSpacing(ExperienceSpacing.xs)
         .experienceNavigationTitle(embedInParentNavigation ? "Confirm Import" : "Review Imported Trades")
         .toolbar {
             if !embedInParentNavigation {

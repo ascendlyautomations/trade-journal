@@ -29,26 +29,38 @@ final class OwnerAccountFilterDropdownController: ObservableObject {
     @Published private(set) var content: ContentModel?
     @Published var anchors: [String: Anchor<CGRect>] = [:]
     @Published private(set) var presentationRevision = 0
+    @Published var panel: OwnerAccountFilterDropdownPanelView = .accounts
+
+    enum OwnerAccountFilterDropdownPanelView: Equatable {
+        case accounts
+        case copyTrading
+    }
 
     struct ContentModel {
         let accounts: [TradingAccount]
-        let isAllAccountsSelected: Bool
-        let selectedAccountID: TradingAccountID?
-        let onSelectAll: () -> Void
-        let onSelectAccount: (TradingAccountID) -> Void
+        let selectedFilter: DashboardAccountFilter
+        let copyGroups: [CopyTradingGroup]
+        let isLoadingCopyGroups: Bool
+        var includesCopyTradingMenu: Bool = true
+        let onSelectFilter: (DashboardAccountFilter) -> Void
         let onManageAccounts: () -> Void
+        let onManageCopyGroups: () -> Void
+        let onRequestCopyGroups: () -> Void
     }
 
     func present(sourceID: String, anchorFrame: CGRect, content: ContentModel) {
+        panel = .accounts
         self.sourceID = sourceID
         self.anchorFrame = anchorFrame
         self.content = content
         isPresented = true
         presentationRevision &+= 1
+        content.onRequestCopyGroups()
     }
 
     func dismiss() {
         isPresented = false
+        panel = .accounts
         self.content = nil
         sourceID = ""
         anchorFrame = .zero
@@ -61,12 +73,15 @@ final class OwnerAccountFilterDropdownController: ObservableObject {
 /// Owner account filter dropdown, root overlay presentation (not ``Menu`` / ``popover``).
 struct OwnerAccountFilterDropdown<Trigger: View>: View {
     let accounts: [TradingAccount]
-    let isAllAccountsSelected: Bool
-    let selectedAccountID: TradingAccountID?
-    let onSelectAll: () -> Void
-    let onSelectAccount: (TradingAccountID) -> Void
+    let selectedFilter: DashboardAccountFilter
+    let copyGroups: [CopyTradingGroup]
+    let isLoadingCopyGroups: Bool
+    let onSelectFilter: (DashboardAccountFilter) -> Void
     let onManageAccounts: () -> Void
+    let onManageCopyGroups: () -> Void
+    let onRequestCopyGroups: () -> Void
     let accessibilityIdentifier: String
+    var includesCopyTradingMenu: Bool = true
     var boundary: OwnerAccountDropdownSupport.Boundary?
     var profileID: ProfileID?
     var detailCache: DetailPresentationCache?
@@ -92,20 +107,23 @@ struct OwnerAccountFilterDropdown<Trigger: View>: View {
                 anchorFrame: anchorFrame,
                 content: .init(
                     accounts: accounts,
-                    isAllAccountsSelected: isAllAccountsSelected,
-                    selectedAccountID: selectedAccountID,
-                    onSelectAll: {
-                        onSelectAll()
-                        controller.dismiss()
-                    },
-                    onSelectAccount: { id in
-                        onSelectAccount(id)
+                    selectedFilter: selectedFilter,
+                    copyGroups: copyGroups,
+                    isLoadingCopyGroups: isLoadingCopyGroups,
+                    includesCopyTradingMenu: includesCopyTradingMenu,
+                    onSelectFilter: { filter in
+                        onSelectFilter(filter)
                         controller.dismiss()
                     },
                     onManageAccounts: {
                         onManageAccounts()
                         controller.dismiss()
-                    }
+                    },
+                    onManageCopyGroups: {
+                        onManageCopyGroups()
+                        controller.dismiss()
+                    },
+                    onRequestCopyGroups: onRequestCopyGroups
                 )
             )
         } label: {
@@ -196,7 +214,9 @@ private struct OwnerAccountFilterDropdownOverlayLayer: View {
 
                     OwnerAccountFilterDropdownPanel(
                         content: content,
-                        screenHeight: proxy.size.height
+                        screenHeight: proxy.size.height,
+                        panel: controller.panel,
+                        onPanelChange: { controller.panel = $0 }
                     )
                         .frame(width: panelWidth, alignment: .leading)
                         .offset(x: originX, y: originY)
@@ -225,12 +245,14 @@ private struct OwnerAccountFilterDropdownOverlayLayer: View {
 private struct OwnerAccountFilterDropdownPanel: View {
     let content: OwnerAccountFilterDropdownController.ContentModel
     let screenHeight: CGFloat
+    let panel: OwnerAccountFilterDropdownController.OwnerAccountFilterDropdownPanelView
+    let onPanelChange: (OwnerAccountFilterDropdownController.OwnerAccountFilterDropdownPanelView) -> Void
 
     @Environment(\.themeColors) private var colors
 
     private var dividerHeight: CGFloat { max(ExperienceBorder.hairline, 1) }
     private var accountsScrollHeight: CGFloat {
-        CGFloat(content.accounts.count) * OwnerAccountDropdownSupport.filterMenuAccountRowHeight
+        CGFloat(accountsForMainMenu.count) * OwnerAccountDropdownSupport.filterMenuAccountRowHeight
     }
     private var maxAccountsScrollHeight: CGFloat {
         OwnerAccountDropdownSupport.filterMenuMaxAccountsScrollHeight(screenHeight: screenHeight)
@@ -241,22 +263,12 @@ private struct OwnerAccountFilterDropdownPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            actionRow(
-                title: "All Accounts",
-                isSelected: content.isAllAccountsSelected,
-                rowHeight: OwnerAccountDropdownSupport.filterMenuAllAccountsRowHeight,
-                action: content.onSelectAll
-            )
-            panelDivider
-            accountsSection
-            panelDivider
-            actionRow(
-                title: "Manage Accounts",
-                systemImage: "slider.horizontal.3",
-                isSelected: false,
-                rowHeight: OwnerAccountDropdownSupport.filterMenuManageAccountsRowHeight,
-                action: content.onManageAccounts
-            )
+            switch panel {
+            case .accounts:
+                accountsPanel
+            case .copyTrading:
+                copyTradingPanel
+            }
         }
         .fixedSize(horizontal: false, vertical: true)
         .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
@@ -267,6 +279,160 @@ private struct OwnerAccountFilterDropdownPanel: View {
         .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
         .accessibilityIdentifier("ownerAccountFilter.dropdown.panel")
         .accessibilityElement(children: .contain)
+    }
+
+    private var accountsPanel: some View {
+        Group {
+            actionRow(
+                title: "All Accounts",
+                isSelected: content.selectedFilter.isAllAccountsSelection,
+                rowHeight: OwnerAccountDropdownSupport.filterMenuAllAccountsRowHeight
+            ) {
+                content.onSelectFilter(.all)
+            }
+            if content.includesCopyTradingMenu {
+                panelDivider
+                actionRow(
+                    title: "Copy Trading",
+                    systemImage: "arrow.triangle.branch",
+                    showsChevron: true,
+                    isSelected: content.selectedFilter.isCopyTradingScoped
+                        || copyAccountSelectionActive,
+                    rowHeight: OwnerAccountDropdownSupport.filterMenuAllAccountsRowHeight
+                ) {
+                    onPanelChange(.copyTrading)
+                }
+                .accessibilityIdentifier("ownerAccountFilter.dropdown.copyTradingEntry")
+                panelDivider
+            }
+            accountsSection
+            panelDivider
+            actionRow(
+                title: "Manage Accounts",
+                systemImage: "slider.horizontal.3",
+                isSelected: false,
+                rowHeight: OwnerAccountDropdownSupport.filterMenuManageAccountsRowHeight
+            ) {
+                content.onManageAccounts()
+            }
+        }
+    }
+
+    private var copyAccountSelectionActive: Bool {
+        guard let id = content.selectedFilter.selectedAccountID else { return false }
+        let linked = DashboardAccountFilterCopyTradingSupport.linkedAccountIDs(from: content.copyGroups)
+        return linked.contains(id.rawValue)
+    }
+
+    private var copyTradingPanel: some View {
+        Group {
+            actionRow(
+                title: "Accounts",
+                systemImage: "chevron.left",
+                isSelected: false,
+                rowHeight: OwnerAccountDropdownSupport.filterMenuAllAccountsRowHeight
+            ) {
+                onPanelChange(.accounts)
+            }
+            .accessibilityIdentifier("ownerAccountFilter.dropdown.copyTradingBack")
+            panelDivider
+            actionRow(
+                title: "All Copy Trading Accounts",
+                isSelected: content.selectedFilter == .copyTradingAll,
+                rowHeight: OwnerAccountDropdownSupport.filterMenuAllAccountsRowHeight
+            ) {
+                content.onSelectFilter(.copyTradingAll)
+            }
+            panelDivider
+            copyTradingListSection
+            panelDivider
+            actionRow(
+                title: "Manage Copy Trading Groups",
+                systemImage: "slider.horizontal.3",
+                isSelected: false,
+                rowHeight: OwnerAccountDropdownSupport.filterMenuManageAccountsRowHeight
+            ) {
+                content.onManageCopyGroups()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var copyTradingListSection: some View {
+        if content.isLoadingCopyGroups, content.copyGroups.isEmpty {
+            HStack(spacing: 8) {
+                selectionMark(isSelected: false)
+                HStack(spacing: ExperienceSpacing.sm) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading copy trading…")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, ExperienceSpacing.sm)
+            .frame(
+                height: OwnerAccountDropdownSupport.filterMenuAccountRowHeight,
+                alignment: .leading
+            )
+        } else if content.copyGroups.isEmpty {
+            HStack(spacing: 8) {
+                selectionMark(isSelected: false)
+                Text("No copy trading groups yet.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, ExperienceSpacing.sm)
+            .frame(
+                height: OwnerAccountDropdownSupport.filterMenuAccountRowHeight,
+                alignment: .leading
+            )
+        } else {
+            copyTradingScrollContent
+        }
+    }
+
+    @ViewBuilder
+    private var copyTradingScrollContent: some View {
+        let rowCount = content.copyGroups.count
+        let scrollHeight = CGFloat(rowCount) * OwnerAccountDropdownSupport.filterMenuAccountRowHeight
+        let maxHeight = OwnerAccountDropdownSupport.filterMenuMaxAccountsScrollHeight(screenHeight: screenHeight)
+        let list = VStack(alignment: .leading, spacing: 0) {
+            ForEach(content.copyGroups, id: \.id) { group in
+                copyGroupRow(group)
+            }
+        }
+        if scrollHeight > maxHeight {
+            ScrollView { list }
+                .frame(height: maxHeight)
+        } else {
+            list
+        }
+    }
+
+    private func copyGroupRow(_ group: CopyTradingGroup) -> some View {
+        let isSelected: Bool = {
+            if case .copyTradingGroup(let id) = content.selectedFilter { return id == group.id }
+            return false
+        }()
+        return Button {
+            ExperienceHaptics.play(.selection)
+            content.onSelectFilter(.copyTradingGroup(group.id))
+        } label: {
+            HStack(spacing: 8) {
+                selectionMark(isSelected: isSelected)
+                Text(group.name)
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, ExperienceSpacing.sm)
+            .frame(height: OwnerAccountDropdownSupport.filterMenuAccountRowHeight)
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityIdentifier("ownerAccountFilter.dropdown.copyGroup.\(group.id)")
     }
 
     @ViewBuilder
@@ -281,9 +447,17 @@ private struct OwnerAccountFilterDropdownPanel: View {
         }
     }
 
+    private var accountsForMainMenu: [TradingAccount] {
+        DashboardAccountFilterCopyTradingSupport.standaloneMenuAccounts(
+            from: content.accounts,
+            copyGroups: content.copyGroups,
+            preservingSelection: content.selectedFilter.selectedAccountID
+        )
+    }
+
     private var accountsList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(content.accounts) { account in
+            ForEach(accountsForMainMenu) { account in
                 accountRow(account)
             }
         }
@@ -293,11 +467,11 @@ private struct OwnerAccountFilterDropdownPanel: View {
     private func accountRow(_ account: TradingAccount) -> some View {
         Button {
             ExperienceHaptics.play(.selection)
-            content.onSelectAccount(account.id)
+            content.onSelectFilter(.account(account.id))
         } label: {
             OwnerAccountDropdownFilterRow(
                 account: account,
-                isSelected: content.selectedAccountID == account.id
+                isSelected: content.selectedFilter.selectedAccountID == account.id
             )
             .padding(.horizontal, ExperienceSpacing.sm)
         }
@@ -308,6 +482,7 @@ private struct OwnerAccountFilterDropdownPanel: View {
     private func actionRow(
         title: String,
         systemImage: String? = nil,
+        showsChevron: Bool = false,
         isSelected: Bool,
         rowHeight: CGFloat,
         action: @escaping () -> Void
@@ -329,6 +504,12 @@ private struct OwnerAccountFilterDropdownPanel: View {
                         .experienceStyle(.footnote, color: colors.primaryText)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(colors.tertiaryText)
+                        .accessibilityHidden(true)
                 }
             }
             .padding(.horizontal, ExperienceSpacing.sm)

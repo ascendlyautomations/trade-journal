@@ -85,6 +85,31 @@ begin
 
   if not exists (
     select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'story_likes'
+  ) then
+    raise exception 'verify: story_likes must be in supabase_realtime publication';
+  end if;
+
+  select pg_get_functiondef(p.oid)
+    into def
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'rpc_v1_story_insights';
+
+  if def is null then
+    raise exception 'verify: rpc_v1_story_insights missing (function body)';
+  end if;
+
+  if def not like '%reply_count%' then
+    raise exception 'verify: rpc_v1_story_insights must expose reply_count';
+  end if;
+
+  if not exists (
+    select 1
     from pg_trigger t
     join pg_class c on c.oid = t.tgrelid
     join pg_namespace n on n.oid = c.relnamespace

@@ -12,7 +12,7 @@ enum TradeJournalCardContentLayout {
 struct TradeJournalCard: View {
     let item: TradeOwnerJournalSummary
     let accountName: String?
-    var copyParticipatingAccountLines: [String]? = nil
+    var copyTradeOwnerDisplay: CopyTradeOwnerJournalDisplay? = nil
     var contentLayout: TradeJournalCardContentLayout = .legacy
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
@@ -35,10 +35,7 @@ struct TradeJournalCard: View {
         return item.accountName
     }
 
-    private var isCopyGroup: Bool {
-        guard let lines = copyParticipatingAccountLines else { return false }
-        return !lines.isEmpty
-    }
+    private var isCopyGroup: Bool { copyTradeOwnerDisplay != nil }
 
     var body: some View {
         Button(action: onOpen) {
@@ -138,16 +135,8 @@ struct TradeJournalCard: View {
     /// Row 2, account or copy-trade context, then timing / duration (layout-specific).
     private var contextSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            if isCopyGroup {
-                Text("Copy Traded")
-                    .experienceStyle(.caption, color: colors.primaryText)
-                    .fontWeight(.semibold)
-                ForEach(copyParticipatingAccountLines ?? [], id: \.self) { line in
-                    Text(line)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            if let copyTradeOwnerDisplay {
+                CopyTradeOwnerJournalContextView(display: copyTradeOwnerDisplay)
             } else if let account = resolvedAccountName, !account.isEmpty {
                 Text(account)
                     .experienceStyle(.caption, color: colors.secondaryText)
@@ -298,8 +287,12 @@ struct TradeJournalCard: View {
             TradeDisplay.sideTitle(summary.side),
             TradeDisplay.pnlText(summary.realizedPnL),
         ]
-        if isCopyGroup {
-            parts.append("Copy Traded")
+        if let copyTradeOwnerDisplay {
+            parts.append(copyTradeOwnerDisplay.headerTitle)
+            parts.append(contentsOf: copyTradeOwnerDisplay.visibleAccountLines)
+            if let overflow = copyTradeOwnerDisplay.overflowSummary {
+                parts.append(overflow)
+            }
         } else if let resolvedAccountName, !resolvedAccountName.isEmpty {
             parts.append(resolvedAccountName)
         }

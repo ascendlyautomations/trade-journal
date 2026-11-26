@@ -4,8 +4,14 @@ struct TradingRulesViolationHistoryGroupsView: View {
     let navigationCoordinator: NavigationCoordinator
     let detailCache: DetailPresentationCache
 
-    @Bindable private var session = TradingRulesComplianceSessionStore.shared
+    @Bindable private var session: TradingRulesComplianceSessionStore
     @Environment(\.themeColors) private var colors
+
+    init(navigationCoordinator: NavigationCoordinator, detailCache: DetailPresentationCache) {
+        self.navigationCoordinator = navigationCoordinator
+        self.detailCache = detailCache
+        _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
+    }
 
     var body: some View {
         Group {

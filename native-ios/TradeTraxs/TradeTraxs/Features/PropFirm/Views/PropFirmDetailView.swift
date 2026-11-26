@@ -122,14 +122,19 @@ struct PropFirmDetailView: View {
         if !viewModel.accountsForMenu.isEmpty, recordPayoutData != nil {
             OwnerAccountFilterDropdown(
                 accounts: viewModel.accountsForMenu,
-                isAllAccountsSelected: false,
-                selectedAccountID: viewModel.accountID,
-                onSelectAll: {},
-                onSelectAccount: { id in
-                    Task { await viewModel.selectAccount(id) }
+                selectedFilter: .account(viewModel.accountID),
+                copyGroups: [],
+                isLoadingCopyGroups: false,
+                onSelectFilter: { filter in
+                    if case .account(let id) = filter {
+                        Task { await viewModel.selectAccount(id) }
+                    }
                 },
                 onManageAccounts: { viewModel.openManageAccounts() },
+                onManageCopyGroups: {},
+                onRequestCopyGroups: {},
                 accessibilityIdentifier: "propFirm.account",
+                includesCopyTradingMenu: false,
                 boundary: .dashboard,
                 profileID: viewModel.ownerProfileID,
                 detailCache: recordPayoutData?.detailCache

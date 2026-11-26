@@ -4,60 +4,122 @@ struct StoryReplyInputView: View {
     @Binding var text: String
     @Binding var isFocused: Bool
     let isSending: Bool
+    var isStoryLiked: Bool = false
+    var isTogglingStoryLike: Bool = false
+    var onToggleStoryLike: (() -> Void)? = nil
     let onSend: () -> Void
 
     @FocusState private var fieldFocused: Bool
+    @State private var keyboardSendScheduled = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var trimmedText: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSend: Bool {
+        !isSending && !trimmedText.isEmpty
+    }
+
+    private var fieldBackground: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.22)
+            : Color.black.opacity(0.55)
+    }
+
+    private var fieldBorder: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.32 : 0.38)
+    }
+
+    private var fieldForeground: Color {
+        .white
+    }
+
+    private var heartUnlikedColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.92)
+            : Color.white
+    }
 
     var body: some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            TextField("Send message...", text: $text, axis: .vertical)
-                .lineLimit(1...4)
-                .textFieldStyle(.plain)
-                .focused($fieldFocused)
-                .disabled(isSending)
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.vertical, ExperienceSpacing.sm + 2)
-                .background(Color.white.opacity(0.12), in: Capsule())
-                .overlay {
-                    Capsule()
-                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+            if onToggleStoryLike != nil {
+                Button {
+                    onToggleStoryLike?()
+                } label: {
+                    Image(systemName: isStoryLiked ? "heart.fill" : "heart")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(isStoryLiked ? Color.red : heartUnlikedColor)
+                        .frame(width: 40, height: 40)
+                        .contentShape(Rectangle())
                 }
-                .foregroundStyle(.white)
-                .submitLabel(.send)
-                .onSubmit(sendIfPossible)
+                .buttonStyle(.plain)
+                .disabled(isTogglingStoryLike)
+                .opacity(isTogglingStoryLike ? 0.55 : 1)
+                .accessibilityLabel(isStoryLiked ? "Unlike story" : "Like story")
+                .accessibilityIdentifier("feed.story.likeButton")
+            }
 
-            Button(action: sendIfPossible) {
+            ZStack(alignment: .leading) {
+                if trimmedText.isEmpty {
+                    Text("Send message...")
+                        .foregroundStyle(Color.white.opacity(0.68))
+                        .allowsHitTesting(false)
+                }
+                StoryReplyMultilineTextField(
+                    text: $text,
+                    isFocused: $isFocused,
+                    isEnabled: !isSending,
+                    onSubmit: submitFromKeyboard
+                )
+                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.sm + 2)
+            .background(fieldBackground, in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(fieldBorder, lineWidth: 1)
+            }
+
+            Button(action: submitFromKeyboard) {
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 40, height: 40)
                     .background(Color.blue, in: Circle())
             }
-            .disabled(isSending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .opacity(isSending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+            .disabled(!canSend)
+            .opacity(canSend ? 1 : 0.45)
             .accessibilityLabel("Send story reply")
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.sm)
         .background {
             LinearGradient(
-                colors: [.black.opacity(0.95), .black.opacity(0.75), .clear],
+                colors: [.black.opacity(0.95), .black.opacity(0.78), .clear],
                 startPoint: .bottom,
                 endPoint: .top
             )
         }
         .accessibilityIdentifier("feed.story.replyInput")
-        .onChange(of: fieldFocused) { _, focused in
-            isFocused = focused
-        }
         .onChange(of: isFocused) { _, focused in
+            guard fieldFocused != focused else { return }
             fieldFocused = focused
         }
         .experienceFormFocusSync($fieldFocused)
+        .experienceSuppressKeyboardInputAccessory()
     }
 
-    private func sendIfPossible() {
-        guard !isSending else { return }
+    private func submitFromKeyboard() {
+        guard !keyboardSendScheduled else { return }
+        guard canSend else { return }
+        keyboardSendScheduled = true
+        fieldFocused = false
+        isFocused = false
         onSend()
+        Task { @MainActor in
+            keyboardSendScheduled = false
+        }
     }
 }

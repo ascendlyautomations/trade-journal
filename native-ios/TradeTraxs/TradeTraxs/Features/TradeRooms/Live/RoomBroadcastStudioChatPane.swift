@@ -340,6 +340,7 @@ struct RoomBroadcastChatComposer: View {
                 colors.fillSecondary,
                 in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
             )
+            .experienceKeyboardExcludesDoneToolbarWhenFocused(composerFocus)
     }
 
     private var sendButton: some View {

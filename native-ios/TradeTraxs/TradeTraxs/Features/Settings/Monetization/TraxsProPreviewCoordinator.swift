@@ -89,7 +89,7 @@ final class TraxsProPreviewCoordinator {
         presentPreview(feature: feature, entryPoint: entryPoint)
     }
 
-    func dismissPreview(detailCache: DetailPresentationCache) {
+    func dismissPreview(productionData: DataEnvironment) {
         guard isPresented || TraxsProPreviewSession.shared.isAnyPreviewActive else {
             isPresented = false
             return
@@ -98,17 +98,14 @@ final class TraxsProPreviewCoordinator {
             ?? TraxsProPreviewSession.shared.activeFeature
             ?? .reports
         let entryPoint = presentationEntryPoint ?? .previewBanner
+        let viewer = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
         isPresented = false
-        if TraxsProPreviewSession.shared.isReportsPreviewActive {
-            TraxsProPreviewSession.shared.endReportsPreview(detailCache: detailCache)
-        } else if TraxsProPreviewSession.shared.isDashboardPreviewActive {
-            TraxsProPreviewSession.shared.endDashboardPreview(detailCache: detailCache)
-        } else if TraxsProPreviewSession.shared.isExpenseTrackerPreviewActive {
-            TraxsProPreviewSession.shared.endExpenseTrackerPreview()
-        } else if TraxsProPreviewSession.shared.isTradingRulesPreviewActive {
-            TraxsProPreviewSession.shared.endTradingRulesPreview(detailCache: detailCache)
-        } else if TraxsProPreviewSession.shared.isBacktestLabPreviewActive {
-            TraxsProPreviewSession.shared.endBacktestLabPreview(detailCache: detailCache)
+        TraxsProPreviewSession.shared.endActivePreview()
+        if let viewer {
+            TraxsProProductionRecovery.recoverAfterPreview(
+                production: productionData,
+                viewer: viewer
+            )
         }
         ProductAnalyticsCoordinator.shared.noteTraxsProPreviewExited(
             entryPoint: entryPoint,
@@ -155,15 +152,15 @@ struct TraxsProPreviewCoverModifier: ViewModifier {
                 isPresented: $previewCoordinator.isPresented,
                 onDismiss: {
                     if TraxsProPreviewSession.shared.isAnyPreviewActive {
-                        previewCoordinator.dismissPreview(detailCache: data.detailCache)
+                        previewCoordinator.dismissPreview(productionData: data)
                     } else {
                         previewCoordinator.isPresented = false
                         previewCoordinator.resetPresentationStateKeepingSessionFlags()
                     }
                 },
                 content: {
-                    TraxsProPreviewCoverContent(data: data) {
-                        previewCoordinator.dismissPreview(detailCache: data.detailCache)
+                    TraxsProPreviewCoverContent(productionData: data) {
+                        previewCoordinator.dismissPreview(productionData: data)
                     }
                 }
             )
@@ -171,7 +168,7 @@ struct TraxsProPreviewCoverModifier: ViewModifier {
 }
 
 private struct TraxsProPreviewCoverContent: View {
-  let data: DataEnvironment
+    let productionData: DataEnvironment
     let onDismiss: () -> Void
 
     @Bindable private var previewCoordinator = TraxsProPreviewCoordinator.shared
@@ -180,15 +177,15 @@ private struct TraxsProPreviewCoverContent: View {
         Group {
             switch previewCoordinator.presentingFeature ?? .reports {
             case .reports:
-                ReportsPreviewContainerView(data: data, onDismiss: onDismiss)
+                ReportsPreviewContainerView(productionData: productionData, onDismiss: onDismiss)
             case .dashboard:
-                DashboardPreviewContainerView(data: data, onDismiss: onDismiss)
+                DashboardPreviewContainerView(productionData: productionData, onDismiss: onDismiss)
             case .expenseTracker:
-                PropFirmExpensesPreviewContainerView(data: data, onDismiss: onDismiss)
+                PropFirmExpensesPreviewContainerView(productionData: productionData, onDismiss: onDismiss)
             case .tradingRules:
-                TradingRulesPreviewContainerView(data: data, onDismiss: onDismiss)
+                TradingRulesPreviewContainerView(productionData: productionData, onDismiss: onDismiss)
             case .backtestLab:
-                BacktestLabPreviewContainerView(data: data, onDismiss: onDismiss)
+                BacktestLabPreviewContainerView(productionData: productionData, onDismiss: onDismiss)
             }
         }
     }

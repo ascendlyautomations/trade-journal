@@ -33,6 +33,7 @@ enum TradingRulesCompliancePresentationBridge {
         )
         return TradingRulesComplianceSessionLoader.revealCachedSnapshotIfPossible(
             profileID: profileID,
+            detailCache: detailCache,
             dashboardViewModel: dashboardViewModel
         )
     }

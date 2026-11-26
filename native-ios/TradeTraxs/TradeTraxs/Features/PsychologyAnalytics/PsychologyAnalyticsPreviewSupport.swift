@@ -1,6 +1,6 @@
 import Foundation
 
-/// In-memory sample psychology analytics for the Free History preview (no Supabase writes).
+/// In-memory sample psychology analytics for Free History preview (no Supabase writes).
 @MainActor
 enum PsychologyAnalyticsPreviewSupport {
     private(set) static var ephemeralHistoryPreviewActive = false
@@ -8,32 +8,26 @@ enum PsychologyAnalyticsPreviewSupport {
     static let inlineHistoryPreviewCount = 5
 
     static var usesSampleCheckInHistory: Bool {
-        TraxsProPreviewSession.shared.isDashboardPreviewActive || ephemeralHistoryPreviewActive
+        TraxsProPreviewSession.shared.activePreviewEnvironment != nil || ephemeralHistoryPreviewActive
     }
 
     static func beginEphemeralHistoryPreview() {
-        guard !TraxsProPreviewSession.shared.isDashboardPreviewActive else { return }
+        guard TraxsProPreviewSession.shared.activePreviewEnvironment == nil else { return }
         ephemeralHistoryPreviewActive = true
-        seedCheckInHistorySessionIfNeeded()
     }
 
     static func endEphemeralHistoryPreview() {
         guard ephemeralHistoryPreviewActive else { return }
         ephemeralHistoryPreviewActive = false
-        if !TraxsProPreviewSession.shared.isDashboardPreviewActive {
-            CheckInHistorySessionStore.shared.invalidate()
-        }
     }
 
-    static func seedCheckInHistorySessionIfNeeded() {
-        guard CheckInHistorySessionStore.shared.summaries.isEmpty else { return }
+    static func sampleCheckInSummaries() -> [CheckInHistoryDaySummary] {
+        if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment {
+            return preview.checkInHistorySummaries
+        }
         let trades = eligibleSampleTrades()
         let checkIns = DemoCanonicalDataset.checkIns()
-        CheckInHistorySessionStore.shared.update(
-            summaries: CheckInHistoryAggregator.buildSummaries(checkIns: checkIns, trades: trades),
-            checkIns: checkIns,
-            trades: trades
-        )
+        return CheckInHistoryAggregator.buildSummaries(checkIns: checkIns, trades: trades)
     }
 
     struct SamplePresentation {
@@ -45,13 +39,26 @@ enum PsychologyAnalyticsPreviewSupport {
     static func buildSamplePresentation() -> SamplePresentation {
         let trades = eligibleSampleTrades()
         let checkIns = DemoCanonicalDataset.checkIns()
+        return buildSamplePresentation(
+            trades: trades,
+            checkIns: checkIns,
+            historySummaries: nil
+        )
+    }
+
+    static func buildSamplePresentation(
+        trades: [Trade],
+        checkIns: [TraderDailyCheckIn],
+        historySummaries: [CheckInHistoryDaySummary]?
+    ) -> SamplePresentation {
         let report = TraderPsychologyAnalyticsEngine.buildReport(trades: trades, checkIns: checkIns)
         let unlock = PsychologyInsightsUnlockProgress(
             tradingDayCheckInCount: PsychologyCheckInHistoryGate.countPsychologyCheckInHistoryDays(checkIns),
             tradeCount: trades.count
         )
-        let summaries = CheckInHistoryAggregator.buildSummaries(checkIns: checkIns, trades: trades)
-            .filter { $0.matches(contentFilter: .psychology) }
+        let builtSummaries = historySummaries
+            ?? CheckInHistoryAggregator.buildSummaries(checkIns: checkIns, trades: trades)
+        let summaries = builtSummaries.filter { $0.matches(contentFilter: .psychology) }
         return SamplePresentation(
             report: report,
             unlockProgress: unlock,
@@ -63,9 +70,11 @@ enum PsychologyAnalyticsPreviewSupport {
         fallbackReport: PsychologyAnalyticsReport?,
         fallbackUnlock: PsychologyInsightsUnlockProgress
     ) -> SamplePresentation {
+        if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment {
+            return preview.psychologySamplePresentation
+        }
         if let fallbackReport {
-            let summaries = CheckInHistorySessionStore.shared.summaries
-                .filter { $0.matches(contentFilter: .psychology) }
+            let summaries = sampleCheckInSummaries().filter { $0.matches(contentFilter: .psychology) }
             return SamplePresentation(
                 report: fallbackReport,
                 unlockProgress: fallbackUnlock,

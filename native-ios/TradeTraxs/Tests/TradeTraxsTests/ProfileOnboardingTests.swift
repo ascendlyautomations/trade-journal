@@ -186,6 +186,31 @@ final class ProfileOnboardingTests: XCTestCase {
         XCTAssertEqual(BrokerOnboardingPersistence.status(for: profileID), .pending)
     }
 
+    @MainActor
+    func testPostAuthFunnelResumePlanBeforeMainShell() {
+        let profileID = ProfileID(UUID().uuidString)
+        defer {
+            PostAuthOnboardingProgress.clear(for: profileID)
+            PostOnboardingPlanSelectionProgressStore().clear(userID: profileID.rawValue)
+            BrokerOnboardingPersistence.markFinished(profileID)
+        }
+        PostAuthOnboardingProgress.activateFunnel(for: profileID)
+        BrokerOnboardingPersistence.markPending(profileID)
+        BrokerOnboardingPersistence.markFinished(profileID)
+        PostAuthOnboardingProgress.markBrokerFinished(for: profileID)
+
+        NativeIosOnboardingSessionStore.apply(
+            session: SessionProfileV1(id: profileID.rawValue, onboarding_completed: false)
+        )
+        XCTAssertTrue(
+            PostAuthOnboardingPolicy.shouldPresentPlanSelection(
+                profileID: profileID,
+                accountCreatedAt: Date()
+            )
+        )
+        XCTAssertEqual(BrokerOnboardingPersistence.status(for: profileID), .finished)
+    }
+
     func testBrokerOnboardingPersistenceGrandfathersUnknownProfiles() {
         let profileID = ProfileID("existing-user")
         BrokerOnboardingPersistence.markFinished(profileID)

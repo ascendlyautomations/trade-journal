@@ -14,11 +14,15 @@ nonisolated enum TradeHistoryDisplayItem: Equatable, Sendable, Identifiable {
         }
     }
 
-    var copyParticipatingAccountLines: [String]? {
+    var copyTradeOwnerDisplay: CopyTradeOwnerJournalDisplay? {
         switch self {
         case .single: return nil
-        case .copyGroup(let group): return group.participatingAccountLines
+        case .copyGroup(let group): return group.ownerDisplay
         }
+    }
+
+    var copyParticipatingAccountLines: [String]? {
+        copyTradeOwnerDisplay?.visibleAccountLines
     }
 }
 
@@ -26,14 +30,15 @@ nonisolated struct CopyTradeJournalGroup: Equatable, Sendable {
     var batchKey: String
     var representative: TradeOwnerJournalSummary
     var members: [TradeOwnerJournalSummary]
-    var participatingAccountLines: [String]
+    var ownerDisplay: CopyTradeOwnerJournalDisplay
 }
 
 /// Groups owner journal rows for Trades list, mirrors web `groupTradesForTradesPageDisplay`.
 nonisolated enum CopyTradeJournalGrouping {
     static func group(
         _ items: [TradeOwnerJournalSummary],
-        accounts: [TradingAccount]
+        accounts: [TradingAccount],
+        copyGroups: [CopyTradingGroup] = []
     ) -> [TradeHistoryDisplayItem] {
         let batchIndex = indexBatchMembers(items)
         var consumed = Set<String>()
@@ -51,35 +56,26 @@ nonisolated enum CopyTradeJournalGrouping {
             ProfileCopySummaryDiagnostics.logSiblingsBeforeCollapse(members)
             #endif
             let representative = pickRepresentative(from: members)
-            let lines = participatingAccountLines(members: members, accounts: accounts)
+            guard let display = CopyTradePresentation.ownerJournalDisplay(
+                members: members,
+                accounts: accounts,
+                copyGroups: copyGroups
+            ) else {
+                out.append(.single(representative))
+                continue
+            }
             out.append(
                 .copyGroup(
                     CopyTradeJournalGroup(
                         batchKey: batchKey,
                         representative: representative,
                         members: members,
-                        participatingAccountLines: lines
+                        ownerDisplay: display
                     )
                 )
             )
         }
         return out
-    }
-
-    static func participatingAccountLines(
-        members: [TradeOwnerJournalSummary],
-        accounts: [TradingAccount]
-    ) -> [String] {
-        let orderedIDs = CopyTradePresentation.participatingAccountIDsForCopyGroup(members)
-
-        return orderedIDs.map { accountID in
-            let member = members.first { $0.accountID == accountID }
-            return CopyTradePresentation.ownerJournalAccountLine(
-                accountID: accountID,
-                member: member,
-                accounts: accounts
-            )
-        }
     }
 
     private static func indexBatchMembers(

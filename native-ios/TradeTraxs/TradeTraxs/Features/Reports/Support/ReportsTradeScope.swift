@@ -9,7 +9,8 @@ nonisolated enum ReportsTradeScope {
     static func scopedTrades(
         from trades: [Trade],
         accounts: [TradingAccount],
-        filters: TradingReportFilters
+        filters: TradingReportFilters,
+        copyTradingGroups: [CopyTradingGroup] = []
     ) -> [Trade] {
         let scope = DashboardClientScopeFilter(
             accountFilter: filters.accountFilter,
@@ -17,7 +18,8 @@ nonisolated enum ReportsTradeScope {
             customInterval: nil,
             accountMode: filters.accountMode,
             showPublicOnly: false,
-            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) }),
+            copyTradingGroups: copyTradingGroups
         )
         return PsychologyAnalyticsTradeScope.scopedTrades(
             ownerTrades: trades,
@@ -44,6 +46,8 @@ nonisolated enum ReportsTradeScope {
             switch filters.accountFilter {
             case .all: return "all"
             case .account(let id): return id.rawValue
+            case .copyTradingAll: return "copyAll"
+            case .copyTradingGroup(let id): return "copyGroup:\(id)"
             }
         }()
         return "acct:\(account):mode:\(filters.accountMode.rawValue)"

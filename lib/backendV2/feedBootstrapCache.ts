@@ -32,9 +32,11 @@ export function feedBootstrapCacheKey(input: {
   scope: string
   contentFilter: string
   cursor?: string | null
+  rankSessionSeed?: string | null
 }): string {
   const cursor = input.cursor?.trim() || ""
-  return `${input.userId}|${input.scope}|${input.contentFilter}|${cursor}`
+  const rank = input.rankSessionSeed?.trim() || ""
+  return `${input.userId}|${input.scope}|${input.contentFilter}|${rank}|${cursor}`
 }
 
 export function readFeedBootstrapCache(

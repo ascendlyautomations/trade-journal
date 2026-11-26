@@ -9,6 +9,7 @@ import Foundation
 /// | reel | reel_likes | reel_comments |
 /// | feedPost | likes | comments |
 /// | achievement | achievement_post_likes | achievement_post_comments |
+/// | story | story_likes | — |
 nonisolated enum InteractionContentKind: String, Hashable, Codable, Sendable {
     case trade
     case profilePost
@@ -16,6 +17,7 @@ nonisolated enum InteractionContentKind: String, Hashable, Codable, Sendable {
     case feedPost
     /// Web achievement feed posts (`achievement_post_id`).
     case achievement
+    case story
 }
 
 /// Typed target injected into reusable Like/Comment UI, never hard-codes a screen.
@@ -43,6 +45,10 @@ nonisolated struct InteractionTarget: Hashable, Codable, Sendable {
     /// ``DefaultInteractionRepository`` resolves that before likes/comments.
     static func achievement(_ id: AchievementID) -> InteractionTarget {
         InteractionTarget(kind: .achievement, id: id.rawValue)
+    }
+
+    static func story(_ id: StoryID) -> InteractionTarget {
+        InteractionTarget(kind: .story, id: id.rawValue)
     }
 }
 

@@ -130,7 +130,15 @@ final class DashboardViewModel {
     private var prioritizedOwnerTradesForRulesTask: Task<Void, Never>?
     /// TraxsPro Dashboard interactive preview, canonical trades only, no owner store hydration.
     let loadsTraxsProPreviewSampleOnly: Bool
+    private var rulesPresentationStore: TradingRulesComplianceSessionStore {
+        TradingRulesCompliancePresentationStores.store(forPreviewUI: loadsTraxsProPreviewSampleOnly)
+    }
+    private var scorecardPresentationStore: TradingScorecardSessionStore {
+        TradingScorecardPresentationStores.store(forPreviewUI: loadsTraxsProPreviewSampleOnly)
+    }
     private var traxsProPreviewAppliedInitialScope = false
+    /// Preview-only withdrawal ledger — never written to ``WithdrawalsHistoryStore``.
+    private var previewLedgerByAccount: [TradingAccountID: [AccountPayoutEntry]] = [:]
 
     private final class LiveBox {
         weak var model: DashboardViewModel?
@@ -326,6 +334,11 @@ final class DashboardViewModel {
         discardIfOlderThan baseline: UInt64? = nil
     ) async {
         guard let profileID else { return }
+        if loadsTraxsProPreviewSampleOnly {
+            RulesPreviewDebugLog.log(
+                "ensureTradingRulesComplianceForPresentation called during preview (production hydration path)"
+            )
+        }
         let publishBaseline = baseline ?? TradingRulesComplianceRecomputeCoordinator.currentGeneration
         let deps = dependencies ?? TradingRulesComplianceLoadDependencies(
             detailCache: detailCache,
@@ -357,16 +370,25 @@ final class DashboardViewModel {
             dashboardInsights: insightsPresentation
         )
         guard !Task.isCancelled else { return }
-        guard TradingRulesComplianceRecomputeCoordinator.isCurrent(publishBaseline) else { return }
+        guard TradingRulesComplianceRecomputeCoordinator.isCurrent(publishBaseline) else {
+            RulesPreviewDebugLog.log("ensureTradingRulesComplianceForPresentation discard stale baseline=\(publishBaseline)")
+            return
+        }
         let preferencesUnavailable = output.preferencesContext == nil || output.preferencesError != nil
         if preferencesUnavailable,
            !output.hasConfiguredRules,
-           TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID)
+           rulesPresentationStore.retainsConfiguredRules(for: profileID)
         {
+            RulesPreviewDebugLog.log("ensureTradingRulesComplianceForPresentation skip overwrite configured rules")
             return
         }
+        if loadsTraxsProPreviewSampleOnly {
+            RulesPreviewDebugLog.log(
+                "ensureTradingRulesComplianceForPresentation committing to preview store \(RulesPreviewDebugLog.describe(output: output))"
+            )
+        }
         let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
-        TradingRulesComplianceSessionStore.shared.commit(
+        let committed = rulesPresentationStore.commit(
             output: output,
             profileID: profileID,
             scope: scope,
@@ -375,6 +397,11 @@ final class DashboardViewModel {
             generation: token,
             preferencesUnavailable: preferencesUnavailable
         )
+        if loadsTraxsProPreviewSampleOnly {
+            RulesPreviewDebugLog.log(
+                "ensureTradingRulesComplianceForPresentation commit returned \(committed) store=\(RulesPreviewDebugLog.describe(session: rulesPresentationStore))"
+            )
+        }
         if preferenceContext == nil, let context = output.preferencesContext {
             preferenceContext = context
             TradingRulesCompliancePreferencesCache.store(context, for: profileID)
@@ -426,15 +453,11 @@ final class DashboardViewModel {
     }
 
     var accountFilterTitle: String {
-        switch accountFilter {
-        case .all:
-            return "All Accounts"
-        case .account(let id):
-            if let account = accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.ownerDropdownLine(for: account)
-            }
-            return accountNames[id] ?? "Account"
-        }
+        OwnerAccountFilterMenuSupport.menuTitle(
+            filter: accountFilter,
+            accounts: accounts,
+            profileID: profileID
+        )
     }
 
     /// Report-style KPIs for the scoped TraxsPro preview sample (production ``TradingReportGenerator`` math).
@@ -722,7 +745,7 @@ final class DashboardViewModel {
             limitDigits: equityDrawdownLimitDraft,
             limitType: equityDrawdownTypeDraft,
             floorCapDigits: equityDrawdownFloorCapDraft,
-            includeFloorCapField: true,
+            includeFloorCapField: equityDrawdownTypeDraft == .trailing,
             limitPolicy: .clearWhenEmptyOrZero
         )
         let config: LivePersonalDrawdownConfig?
@@ -922,6 +945,8 @@ final class DashboardViewModel {
                 accountID: id,
                 revision: analyticsV3Revision
             )
+        case .copyTradingAll, .copyTradingGroup:
+            return .failedNonRetryable
         }
     }
 
@@ -1043,6 +1068,24 @@ final class DashboardViewModel {
     private func payoutsCardDisplay(
         withdrawalsHistory: WithdrawalsHistoryStore
     ) -> PayoutsCardDisplay {
+        if loadsTraxsProPreviewSampleOnly {
+            let scope = clientScopeFilter()
+            let total = PayoutHistorySupport.dashboardPayoutsCardTotal(
+                accounts: accounts,
+                entriesByAccount: previewLedgerByAccount,
+                cyclesByAccount: [:],
+                achievementPayouts: [],
+                accountFilter: accountFilter,
+                scope: scope
+            )
+            payoutTotal = total
+            attachAccountLevelPayoutsToSummary()
+            return PayoutsCardDisplay(
+                formatted: ProfileDisplay.formatMoney(total),
+                tone: total > 0 ? .positive : .neutral,
+                total: total
+            )
+        }
         guard payoutsCardDataReady(withdrawalsHistory: withdrawalsHistory) else {
             if let interim = interimBootstrapPayoutCardDisplay(withdrawalsHistory: withdrawalsHistory) {
                 return interim
@@ -1189,6 +1232,7 @@ final class DashboardViewModel {
     }
 
     private func loadTradingPreferences() async {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         preferenceLoadGeneration &+= 1
         let loadToken = preferenceLoadGeneration
         guard let tradingPreferences, let signedIn = await session.currentUserID else {
@@ -1256,6 +1300,8 @@ final class DashboardViewModel {
                 accountID: id,
                 revision: analyticsV3Revision
             )
+        case .copyTradingAll, .copyTradingGroup:
+            break
         }
         ensureEquityChartOverlayIfNeeded()
     }
@@ -1366,6 +1412,15 @@ final class DashboardViewModel {
         }
     }
 
+    func handleCopyTradingGroupsMutation() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
+        reconcileDashboardAccountFilterIfNeeded()
+        recompute()
+        if usesDashboardAnalyticsV3, !AnalyticsReconciliationGate.isEnabled {
+            scheduleAnalyticsV3RefreshAfterMutation()
+        }
+    }
+
     func handleAccountMutation() {
         guard !loadsTraxsProPreviewSampleOnly else { return }
         switch AccountMutationStore.shared.latestKind {
@@ -1396,6 +1451,12 @@ final class DashboardViewModel {
     }
 
     /// Live Home dashboard only — restores owner scope after TraxsPro sample-data preview dismisses.
+    func refreshAfterTraxsProPreviewDismissed(profileID: ProfileID) async {
+        guard !loadsTraxsProPreviewSampleOnly, self.profileID == profileID else { return }
+        previewLedgerByAccount = [:]
+        await refresh()
+    }
+
     func restoreAfterCanonicalJournalPreviewEnded() {
         guard !loadsTraxsProPreviewSampleOnly else { return }
         guard let profileID else {
@@ -1458,9 +1519,10 @@ final class DashboardViewModel {
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
-        let filter = DashboardAccountScopePolicy.sanitizedFilter(
+        let filter = OwnerAccountMutationSync.reconciledAccountFilter(
             filter,
-            accounts: ownerAccountSource()
+            accounts: ownerAccountSource(),
+            profileID: profileID
         )
         guard accountFilter != filter else { return }
         ExperienceHaptics.play(.selection)
@@ -1594,7 +1656,8 @@ final class DashboardViewModel {
             customInterval: customDateInterval,
             accountMode: accountTypeFilter,
             showPublicOnly: showPublicOnly,
-            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) }),
+            copyTradingGroups: OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
         )
     }
 
@@ -1649,6 +1712,11 @@ final class DashboardViewModel {
     func openManageAccounts() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
+    }
+
+    func openManageCopyTradingGroups() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.pushHome(.settings(.copyTradingAccounts))
     }
 
     func openTradesList() {
@@ -1768,6 +1836,12 @@ final class DashboardViewModel {
     }
 
     private func psychologyCheckInsForUnlockGate() -> [TraderDailyCheckIn] {
+        if loadsTraxsProPreviewSampleOnly,
+           let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+           preview.viewer == profileID
+        {
+            return preview.checkIns
+        }
         var merged = SessionDailyCheckInsStore.shared.checkIns
         let historyCheckIns = CheckInHistorySessionStore.shared.checkIns
         if !historyCheckIns.isEmpty {
@@ -2591,6 +2665,7 @@ final class DashboardViewModel {
     /// Session caches mirror the Withdrawals screen bootstrap, no network.
     @discardableResult
     private func tryPrimeWithdrawalRecordsFromSessionCache(profileID: ProfileID) -> Bool {
+        guard !loadsTraxsProPreviewSampleOnly else { return false }
         guard !accounts.isEmpty else { return false }
         primeWithdrawalsHistoryStore(for: profileID)
         let accountIDs = accounts.map(\.id)
@@ -2636,6 +2711,7 @@ final class DashboardViewModel {
         profileID: ProfileID,
         forceNetwork: Bool
     ) async {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         if tryPrimeWithdrawalRecordsFromSessionCache(profileID: profileID) {
             recompute()
             return
@@ -2719,15 +2795,102 @@ final class DashboardViewModel {
             traxsProPreviewAppliedInitialScope = true
         }
         analyticsV3Bootstrap = nil
-        preferenceContext = DemoCanonicalDataset.previewPreferenceContext(for: viewerProfileID)
+        if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+           preview.viewer == viewerProfileID
+        {
+            preferenceContext = preview.preferenceContext
+        } else {
+            preferenceContext = DemoCanonicalDataset.previewPreferenceContext(for: viewerProfileID)
+        }
         psychologyUnlockMetricsReady = true
         applyDemoCanonicalDashboardFixtures(
             viewerProfileID: viewerProfileID,
             seedDetailCacheTrades: false
         )
         reconcileDashboardAccountFilterIfNeeded()
-        scheduleTradingRulesComplianceRecompute()
         recomputePsychology()
+        RulesPreviewDebugLog.log(
+            "applyTraxsProPreviewCanonicalSample complete summary=\(summary != nil) tradeInputs=\(tradeInputs.count) rulesStore=\(RulesPreviewDebugLog.storeID(rulesPresentationStore)) \(RulesPreviewDebugLog.describeConfiguredRules(context: preferenceContext)) env=\(RulesPreviewDebugLog.describe(TraxsProPreviewSession.shared.activePreviewEnvironment))"
+        )
+        publishTraxsProPreviewTradingRulesIfNeeded()
+    }
+
+    private func publishTraxsProPreviewTradingRulesIfNeeded() {
+        RulesPreviewDebugLog.log(
+            "publishTraxsProPreviewTradingRulesIfNeeded enter loadsPreview=\(loadsTraxsProPreviewSampleOnly) profileID=\(profileID?.rawValue ?? "nil") summary=\(summary != nil) tradeInputs=\(tradeInputs.count) rulesStore=\(RulesPreviewDebugLog.storeID(rulesPresentationStore))"
+        )
+        guard loadsTraxsProPreviewSampleOnly else {
+            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: loadsTraxsProPreviewSampleOnly=false")
+            return
+        }
+        guard let profileID else {
+            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: profileID=nil")
+            return
+        }
+        guard summary != nil else {
+            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: summary=nil")
+            return
+        }
+        guard !tradeInputs.isEmpty else {
+            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: tradeInputs empty")
+            return
+        }
+        guard let preview = TraxsProPreviewSession.shared.activePreviewEnvironment else {
+            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: activePreviewEnvironment=nil")
+            return
+        }
+        guard preview.viewer == profileID else {
+            RulesPreviewDebugLog.log(
+                "publishTraxsProPreviewTradingRulesIfNeeded guard fail: viewer mismatch preview=\(preview.viewer.rawValue) dashboard=\(profileID.rawValue)"
+            )
+            return
+        }
+        let generation = preview.generation
+        let preferenceContext = preview.preferenceContext
+        let scopeFilter = clientScopeFilter()
+        RulesPreviewDebugLog.log(
+            "publishTraxsProPreviewTradingRulesIfNeeded scheduling sequence task generation=\(generation) \(RulesPreviewDebugLog.describe(scopeFilter: scopeFilter)) \(RulesPreviewDebugLog.describeConfiguredRules(context: preferenceContext))"
+        )
+        let deps = TradingRulesComplianceLoadDependencies(
+            detailCache: detailCache,
+            tradesRepository: trades,
+            tradingPreferences: tradingPreferences
+        )
+        tradingRulesRecomputeSequence &+= 1
+        let sequence = tradingRulesRecomputeSequence
+        tradingRulesRecomputeTask?.cancel()
+        tradingRulesRecomputeTask = Task { @MainActor [weak self] in
+            guard let self, !Task.isCancelled, sequence == self.tradingRulesRecomputeSequence else {
+                RulesPreviewDebugLog.log(
+                    "publishTraxsProPreviewTradingRulesIfNeeded task aborted cancelled=\(Task.isCancelled) sequence=\(sequence)"
+                )
+                return
+            }
+            guard TraxsProPreviewSession.shared.activePreviewEnvironment?.isCurrentGeneration(generation) == true
+            else {
+                RulesPreviewDebugLog.log(
+                    "publishTraxsProPreviewTradingRulesIfNeeded task aborted stale generation=\(generation)"
+                )
+                return
+            }
+            let published = await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
+                profileID: profileID,
+                dependencies: deps,
+                preferenceContext: preferenceContext,
+                dashboardScopeFilter: scopeFilter
+            )
+            RulesPreviewDebugLog.log(
+                "publishTraxsProPreviewTradingRulesIfNeeded publishBundledSampleSnapshot returned \(published) store=\(RulesPreviewDebugLog.describe(session: self.rulesPresentationStore))"
+            )
+            guard TraxsProPreviewSession.shared.activePreviewEnvironment?.isCurrentGeneration(generation) == true
+            else {
+                RulesPreviewDebugLog.log(
+                    "publishTraxsProPreviewTradingRulesIfNeeded task end aborted stale generation=\(generation) after publish"
+                )
+                return
+            }
+            self.refreshDashboardReadinessProbes()
+        }
     }
 
     private func clearIneligibleRemoteAccountChartState() {
@@ -2796,8 +2959,13 @@ final class DashboardViewModel {
                 entriesByAccount[account.id] = entries
             }
         }
-        primeWithdrawalsHistoryStore(for: viewerProfileID)
-        WithdrawalsHistoryStore.shared.applyLedgerSnapshot(entriesByAccount, profileID: viewerProfileID)
+        if loadsTraxsProPreviewSampleOnly {
+            previewLedgerByAccount = entriesByAccount
+        } else {
+            previewLedgerByAccount = [:]
+            primeWithdrawalsHistoryStore(for: viewerProfileID)
+            WithdrawalsHistoryStore.shared.applyLedgerSnapshot(entriesByAccount, profileID: viewerProfileID)
+        }
         withdrawalRecordsHydrationComplete = true
         refreshAuthoritativePayoutTotal()
         tradeInputs = samples.map { trade in
@@ -2926,9 +3094,10 @@ final class DashboardViewModel {
     }
 
     private func reconcileDashboardAccountFilterIfNeeded() {
-        let sanitized = DashboardAccountScopePolicy.sanitizedFilter(
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
             accountFilter,
-            accounts: ownerAccountSource()
+            accounts: ownerAccountSource(),
+            profileID: profileID
         )
         guard sanitized != accountFilter else { return }
         accountChartHydrateTask?.cancel()
@@ -3173,6 +3342,11 @@ final class DashboardViewModel {
                 return tradeInputs
                     .map(\.trade)
                     .filter { $0.mode != .backtest }
+            case .copyTradingAll, .copyTradingGroup:
+                var scope = clientScopeFilter()
+                scope.dateRange = .all
+                scope.customInterval = nil
+                return DashboardChartMetrics.filteredTrades(from: tradeInputs, scope: scope)
             }
         }()
         let ledgerEntries = ledgerEntriesForMaxDrawdown()
@@ -3197,6 +3371,12 @@ final class DashboardViewModel {
             return accounts.flatMap { account in
                 manualPayoutEntries(for: account.id).filter { seen.insert($0.id).inserted }
             }
+        case .copyTradingAll, .copyTradingGroup:
+            let scopedAccounts = copyFilterLinkedAccounts()
+            var seen = Set<AccountPayoutEntryID>()
+            return scopedAccounts.flatMap { account in
+                manualPayoutEntries(for: account.id).filter { seen.insert($0.id).inserted }
+            }
         }
     }
 
@@ -3209,7 +3389,27 @@ final class DashboardViewModel {
             return accounts.flatMap { account in
                 resolvedPayoutCycles(for: account.id).filter { seen.insert($0.id).inserted }
             }
+        case .copyTradingAll, .copyTradingGroup:
+            let scopedAccounts = copyFilterLinkedAccounts()
+            var seen = Set<String>()
+            return scopedAccounts.flatMap { account in
+                resolvedPayoutCycles(for: account.id).filter { seen.insert($0.id).inserted }
+            }
         }
+    }
+
+    private func copyFilterLinkedAccounts() -> [TradingAccount] {
+        let groups = OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
+        let linked = DashboardAccountFilterCopyTradingSupport.linkedAccountIDs(from: groups)
+        let scoped: Set<String> = switch accountFilter {
+        case .copyTradingGroup(let groupID):
+            DashboardAccountFilterCopyTradingSupport.accountIDs(forGroupID: groupID, groups: groups)
+        case .copyTradingAll:
+            linked
+        default:
+            linked
+        }
+        return accounts.filter { scoped.contains($0.id.rawValue) }
     }
 
     private func attachAccountLevelPayoutsToSummary() {
@@ -3279,14 +3479,13 @@ final class DashboardViewModel {
                 accountID: id,
                 revision: analyticsV3Revision
             )
+        case .copyTradingAll, .copyTradingGroup:
+            return nil
         }
     }
 
     private func currentChartOverlaySelectionKey() -> String {
-        let accountScope: String = switch accountFilter {
-        case .all: "all"
-        case .account(let id): id.rawValue.lowercased()
-        }
+        let accountScope = DashboardAccountFilterCopyTradingSupport.persistenceKey(for: accountFilter)
         return "\(analyticsV3Revision)|\(accountScope)"
     }
 
@@ -3340,6 +3539,8 @@ final class DashboardViewModel {
                 accountID: id,
                 revision: analyticsV3Revision
             )
+        case .copyTradingAll, .copyTradingGroup:
+            break
         }
     }
 
@@ -3354,6 +3555,8 @@ final class DashboardViewModel {
                 accountID: id,
                 revision: analyticsV3Revision
             )
+        case .copyTradingAll, .copyTradingGroup:
+            break
         }
     }
 
@@ -4345,20 +4548,6 @@ final class DashboardViewModel {
             ),
             tradeCount: filteredDashboardTradeCountForPsychologyGate(trades: trades)
         )
-        if let profileID {
-            let scope = PsychologyAnalyticsScopeResolver.resolve(
-                filter: clientScopeFilter(),
-                profileID: profileID
-            )
-            PsychologyAnalyticsReportComposer.publish(
-                report: report,
-                scopedTrades: trades,
-                checkIns: gateCheckIns,
-                profileID: profileID,
-                scope: scope,
-                preferences: preferenceContext
-            )
-        }
 
         let facts = PsychologyCoachFactsBuilder.build(
             report: report,
@@ -4366,8 +4555,24 @@ final class DashboardViewModel {
             checkIns: gateCheckIns,
             preferences: preferenceContext
         )
-        let summary = PsychologyCoachDeterministicCoach.buildSummary(from: facts)
-        PsychologyCoachSessionStore.shared.update(facts: facts, summary: summary)
+        if !loadsTraxsProPreviewSampleOnly {
+            if let profileID {
+                let scope = PsychologyAnalyticsScopeResolver.resolve(
+                    filter: clientScopeFilter(),
+                    profileID: profileID
+                )
+                PsychologyAnalyticsReportComposer.publish(
+                    report: report,
+                    scopedTrades: trades,
+                    checkIns: gateCheckIns,
+                    profileID: profileID,
+                    scope: scope,
+                    preferences: preferenceContext
+                )
+            }
+            let summary = PsychologyCoachDeterministicCoach.buildSummary(from: facts)
+            PsychologyCoachSessionStore.shared.update(facts: facts, summary: summary)
+        }
 
         let todayKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
         let todayCheckIn = gateCheckIns.first { $0.checkInDate == todayKey }
@@ -4387,6 +4592,11 @@ final class DashboardViewModel {
     }
 
     private func scheduleTradingRulesComplianceRecompute() {
+        if loadsTraxsProPreviewSampleOnly {
+            RulesPreviewDebugLog.log("scheduleTradingRulesComplianceRecompute preview path")
+            publishTraxsProPreviewTradingRulesIfNeeded()
+            return
+        }
         tradingRulesRecomputeSequence &+= 1
         let sequence = tradingRulesRecomputeSequence
         tradingRulesRecomputeTask?.cancel()
@@ -4414,7 +4624,7 @@ final class DashboardViewModel {
         if psychologyUnlockMetricsReady {
             DashboardLoadProbe.markSectionReady(.psychologyUnlock)
         }
-        let rulesStore = TradingRulesComplianceSessionStore.shared
+        let rulesStore = rulesPresentationStore
         let rulesUIReady = rulesStore.profileID == profileID
             && rulesStore.ready
             && (
@@ -4422,6 +4632,11 @@ final class DashboardViewModel {
                     || !rulesStore.hasConfiguredRules
                     || rulesStore.insufficientScope
             )
+        if loadsTraxsProPreviewSampleOnly {
+            RulesPreviewDebugLog.log(
+                "refreshDashboardReadinessProbes rulesUIReady=\(rulesUIReady) \(RulesPreviewDebugLog.describe(session: rulesStore)) branchWouldBe=\(RulesPreviewDebugLog.dashboardSectionBranch(compliancePresentation: .unrestricted, session: rulesStore))"
+            )
+        }
         if rulesUIReady {
             DashboardLoadProbe.markSectionReady(.tradingRulesUI)
             DashboardLoadProbe.markSectionReady(.tradingRules)
@@ -4952,7 +5167,7 @@ final class DashboardViewModel {
         let ready = !isScopeFilteredMetricsLoading && profileID != nil
 
         guard ready, !trades.isEmpty, let summary else {
-            TradingScorecardSessionStore.shared.publish(
+            scorecardPresentationStore.publish(
                 ready: ready,
                 result: nil,
                 highlights: .init(strengths: [], weaknesses: []),
@@ -4993,7 +5208,7 @@ final class DashboardViewModel {
         let highlights = TradingScorecardBuilder.collectTopStrengthsAndWeaknesses(result: result)
         let psychCards = EarlyPsychologyInsightsBuilder.build(trades: trades, checkIns: checkIns)
 
-        TradingScorecardSessionStore.shared.publish(
+        scorecardPresentationStore.publish(
             ready: true,
             result: result,
             highlights: highlights,
@@ -5058,13 +5273,18 @@ final class DashboardViewModel {
     /// Rebuilds from memory when the store is missing or says no rules while preferences are cached.
     func restoreTradingRulesPresentationIfNeeded() {
         guard let profileID else { return }
-        TradingRulesComplianceSessionStore.shared.clearIfProfileMismatch(profileID)
+        if loadsTraxsProPreviewSampleOnly {
+            RulesPreviewDebugLog.log("restoreTradingRulesPresentationIfNeeded preview shortcut")
+            publishTraxsProPreviewTradingRulesIfNeeded()
+            return
+        }
+        rulesPresentationStore.clearIfProfileMismatch(profileID)
         adoptCachedTradingRulesPreferencesIfNeeded()
         let scope = PsychologyAnalyticsScopeResolver.resolve(
             filter: clientScopeFilter(),
             profileID: profileID
         )
-        let store = TradingRulesComplianceSessionStore.shared
+        let store = rulesPresentationStore
         let isFreeRulesTier = ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
             demoModeActive: ExploreModeSupport.isActive,
             profileID: profileID
@@ -5091,6 +5311,10 @@ final class DashboardViewModel {
     }
 
     func recomputeTradingRulesCompliance() {
+        if loadsTraxsProPreviewSampleOnly {
+            publishTraxsProPreviewTradingRulesIfNeeded()
+            return
+        }
         let ready = !isScopeFilteredMetricsLoading && profileID != nil
 
         guard let profileID else {
@@ -5129,10 +5353,10 @@ final class DashboardViewModel {
         )
         let preferencesUnavailable = preferenceContext == nil
         if preferencesUnavailable, !hasRulesConfigured {
-            if TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID) {
+            if rulesPresentationStore.retainsConfiguredRules(for: profileID) {
                 return
             }
-            let store = TradingRulesComplianceSessionStore.shared
+            let store = rulesPresentationStore
             let alreadyWaiting = !store.ready
                 && store.profileID == profileID
                 && store.scopeFingerprint == scope.fingerprint
@@ -5287,7 +5511,7 @@ final class DashboardViewModel {
                 output.isAuthoritative = false
             }
             self.refreshDashboardReadinessProbes()
-            TradingRulesComplianceSessionStore.shared.commit(
+            rulesPresentationStore.commit(
                 output: output,
                 profileID: profileID,
                 scope: scope,
@@ -5369,8 +5593,9 @@ final class DashboardViewModel {
     ) {
         if preferencesUnavailable,
            !output.hasConfiguredRules,
-           TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID)
+           rulesPresentationStore.retainsConfiguredRules(for: profileID)
         {
+            RulesPreviewDebugLog.log("commitTradingRulesSnapshot skip retain configured rules")
             return
         }
         if let inputFingerprint,
@@ -5380,10 +5605,16 @@ final class DashboardViewModel {
                inputFingerprint: inputFingerprint
            )
         {
+            RulesPreviewDebugLog.log("commitTradingRulesSnapshot skip fingerprint unchanged")
             return
         }
+        if loadsTraxsProPreviewSampleOnly {
+            RulesPreviewDebugLog.log(
+                "commitTradingRulesSnapshot publishing \(RulesPreviewDebugLog.describe(output: output)) store=\(RulesPreviewDebugLog.storeID(rulesPresentationStore))"
+            )
+        }
         let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
-        TradingRulesComplianceSessionStore.shared.commit(
+        let committed = rulesPresentationStore.commit(
             output: output,
             profileID: profileID,
             scope: scope,
@@ -5392,6 +5623,9 @@ final class DashboardViewModel {
             generation: token,
             preferencesUnavailable: preferencesUnavailable
         )
+        if loadsTraxsProPreviewSampleOnly {
+            RulesPreviewDebugLog.log("commitTradingRulesSnapshot commit returned \(committed)")
+        }
     }
 
     private func scheduleTradingRulesFullHydrationIfNeeded(
@@ -5404,7 +5638,7 @@ final class DashboardViewModel {
             && !output.insufficientScope
             && preferenceContext == nil
             && (ownerCount == 0 || !historyComplete)
-            && !TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID)
+            && !rulesPresentationStore.retainsConfiguredRules(for: profileID)
 
         guard shouldHydrateFullSnapshot,
               tradingRulesHydrationTask == nil,
@@ -5433,16 +5667,13 @@ final class DashboardViewModel {
 
     var tradingScorecardScopeLabel: String {
         var parts: [String] = [dateRange.title]
-        switch accountFilter {
-        case .all:
-            parts.append("All accounts")
-        case .account(let id):
-            if let name = accountNames[id], !name.isEmpty {
-                parts.append(name)
-            } else {
-                parts.append("Account")
-            }
-        }
+        parts.append(
+            OwnerAccountFilterMenuSupport.menuTitle(
+                filter: accountFilter,
+                accounts: accounts,
+                profileID: profileID
+            )
+        )
         if accountTypeFilter != .all {
             parts.append(accountTypeFilter.title)
         }

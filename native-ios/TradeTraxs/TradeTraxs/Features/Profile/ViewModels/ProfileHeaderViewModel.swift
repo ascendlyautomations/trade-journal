@@ -231,19 +231,19 @@ final class ProfileHeaderViewModel {
         if let profile = store.profile {
             detailCache.seed(profile)
         }
-        if let catalogViewer = FeedStoriesCatalogStore.shared.viewerID {
-            FeedStoriesCatalogStore.shared.mergeAuthorStories(
-                store.activeStories,
-                authorID: story.authorProfileID,
-                viewerID: catalogViewer
-            )
-        } else if let profileID = store.resolvedProfileID {
-            FeedStoriesCatalogStore.shared.replace(
-                catalog: store.activeStories,
-                viewerID: profileID
-            )
-        }
-        navigationCoordinator.present(fullScreen: .storyViewer(story.id))
+        let authorID = story.authorProfileID
+        let catalogViewer = FeedStoriesCatalogStore.shared.viewerID
+            ?? store.resolvedProfileID
+            ?? authorID
+        detailCache.seed(stories: store.activeStories)
+        FeedStoriesCatalogStore.shared.replace(
+            catalog: store.activeStories,
+            viewerID: catalogViewer,
+            isFullCatalog: false
+        )
+        navigationCoordinator.present(
+            fullScreen: .storyViewer(story.id, .profile(authorID: authorID))
+        )
     }
 
     // MARK: - Private

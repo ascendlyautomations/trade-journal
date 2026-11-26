@@ -1,4 +1,5 @@
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { loadTraxProEntitlementSnapshot } from "@/lib/traxProEntitlement"
 import { emitActivityNotification } from "@/lib/server/notifications/emit"
 import { getServerNotificationPreferences } from "@/lib/serverNotificationPreferences"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
@@ -338,6 +339,14 @@ async function notifyTradingReport(input: {
 
   if (!periodKey || !periodId) {
     return { ok: false, error: "Missing periodKey or periodId", status: 400 }
+  }
+
+  const entitlement = await loadTraxProEntitlementSnapshot(
+    supabaseServiceRole,
+    input.actorUserId
+  )
+  if (!entitlement.ok || !entitlement.snapshot.traxProActive) {
+    return { ok: true, skipped: true, reason: "pro_required" }
   }
 
   const content = JSON.stringify({

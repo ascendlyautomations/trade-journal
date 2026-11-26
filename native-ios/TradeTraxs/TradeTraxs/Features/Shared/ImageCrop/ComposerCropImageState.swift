@@ -6,6 +6,11 @@ enum ComposerCropImageState {
     struct Applied: Sendable {
         let finalImage: UIImage
         let uploadData: Data
+        let contentType: String
+
+        var fileExtension: String {
+            MediaImagePreparation.ContentUploadPayload.fileExtension(for: contentType)
+        }
     }
 
     static func apply(_ result: ImageCropSelectionResult) -> Applied? {
@@ -16,13 +21,17 @@ enum ComposerCropImageState {
             result: result.image
         )
         #endif
-        guard let uploadData = MediaImagePreparation.jpegData(
+        guard let payload = MediaImagePreparation.contentUploadData(
             from: result.image,
             logUpload: true
-        ), !uploadData.isEmpty else {
+        ) else {
             return nil
         }
-        return Applied(finalImage: result.image, uploadData: uploadData)
+        return Applied(
+            finalImage: result.image,
+            uploadData: payload.data,
+            contentType: payload.contentType
+        )
     }
 }
 

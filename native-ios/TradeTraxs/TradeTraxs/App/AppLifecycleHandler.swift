@@ -43,10 +43,12 @@ final class AppLifecycleHandler {
             await pushNotifications?.refreshAuthorizationStatus()
             if AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() {
                 pushNotifications?.syncBadgeFromActivity()
-                pushNotifications?.refreshRemoteTokenIfAuthorized()
+                await pushNotifications?.reconcileRemotePushRegistrationForForeground()
             }
             await DailyCheckInReminderCoordinator.shared.sync()
             await TradeImportReminderCoordinator.shared.sync()
+            let profileID = SessionBillingEntitlementStore.shared.status?.profileID
+            await PerformanceReportReminderCoordinator.shared.reconcile(profileID: profileID)
         }
     }
 

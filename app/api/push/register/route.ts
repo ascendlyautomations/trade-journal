@@ -111,7 +111,7 @@ export async function POST(req: Request) {
 
     const { data: installRow, error: installLookupErr } = await db
       .from("device_push_tokens")
-      .select("id, device_token")
+      .select("id, device_token, user_id, performance_report_local_reminders_active")
       .eq("installation_id", installationId)
       .maybeSingle()
 
@@ -143,6 +143,7 @@ export async function POST(req: Request) {
         }
       }
 
+      const sameUser = installRow.user_id === user.id
       const { error: updateErr } = await db
         .from("device_push_tokens")
         .update({
@@ -152,6 +153,9 @@ export async function POST(req: Request) {
           app_version: appVersion,
           updated_at: now,
           last_seen_at: now,
+          performance_report_local_reminders_active: sameUser
+            ? Boolean(installRow.performance_report_local_reminders_active)
+            : false,
         })
         .eq("id", installRow.id)
 

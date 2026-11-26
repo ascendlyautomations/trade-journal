@@ -92,6 +92,7 @@ nonisolated enum DashboardChartMetrics {
             accountFilter: scope.accountFilter,
             accountMode: scope.accountMode,
             linkedAccountModes: scope.linkedAccountModes,
+            copyTradingGroups: scope.copyTradingGroups,
             interval: scope.customInterval,
             dateRange: scope.customInterval == nil ? scope.dateRange : nil,
             showPublicOnly: scope.showPublicOnly,
@@ -127,6 +128,7 @@ nonisolated enum DashboardChartMetrics {
         accountFilter: DashboardAccountFilter,
         accountMode: ProfileStatisticsMetrics.Mode,
         linkedAccountModes: [TradingAccountID: TradingAccountMode],
+        copyTradingGroups: [CopyTradingGroup] = [],
         interval: DateInterval?,
         dateRange: DashboardDateRange?,
         showPublicOnly: Bool,
@@ -138,12 +140,16 @@ nonisolated enum DashboardChartMetrics {
             accountFilter: accountFilter,
             accountMode: accountMode,
             linkedAccountModes: linkedAccountModes,
+            copyTradingGroups: copyTradingGroups,
             interval: interval,
             dateRange: dateRange,
             showPublicOnly: showPublicOnly,
             now: now
         )
-        let trades = filtered.map(\.trade)
+        var trades = filtered.map(\.trade)
+        if DashboardAccountFilterCopyTradingSupport.shouldDedupeCopyMetrics(for: accountFilter) {
+            trades = DashboardAccountFilterCopyTradingSupport.dedupeCopyTradedTradesForMetrics(trades)
+        }
 
         let pnlValues = trades.compactMap(\.realizedPnL?.amount)
         let wins = pnlValues.filter { $0 > 0 }
@@ -266,16 +272,21 @@ nonisolated enum DashboardChartMetrics {
         scope: DashboardClientScopeFilter,
         now: Date = Date()
     ) -> [Trade] {
-        filter(
+        let trades = filter(
             inputs,
             accountFilter: scope.accountFilter,
             accountMode: scope.accountMode,
             linkedAccountModes: scope.linkedAccountModes,
+            copyTradingGroups: scope.copyTradingGroups,
             interval: scope.customInterval,
             dateRange: scope.customInterval == nil ? scope.dateRange : nil,
             showPublicOnly: scope.showPublicOnly,
             now: now
         ).map(\.trade)
+        if DashboardAccountFilterCopyTradingSupport.shouldDedupeCopyMetrics(for: scope.accountFilter) {
+            return DashboardAccountFilterCopyTradingSupport.dedupeCopyTradedTradesForMetrics(trades)
+        }
+        return trades
     }
 
     /// Filtered trades for an explicit interval, shared with Performance Reports.
@@ -323,6 +334,7 @@ nonisolated enum DashboardChartMetrics {
         accountFilter: DashboardAccountFilter,
         accountMode selectedMode: ProfileStatisticsMetrics.Mode,
         linkedAccountModes: [TradingAccountID: TradingAccountMode],
+        copyTradingGroups: [CopyTradingGroup] = [],
         interval: DateInterval?,
         dateRange: DashboardDateRange?,
         showPublicOnly: Bool,
@@ -331,12 +343,11 @@ nonisolated enum DashboardChartMetrics {
         let scoped = inputs.filter { input in
             let trade = input.trade
 
-            switch accountFilter {
-            case .all:
-                break
-            case .account(let id):
-                guard trade.accountID == id else { return false }
-            }
+            guard DashboardAccountFilterCopyTradingSupport.matchesTrade(
+                trade,
+                filter: accountFilter,
+                copyGroups: copyTradingGroups
+            ) else { return false }
 
             guard DashboardScopeFilterSupport.matchesProfileStatisticsAccountModeFilter(
                 trade: trade,

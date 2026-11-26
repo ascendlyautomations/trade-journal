@@ -29,17 +29,25 @@ final class CopyTradeJournalGroupingTests: XCTestCase {
         XCTAssertEqual(group.members.count, 3)
     }
 
-    func testParticipatingAccountsAllShownOnCard() {
+    func testParticipatingAccountsCollapseToTwoVisibleLinesAndOverflow() {
         let rows = copyBatchRows(createdAt: createdAt)
-        let grouped = CopyTradeJournalGrouping.group(rows, accounts: accounts)
+        let groups = [CopyTradingGroup(
+            id: "group-1",
+            name: "Alpha Group",
+            accountIDs: [sourceID.rawValue, copyB.rawValue, copyC.rawValue],
+            createdAt: "",
+            updatedAt: ""
+        )]
+        let grouped = CopyTradeJournalGrouping.group(rows, accounts: accounts, copyGroups: groups)
         guard case .copyGroup(let group) = grouped[0] else {
             return XCTFail("Expected copy group")
         }
-        XCTAssertEqual(group.participatingAccountLines.count, 3)
-        XCTAssertTrue(group.participatingAccountLines[0].contains("Alpha Futures"))
-        XCTAssertTrue(group.participatingAccountLines[0].contains("Funded"))
-        XCTAssertTrue(group.participatingAccountLines[0].contains("••••1234"))
-        XCTAssertTrue(group.participatingAccountLines[2].contains("TradeStation"))
+        XCTAssertEqual(group.ownerDisplay.headerTitle, "Copy Traded X3 (Alpha Group)")
+        XCTAssertEqual(group.ownerDisplay.visibleAccountLines.count, 2)
+        XCTAssertTrue(group.ownerDisplay.visibleAccountLines[0].contains("Alpha Futures"))
+        XCTAssertTrue(group.ownerDisplay.visibleAccountLines[0].contains("Funded"))
+        XCTAssertTrue(group.ownerDisplay.visibleAccountLines[0].contains("••••1234"))
+        XCTAssertEqual(group.ownerDisplay.overflowSummary, "+1 Account")
     }
 
     func testAllAccountsFilterShowsOneCard() {
@@ -66,7 +74,8 @@ final class CopyTradeJournalGroupingTests: XCTestCase {
             guard case .copyGroup(let group) = display[0] else {
                 return XCTFail("Expected copy group")
             }
-            XCTAssertEqual(group.participatingAccountLines.count, 3)
+            XCTAssertEqual(group.ownerDisplay.visibleAccountLines.count, 2)
+            XCTAssertNotNil(group.ownerDisplay.overflowSummary)
         }
     }
 

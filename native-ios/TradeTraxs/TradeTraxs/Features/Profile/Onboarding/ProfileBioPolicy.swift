@@ -9,7 +9,7 @@ nonisolated enum ProfileBioPolicy {
     static let displayLineSpacing: CGFloat = 3
 
     /// Profile header horizontal inset: ``ProfileView`` uses ``SpacingToken/lg``.
-    static let profileHorizontalInset: CGFloat = SpacingToken.lg.value * 2
+    static let profileHorizontalInset: CGFloat = SpacingToken.lg.rawValue * 2
 
     enum EditDecision: Equatable {
         case accept
@@ -17,7 +17,10 @@ nonisolated enum ProfileBioPolicy {
         case apply(String)
     }
 
-    static func referenceContentWidth(screenWidth: CGFloat = UIScreen.main.bounds.width) -> CGFloat {
+    /// Fallback width when UI geometry is unavailable (onboarding/settings pass measured width).
+    static let defaultReferenceScreenWidth: CGFloat = 390
+
+    static func referenceContentWidth(screenWidth: CGFloat = defaultReferenceScreenWidth) -> CGFloat {
         max(120, screenWidth - profileHorizontalInset)
     }
 

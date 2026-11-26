@@ -32,10 +32,12 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         let accounts = try await loadAccounts(forceNetwork: forceNetwork)
         let filters = await ReportsTradeScope.filtersFromSession()
         let preferences = await loadPreferences()
+        let copyGroups = await copyTradingMenuGroups()
         let scoped = ReportsTradeScope.scopedTrades(
             from: eligible,
             accounts: accounts,
-            filters: filters
+            filters: filters,
+            copyTradingGroups: copyGroups
         )
         let fingerprint = Self.fingerprint(eligible)
             + ":" + PreferenceComplianceEngine.fingerprint(preferences)
@@ -75,10 +77,12 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
         let accounts = try await loadAccounts(forceNetwork: forceNetwork)
         let filters = await ReportsTradeScope.filtersFromSession()
+        let copyGroups = await copyTradingMenuGroups()
         let scoped = ReportsTradeScope.scopedTrades(
             from: eligible,
             accounts: accounts,
-            filters: filters
+            filters: filters,
+            copyTradingGroups: copyGroups
         )
         return TradingYearlyReportGenerator.availableYears(from: scoped)
     }
@@ -94,10 +98,12 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         if !forceNetwork, let cached = yearlyCache[cacheKey] {
             return cached
         }
+        let copyGroups = await copyTradingMenuGroups()
         let report = TradingYearlyReportGenerator.generate(
             year: year,
             trades: eligible,
-            filters: filters
+            filters: filters,
+            copyTradingGroups: copyGroups
         )
         yearlyCache[cacheKey] = report
         return report
@@ -109,10 +115,12 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         forceNetwork: Bool
     ) async throws -> TradingReport {
         let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
+        let copyGroups = await copyTradingMenuGroups()
         return TradingYearlyReportGenerator.generateMonthReport(
             ref: ref,
             trades: eligible,
-            filters: filters
+            filters: filters,
+            copyTradingGroups: copyGroups
         )
     }
 
@@ -123,10 +131,12 @@ actor DefaultTradingReportRepository: TradingReportRepository {
     ) async throws -> TradingReport {
         let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
         let accounts = try await loadAccounts(forceNetwork: forceNetwork)
+        let copyGroups = await copyTradingMenuGroups()
         let scoped = ReportsTradeScope.scopedTrades(
             from: eligible,
             accounts: accounts,
-            filters: filters
+            filters: filters,
+            copyTradingGroups: copyGroups
         )
         let preferences = await loadPreferences()
         guard let week = TradingReportWeekRef.parse(reportID: ReportID("week:\(mondayKey)")) else {
@@ -154,10 +164,12 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             return cached
         }
         let preferences = await loadPreferences()
+        let copyGroups = await copyTradingMenuGroups()
         let report = TradingReportGenerator.generateCustomRange(
             trades: eligible,
             interval: interval,
             filters: filters,
+            copyTradingGroups: copyGroups,
             preferences: preferences
         )
         customReportCache[cacheKey] = report
@@ -180,6 +192,20 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             )
         } catch {
             return nil
+        }
+    }
+
+    private func copyTradingMenuGroups() async -> [CopyTradingGroup] {
+        let userID = await session.currentUserID
+        let demoActive = await AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
+            return []
+        }
+        return await MainActor.run {
+            OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
         }
     }
 
@@ -252,13 +278,7 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         filters: TradingReportFilters,
         fingerprint: String
     ) -> String {
-        let account: String = {
-            switch filters.accountFilter {
-            case .all: return "all"
-            case .account(let id): return id.rawValue
-            }
-        }()
-        return "\(fingerprint):year:\(year):account:\(account):mode:\(filters.accountMode.rawValue)"
+        return "\(fingerprint):year:\(year):\(ReportsTradeScope.filtersFingerprint(filters))"
     }
 
     private static func customCacheKey(
@@ -266,12 +286,6 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         filters: TradingReportFilters,
         fingerprint: String
     ) -> String {
-        let account: String = {
-            switch filters.accountFilter {
-            case .all: return "all"
-            case .account(let id): return id.rawValue
-            }
-        }()
-        return "\(fingerprint):custom:\(ref.startKey):\(ref.endKey):account:\(account):mode:\(filters.accountMode.rawValue)"
+        return "\(fingerprint):custom:\(ref.startKey):\(ref.endKey):\(ReportsTradeScope.filtersFingerprint(filters))"
     }
 }

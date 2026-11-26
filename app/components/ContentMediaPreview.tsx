@@ -84,7 +84,7 @@ export default function ContentMediaPreview({
   if (resolvedContext === "feed") {
     return (
       <div
-        className={`tt-content-media-frame tt-content-media-frame--feed flex w-full items-center justify-center bg-black/30 ${className}`}
+        className={`tt-content-media-frame tt-content-media-frame--feed flex w-full items-center justify-center bg-transparent ${className}`}
       >
         <StorageImage
           src={src}
@@ -105,7 +105,7 @@ export default function ContentMediaPreview({
   if (mode === "fill") {
     return (
       <div
-        className={`w-full overflow-hidden bg-black/30 ${className}`}
+        className={`w-full overflow-hidden bg-transparent ${className}`}
       >
         <StorageImage
           src={src}
@@ -125,7 +125,7 @@ export default function ContentMediaPreview({
 
   return (
     <div
-      className={`flex w-full items-center justify-center bg-black/30 ${className}`}
+      className={`flex w-full items-center justify-center bg-transparent ${className}`}
     >
       <StorageImage
         src={src}

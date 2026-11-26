@@ -28,7 +28,7 @@ struct BrokerImportProgressView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(colors.groupedBackground.ignoresSafeArea())
+            .experienceScreenBackground()
             .experienceNavigationTitle("Importing Trades")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

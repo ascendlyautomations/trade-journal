@@ -39,6 +39,8 @@ final class ContextualTourCoordinator {
     private var replayArmed = false
     /// Stops an exhausted pass from immediately re-arming until the user leaves Dashboard.
     private var suppressedUntilGatesDrop = false
+    /// Arms the one-time post-plan walkthrough without requiring dashboard analytics.
+    private var postPlanWalkthroughArmed = false
     private var resolveStartedAt: Date?
     private var previousFrame: CGRect?
     private var scrollIssuedForStep: Int?
@@ -49,7 +51,6 @@ final class ContextualTourCoordinator {
     private var measurementToken: UInt64 = 0
     private var timeoutTask: Task<Void, Never>?
     private var confirmationTask: Task<Void, Never>?
-    /// Keeps the explanation card up while the next real target is scrolling into place.
     private var hasPresentedStep = false
     private var displayedStepIndex = 0
 
@@ -91,9 +92,17 @@ final class ContextualTourCoordinator {
         }
     }
 
-    /// Full explanation card, hidden during cross-surface transitions and section prompts.
+    /// Full explanation card during presenting; spotlight steps also explain while measuring once a hole exists.
     var showsExplanationCard: Bool {
-        phase == .presenting && (currentStep?.role.countsTowardProgress ?? false)
+        guard currentStep?.role.countsTowardProgress ?? false else { return false }
+        switch phase {
+        case .presenting:
+            return true
+        case .measuring:
+            return currentStep?.role == .spotlight
+        case .idle:
+            return false
+        }
     }
 
     /// Step the card should explain. The next step's copy waits until its anchor is ready.
@@ -114,7 +123,12 @@ final class ContextualTourCoordinator {
     }
 
     var visibleStepIndex: Int {
-        phase == .presenting ? stepIndex : displayedStepIndex
+        switch phase {
+        case .presenting, .measuring:
+            return stepIndex
+        case .idle:
+            return displayedStepIndex
+        }
     }
 
     /// Feed filters step, keep the horizontal filter strip visible and sized intrinsically for measurement.
@@ -144,10 +158,33 @@ final class ContextualTourCoordinator {
     func syncShell(userID: String?, createdAt: Date?, gates: ContextualTourGates) {
         if userID != self.userID {
             clearMemory()
+            postPlanWalkthroughArmed = false
         }
         self.userID = userID
-        self.createdAt = createdAt
+        if let createdAt, ContextualTourEligibility.isAuthoritativeCreatedAt(createdAt) {
+            self.createdAt = createdAt
+        } else if createdAt == nil {
+            self.createdAt = nil
+        }
         self.gates = gates
+        reevaluate()
+    }
+
+    func refreshAccountCreatedAt(_ createdAt: Date?) {
+        guard let createdAt, ContextualTourEligibility.isAuthoritativeCreatedAt(createdAt) else { return }
+        guard self.createdAt != createdAt else { return }
+        self.createdAt = createdAt
+        reevaluate()
+    }
+
+    func notePostOnboardingWalkthroughShouldPresent(userID: String?) {
+        guard let userID, !userID.isEmpty else { return }
+        let profileID = ProfileID(userID)
+        guard PostAuthOnboardingPolicy.shouldPresentAutomaticWalkthrough(profileID: profileID) else {
+            return
+        }
+        postPlanWalkthroughArmed = true
+        suppressedUntilGatesDrop = false
         reevaluate()
     }
 
@@ -232,6 +269,7 @@ final class ContextualTourCoordinator {
         feedChromeReady = false
         exitNotice = nil
         shouldOpenTradingRulesAfterCompletion = false
+        postPlanWalkthroughArmed = false
     }
 
     func noteMeasuredFrame(
@@ -263,6 +301,9 @@ final class ContextualTourCoordinator {
            ) {
             if scrollIssuedForStep != stepIndex {
                 issueScroll(now: now)
+            } else if scrollRetryCountForStep < settingsListScrollRetries(for: target) {
+                scrollRetryCountForStep += 1
+                issueScroll(now: now)
             }
             return
         }
@@ -287,7 +328,12 @@ final class ContextualTourCoordinator {
         let elapsed = now.timeIntervalSince(resolveStartedAt ?? now)
         switch ContextualTourGeometry.resolve(frame: frame, previous: previousFrame, elapsed: elapsed) {
         case .ready(let stable):
-            if ContextualTourGeometry.isRenderableSpotlight(stable, in: viewport) {
+            let visible = ContextualTourGeometry.measurementVisibleRect(
+                viewport: viewport,
+                topInset: topInset,
+                bottomInset: bottomInset
+            )
+            if ContextualTourGeometry.isRenderableSpotlight(stable, in: visible) {
                 presentResolvedStep(frame: stable)
             } else {
                 previousFrame = stable
@@ -319,15 +365,7 @@ final class ContextualTourCoordinator {
             return
         }
         let elapsed = now.timeIntervalSince(resolveStartedAt ?? now)
-        guard elapsed >= ContextualTourGeometry.resolveTimeout else { return }
-        if let previousFrame,
-           ContextualTourGeometry.isUsable(previousFrame),
-           let viewport = lastViewport,
-           ContextualTourGeometry.isRenderableSpotlight(previousFrame, in: viewport)
-        {
-            presentResolvedStep(frame: previousFrame)
-            return
-        }
+        guard elapsed >= ContextualTourGeometry.resolveTimeout(for: spotlightTarget) else { return }
         let maxScrollRetries = settingsListScrollRetries(for: spotlightTarget)
         if scrollIssuedForStep == stepIndex,
            scrollRetryCountForStep < maxScrollRetries
@@ -336,14 +374,51 @@ final class ContextualTourCoordinator {
             issueScroll(now: now)
             return
         }
-        if currentStep?.presentsIfUnmeasured == true {
-            presentResolvedStep(frame: .zero)
-            return
-        }
         skipUnresolvedStep()
     }
 
+    /// Dashboard sections (e.g. Getting Started) resized during measurement — re-scroll and re-stabilize.
+    func noteScrollTargetLayoutChanged() {
+        guard phase == .measuring else { return }
+        guard let target = spotlightTarget else { return }
+        guard !ContextualTourGeometry.skipsTourAutoscroll(for: target) else { return }
+        previousFrame = nil
+        resolveStartedAt = Date()
+        if scrollIssuedForStep == stepIndex {
+            let maxRetries = settingsListScrollRetries(for: target)
+            guard scrollRetryCountForStep < maxRetries else { return }
+            scrollRetryCountForStep += 1
+            issueScroll(now: Date())
+        }
+    }
+
     private func presentResolvedStep(frame: CGRect) {
+        guard let step = currentStep else { return }
+        switch step.role {
+        case .spotlight:
+            guard let viewport = lastViewport,
+                  ContextualTourGeometry.isRenderableSpotlight(
+                    frame,
+                    in: ContextualTourGeometry.measurementVisibleRect(
+                        viewport: viewport,
+                        topInset: lastTopInset,
+                        bottomInset: lastBottomInset
+                    )
+                  )
+            else {
+                return
+            }
+        case .narration:
+            guard ContextualTourGeometry.isUsable(frame),
+                  let viewport = lastViewport,
+                  ContextualTourGeometry.isRenderableSpotlight(frame, in: viewport)
+            else {
+                return
+            }
+        case .sectionContinue, .finish, .tradingRulesPrompt:
+            break
+        }
+
         confirmationTask?.cancel()
         timeoutTask?.cancel()
         spotlightFrame = frame
@@ -399,14 +474,11 @@ final class ContextualTourCoordinator {
             return
         }
 
-        let dismissed = progress.dismissedVersion(for: definition.id, userID: userID)
-        let automatic = ContextualTourEligibility.shouldAutomaticallyPresent(
-            createdAt: createdAt,
-            cutoff: cutoff,
-            dismissedVersion: dismissed,
-            tourVersion: definition.version
+        let dismissed = PostAuthOnboardingPolicy.effectiveTourDismissedVersion(userID: userID)
+        let policyAutomatic = PostAuthOnboardingPolicy.shouldPresentAutomaticWalkthrough(
+            profileID: ProfileID(userID)
         )
-        guard replayArmed || automatic else {
+        guard replayArmed || postPlanWalkthroughArmed || policyAutomatic else {
             let epoch = createdAt == Date(timeIntervalSince1970: 0)
             let reason: String
             if epoch {
@@ -449,9 +521,14 @@ final class ContextualTourCoordinator {
         guard gates.sceneActive, gates.unobstructed else { return false }
         switch step.surface {
         case .dashboard:
+            if postPlanWalkthroughArmed || replayArmed {
+                return gates.homeRootActive
+            }
             return gates.homeRootActive && analyticsReady
         case .feed:
             return gates.feedRootActive && feedChromeReady
+        case .messages:
+            return gates.messagesRootActive
         case .profile:
             return gates.profileRootActive
         case .settings:
@@ -499,7 +576,9 @@ final class ContextualTourCoordinator {
         scrollIssuedForStep = nil
         scrollRetryCountForStep = 0
         scrollTarget = nil
+        spotlightFrame = .zero
         lastViewport = nil
+        ContextualTourGlobalFrameStore.shared.reset()
         resolveStartedAt = Date()
         if step.target == .feedContentFilters {
             FeedFilterBarTourLayoutGate.resetForTourStep()
@@ -512,6 +591,12 @@ final class ContextualTourCoordinator {
             return
         }
         phase = .measuring
+        if let target = step.target,
+           step.role == .spotlight,
+           !ContextualTourGeometry.skipsTourAutoscroll(for: target)
+        {
+            issueScroll(now: Date())
+        }
         scheduleTimeout()
     }
 
@@ -535,7 +620,8 @@ final class ContextualTourCoordinator {
         timeoutTask?.cancel()
         let token = measurementToken
         timeoutTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(ContextualTourGeometry.resolveTimeout * 1_000_000_000))
+            let timeout = ContextualTourGeometry.resolveTimeout(for: spotlightTarget)
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
             guard !Task.isCancelled, token == measurementToken, phase == .measuring else { return }
             forceTimeout()
         }
@@ -570,6 +656,10 @@ final class ContextualTourCoordinator {
             finishWithoutDismiss()
             return
         }
+        if definition.steps[next].role == .tradingRulesPrompt {
+            finishWithoutDismiss()
+            return
+        }
         stepIndex = next
         beginMeasuring()
     }
@@ -580,8 +670,15 @@ final class ContextualTourCoordinator {
         if let userID, persistDismissal {
             progress.dismiss(definition.id, version: definition.version, userID: userID)
             ContextualTourDebug.logAppTour("completed")
+            PostAuthOnboardingProgress.markWalkthroughFinished(for: ProfileID(userID))
+            NativeIosOnboardingSync.recordTourDismissed(
+                userID: userID,
+                version: definition.version,
+                rpc: NativeIosOnboardingServices.rpc
+            )
         }
         replayArmed = false
+        postPlanWalkthroughArmed = false
         suppressedUntilGatesDrop = true
         hideWithoutDismiss(resetStep: true)
         if let completedUserID {
@@ -589,14 +686,20 @@ final class ContextualTourCoordinator {
                 name: .contextualTourDidComplete,
                 object: completedUserID
             )
-            PostOnboardingPlanSelectionCoordinator.shared.handleTourCompleted(userID: completedUserID)
         }
     }
 
     private func finishWithoutDismiss() {
-        suppressedUntilGatesDrop = true
+        if hasPresentedStep {
+            suppressedUntilGatesDrop = true
+        } else {
+            suppressedUntilGatesDrop = false
+        }
         replayArmed = false
         hideWithoutDismiss(resetStep: true)
+        if postPlanWalkthroughArmed {
+            reevaluate()
+        }
     }
 
     private func hideWithoutDismiss(resetStep: Bool) {
@@ -605,7 +708,9 @@ final class ContextualTourCoordinator {
         measurementToken &+= 1
         phase = .idle
         scrollTarget = nil
+        spotlightFrame = .zero
         previousFrame = nil
+        ContextualTourGlobalFrameStore.shared.reset()
         hasPresentedStep = false
         displayedStepIndex = 0
         if resetStep {
@@ -635,9 +740,13 @@ final class ContextualTourCoordinator {
     private func settingsListScrollRetries(for target: ContextualTourTargetID?) -> Int {
         switch target {
         case .settingsAppearance, .settingsTradingRules:
-            return 2
+            return 3
+        case .dashboardPerformance:
+            return 3
+        case .dashboardAccountAndDates:
+            return 4
         default:
-            return 1
+            return 2
         }
     }
 

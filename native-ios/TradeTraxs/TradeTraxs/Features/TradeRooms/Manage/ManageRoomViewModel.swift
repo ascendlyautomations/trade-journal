@@ -59,6 +59,8 @@ final class ManageRoomViewModel {
     var showsModeratorConfirmation = false
     var pendingModeratorMake: Bool?
     var pendingModeratorProfileID: ProfileID?
+    var pendingUnban: RoomBanRecord?
+    var showsUnbanConfirmation = false
     var pendingChannelDelete: ChannelDeleteConfirmation?
     var isSavingDetails = false
     var isMutatingMember = false
@@ -498,26 +500,45 @@ final class ManageRoomViewModel {
         showsModeratorConfirmation = false
         isMutatingMember = true
         defer { isMutatingMember = false }
+        var rollbackTagIDs: Set<RoomMemberTagID>?
         do {
             _ = await tagStore.ensureDefaultTagsIfCanManage(
                 roomID: roomID,
                 canManage: canManageRoom,
                 repository: rooms
             )
+            guard let modTag = TradeRoomModeratorPromotion.moderatorTag(in: tagStore.tags(for: roomID)) else {
+                throw TradeRoomModeratorPromotionError.moderatorTagMissing
+            }
+            let baseline = Set(tagStore.tags(for: profileID, roomID: roomID).map(\.id))
+            rollbackTagIDs = baseline
+            let optimistic = TradeRoomModeratorPromotion.projectedTagIDs(
+                promoted: makeModerator,
+                baseline: baseline,
+                moderatorTagID: modTag.id
+            )
+            tagStore.setMemberTagIDs(optimistic, profileID: profileID, roomID: roomID)
+            applyCachedTagsToMembers()
+
             try await TradeRoomModeratorPromotion.setModerator(
                 promoted: makeModerator,
                 roomID: roomID,
                 profileID: profileID,
                 roomTags: tagStore.tags(for: roomID),
                 tagStore: tagStore,
-                management: rooms
+                management: rooms,
+                baselineMemberTagIDs: baseline
             )
-            await refreshMembersAndBans()
+            applyCachedTagsToMembers()
             SaveSuccessConfirmationCenter.shared.present(
                 makeModerator ? "Moderator assigned." : "Moderator removed."
             )
             ExperienceHaptics.play(.success)
         } catch {
+            if let rollbackTagIDs {
+                tagStore.setMemberTagIDs(rollbackTagIDs, profileID: profileID, roomID: roomID)
+                applyCachedTagsToMembers()
+            }
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
         }
@@ -572,16 +593,36 @@ final class ManageRoomViewModel {
         }
     }
 
-    func unban(_ ban: RoomBanRecord) async {
-        guard canUnban(ban), viewerID != nil else { return }
+    var bannedMemberCount: Int { bans.count }
+
+    func requestUnban(_ ban: RoomBanRecord) {
+        guard canUnban(ban) else { return }
+        pendingUnban = ban
+        showsUnbanConfirmation = true
+    }
+
+    func cancelUnban() {
+        pendingUnban = nil
+        showsUnbanConfirmation = false
+    }
+
+    func confirmUnban() async {
+        guard let ban = pendingUnban, canUnban(ban), viewerID != nil else { return }
+        let banID = ban.id
+        pendingUnban = nil
+        showsUnbanConfirmation = false
         isMutatingMember = true
         defer { isMutatingMember = false }
+
+        let rollbackBans = bans
+        bans.removeAll { $0.id == banID }
+
         do {
-            try await rooms.unbanMember(roomID: roomID, banID: ban.id)
-            await refreshMembersAndBans()
+            try await rooms.unbanMember(roomID: roomID, banID: banID)
             SaveSuccessConfirmationCenter.shared.present("User unbanned.")
             ExperienceHaptics.play(.success)
         } catch {
+            bans = rollbackBans
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
         }

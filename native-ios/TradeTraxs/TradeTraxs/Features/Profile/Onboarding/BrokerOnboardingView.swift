@@ -8,6 +8,7 @@ struct BrokerOnboardingView: View {
     @State private var manageAccountsViewModel: ManageAccountsViewModel
     @State private var linkTarget: BrokerIntegrationLinkTarget?
     @State private var createLinkTarget: BrokerIntegrationCreateLinkTarget?
+    @State private var linkPromptGate = BrokerIntegrationLinkPromptGate()
 
     @Environment(\.themeColors) private var colors
 
@@ -32,52 +33,58 @@ struct BrokerOnboardingView: View {
     }
 
     var body: some View {
-        ZStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                    header
+        ScrollView {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+                header
 
-                    if viewModel.hasActiveConnectedBroker {
-                        connectedBrokersSection
-                        if !allSupportedProvidersConnected {
-                            connectAnotherBrokerSection
-                        }
-                    } else {
-                        brokerConnectOptionsSection
+                if viewModel.hasActiveConnectedBroker {
+                    connectedBrokersSection
+                    if !allSupportedProvidersConnected {
+                        connectAnotherBrokerSection
                     }
-
-                    if viewModel.unlinkedBrokerAccountsCount > 0 {
-                        linkingHint
-                    }
-                    if let message = viewModel.oauthErrorMessage ?? nonOAuthActionMessage {
-                        Text(message)
-                            .experienceStyle(.footnote, color: colors.error)
-                    }
-
-                    optionalConnectLaterHint
-
-                    if viewModel.hasActiveConnectedBroker {
-                        continueButton
-                    } else {
-                        maybeLaterButton
-                    }
+                } else {
+                    brokerConnectOptionsSection
                 }
-                .experiencePadding(.xl)
-                .frame(maxWidth: 480)
-                .frame(maxWidth: .infinity)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .experienceScreenBackground()
 
+                if viewModel.unlinkedBrokerAccountsCount > 0 {
+                    linkingHint
+                }
+                if let message = viewModel.oauthErrorMessage ?? nonOAuthActionMessage {
+                    Text(message)
+                        .experienceStyle(.footnote, color: colors.error)
+                }
+
+                optionalConnectLaterHint
+
+                if viewModel.hasActiveConnectedBroker {
+                    continueButton
+                } else {
+                    maybeLaterButton
+                }
+            }
+            .experiencePadding(.xl)
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .experienceScreenBackground()
+        .background {
             BrokerIntegrationConnectionCoordinator(
                 viewModel: viewModel,
                 manageAccountsViewModel: manageAccountsViewModel,
                 data: data,
                 linkTarget: $linkTarget,
                 createLinkTarget: $createLinkTarget,
+                linkPromptGate: linkPromptGate,
                 showsImportedTradesReview: false
             )
         }
+        .brokerIntegrationAutoLinkPrompt(
+            viewModel: viewModel,
+            gate: linkPromptGate,
+            linkTarget: $linkTarget,
+            createLinkTarget: $createLinkTarget
+        )
         .onAppear {
             BrokerIntegrationsLoadPriorityGate.setScreenActive(true)
             manageAccountsViewModel.loadIfNeeded()
@@ -85,12 +92,6 @@ struct BrokerOnboardingView: View {
         }
         .onDisappear {
             BrokerIntegrationsLoadPriorityGate.setScreenActive(false)
-        }
-        .onChange(of: viewModel.unlinkedBrokerAccountsCount) { _, _ in
-            promptLinkingIfNeeded()
-        }
-        .onChange(of: viewModel.hasActiveConnectedBroker) { _, _ in
-            promptLinkingIfNeeded()
         }
         .accessibilityIdentifier("onboarding.broker")
     }
@@ -275,19 +276,22 @@ struct BrokerOnboardingView: View {
     }
 
     private func finishBrokerOnboarding() {
+        if blocksBrokerOnboardingAdvance {
+            return
+        }
         ExperienceHaptics.play(.selection)
         BrokerIntegrationMutationStore.shared.noteBrokerIntegrationChanged()
         BrokerImportEligibilityStore.shared.refresh(fromUserAction: false)
         gateStore.markBrokerOnboardingFinished()
     }
 
-    private func promptLinkingIfNeeded() {
-        guard linkTarget == nil, createLinkTarget == nil else { return }
-        guard let next = viewModel.firstUnlinkedBrokerAccount() else { return }
-        linkTarget = BrokerIntegrationLinkTarget(
-            provider: next.provider,
-            connectionId: next.connectionId,
-            account: next.account
-        )
+    private var blocksBrokerOnboardingAdvance: Bool {
+        linkPromptGate.autoLinkSequenceActive
+            || linkTarget != nil
+            || createLinkTarget != nil
+            || viewModel.isBrokerConnectionMutationActive
+            || viewModel.showsRithmicConnectSheet
+            || viewModel.showsTradovateEnvironmentPicker
     }
+
 }

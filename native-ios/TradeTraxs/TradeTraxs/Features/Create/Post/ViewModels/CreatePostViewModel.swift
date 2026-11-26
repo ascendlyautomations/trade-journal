@@ -20,6 +20,7 @@ final class CreatePostViewModel {
     var bodyText = ""
     private(set) var finalImage: UIImage?
     private(set) var finalImageData: Data?
+    private var finalImageContentType = MediaImagePreparation.contentJPEGContentType
     /// Room attached by Share Room → Create Feed Post. Caption and photo stay optional.
     let roomShare: RoomShareAttachment?
 
@@ -96,6 +97,7 @@ final class CreatePostViewModel {
         guard let applied = ComposerCropImageState.apply(result) else { return }
         finalImage = applied.finalImage
         finalImageData = applied.uploadData
+        finalImageContentType = applied.contentType
     }
 
     func setImage(_ image: UIImage?) {
@@ -115,6 +117,7 @@ final class CreatePostViewModel {
 
     func clearImage() {
         finalImageData = nil
+        finalImageContentType = MediaImagePreparation.contentJPEGContentType
         finalImage = nil
         didClearDraftImage = true
     }
@@ -308,7 +311,7 @@ final class CreatePostViewModel {
         if let finalImage, let finalImageData {
             PostImageUploadProbe.log(finalImage: finalImage, uploadData: finalImageData)
             guard !finalImageData.isEmpty else {
-                let error = AppError.unknown(message: "Image encoding produced empty JPEG data.")
+                let error = AppError.unknown(message: "Image encoding produced empty data.")
                 PostPublishProbe.logFailed(stage: .imageEncode, error: error)
                 formError = PostPublishProbe.userFacingMessage(for: .imageEncode, error: error)
                 publishTask = nil
@@ -316,7 +319,7 @@ final class CreatePostViewModel {
             }
             PostPublishProbe.logImageEncode(
                 byteCount: finalImageData.count,
-                mimeType: "image/jpeg",
+                mimeType: finalImageContentType,
                 pixelSize: pixelSize
             )
         }
@@ -342,7 +345,10 @@ final class CreatePostViewModel {
                 if let finalImageData {
                     failedStage = .upload
                     isUploadingMedia = true
-                    let path = StorageOptimizedMedia.objectPath(prefix: viewerID.rawValue, fileExtension: "jpg")
+                    let fileExtension = MediaImagePreparation.ContentUploadPayload.fileExtension(
+                        for: finalImageContentType
+                    )
+                    let path = StorageOptimizedMedia.objectPath(prefix: viewerID.rawValue, fileExtension: fileExtension)
                     PostPublishProbe.logUploadStarted(
                         storagePath: path,
                         bucket: StorageBucket.profilePosts.rawValue
@@ -406,12 +412,13 @@ final class CreatePostViewModel {
     }
 
     private func uploadImage(_ data: Data, viewerID: ProfileID, path: String) async throws -> UploadedImage {
+        let contentType = MediaImagePreparation.contentType(forUploadData: data)
         let reference = try await uploadService.upload(
             UploadRequest(
                 bucket: StorageBucket.profilePosts.rawValue,
                 path: path,
                 data: data,
-                contentType: "image/jpeg",
+                contentType: contentType,
                 purpose: .postImage,
                 cacheControl: StorageCacheControl.immutableMaxAge
             )

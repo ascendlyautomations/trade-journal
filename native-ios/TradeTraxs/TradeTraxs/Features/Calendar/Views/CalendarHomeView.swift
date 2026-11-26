@@ -63,6 +63,10 @@ struct CalendarHomeView: View {
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.handleAccountMutation()
         }
+        .onChange(of: CopyTradingGroupsMutationStore.shared.revision) { _, _ in
+            OwnerAccountFilterDropdownController.shared.dismiss()
+            viewModel.handleCopyTradingGroupsMutation()
+        }
         .onDisappear { viewModel.onDisappear() }
         .accessibilityIdentifier("calendar.home")
     }
@@ -220,25 +224,24 @@ struct CalendarHomeView: View {
     }
 
     private var accountMenu: some View {
-        OwnerAccountFilterDropdown(
+        let profileID = viewModel.ownerAccountsProfileID ?? currentUserProfile.profile?.id
+        return OwnerAccountFilterDropdown(
             accounts: viewModel.menuAccounts(
                 viewerID: currentUserProfile.profile?.id,
                 detailCache: appEnvironment.data.detailCache
             ),
-            isAllAccountsSelected: {
-                if case .all = viewModel.accountFilter { return true }
-                return false
-            }(),
-            selectedAccountID: {
-                if case .account(let id) = viewModel.accountFilter { return id }
-                return nil
-            }(),
-            onSelectAll: { viewModel.setAccountFilter(.all) },
-            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            selectedFilter: viewModel.accountFilter,
+            copyGroups: OwnerAccountFilterMenuSupport.copyGroups(for: profileID),
+            isLoadingCopyGroups: OwnerAccountFilterMenuSupport.isLoadingCopyGroups(for: profileID),
+            onSelectFilter: { viewModel.setAccountFilter($0) },
             onManageAccounts: { viewModel.openManageAccounts() },
+            onManageCopyGroups: { viewModel.openManageCopyTradingGroups() },
+            onRequestCopyGroups: {
+                OwnerAccountFilterMenuSupport.requestCopyGroupsLoad(profileID: profileID)
+            },
             accessibilityIdentifier: "calendar.account",
             boundary: .calendar,
-            profileID: viewModel.ownerAccountsProfileID ?? currentUserProfile.profile?.id,
+            profileID: profileID,
             detailCache: appEnvironment.data.detailCache
         ) {
             HStack(spacing: 4) {

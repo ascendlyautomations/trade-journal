@@ -40,7 +40,7 @@ export default function ContentImageCropFrame({
 
   return (
     <div
-      className={`tt-content-image-crop relative overflow-hidden bg-black/30 ${className}`}
+      className={`tt-content-image-crop relative overflow-hidden bg-transparent ${className}`}
       style={{
         aspectRatio: String(crop.presentationAspectRatio),
         ["--tt-crop-aspect" as string]: String(crop.presentationAspectRatio),

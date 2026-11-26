@@ -6,8 +6,10 @@ struct BrokerIntegrationsView: View {
     @State private var linkTarget: BrokerIntegrationLinkTarget?
     @State private var createLinkTarget: BrokerIntegrationCreateLinkTarget?
     @State private var disconnectTarget: BrokerDisconnectTarget?
-    @State private var brokerSearchText = ""
     @State private var expandedBrokers: Set<BrokerIntegrationProvider> = []
+    @State private var expandedConnections: Set<String> = []
+    @State private var collapsedConnections: Set<String> = []
+    @State private var linkPromptGate = BrokerIntegrationLinkPromptGate()
 
     @Environment(\.themeColors) private var colors
 
@@ -65,13 +67,20 @@ struct BrokerIntegrationsView: View {
 
     var body: some View {
         List {
+            Section {
+                BrokerIntegrationsSecurityDisclaimer()
+                    .experienceDashboardListRow()
+            }
+
             if let oauthError = viewModel.oauthErrorMessage {
                 Section {
-                    Text(oauthError)
-                        .experienceStyle(.footnote, color: colors.primaryText)
-                    if !viewModel.isBrokerConnectionMutationActive {
-                        Button("Retry Connect") {
-                            viewModel.promptConnectTradovate()
+                    brokerInlineBanner(message: oauthError, isError: true) {
+                        if !viewModel.isBrokerConnectionMutationActive {
+                            Button("Retry Connect") {
+                                viewModel.promptConnectTradovate()
+                            }
+                            .font(.footnote.weight(.semibold))
+                            .buttonStyle(.experiencePlain)
                         }
                     }
                 }
@@ -79,48 +88,29 @@ struct BrokerIntegrationsView: View {
 
             if let message = viewModel.actionMessage {
                 Section {
-                    Text(message)
-                        .experienceStyle(.footnote, color: viewModel.actionIsError ? colors.primaryText : colors.secondaryText)
-                    if let reconnect = viewModel.importReconnectPrompt,
-                       !viewModel.isImportingTrades(mappingId: reconnect.mappingId)
-                    {
-                        Button(BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: reconnect.provider)) {
-                            viewModel.reconnectBrokerImport(from: reconnect)
-                        }
-                        .font(.footnote.weight(.semibold))
-                        .accessibilityIdentifier("brokerIntegrations.importReconnectBanner")
-                    } else if let retry = viewModel.importRetryPrompt,
-                              !viewModel.isImportingTrades(mappingId: retry.mappingId)
-                    {
-                        Button("Try Again") {
-                            Task {
-                                await viewModel.importTrades(
-                                    provider: retry.provider,
-                                    connectionId: retry.connectionId,
-                                    mappingId: retry.mappingId
-                                )
-                            }
-                        }
-                        .font(.footnote.weight(.semibold))
-                        .accessibilityIdentifier("brokerIntegrations.importRetryBanner")
+                    brokerInlineBanner(message: message, isError: viewModel.actionIsError) {
+                        importActionBanner
                     }
                 }
             }
 
             Section {
-                ForEach(visibleBrokerProviders, id: \.self) { provider in
-                    brokerCollapsibleSection(provider)
+                ForEach(BrokerIntegrationsCatalog.providers, id: \.self) { provider in
+                    brokerProviderCard(provider)
+                        .brokerIntegrationsCardListRow()
                 }
+            }
+
+            Section {
                 BrokerIntegrationComingSoonFooter()
-                    .experienceDashboardListRow()
                     .listRowSeparator(.hidden)
             }
+            .listRowBackground(Color.clear)
         }
         .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(BrokerIntegrationProviderOptionsLayout.listSectionSpacing)
         .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .experienceNavigationTitle("Broker Integrations")
-        .searchable(text: $brokerSearchText, prompt: "Search brokers")
         .background {
             BrokerIntegrationConnectionCoordinator(
                 viewModel: viewModel,
@@ -128,9 +118,21 @@ struct BrokerIntegrationsView: View {
                 data: data,
                 linkTarget: $linkTarget,
                 createLinkTarget: $createLinkTarget,
+                linkPromptGate: linkPromptGate,
                 showsImportedTradesReview: true
             )
         }
+        .brokerIntegrationAutoLinkPrompt(
+            viewModel: viewModel,
+            gate: linkPromptGate,
+            linkTarget: $linkTarget,
+            createLinkTarget: $createLinkTarget,
+            onExpandConnectedLogin: { provider, connectionID in
+                expandedBrokers.insert(provider)
+                expandedConnections.insert(connectionID)
+                collapsedConnections.remove(connectionID)
+            }
+        )
         .confirmationDialog(
             disconnectDialogTitle,
             isPresented: Binding(
@@ -151,34 +153,7 @@ struct BrokerIntegrationsView: View {
             Text("Your TradeTraxs accounts and imported trades will stay in the journal.")
         }
         .sheet(isPresented: $viewModel.showsTradovateNoTradeHistorySheet) {
-            NavigationStack {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                    Text(BrokerSyncPresentation.noAvailableTradeHistoryTitle())
-                        .experienceStyle(.headline, color: colors.primaryText)
-                    Text(BrokerSyncPresentation.noAvailableTradeHistoryDetail())
-                        .experienceStyle(.body, color: colors.secondaryText)
-                    Spacer(minLength: ExperienceSpacing.sm)
-                    Button("Import CSV") {
-                        viewModel.showsTradovateNoTradeHistorySheet = false
-                        viewModel.openTradovatePerformanceCSVImport()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    Button("Done") {
-                        viewModel.showsTradovateNoTradeHistorySheet = false
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .padding(ExperienceSpacing.lg)
-                .experienceNavigationTitle("Import Trades")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") {
-                            viewModel.showsTradovateNoTradeHistorySheet = false
-                        }
-                    }
-                }
-            }
-            .experienceSheetChrome(detents: [.medium])
+            brokerNoTradeHistorySheet
         }
         .onAppear {
             BrokerIntegrationsLoadPriorityGate.setScreenActive(true)
@@ -188,15 +163,38 @@ struct BrokerIntegrationsView: View {
         .onDisappear {
             BrokerIntegrationsLoadPriorityGate.setScreenActive(false)
         }
-        .onChange(of: viewModel.tradovateConnections.count) { oldCount, newCount in
-            guard newCount > 0, oldCount == 0 else { return }
-            expandedBrokers.insert(.tradovate)
-        }
-        .onChange(of: viewModel.rithmicConnections.count) { oldCount, newCount in
-            guard newCount > 0, oldCount == 0 else { return }
-            expandedBrokers.insert(.rithmic)
-        }
         .accessibilityIdentifier("settings.brokerIntegrations")
+    }
+
+    @ViewBuilder
+    private var brokerNoTradeHistorySheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                Text(BrokerSyncPresentation.noAvailableTradeHistoryTitle())
+                    .experienceStyle(.headline, color: colors.primaryText)
+                Text(BrokerSyncPresentation.noAvailableTradeHistoryDetail())
+                    .experienceStyle(.body, color: colors.secondaryText)
+                Spacer(minLength: ExperienceSpacing.sm)
+                ExperienceButton(title: "Import CSV", kind: .primary) {
+                    viewModel.showsTradovateNoTradeHistorySheet = false
+                    viewModel.openTradovatePerformanceCSVImport()
+                }
+                ExperienceButton(title: "Done", kind: .secondary) {
+                    viewModel.showsTradovateNoTradeHistorySheet = false
+                }
+            }
+            .padding(ExperienceSpacing.lg)
+            .experienceScreenBackground()
+            .experienceNavigationTitle("Import Trades")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        viewModel.showsTradovateNoTradeHistorySheet = false
+                    }
+                }
+            }
+        }
+        .experienceSheetChrome(detents: [.medium])
     }
 
     private var disconnectDialogTitle: String {
@@ -206,101 +204,102 @@ struct BrokerIntegrationsView: View {
         }
     }
 
-    private var visibleBrokerProviders: [BrokerIntegrationProvider] {
-        BrokerIntegrationsCatalog.filteredProviders(matching: brokerSearchText)
+    @ViewBuilder
+    private func brokerInlineBanner(
+        message: String,
+        isError: Bool,
+        @ViewBuilder actions: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text(message)
+                .experienceStyle(.footnote, color: isError ? colors.primaryText : colors.secondaryText)
+            actions()
+        }
+        .experienceDashboardListRow()
     }
 
     @ViewBuilder
-    private func brokerCollapsibleSection(_ provider: BrokerIntegrationProvider) -> some View {
+    private var importActionBanner: some View {
+        if let reconnect = viewModel.importReconnectPrompt,
+           !viewModel.isImportingTrades(mappingId: reconnect.mappingId)
+        {
+            Button("Reconnect") {
+                viewModel.reconnectBrokerImport(from: reconnect)
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(colors.accent)
+            .buttonStyle(.experiencePlain)
+            .accessibilityIdentifier("brokerIntegrations.importReconnectBanner")
+        } else if let retry = viewModel.importRetryPrompt,
+                  !viewModel.isImportingTrades(mappingId: retry.mappingId)
+        {
+            Button("Try Again") {
+                Task {
+                    await viewModel.importTrades(
+                        provider: retry.provider,
+                        connectionId: retry.connectionId,
+                        mappingId: retry.mappingId
+                    )
+                }
+            }
+            .font(.footnote.weight(.semibold))
+            .buttonStyle(.experiencePlain)
+            .accessibilityIdentifier("brokerIntegrations.importRetryBanner")
+        }
+    }
+
+    @ViewBuilder
+    private func brokerProviderCard(_ provider: BrokerIntegrationProvider) -> some View {
         let isExpanded = expandedBrokers.contains(provider)
 
-        Button {
-            ExperienceHaptics.play(.selection)
-            if isExpanded {
-                expandedBrokers.remove(provider)
-            } else {
-                expandedBrokers.insert(provider)
-            }
-        } label: {
-            brokerSectionHeader(provider: provider, isExpanded: isExpanded)
-        }
-        .buttonStyle(.experiencePlain)
-        .accessibilityIdentifier("brokerIntegrations.section.\(provider.rawValue)")
+        BrokerIntegrationCompactCard {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    if isExpanded {
+                        expandedBrokers.remove(provider)
+                    } else {
+                        expandedBrokers.insert(provider)
+                    }
+                } label: {
+                    HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                            Text(BrokerIntegrationsCatalog.displayName(for: provider))
+                                .experienceStyle(.subheadline, color: colors.primaryText)
+                            Text(viewModel.collapsedSummary(for: provider))
+                                .font(ExperienceTypography.caption)
+                                .foregroundStyle(colors.secondaryText)
+                        }
+                        Spacer(minLength: ExperienceSpacing.sm)
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(colors.tertiaryText)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.experiencePlain)
+                .accessibilityIdentifier("brokerIntegrations.section.\(provider.rawValue)")
 
-        if isExpanded {
-            switch provider {
-            case .tradovate:
-                tradovateSection
-                Text("Connect your Tradovate login to discover accounts and import trades.")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .experienceDashboardListRow()
-            case .rithmic:
-                rithmicSection
-                rithmicExpandedFooter
-            }
-        }
-    }
-
-    private func brokerSectionHeader(provider: BrokerIntegrationProvider, isExpanded: Bool) -> some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                Text(BrokerIntegrationsCatalog.displayName(for: provider))
-                    .experienceStyle(.body, color: colors.primaryText)
-                Text(viewModel.collapsedSummary(for: provider))
-                    .experienceStyle(.caption, color: colors.secondaryText)
-            }
-            Spacer(minLength: ExperienceSpacing.sm)
-            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(colors.tertiaryText)
-                .accessibilityHidden(true)
-        }
-        .contentShape(Rectangle())
-        .padding(.vertical, ExperienceSpacing.xxs)
-    }
-
-    @ViewBuilder
-    private var rithmicExpandedFooter: some View {
-        switch viewModel.rithmicConnectCapabilitiesPhase {
-        case .loading:
-            EmptyView()
-        case .failed:
-            EmptyView()
-        case .loaded:
-            if viewModel.isRithmicConnectUIAvailable {
-                Text("Test environment only. Your Rithmic password is used only when you connect or import and is not saved by TradeTraxs.")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .experienceDashboardListRow()
-            } else {
-                Text("Rithmic connection is not available on this server yet.")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .experienceDashboardListRow()
+                if isExpanded {
+                    switch provider {
+                    case .tradovate:
+                        tradovateProviderBody
+                    case .rithmic:
+                        rithmicProviderBody
+                    }
+                }
             }
         }
     }
 
     @ViewBuilder
-    private var tradovateSection: some View {
+    private var tradovateProviderBody: some View {
         switch viewModel.tradovateLoadPhase {
         case .loading where viewModel.tradovateConnections.isEmpty:
-            HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Loading Tradovate…")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            brokerLoadingRow("Loading Tradovate…")
         case .failed(let message) where viewModel.tradovateConnections.isEmpty:
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                Text(message)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                Button("Retry") {
-                    Task { await viewModel.refreshAll() }
-                }
-                .font(.footnote)
-                .buttonStyle(.experiencePlain)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            brokerFailedRow(message: message)
         default:
             EmptyView()
         }
@@ -308,178 +307,425 @@ struct BrokerIntegrationsView: View {
         if viewModel.tradovateConnections.isEmpty,
            viewModel.tradovateLoadPhase != .loading
         {
-            Button {
+            BrokerIntegrationSettingsButton(
+                title: "Connect Tradovate",
+                icon: .create,
+                isPrimary: true,
+                isEnabled: !viewModel.isBrokerConnectionMutationActive,
+                accessibilityIdentifier: "brokerIntegrations.connectTradovate"
+            ) {
                 viewModel.promptConnectTradovate()
-            } label: {
-                Label("Connect Tradovate", systemImage: "link")
             }
-            .disabled(viewModel.isBrokerConnectionMutationActive)
-            .accessibilityIdentifier("brokerIntegrations.connectTradovate")
         }
 
         ForEach(viewModel.tradovateConnections) { connection in
-            brokerConnectionHeader(connection)
+            brokerConnectionCard(
+                provider: .tradovate,
+                connection: connection,
+                connections: viewModel.tradovateConnections
+            )
+        }
 
-            ForEach(viewModel.accounts(for: connection.id)) { account in
-                brokerAccountRow(
-                    provider: .tradovate,
-                    connection: connection,
-                    account: account
-                )
-            }
-
-            if connection.isActiveForBrokerUI {
-                if connection.status == .reconnectRequired {
-                    brokerReconnectRequiredRow(
-                        provider: .tradovate,
-                        onReconnect: {
-                            viewModel.promptConnectTradovate(reconnectConnectionId: connection.id)
-                        }
-                    )
-                }
-
-                if connection.connected {
-                    brokerRefreshAccountsRow(provider: .tradovate, connectionId: connection.id)
-                }
-
-                brokerDisconnectRow {
-                    disconnectTarget = .tradovate(connection)
-                }
-
-                if connection.id == viewModel.tradovateConnections.last?.id {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        Button {
-                            viewModel.promptConnectTradovate()
-                        } label: {
-                            Label("Connect Another Tradovate Login", systemImage: "plus.circle")
-                        }
-                        .disabled(viewModel.isBrokerConnectionMutationActive)
-
-                        Text("TradeTraxs never stores your Tradovate password.")
-                            .experienceStyle(.caption, color: colors.secondaryText)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+        if !viewModel.tradovateConnections.isEmpty {
+            connectAnotherLoginButton(title: "New Tradovate Integration") {
+                viewModel.promptConnectTradovate()
             }
         }
     }
 
     @ViewBuilder
-    private var rithmicSection: some View {
+    private var rithmicProviderBody: some View {
         switch viewModel.rithmicConnectionsLoadPhase {
         case .loading where viewModel.rithmicConnections.isEmpty:
-            HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Loading Rithmic connections…")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            brokerLoadingRow("Loading Rithmic connections…")
         case .failed(let message) where viewModel.rithmicConnections.isEmpty:
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                Text(message)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                Button("Retry") {
-                    Task { await viewModel.refreshAll() }
-                }
-                .font(.footnote)
-                .buttonStyle(.experiencePlain)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            brokerFailedRow(message: message)
         default:
             EmptyView()
         }
 
-        rithmicConnectionRows
+        ForEach(viewModel.rithmicConnections) { connection in
+            brokerConnectionCard(
+                provider: .rithmic,
+                connection: connection,
+                connections: viewModel.rithmicConnections
+            )
+        }
 
+        rithmicConnectAvailabilityBody
+
+        if !viewModel.rithmicConnections.isEmpty {
+            connectAnotherLoginButton(title: "New Rithmic Integration") {
+                viewModel.presentRithmicConnect()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var rithmicConnectAvailabilityBody: some View {
         switch viewModel.rithmicConnectCapabilitiesPhase {
         case .loading where viewModel.rithmicConnections.isEmpty:
-            HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Checking Rithmic availability…")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            brokerLoadingRow("Checking Rithmic availability…")
         case .failed where viewModel.rithmicConnections.isEmpty:
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                Text("Couldn’t load Rithmic availability.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                Button("Retry") {
-                    Task { await viewModel.refreshAll() }
-                }
-                .font(.footnote)
-                .buttonStyle(.experiencePlain)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            brokerFailedRow(message: "Couldn’t load Rithmic availability.")
         case .loaded:
             if viewModel.isRithmicConnectUIAvailable {
                 if viewModel.rithmicConnections.isEmpty {
-                    Button {
+                    BrokerIntegrationSettingsButton(
+                        title: "Connect Rithmic",
+                        icon: .create,
+                        isPrimary: true,
+                        isEnabled: !viewModel.isBrokerConnectionMutationActive,
+                        accessibilityIdentifier: "brokerIntegrations.connectRithmic"
+                    ) {
                         viewModel.presentRithmicConnect()
-                    } label: {
-                        Label("Connect Rithmic", systemImage: "link")
                     }
-                    .disabled(viewModel.isBrokerConnectionMutationActive)
-                    .accessibilityIdentifier("brokerIntegrations.connectRithmic")
                 }
             } else if viewModel.rithmicConnections.isEmpty {
                 Text(rithmicUnavailableLabel)
                     .experienceStyle(.footnote, color: colors.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         default:
             EmptyView()
         }
     }
 
+    private func connectAnotherLoginButton(
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        BrokerIntegrationSettingsButton(
+            title: title,
+            isEnabled: !viewModel.isBrokerConnectionMutationActive,
+            action: action
+        )
+    }
+
     @ViewBuilder
-    private var rithmicConnectionRows: some View {
-        ForEach(viewModel.rithmicConnections) { connection in
-            brokerConnectionHeader(connection)
+    private func brokerConnectionCard(
+        provider: BrokerIntegrationProvider,
+        connection: TradovateConnectionSummary,
+        connections: [TradovateConnectionSummary]
+    ) -> some View {
+        let expanded = isConnectionExpanded(connection.id, connections: connections)
+        let accounts = viewModel.accounts(for: connection.id)
+        let loginNeedsReconnect = connectionRequiresLoginReconnect(
+            provider: provider,
+            connection: connection,
+            accounts: accounts
+        )
 
-            ForEach(viewModel.accounts(for: connection.id)) { account in
-                brokerAccountRow(
-                    provider: .rithmic,
-                    connection: connection,
-                    account: account
-                )
-            }
-
-            if connection.isActiveForBrokerUI {
-                if connection.status == .reconnectRequired {
-                    brokerReconnectRequiredRow(
-                        provider: .rithmic,
-                        onReconnect: {
-                            viewModel.presentRithmicConnect(reconnectConnectionId: connection.id)
+        BrokerIntegrationCompactCard {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    toggleConnectionExpansion(connection.id, connections: connections)
+                } label: {
+                    HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                            Text(connection.label)
+                                .experienceStyle(.subheadline, color: colors.primaryText)
+                            if let environment = connectionEnvironmentLabel(connection) {
+                                Text(environment)
+                                    .font(ExperienceTypography.caption)
+                                    .foregroundStyle(colors.secondaryText)
+                            }
                         }
-                    )
-                }
-
-                if connection.connected {
-                    brokerRefreshAccountsRow(provider: .rithmic, connectionId: connection.id)
-                }
-
-                brokerDisconnectRow {
-                    disconnectTarget = .rithmic(connection)
-                }
-
-                if connection.id == viewModel.rithmicConnections.last?.id {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        Button {
-                            viewModel.presentRithmicConnect()
-                        } label: {
-                            Label("Connect Another Rithmic Login", systemImage: "plus.circle")
+                        Spacer(minLength: ExperienceSpacing.xs)
+                        if connection.connected, !loginNeedsReconnect {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(colors.accent)
+                                .accessibilityLabel("Connected")
                         }
-                        .disabled(viewModel.isBrokerConnectionMutationActive)
-
-                        Text("Your Rithmic password is sent once over HTTPS and is never stored on this device.")
-                            .experienceStyle(.caption, color: colors.secondaryText)
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(colors.tertiaryText)
+                            .accessibilityHidden(true)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.experiencePlain)
+
+                if expanded {
+                    if loginNeedsReconnect {
+                        Text(BrokerSyncPresentation.reconnectRequiredMessage(provider: provider))
+                            .font(ExperienceTypography.caption)
+                            .foregroundStyle(colors.loss)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("brokerIntegrations.reconnectWarning.\(connection.id)")
+                    }
+
+                    if viewModel.isRefreshingAccounts.contains(connection.id) {
+                        brokerLoadingRow("Refreshing accounts…")
+                    } else if accounts.isEmpty {
+                        Text("No broker accounts returned. Try Refresh Accounts.")
+                            .font(ExperienceTypography.caption)
+                            .foregroundStyle(colors.secondaryText)
+                    } else {
+                        ForEach(accounts) { account in
+                            brokerDiscoveredAccountCard(
+                                provider: provider,
+                                connection: connection,
+                                account: account,
+                                accounts: accounts
+                            )
+                        }
+                    }
+
+                    if connection.isActiveForBrokerUI {
+                        if connection.connected {
+                            BrokerIntegrationSettingsButton(
+                                title: "Refresh Accounts",
+                                isEnabled: !viewModel.isBrokerConnectionMutationActive
+                            ) {
+                                Task {
+                                    await viewModel.loadAccounts(
+                                        provider: provider,
+                                        connectionId: connection.id,
+                                        forceRefresh: provider == .tradovate
+                                    )
+                                }
+                            }
+                        }
+
+                        BrokerIntegrationTextAction(
+                            title: "Disconnect",
+                            isDestructive: true,
+                            isEnabled: !viewModel.isBrokerConnectionMutationActive
+                        ) {
+                            disconnectTarget = provider == .tradovate
+                                ? .tradovate(connection)
+                                : .rithmic(connection)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func brokerDiscoveredAccountCard(
+        provider: BrokerIntegrationProvider,
+        connection: TradovateConnectionSummary,
+        account: BrokerIntegrationAccount,
+        accounts: [BrokerIntegrationAccount]
+    ) -> some View {
+        let loginNeedsReconnect = connectionRequiresLoginReconnect(
+            provider: provider,
+            connection: connection,
+            accounts: accounts
+        )
+        let showsReconnect = isPrimaryReconnectAccount(
+            account: account,
+            accounts: accounts,
+            loginNeedsReconnect: loginNeedsReconnect
+        )
+
+        BrokerIntegrationCompactCard {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                accountTitleBlock(
+                    account: account,
+                    showsReconnect: showsReconnect,
+                    provider: provider,
+                    connection: connection
+                )
+
+                if let linked = linkedSummaryLine(for: account) {
+                    Text(linked)
+                        .font(ExperienceTypography.caption)
+                        .foregroundStyle(colors.secondaryText)
+                }
+
+                if !loginNeedsReconnect {
+                    accountActions(provider: provider, connection: connection, account: account)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func accountTitleBlock(
+        account: BrokerIntegrationAccount,
+        showsReconnect: Bool,
+        provider: BrokerIntegrationProvider,
+        connection: TradovateConnectionSummary
+    ) -> some View {
+        let masked = BrokerIntegrationDisplay.maskedBrokerAccountNumber(
+            account.externalAccountId,
+            name: account.externalAccountName,
+            displayName: account.externalDisplayName
+        )
+        let typeLabel = BrokerIntegrationDisplay.brokerAccountTypeLabel(metadata: account.metadata)
+        let title = account.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let showsMasked = !masked.isEmpty && masked != title
+
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                Text(title)
+                    .experienceStyle(.subheadline, color: colors.primaryText)
+                if showsMasked {
+                    Text(masked)
+                        .font(ExperienceTypography.caption)
+                        .foregroundStyle(colors.tertiaryText)
+                }
+            }
+            Spacer(minLength: ExperienceSpacing.xs)
+            if showsReconnect {
+                Button("Reconnect") {
+                    performLoginReconnect(provider: provider, connection: connection)
+                }
+                .font(ExperienceTypography.footnote.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .buttonStyle(.experiencePlain)
+                .accessibilityIdentifier("brokerIntegrations.reconnect.\(connection.id)")
+            } else if let typeLabel {
+                Text(typeLabel)
+                    .font(ExperienceTypography.caption)
+                    .foregroundStyle(colors.secondaryText)
+            }
+        }
+    }
+
+    private func linkedSummaryLine(for account: BrokerIntegrationAccount) -> String? {
+        if let linked = BrokerIntegrationDisplay.linkedTradeTraxsLine(
+            for: account,
+            tradingAccounts: manageAccountsViewModel.accounts
+        ) {
+            return linked.replacingOccurrences(of: "Linked to: ", with: "Linked · ")
+        }
+        guard !account.hasTradetraxsMapping else { return "Linked" }
+        return "Not linked"
+    }
+
+    @ViewBuilder
+    private func accountActions(
+        provider: BrokerIntegrationProvider,
+        connection: TradovateConnectionSummary,
+        account: BrokerIntegrationAccount
+    ) -> some View {
+        if viewModel.showsManualImportActions(connection: connection, account: account) {
+            BrokerIntegrationSettingsButton(
+                title: viewModel.isImportBusy(for: account)
+                    ? "Importing…"
+                    : viewModel.manualImportActionTitle(connection: connection, account: account),
+                isPrimary: true,
+                isEnabled: !viewModel.isImportBusy(for: account),
+                isLoading: viewModel.isImportBusy(for: account),
+                accessibilityIdentifier: "brokerIntegrations.importTrades.\(account.id)"
+            ) {
+                Task {
+                    await viewModel.importTrades(
+                        provider: provider,
+                        connectionId: connection.id,
+                        mappingId: account.id
+                    )
+                }
+            }
+        } else if !account.hasTradetraxsMapping, connection.connected {
+            BrokerIntegrationSettingsButton(title: "Link Account") {
+                linkPromptGate.recordPresentation(mappingID: account.id)
+                linkTarget = BrokerIntegrationLinkTarget(
+                    provider: provider,
+                    connectionId: connection.id,
+                    account: account
+                )
+            }
+        }
+    }
+
+    private func connectionRequiresLoginReconnect(
+        provider: BrokerIntegrationProvider,
+        connection: TradovateConnectionSummary,
+        accounts: [BrokerIntegrationAccount]
+    ) -> Bool {
+        if connection.status == .reconnectRequired { return true }
+        return accounts.contains { account in
+            viewModel.resolvedImportReconnectPrompt(
+                provider: provider,
+                connection: connection,
+                account: account
+            ) != nil
+        }
+    }
+
+    private func isPrimaryReconnectAccount(
+        account: BrokerIntegrationAccount,
+        accounts: [BrokerIntegrationAccount],
+        loginNeedsReconnect: Bool
+    ) -> Bool {
+        guard loginNeedsReconnect, let first = accounts.first else { return false }
+        return first.id == account.id
+    }
+
+    private func performLoginReconnect(
+        provider: BrokerIntegrationProvider,
+        connection: TradovateConnectionSummary
+    ) {
+        if connection.status == .reconnectRequired {
+            switch provider {
+            case .tradovate:
+                viewModel.promptConnectTradovate(reconnectConnectionId: connection.id)
+            case .rithmic:
+                viewModel.presentRithmicConnect(reconnectConnectionId: connection.id)
+            }
+            return
+        }
+        let accounts = viewModel.accounts(for: connection.id)
+        guard let account = accounts.first,
+              let prompt = viewModel.resolvedImportReconnectPrompt(
+                  provider: provider,
+                  connection: connection,
+                  account: account
+              )
+        else { return }
+        viewModel.reconnectBrokerImport(from: prompt)
+    }
+
+    private func brokerLoadingRow(_ text: String) -> some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            ProgressView()
+                .controlSize(.small)
+            Text(text)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+        }
+    }
+
+    private func brokerFailedRow(message: String) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text(message)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+            Button("Retry") {
+                Task { await viewModel.refreshAll() }
+            }
+            .font(.footnote.weight(.semibold))
+            .buttonStyle(.experiencePlain)
+        }
+    }
+
+    private func isConnectionExpanded(_ id: String, connections: [TradovateConnectionSummary]) -> Bool {
+        if expandedConnections.contains(id) { return true }
+        if collapsedConnections.contains(id) { return false }
+        return false
+    }
+
+    private func toggleConnectionExpansion(_ id: String, connections: [TradovateConnectionSummary]) {
+        let currentlyExpanded = isConnectionExpanded(id, connections: connections)
+        if currentlyExpanded {
+            collapsedConnections.insert(id)
+            expandedConnections.remove(id)
+        } else {
+            collapsedConnections.remove(id)
+            expandedConnections.insert(id)
+        }
+    }
+
+    private func connectionEnvironmentLabel(_ connection: TradovateConnectionSummary) -> String? {
+        guard let env = connection.apiEnvironment?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !env.isEmpty
+        else { return nil }
+        return env.uppercased()
     }
 
     private var rithmicUnavailableLabel: String {
@@ -496,197 +742,5 @@ struct BrokerIntegrationsView: View {
             return "Only the supported Rithmic Test environment is enabled for connect."
         }
         return "Rithmic connect is unavailable until server protocol configuration is complete."
-    }
-
-    @ViewBuilder
-    private func brokerConnectionHeader(_ connection: TradovateConnectionSummary) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            HStack {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                    Text(connection.label)
-                        .experienceStyle(.body, color: colors.primaryText)
-                    Text(connectionSubtitle(connection))
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                }
-                Spacer()
-                if connection.connected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(colors.accent)
-                        .accessibilityLabel("Connected")
-                }
-            }
-
-            let accounts = viewModel.accounts(for: connection.id)
-            if viewModel.isRefreshingAccounts.contains(connection.id) {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Text("\(accounts.count) broker account(s)")
-                    .experienceStyle(.caption, color: colors.tertiaryText)
-            }
-        }
-        .padding(.vertical, ExperienceSpacing.xxs)
-        .listRowInsets(
-            EdgeInsets(
-                top: ExperienceSpacing.xs,
-                leading: ExperienceSpacing.md,
-                bottom: ExperienceSpacing.xxs,
-                trailing: ExperienceSpacing.md
-            )
-        )
-    }
-
-    private func brokerReconnectRequiredRow(
-        provider: BrokerIntegrationProvider,
-        onReconnect: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(BrokerSyncPresentation.reconnectRequiredMessage(provider: provider))
-                .experienceStyle(.caption, color: colors.secondaryText)
-            Button(BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: provider), action: onReconnect)
-                .font(.footnote)
-                .buttonStyle(.experiencePlain)
-                .disabled(viewModel.isBrokerConnectionMutationActive)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func brokerRefreshAccountsRow(
-        provider: BrokerIntegrationProvider,
-        connectionId: String
-    ) -> some View {
-        Button {
-            Task {
-                await viewModel.loadAccounts(
-                    provider: provider,
-                    connectionId: connectionId,
-                    forceRefresh: provider == .tradovate
-                )
-            }
-        } label: {
-            Text("Refresh Accounts")
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.experiencePlain)
-        .disabled(viewModel.isBrokerConnectionMutationActive)
-    }
-
-    private func brokerDisconnectRow(onDisconnect: @escaping () -> Void) -> some View {
-        Button("Disconnect", role: .destructive, action: onDisconnect)
-            .font(.footnote)
-            .buttonStyle(.experiencePlain)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .disabled(viewModel.isBrokerConnectionMutationActive)
-    }
-
-    @ViewBuilder
-    private func brokerAccountRow(
-        provider: BrokerIntegrationProvider,
-        connection: TradovateConnectionSummary,
-        account: BrokerIntegrationAccount
-    ) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(account.displayTitle)
-                .experienceStyle(.subheadline, color: colors.primaryText)
-            Text(BrokerIntegrationDisplay.brokerAccountNumberTail(account.externalAccountId, name: account.externalAccountName))
-                .experienceStyle(.caption, color: colors.tertiaryText)
-            if let linkedLine = BrokerIntegrationDisplay.linkedTradeTraxsLine(
-                for: account,
-                tradingAccounts: manageAccountsViewModel.accounts
-            ) {
-                Text(linkedLine)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-            } else {
-                Text(BrokerIntegrationDisplay.linkStatusLabel(for: account))
-                    .experienceStyle(.caption, color: colors.secondaryText)
-            }
-
-            if viewModel.showsManualImportActions(connection: connection, account: account) {
-                if let prompt = viewModel.resolvedImportReconnectPrompt(
-                    provider: provider,
-                    connection: connection,
-                    account: account
-                ) {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        Text(BrokerSyncPresentation.reconnectRequiredMessage(provider: provider))
-                            .experienceStyle(.caption, color: colors.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button {
-                            viewModel.reconnectBrokerImport(from: prompt)
-                        } label: {
-                            if viewModel.isImportBusy(for: account) {
-                                Label("Reconnecting…", systemImage: "arrow.triangle.2.circlepath")
-                            } else {
-                                Text(BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: provider))
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(viewModel.isImportBusy(for: account))
-                        .accessibilityIdentifier("brokerIntegrations.reconnectAccount.\(account.id)")
-                    }
-                } else {
-                    Button {
-                        Task {
-                            await viewModel.importTrades(
-                                provider: provider,
-                                connectionId: connection.id,
-                                mappingId: account.id
-                            )
-                        }
-                    } label: {
-                        if viewModel.isImportBusy(for: account) {
-                            Label("Importing…", systemImage: "arrow.triangle.2.circlepath")
-                        } else {
-                            Label(
-                                viewModel.manualImportActionTitle(connection: connection, account: account),
-                                systemImage: "square.and.arrow.down"
-                            )
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(viewModel.isImportBusy(for: account))
-                    .accessibilityIdentifier("brokerIntegrations.importTrades.\(account.id)")
-                }
-            } else if !account.hasTradetraxsMapping, connection.connected {
-                Button("Link Account") {
-                    linkTarget = BrokerIntegrationLinkTarget(
-                        provider: provider,
-                        connectionId: connection.id,
-                        account: account
-                    )
-                }
-                .buttonStyle(.experiencePlain)
-            }
-        }
-        .padding(.vertical, ExperienceSpacing.xxs)
-        .listRowInsets(
-            EdgeInsets(
-                top: ExperienceSpacing.xxs,
-                leading: ExperienceSpacing.md,
-                bottom: ExperienceSpacing.xxs,
-                trailing: ExperienceSpacing.md
-            )
-        )
-    }
-
-    private func connectionSubtitle(_ connection: TradovateConnectionSummary) -> String {
-        var parts: [String] = []
-        if let name = connection.providerDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
-            parts.append(name)
-        }
-        if connection.status == .reconnectRequired {
-            parts.append("Authorization refresh needed")
-        } else if connection.connected {
-            parts.append("Connected")
-        } else {
-            parts.append(connection.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
-        }
-        if let env = connection.apiEnvironment {
-            parts.append(env.uppercased())
-        }
-        return parts.joined(separator: " · ")
     }
 }

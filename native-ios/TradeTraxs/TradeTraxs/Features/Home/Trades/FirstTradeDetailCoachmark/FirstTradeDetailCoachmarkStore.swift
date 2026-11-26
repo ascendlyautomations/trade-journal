@@ -7,6 +7,11 @@ final class FirstTradeDetailCoachmarkStore {
     static let shared = FirstTradeDetailCoachmarkStore()
 
     private(set) var pendingTradeID: TradeID?
+    /// Second-step highlight for the Backtest toolbar control (after trade-detail step settles).
+    private(set) var backtestCoachmarkActive = false
+    /// Trades journal chrome is ready to measure the Backtest toolbar.
+    private(set) var tradesJournalReadyForBacktestCoachmark = false
+
     private var viewerID: ProfileID?
     private var stagedOwnerProfileID: ProfileID?
     private weak var navigationCoordinator: NavigationCoordinator?
@@ -24,28 +29,61 @@ final class FirstTradeDetailCoachmarkStore {
         let owner = trade.ownerProfileID
         if let viewerID, viewerID != owner { return }
         guard !FirstTradeDetailCoachmarkPersistence.hasSeen(viewerID: owner) else { return }
-        guard pendingTradeID == nil else { return }
+        guard pendingTradeID == nil, !backtestCoachmarkActive else { return }
 
         stagedOwnerProfileID = owner
         pendingTradeID = trade.id
+        backtestCoachmarkActive = false
+        tradesJournalReadyForBacktestCoachmark = false
         navigationCoordinator?.presentOwnerTradesJournalRoot(source: "firstTradeDetailCoachmark")
     }
 
     func dismissGotIt() {
-        markSeenAndClearPending()
+        if pendingTradeID != nil {
+            advanceToBacktestCoachmarkIfEligible()
+            return
+        }
+        if backtestCoachmarkActive {
+            markSeenAndClearPending()
+        }
     }
 
-    /// User tapped the highlighted journal card, allow normal detail navigation.
+    /// User tapped the highlighted journal card; proceed to the Backtest highlight when eligible.
     func completeIfOpeningTrade(_ tradeID: TradeID) {
         guard pendingTradeID == tradeID else { return }
-        markSeenAndClearPending()
+        advanceToBacktestCoachmarkIfEligible()
+    }
+
+    func noteTradesJournalReadyForBacktestCoachmark() {
+        tradesJournalReadyForBacktestCoachmark = true
+    }
+
+    func resetTradesJournalReadyForBacktestCoachmark() {
+        tradesJournalReadyForBacktestCoachmark = false
     }
 
     func resetForSessionBoundary() {
         pendingTradeID = nil
+        backtestCoachmarkActive = false
+        tradesJournalReadyForBacktestCoachmark = false
         stagedOwnerProfileID = nil
         viewerID = nil
         navigationCoordinator = nil
+    }
+
+    var isActive: Bool {
+        pendingTradeID != nil || backtestCoachmarkActive
+    }
+
+    private func advanceToBacktestCoachmarkIfEligible() {
+        pendingTradeID = nil
+        let profileID = viewerID ?? stagedOwnerProfileID
+        if let profileID, ProAccessGate.shouldPresentPaywall(profileID: profileID) {
+            markSeenAndClearPending()
+            return
+        }
+        backtestCoachmarkActive = true
+        tradesJournalReadyForBacktestCoachmark = false
     }
 
     private func markSeenAndClearPending() {
@@ -53,6 +91,8 @@ final class FirstTradeDetailCoachmarkStore {
             FirstTradeDetailCoachmarkPersistence.markSeen(viewerID: profileID)
         }
         pendingTradeID = nil
+        backtestCoachmarkActive = false
+        tradesJournalReadyForBacktestCoachmark = false
         stagedOwnerProfileID = nil
     }
 }

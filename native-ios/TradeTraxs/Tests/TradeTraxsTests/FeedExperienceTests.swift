@@ -287,7 +287,7 @@ final class FeedExperienceTests: XCTestCase {
 
         let story = try XCTUnwrap(viewModel.stories.first)
         viewModel.openStory(story)
-        XCTAssertEqual(navigationStore.presentedFullScreen, .storyViewer(story.id))
+        XCTAssertEqual(navigationStore.presentedFullScreen, .storyViewer(story.id, .feedCarousel))
         XCTAssertNotNil(cache.story(id: story.id))
     }
 

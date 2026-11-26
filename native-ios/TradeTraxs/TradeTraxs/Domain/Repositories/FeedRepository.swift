@@ -52,6 +52,10 @@ nonisolated protocol FeedRepository: Sendable {
     func storyTextOverlays(id: StoryID) async throws -> [StoryTextOverlayRecord]
     /// Deletes a story the viewer owns.
     func deleteStory(id: StoryID) async throws
+    /// Owner-only engagement (`rpc_v1_story_insights`).
+    func storyInsights(id: StoryID) async throws -> StoryInsights
+    /// Records a unique non-owner view (`rpc_v1_story_record_view`).
+    func recordStoryView(id: StoryID) async throws
     func reel(id: ReelID) async throws -> ReelLoadResult
     func reels(authoredBy profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Reel>
     /// Web `fetchUserProfileReels`, Profile Clips tab (trade-linked visibility filter).
@@ -110,6 +114,12 @@ extension FeedRepository {
     func deleteStory(id: StoryID) async throws {
         throw AppError.notImplemented(feature: "deleteStory")
     }
+
+    func storyInsights(id: StoryID) async throws -> StoryInsights {
+        throw AppError.notImplemented(feature: "storyInsights")
+    }
+
+    func recordStoryView(id: StoryID) async throws {}
 
     func deleteReel(id: ReelID) async throws {
         throw AppError.notImplemented(feature: "deleteReel")

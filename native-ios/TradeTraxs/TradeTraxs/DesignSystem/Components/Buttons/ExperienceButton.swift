@@ -52,9 +52,9 @@ struct ExperienceButton: View {
             HStack(spacing: ExperienceSpacing.xs) {
                 if isLoading {
                     ProgressView()
-                        .tint(foreground)
+                        .tint(buttonForeground)
                 } else if let icon {
-                    ExperienceIcon(icon: icon, size: .sm, color: foreground)
+                    ExperienceIcon(icon: icon, size: .sm, color: buttonForeground)
                 }
                 if kind != .icon {
                     Text(title)
@@ -66,8 +66,8 @@ struct ExperienceButton: View {
             .padding(.horizontal, kind == .text || kind == .icon ? ExperienceSpacing.xs : ExperienceSpacing.md)
             .padding(.vertical, kind == .text ? ExperienceSpacing.xs : ExperienceSpacing.sm)
             .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-            .background(background)
-            .foregroundStyle(foreground)
+            .background(buttonBackground)
+            .foregroundStyle(buttonForeground)
             .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous))
             .overlay {
                 if kind == .secondary {
@@ -89,7 +89,7 @@ struct ExperienceButton: View {
         )
     }
 
-    private var foreground: Color {
+    private var buttonForeground: Color {
         switch kind {
         case .primary: return colors.onAccent
         case .secondary, .text, .icon: return colors.primaryText
@@ -97,15 +97,16 @@ struct ExperienceButton: View {
         }
     }
 
-    @ViewBuilder
-    private var background: some View {
+    private var buttonBackground: Color {
         switch kind {
         case .primary:
-            colors.accent
-        case .secondary, .text, .icon:
-            Color.clear
+            return colors.accent
+        case .secondary:
+            return colors.secondaryBackground
+        case .text, .icon:
+            return .clear
         case .destructive:
-            colors.error
+            return colors.error
         }
     }
 }

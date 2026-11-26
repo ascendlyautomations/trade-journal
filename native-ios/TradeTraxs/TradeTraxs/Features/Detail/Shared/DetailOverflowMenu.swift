@@ -12,6 +12,7 @@ struct DetailOverflowMenu: View {
     var onAddToVault: (() -> Void)? = nil
     var onManageInVault: (() -> Void)? = nil
     var onReport: (() -> Void)? = nil
+    var onStoryAnalytics: (() -> Void)? = nil
     var editTitle: String = "Edit"
     var deleteTitle: String = "Delete"
     var onEdit: (() -> Void)? = nil
@@ -23,6 +24,7 @@ struct DetailOverflowMenu: View {
         if onAddToVault != nil || onManageInVault != nil { return true }
         if !isOwner, onReport != nil { return true }
         if isOwner, onEdit != nil || onDelete != nil { return true }
+        if isOwner, onStoryAnalytics != nil { return true }
         return false
     }
 
@@ -42,6 +44,13 @@ struct DetailOverflowMenu: View {
                     Button("Add to Vault", systemImage: "hexagon") {
                         ExperienceHaptics.play(.selection)
                         onAddToVault()
+                    }
+                }
+
+                if isOwner, let onStoryAnalytics {
+                    Button("Story Analytics", systemImage: "chart.bar.xaxis") {
+                        ExperienceHaptics.play(.selection)
+                        onStoryAnalytics()
                     }
                 }
 

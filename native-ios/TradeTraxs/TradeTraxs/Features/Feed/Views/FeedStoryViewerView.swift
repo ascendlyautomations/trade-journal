@@ -3,33 +3,41 @@ import SwiftUI
 /// Instagram-style story viewer, multi-slide carousel, tap navigation, private DM replies.
 struct FeedStoryViewerView: View {
     @State private var viewModel: FeedStoryViewerViewModel
+    @Bindable private var engagementStore: EngagementStore
     private let data: DataEnvironment
     private let imagePipeline: any ImagePipeline
     private let onClose: () -> Void
 
     @State private var showsDeleteConfirm = false
     @State private var showsShareSheet = false
+    @State private var showsAnalyticsSheet = false
+    @State private var pendingAnalyticsProfileID: ProfileID?
     @State private var replyText = ""
     @State private var isReplyFocused = false
 
     @Environment(\.appEnvironment) private var appEnvironment
+    @Environment(\.navigationEnvironment) private var navigationEnvironment
     @Environment(\.scenePhase) private var scenePhase
 
     init(
         storyID: StoryID,
+        entryContext: StoryViewerEntryContext = .feedCarousel,
         data: DataEnvironment,
         onClose: @escaping () -> Void
     ) {
         self.onClose = onClose
         self.data = data
+        _engagementStore = Bindable(wrappedValue: data.engagementStore)
         _viewModel = State(
             initialValue: FeedStoryViewerViewModel(
                 storyID: storyID,
+                entryContext: entryContext,
                 feed: data.feed,
                 messages: data.messages,
                 session: data.session,
                 cache: data.detailCache,
                 objectStorage: data.objectStorage,
+                engagementStore: data.engagementStore,
                 onDismiss: onClose
             )
         )
@@ -37,64 +45,8 @@ struct FeedStoryViewerView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            switch viewModel.phase {
-            case .loading:
-                ProgressView()
-                    .tint(.white)
-            case .failed:
-                ProgressView()
-                    .tint(.white)
-            case .loaded:
-                if let story = viewModel.story {
-                    storyContent(story)
-                }
-            }
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .experienceSwipeToDismiss(
-            isEnabled: canSwipeToDismiss,
-            distanceThreshold: 72,
-            velocityThreshold: 650,
-            onDismiss: closeViewer
-        )
-        .confirmationDialog(
-            "Delete Story?",
-            isPresented: $showsDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Story", role: .destructive) {
-                Task { _ = await viewModel.deleteStory() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This story will be permanently removed.")
-        }
-        .alert(
-            "Couldn't delete story",
-            isPresented: Binding(
-                get: { viewModel.deleteErrorMessage != nil },
-                set: { if !$0 { viewModel.clearDeleteError() } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(viewModel.deleteErrorMessage ?? "")
-        }
-        .alert(
-            "Couldn't send message",
-            isPresented: Binding(
-                get: { viewModel.replyErrorMessage != nil },
-                set: { if !$0 { viewModel.clearReplyError() } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(viewModel.replyErrorMessage ?? "")
-        }
-        .interactiveDismissDisabled(viewModel.isDeleting)
+        viewerSurface
+            .interactiveDismissDisabled(viewModel.isDeleting)
         .sheet(isPresented: $showsShareSheet) {
             if let story = viewModel.story {
                 StoryShareSheet(
@@ -104,6 +56,24 @@ struct FeedStoryViewerView: View {
                     onClose: { showsShareSheet = false }
                 )
             }
+        }
+        .sheet(isPresented: $showsAnalyticsSheet) {
+            StoryAnalyticsSheet(
+                storyID: viewModel.storyID,
+                feed: data.feed,
+                imagePipeline: imagePipeline,
+                detailCache: data.detailCache,
+                onClose: { showsAnalyticsSheet = false },
+                onOpenProfile: { profileID in
+                    pendingAnalyticsProfileID = profileID
+                    showsAnalyticsSheet = false
+                }
+            )
+        }
+        .onChange(of: showsAnalyticsSheet) { _, isPresented in
+            guard !isPresented, let profileID = pendingAnalyticsProfileID else { return }
+            pendingAnalyticsProfileID = nil
+            openProfileFromStoryAnalytics(profileID)
         }
         .task {
             await viewModel.loadIfNeeded()
@@ -135,12 +105,80 @@ struct FeedStoryViewerView: View {
         .accessibilityIdentifier("feed.story.viewer")
     }
 
+    private var viewerSurface: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            switch viewModel.phase {
+            case .loading:
+                ProgressView()
+                    .tint(.white)
+            case .failed:
+                ProgressView()
+                    .tint(.white)
+            case .loaded:
+                if let story = viewModel.story {
+                    storyContent(story)
+                }
+            }
+        }
+        .environment(\.experienceKeyboardDoneToolbarSuppressed, true)
+        .toolbar(.hidden, for: .navigationBar)
+        .experienceKeyboardSafeBottom()
+        .experienceSuppressKeyboardInputAccessory()
+        .experienceSwipeToDismiss(
+            isEnabled: canSwipeToDismiss,
+            distanceThreshold: 72,
+            velocityThreshold: 650,
+            onDismiss: closeViewer
+        )
+        .confirmationDialog(
+            "Delete Story?",
+            isPresented: $showsDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Story", role: .destructive) {
+                Task { _ = await viewModel.deleteStory() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This story will be permanently removed.")
+        }
+        .modifier(FeedStoryViewerErrorAlerts(viewModel: viewModel))
+    }
+
     private var canSwipeToDismiss: Bool {
         !viewModel.isDeleting && !isReplyFocused
     }
 
     private func closeViewer() {
+        dismissReplyKeyboard()
         viewModel.dismissViewer()
+    }
+
+    private func dismissReplyKeyboard() {
+        guard isReplyFocused else {
+            ExperienceKeyboard.dismissFormKeyboard()
+            return
+        }
+        isReplyFocused = false
+        ExperienceKeyboard.dismissFormKeyboard()
+    }
+
+    private func openStoryAuthorProfile(authorID: ProfileID) {
+        ExperienceHaptics.play(.selection)
+        dismissReplyKeyboard()
+        closeViewer()
+        navigationEnvironment.coordinator.pushProfile(.otherProfile(authorID))
+    }
+
+    private func openProfileFromStoryAnalytics(_ profileID: ProfileID) {
+        dismissReplyKeyboard()
+        closeViewer()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            navigationEnvironment.coordinator.pushProfile(.otherProfile(profileID))
+        }
     }
 
     private var storyReportAction: (() -> Void)? {
@@ -161,63 +199,78 @@ struct FeedStoryViewerView: View {
 
     @ViewBuilder
     private func storyContent(_ story: Story) -> some View {
-        GeometryReader { proxy in
-            let storyCanvas = StoryComposerGeometry.aspectFitStoryCanvas(in: proxy.size)
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                let storyCanvas = StoryComposerGeometry.aspectFitStoryCanvas(in: proxy.size)
 
-            ZStack {
-                StoryPlaybackMediaView(
-                    reference: story.media,
-                    imagePipeline: imagePipeline,
-                    objectStorage: data.objectStorage,
-                    player: viewModel.playback.player,
-                    isVideo: viewModel.isVideoStory
-                )
-                .frame(width: storyCanvas.width, height: storyCanvas.height)
-                .position(x: storyCanvas.midX, y: storyCanvas.midY)
-                .clipped()
-                .id(story.id)
-                .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
-                    viewModel.setHoldPaused(holding)
-                }
-
-                if viewModel.isVideoStory, !viewModel.videoTextOverlays.isEmpty {
-                    StoryVideoTextPlaybackOverlay(
-                        overlays: viewModel.videoTextOverlays,
-                        canvasSize: storyCanvas.size
+                ZStack {
+                    StoryPlaybackMediaView(
+                        reference: story.media,
+                        imagePipeline: imagePipeline,
+                        objectStorage: data.objectStorage,
+                        player: viewModel.playback.player,
+                        isVideo: viewModel.isVideoStory
                     )
+                    .frame(width: storyCanvas.width, height: storyCanvas.height)
                     .position(x: storyCanvas.midX, y: storyCanvas.midY)
-                    .allowsHitTesting(false)
-                    .accessibilityIdentifier("storyViewer.textOverlays")
-                }
-
-                storyTapNavigationOverlay
-
-                VStack(spacing: 0) {
-                    storyTopChrome(for: story)
-                    Spacer(minLength: 0)
-                    if viewModel.showReplyComposer {
-                        StoryReplyInputView(
-                            text: $replyText,
-                            isFocused: $isReplyFocused,
-                            isSending: viewModel.isSendingReply,
-                            onSend: {
-                                Task {
-                                    let draft = replyText
-                                    let sent = await viewModel.sendStoryReply(text: draft)
-                                    if sent {
-                                        replyText = ""
-                                        isReplyFocused = false
-                                    }
-                                }
-                            }
-                        )
+                    .clipped()
+                    .id(story.id)
+                    .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
+                        viewModel.setHoldPaused(holding)
                     }
+
+                    if viewModel.isVideoStory, !viewModel.videoTextOverlays.isEmpty {
+                        StoryVideoTextPlaybackOverlay(
+                            overlays: viewModel.videoTextOverlays,
+                            canvasSize: storyCanvas.size
+                        )
+                        .position(x: storyCanvas.midX, y: storyCanvas.midY)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("storyViewer.textOverlays")
+                    }
+
+                    storyTapNavigationOverlay
+
+                    VStack(spacing: 0) {
+                        storyTopChrome(for: story)
+                        Spacer(minLength: 0)
+                    }
+                    .safeAreaPadding(.top, StoryViewerChromeMetrics.topBreathingRoom)
                 }
-                .safeAreaPadding(.top, StoryViewerChromeMetrics.topBreathingRoom)
-                .safeAreaPadding(.bottom)
+            }
+
+            if viewModel.showReplyComposer {
+                storyReplyComposer(for: story)
             }
         }
         .simultaneousGesture(storyHorizontalDragGesture)
+    }
+
+    @ViewBuilder
+    private func storyReplyComposer(for story: Story) -> some View {
+        let storyTarget = InteractionTarget.story(story.id)
+        let storyEngagement = engagementStore.snapshot(for: storyTarget)
+        StoryReplyInputView(
+            text: $replyText,
+            isFocused: $isReplyFocused,
+            isSending: viewModel.isSendingReply,
+            isStoryLiked: storyEngagement.viewerHasLiked,
+            isTogglingStoryLike: engagementStore.isLikeInFlight(for: storyTarget),
+            onToggleStoryLike: {
+                Task { await viewModel.toggleCurrentStoryLike() }
+            },
+            onSend: {
+                let draft = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !draft.isEmpty, !viewModel.isSendingReply else { return }
+                isReplyFocused = false
+                ExperienceKeyboard.dismissFormKeyboard()
+                Task {
+                    let sent = await viewModel.sendStoryReply(text: draft)
+                    guard sent else { return }
+                    replyText = ""
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -230,6 +283,7 @@ struct FeedStoryViewerView: View {
                 DetailOverflowActions.copyLink(.story(viewModel.storyID))
             },
             onReport: storyReportAction,
+            onStoryAnalytics: viewModel.isOwner ? { showsAnalyticsSheet = true } : nil,
             deleteTitle: "Delete Story",
             onDelete: viewModel.isOwner ? { showsDeleteConfirm = true } : nil,
             accessibilityIdentifier: "feed.story.overflow"
@@ -254,22 +308,39 @@ struct FeedStoryViewerView: View {
                 Color.clear
                     .contentShape(Rectangle())
                     .frame(width: proxy.size.width * 0.35)
-                    .onTapGesture { viewModel.goPreviousSlide() }
-                    .accessibilityLabel("Previous story")
+                    .onTapGesture {
+                        if isReplyFocused {
+                            dismissReplyKeyboard()
+                        } else {
+                            viewModel.goPreviousSlide()
+                        }
+                    }
+                    .accessibilityLabel(isReplyFocused ? "Dismiss keyboard" : "Previous story")
 
                 Color.clear
                     .contentShape(Rectangle())
                     .frame(width: proxy.size.width * 0.65)
-                    .onTapGesture { viewModel.goNextSlide() }
-                    .accessibilityLabel("Next story")
+                    .onTapGesture {
+                        if isReplyFocused {
+                            dismissReplyKeyboard()
+                        } else {
+                            viewModel.goNextSlide()
+                        }
+                    }
+                    .accessibilityLabel(isReplyFocused ? "Dismiss keyboard" : "Next story")
             }
         }
-        .allowsHitTesting(!isReplyFocused)
     }
 
     private func storyTopChrome(for story: Story) -> some View {
         let slides = viewModel.currentSlides
         let profile = viewModel.author
+        let authorID = profile?.id ?? story.authorProfileID
+        let authorLabel = profile.map { profile in
+            let handle = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !handle.isEmpty { return "@\(handle)" }
+            return profile.displayName
+        } ?? "Trader"
 
         return VStack(alignment: .leading, spacing: StoryViewerChromeMetrics.sectionSpacing) {
             if slides.count > 1 {
@@ -280,23 +351,37 @@ struct FeedStoryViewerView: View {
             }
 
             HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-                HStack(spacing: ExperienceSpacing.sm) {
-                    if let profile {
-                        FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: 32)
-                    } else {
-                        ExperienceAvatar(initials: "?", size: 32)
+                Button {
+                    openStoryAuthorProfile(authorID: authorID)
+                } label: {
+                    HStack(spacing: ExperienceSpacing.sm) {
+                        if let profile {
+                            FollowListAvatarView(
+                                profile: profile,
+                                imagePipeline: imagePipeline,
+                                size: 32,
+                                debugSurface: "storyViewer"
+                            )
+                            .id(authorID)
+                        } else {
+                            ExperienceAvatar(initials: "?", size: 32)
+                                .id(authorID)
+                        }
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(authorLabel)
+                                .experienceStyle(.headline, color: .white)
+                                .lineLimit(1)
+                            Text(MessagesInboxSupport.relativeTimestamp(story.createdAt))
+                                .experienceStyle(.caption, color: .white.opacity(0.7))
+                                .lineLimit(1)
+                        }
                     }
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(profile?.displayName ?? "Trader")
-                            .experienceStyle(.headline, color: .white)
-                            .lineLimit(1)
-                        Text(MessagesInboxSupport.relativeTimestamp(story.createdAt))
-                            .experienceStyle(.caption, color: .white.opacity(0.7))
-                            .lineLimit(1)
-                    }
+                    .contentShape(Rectangle())
                 }
-                .allowsHitTesting(false)
-                .accessibilityElement(children: .combine)
+                .buttonStyle(.plain)
+                .id(authorID)
+                .accessibilityLabel("Open \(authorLabel) profile")
+                .accessibilityIdentifier("feed.story.authorProfile")
 
                 Spacer(minLength: ExperienceSpacing.sm)
                     .allowsHitTesting(false)
@@ -307,5 +392,43 @@ struct FeedStoryViewerView: View {
         .padding(.horizontal, StoryViewerChromeMetrics.horizontalInset)
         .padding(.bottom, ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct FeedStoryViewerErrorAlerts: ViewModifier {
+    @Bindable var viewModel: FeedStoryViewerViewModel
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Couldn't delete story",
+                isPresented: deleteErrorPresented
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.deleteErrorMessage ?? "")
+            }
+            .alert(
+                "Couldn't send message",
+                isPresented: replyErrorPresented
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.replyErrorMessage ?? "")
+            }
+    }
+
+    private var deleteErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.deleteErrorMessage != nil },
+            set: { if !$0 { viewModel.clearDeleteError() } }
+        )
+    }
+
+    private var replyErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.replyErrorMessage != nil },
+            set: { if !$0 { viewModel.clearReplyError() } }
+        )
     }
 }

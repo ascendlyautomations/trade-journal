@@ -1,6 +1,30 @@
 import Foundation
 
 enum BrokerIntegrationDisplay {
+    /// Masked broker account identifier for UI (last-four tail convention).
+    static func maskedBrokerAccountNumber(
+        _ externalAccountId: String,
+        name: String? = nil,
+        displayName: String? = nil
+    ) -> String {
+        brokerAccountNumberTail(externalAccountId, name: name ?? displayName)
+    }
+
+    /// Human-readable broker account type from discovery metadata when present.
+    static func brokerAccountTypeLabel(metadata: [String: JSONBrokerValue]) -> String? {
+        let candidates = ["accountType", "marginAccountType", "legalStatus"]
+        for key in candidates {
+            if case .string(let raw) = metadata[key] {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        if case .bool(let sim) = metadata["simOnly"], sim {
+            return "Sim"
+        }
+        return nil
+    }
+
     /// Broker-side account identifier, last four characters only (no masking bullets).
     static func brokerAccountNumberTail(_ externalAccountId: String, name: String?) -> String {
         let source = name?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? externalAccountId

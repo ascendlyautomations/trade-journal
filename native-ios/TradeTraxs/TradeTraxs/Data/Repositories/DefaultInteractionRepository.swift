@@ -133,7 +133,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
                 achievementPostIDs.append(id)
             case .reel:
                 reelIDs.append(id)
-            case .trade:
+            case .trade, .story:
                 break
             }
         }
@@ -188,7 +188,8 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
             )) ?? []
         }()
         async let commentRows: [InteractionDTO.CommentCountRow] = {
-            (try? await database.select(
+            guard kind != .story else { return [] }
+            return (try? await database.select(
                 InteractionDTO.CommentCountRow.self,
                 from: tables.comments,
                 query: [
@@ -243,6 +244,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
                 var reel_id: String?
                 var post_id: String?
                 var achievement_post_id: String?
+                var story_id: String?
                 var user_id: String
             }
             var body = Body(user_id: userID)
@@ -252,6 +254,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
             case .reel: body.reel_id = contentID
             case .feedPost: body.post_id = contentID
             case .achievement: body.achievement_post_id = contentID
+            case .story: body.story_id = contentID
             }
             do {
                 _ = try await supabase.database.insert(
@@ -282,6 +285,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         for target: InteractionTarget,
         order: CommentSortOrder
     ) async throws -> [InteractionComment] {
+        guard target.kind != .story else { return [] }
         let contentID = try await effectiveContentID(for: target)
         let tables = Self.tables(for: target.kind)
         let fk = tables.foreignKey
@@ -307,6 +311,9 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         sharedTradeID: TradeID?,
         on target: InteractionTarget
     ) async throws -> InteractionComment {
+        guard target.kind != .story else {
+            throw AppError.network(.validation(statusCode: nil, message: "Stories do not support comments"))
+        }
         guard let userID = await session.currentUserID?.rawValue else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
@@ -341,6 +348,8 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         case .reel: insert.reel_id = contentID
         case .feedPost: insert.post_id = contentID
         case .achievement: insert.achievement_post_id = contentID
+        case .story:
+            throw AppError.network(.validation(statusCode: nil, message: "Stories do not support comments"))
         }
 
         // Same profiles embed as list load, no follow-up profile query after create.
@@ -507,6 +516,8 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
                 comments: "achievement_post_comments",
                 foreignKey: "achievement_post_id"
             )
+        case .story:
+            return Tables(likes: "story_likes", comments: "stories", foreignKey: "story_id")
         }
     }
 
@@ -517,6 +528,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         case .reel: return row.reel_id
         case .feedPost: return row.post_id
         case .achievement: return row.achievement_post_id
+        case .story: return row.story_id
         }
     }
 
@@ -530,6 +542,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         case .reel: return row.reel_id
         case .feedPost: return row.post_id
         case .achievement: return row.achievement_post_id
+        case .story: return row.story_id
         }
     }
 

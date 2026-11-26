@@ -144,10 +144,22 @@ struct SettingsHomeView: View {
                     }
                     .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("settings.debug.resetAppTour")
+                    Button {
+                        Task {
+                            await PerformanceReportReminderCoordinator.shared.scheduleDebugProbesForTesting()
+                        }
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Test Performance Report Notifications",
+                            systemImage: "bell.badge"
+                        )
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .accessibilityIdentifier("settings.debug.performanceReportReminders")
                 } header: {
                     Text("Developer")
                 } footer: {
-                    Text("Debug only. Reset App Tour clears this account’s tour completion, then open Dashboard. Clear Clip Video Cache removes the Clip MP4 disk cache.")
+                    Text("Debug only. Reset App Tour clears this account’s tour completion, then open Dashboard. Clear Clip Video Cache removes the Clip MP4 disk cache. Performance report test schedules one weekly and one monthly local notification in ~90s.")
                 }
             }
             #endif
@@ -209,6 +221,10 @@ struct SettingsHomeView: View {
             scrollSettingsTourIfNeeded(using: tourProxy)
         }
         .onChange(of: ContextualTourCoordinator.shared.scrollGeneration) { _, _ in
+            scrollSettingsTourIfNeeded(using: tourProxy)
+        }
+        .onChange(of: ContextualTourCoordinator.shared.spotlightTarget) { _, target in
+            guard target == .settingsAppearance || target == .settingsTradingRules else { return }
             scrollSettingsTourIfNeeded(using: tourProxy)
         }
         }

@@ -68,6 +68,7 @@ struct MessageComposerBar: View {
             Text("Turn on microphone access in Settings to send voice messages.")
         }
         .experienceFormFocusSync($focused)
+        .experienceKeyboardExcludesDoneToolbarWhenFocused(focused)
     }
 
     private var composerBar: some View {

@@ -33,6 +33,7 @@ const APPEARANCE_OPT_OUT_EXACT = [
   ...MARKETING_EXACT_PATHS,
   ...PUBLIC_LEGAL_EXACT_PATHS,
   "/copyright",
+  "/download",
 ] as const
 
 const APPEARANCE_OPT_OUT_PREFIXES = [

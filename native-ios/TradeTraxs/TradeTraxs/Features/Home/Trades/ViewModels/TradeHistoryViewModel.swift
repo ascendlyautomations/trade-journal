@@ -49,6 +49,8 @@ final class TradeHistoryViewModel {
     private var lastQueryKey: String?
     private var loadGeneration: UInt64 = 0
     private var coldLoadFinished = false
+    /// Bumps when copy-trading groups finish loading so list headers can show group names.
+    private var copyGroupsDisplayRevision = 0
     #if DEBUG
     private var stageCorrelation: String?
     private var cacheProbeStart: Date?
@@ -71,12 +73,21 @@ final class TradeHistoryViewModel {
     }
 
     var summary: TradeHistorySummary {
-        TradeHistorySummary.from(summaries: items)
+        if DashboardAccountFilterCopyTradingSupport.shouldDedupeCopyMetrics(for: filters.account) {
+            _ = copyGroupsDisplayRevision
+            return TradeHistorySummary.from(summaries: displayItems.map(\.representative))
+        }
+        return TradeHistorySummary.from(summaries: items)
     }
 
     /// Presentation-only grouping, one card per copy action.
     var displayItems: [TradeHistoryDisplayItem] {
-        CopyTradeJournalGrouping.group(items, accounts: accounts)
+        _ = copyGroupsDisplayRevision
+        return CopyTradeJournalGrouping.group(
+            items,
+            accounts: accounts,
+            copyGroups: OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
+        )
     }
 
     /// Grid layout, screenshot trades only (independent of the list filter toggle except both require media).
@@ -153,15 +164,11 @@ final class TradeHistoryViewModel {
     }
 
     var accountMenuTitle: String {
-        switch filters.account {
-        case .all:
-            return "All Accounts"
-        case .account(let id):
-            if let account = accounts.first(where: { $0.id == id }) {
-                return TradingAccountDisplay.ownerDropdownLine(for: account)
-            }
-            return displayAccountTitle(for: id) ?? "Account"
-        }
+        OwnerAccountFilterMenuSupport.menuTitle(
+            filter: filters.account,
+            accounts: accounts,
+            profileID: profileID
+        )
     }
 
     var accountsForMenu: [TradingAccount] {
@@ -212,6 +219,7 @@ final class TradeHistoryViewModel {
         var context = TradeHistoryMatchContext()
         context.accountTitles = accountNames
         context.accountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+        context.copyTradingGroups = OwnerAccountFilterMenuSupport.copyGroups(for: profileID)
         return context
     }
 
@@ -288,15 +296,25 @@ final class TradeHistoryViewModel {
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
-        guard filters.account != filter else { return }
+        let resolved = OwnerAccountMutationSync.reconciledAccountFilter(
+            filter,
+            accounts: accounts,
+            profileID: profileID
+        )
+        guard filters.account != resolved else { return }
         ExperienceHaptics.play(.selection)
-        filters.account = filter
+        filters.account = resolved
         Task { await reload(reason: "account") }
     }
 
     func openManageAccounts() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
+    }
+
+    func openManageCopyTradingGroups() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.pushHome(.settings(.copyTradingAccounts))
     }
 
     func openFilters() {
@@ -641,6 +659,13 @@ final class TradeHistoryViewModel {
         case .none:
             break
         }
+    }
+
+    func handleCopyTradingGroupsMutation() {
+        guard profileID != nil else { return }
+        copyGroupsDisplayRevision &+= 1
+        reconcileAccountFilterIfNeeded(reloadIfChanged: true)
+        Task { await prefetchCopyGroupsForDisplay() }
     }
 
     func handleAccountMutation() {
@@ -1046,6 +1071,18 @@ final class TradeHistoryViewModel {
         }
         accountNames = OwnerAccountMutationSync.accountNamesMap(from: accounts)
         reconcileAccountFilterIfNeeded(reloadIfChanged: true)
+        Task { await prefetchCopyGroupsForDisplay() }
+    }
+
+    private func prefetchCopyGroupsForDisplay() async {
+        guard let profileID,
+              let repository = OwnerAccountFilterDropdownCopyTradingBridge.repositoryFactory?()
+        else { return }
+        await CopyTradingGroupsMenuCache.shared.loadIfNeeded(
+            profileID: profileID,
+            repository: repository
+        )
+        copyGroupsDisplayRevision &+= 1
     }
 
     private func tradesJournalEligibleSelectedAccountID() -> TradingAccountID? {
@@ -1057,7 +1094,11 @@ final class TradeHistoryViewModel {
     }
 
     private func reconcileAccountFilterIfNeeded(reloadIfChanged: Bool = false) {
-        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(filters.account, accounts: accounts)
+        let sanitized = OwnerAccountMutationSync.reconciledAccountFilter(
+            filters.account,
+            accounts: accounts,
+            profileID: profileID
+        )
         guard sanitized != filters.account else { return }
         filters.account = sanitized
         if reloadIfChanged {

@@ -118,17 +118,17 @@ struct YearlyReportFilterBar: View {
             HStack(spacing: ExperienceSpacing.sm) {
                 OwnerAccountFilterDropdown(
                     accounts: viewModel.accountsForMenu,
-                    isAllAccountsSelected: {
-                        if case .all = viewModel.filters.accountFilter { return true }
-                        return false
-                    }(),
-                    selectedAccountID: {
-                        if case .account(let id) = viewModel.filters.accountFilter { return id }
-                        return nil
-                    }(),
-                    onSelectAll: { viewModel.setAccountFilter(.all) },
-                    onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+                    selectedFilter: viewModel.filters.accountFilter,
+                    copyGroups: OwnerAccountFilterMenuSupport.copyGroups(for: viewModel.ownerProfileID),
+                    isLoadingCopyGroups: OwnerAccountFilterMenuSupport.isLoadingCopyGroups(
+                        for: viewModel.ownerProfileID
+                    ),
+                    onSelectFilter: { viewModel.setAccountFilter($0) },
                     onManageAccounts: { viewModel.openManageAccounts() },
+                    onManageCopyGroups: { viewModel.openManageCopyTradingGroups() },
+                    onRequestCopyGroups: {
+                        OwnerAccountFilterMenuSupport.requestCopyGroupsLoad(profileID: viewModel.ownerProfileID)
+                    },
                     accessibilityIdentifier: "reports.yearly.account",
                     profileID: viewModel.ownerProfileID
                 ) {

@@ -2,20 +2,29 @@ import SwiftUI
 
 /// Full-screen TraxsPro Expense Tracker preview for signed-in Free users.
 struct PropFirmExpensesPreviewContainerView: View {
-    let data: DataEnvironment
+    let productionData: DataEnvironment
     let onDismiss: () -> Void
 
     @Environment(\.dismiss) private var dismiss
 
-    init(data: DataEnvironment, onDismiss: @escaping () -> Void) {
-        self.data = data
+    private var previewData: DataEnvironment {
+        TraxsProPreviewSession.shared.activePreviewEnvironment?.data ?? productionData
+    }
+
+    init(productionData: DataEnvironment, onDismiss: @escaping () -> Void) {
+        self.productionData = productionData
         self.onDismiss = onDismiss
-        TraxsProPreviewSession.shared.beginExpenseTrackerPreview()
+        if let viewer = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) }) {
+            TraxsProPreviewSession.shared.beginExpenseTrackerPreview(
+                production: productionData,
+                viewer: viewer
+            )
+        }
     }
 
     var body: some View {
         NavigationStack {
-            PropFirmExpensesView(data: data, embeddedInTraxsProPreview: true)
+            PropFirmExpensesView(data: previewData, embeddedInTraxsProPreview: true)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     TraxsProSampleDataHeader(
                         unlockFeature: .propFirm,

@@ -122,6 +122,9 @@ struct MainTabShellView: View {
             OwnerAccountFilterDropdownController.shared.dismiss()
             TradingRulesCompliancePresentationBridge.handleOwnerAccountMutation()
         }
+        .onChange(of: CopyTradingGroupsMutationStore.shared.revision) { _, _ in
+            OwnerAccountFilterDropdownController.shared.dismiss()
+        }
         .onAppear {
             ProductAnalyticsCoordinator.shared.bind(repository: appEnvironment.data.analytics)
             ProductAnalyticsCoordinator.shared.noteScreen(
@@ -234,6 +237,9 @@ struct MainTabShellView: View {
             liveVoiceCoordinator: liveVoiceCoordinator,
             imagePipeline: appEnvironment.data.imagePipeline
         )
+        .background {
+            ContextualTourMainTabBarFrameReporter()
+        }
     }
 
     private var tabSelection: Binding<TabIdentifier> {
@@ -688,6 +694,7 @@ struct FeedNavigationStack: View {
         case .story(let storyID):
             FeedStoryViewerView(
                 storyID: storyID,
+                entryContext: .feedCarousel,
                 data: appEnvironment.data,
                 onClose: { coordinator.pop() }
             )
@@ -1680,6 +1687,16 @@ struct PsychologyAnalyticsHomeRouteView: View {
             guard showsPsychologyAnalyticsFreePreview else {
                 PsychologyAnalyticsPreviewSupport.endEphemeralHistoryPreview()
                 freePreviewPresentation = nil
+                return
+            }
+            if TraxsProPreviewSession.shared.activePreviewEnvironment != nil {
+                freePreviewPresentation = PsychologyAnalyticsPreviewSupport.resolvedPresentation(
+                    fallbackReport: nil,
+                    fallbackUnlock: PsychologyInsightsUnlockProgress(
+                        tradingDayCheckInCount: 0,
+                        tradeCount: 0
+                    )
+                )
                 return
             }
             PsychologyAnalyticsPreviewSupport.beginEphemeralHistoryPreview()

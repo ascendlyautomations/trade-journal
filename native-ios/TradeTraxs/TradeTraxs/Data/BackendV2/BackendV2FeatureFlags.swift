@@ -15,6 +15,8 @@ nonisolated enum BackendV2FeatureFlag: String, CaseIterable, Sendable {
     case session
     case dashboard
     case feed
+    /// Rotating rank (`rpc_v2_feed_bootstrap`), Release default OFF.
+    case feedRotatingRank
     case profile
     case messages
     case messageThreads

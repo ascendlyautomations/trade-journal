@@ -14,6 +14,8 @@ export const STANDALONE_LAYOUT_SEGMENTS = new Set([
   "onboarding",
   "choose-plan",
   "finish-trial",
+  /** App Store handoff — no marketing or app chrome. */
+  "download",
   /** Instagram / export ad frames — no marketing or app chrome. */
   "marketing",
 ])
