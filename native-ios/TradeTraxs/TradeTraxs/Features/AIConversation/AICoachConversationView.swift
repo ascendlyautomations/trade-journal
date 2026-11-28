@@ -11,7 +11,6 @@ struct AICoachConversationView: View {
     var sendTitle: String = "Send"
     var isSendEnabled: Bool
     var onSend: () -> Void
-    var usesPsychologyStructuredParsing: Bool = false
 
     @Environment(\.themeColors) private var colors
     @FocusState private var composerFocused: Bool
@@ -30,8 +29,7 @@ struct AICoachConversationView: View {
                             AICoachMessageCard(
                                 role: message.role,
                                 content: message.content,
-                                assistantTitle: assistantTitle,
-                                psychologyStructured: psychologySections(for: message)
+                                assistantTitle: assistantTitle
                             )
                             .id(message.id)
                         }
@@ -57,11 +55,6 @@ struct AICoachConversationView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle(navigationTitle)
-    }
-
-    private func psychologySections(for message: AICoachConversationMessage) -> PsychologyCoachStructuredSections? {
-        guard usesPsychologyStructuredParsing, message.role == .assistant else { return nil }
-        return PsychologyCoachResponseParser.parse(message.content)
     }
 
     private var composer: some View {

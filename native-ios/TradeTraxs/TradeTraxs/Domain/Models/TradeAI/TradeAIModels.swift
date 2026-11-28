@@ -177,6 +177,21 @@ nonisolated enum TradeAISuggestedPrompts {
     }
 }
 
+nonisolated enum GeneralTradeAISuggestedQuestions {
+    static let introTitle = "Let's improve your trading."
+    static let introBody =
+        "Select an account and date range to get personalized insights into your trading performance."
+
+    static let starters: [String] = [
+        "How is my account performing?",
+        "What are my most profitable setups?",
+        "What is causing most of my losses?",
+        "Which trading session do I perform best in?",
+        "Am I following my trading rules?",
+        "What should I focus on improving?",
+    ]
+}
+
 nonisolated struct TradeAIAnalyzeRequest: Sendable {
     var context: TradeAIContext
     /// Full turn list including the latest user message (web contract).

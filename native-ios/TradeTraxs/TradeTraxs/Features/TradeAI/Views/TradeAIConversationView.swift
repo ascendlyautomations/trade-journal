@@ -38,6 +38,8 @@ struct TradeAIConversationView: View {
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.vertical, ExperienceSpacing.sm)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .aiCoachConversationMessageScroll()
             .scrollPosition(id: $scrollPosition, anchor: .bottom)
             .onChange(of: viewModel.messages.count) { _, count in
                 guard count > 0 else { return }
@@ -67,7 +69,7 @@ struct TradeAIConversationView: View {
 
             composer
         }
-        .experienceScreenBackground()
+        .aiCoachConversationRootChrome()
         .navigationTitle("Trade AI")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)

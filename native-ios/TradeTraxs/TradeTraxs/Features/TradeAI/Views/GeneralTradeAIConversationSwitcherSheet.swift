@@ -23,8 +23,13 @@ struct GeneralTradeAIConversationSwitcherSheet: View {
                         dismiss()
                         viewModel.showsNewConversationSheet = true
                     } label: {
-                        Label("New Conversation", systemImage: "plus.bubble")
-                            .experienceStyle(.body, color: colors.accent)
+                        Label {
+                            Text("New Conversation")
+                                .experienceStyle(.body, color: colors.accent)
+                        } icon: {
+                            Image(systemName: "plus.bubble")
+                                .foregroundStyle(colors.accent)
+                        }
                     }
                     .listRowBackground(colors.fillSecondary)
 

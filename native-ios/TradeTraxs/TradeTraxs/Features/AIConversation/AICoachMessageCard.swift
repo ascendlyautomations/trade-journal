@@ -5,8 +5,6 @@ struct AICoachMessageCard: View {
     let role: AICoachConversationRole
     let content: String
     var assistantTitle: String = "Coach"
-    var psychologyStructured: PsychologyCoachStructuredSections?
-
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isExpanded = true
@@ -20,10 +18,13 @@ struct AICoachMessageCard: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             header
             if isExpanded {
-                if let psychologyStructured, psychologyStructured.isStructured {
-                    psychologyBody(psychologyStructured)
+                if role == .assistant {
+                    AICoachMarkdownText(content: content)
                 } else {
-                    markdownBody
+                    Text(content)
+                        .experienceStyle(.body, color: colors.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
             } else {
                 Text(collapsedPreview)
@@ -62,76 +63,11 @@ struct AICoachMessageCard: View {
         }
     }
 
-    @ViewBuilder
-    private func psychologyBody(_ sections: PsychologyCoachStructuredSections) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            sectionBlock(title: "Biggest Psychological Insight", body: sections.biggestInsight)
-            bulletBlock(title: "Performance Patterns", items: sections.performancePatterns)
-            bulletBlock(title: "Areas for Improvement", items: sections.areasForImprovement)
-            bulletBlock(title: "Recommended Guardrails", items: sections.recommendedGuardrails)
-            sectionBlock(title: "Next Session Focus", body: sections.nextSessionFocus)
-        }
-    }
-
-    @ViewBuilder
-    private func sectionBlock(title: String, body: String?) -> some View {
-        if let body, !body.isEmpty {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                Text(title)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .textCase(.uppercase)
-                Text(body)
-                    .experienceStyle(.body, color: colors.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func bulletBlock(title: String, items: [String]) -> some View {
-        if !items.isEmpty {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                Text(title)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .textCase(.uppercase)
-                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    Text("• \(item)")
-                        .experienceStyle(.body, color: colors.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var markdownBody: some View {
-        if let attributed = try? AttributedString(
-            markdown: AIGeneratedTextNormalizer.normalize(content),
-            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
-        ) {
-            Text(attributed)
-                .font(.body)
-                .foregroundStyle(colors.primaryText)
-                .tint(colors.accent)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-        } else {
-            Text(AIGeneratedTextNormalizer.normalize(content))
-                .experienceStyle(.body, color: colors.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-        }
-    }
-
     private var shouldOfferCollapse: Bool {
         role == .assistant && content.count > 420
     }
 
     private var collapsedPreview: String {
-        if let focus = psychologyStructured?.nextSessionFocus {
-            return focus
-        }
         if let verdict = tradeSections?.verdict {
             return verdict
         }

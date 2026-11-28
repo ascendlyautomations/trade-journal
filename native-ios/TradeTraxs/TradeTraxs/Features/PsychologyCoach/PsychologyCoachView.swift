@@ -242,47 +242,48 @@ struct PsychologyCoachView: View {
                     }
                 }
                 .padding(ExperienceSpacing.md)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
-                AICoachConversationView(
-                    navigationTitle: "Psychology Coach",
-                    assistantTitle: "Psychology Coach",
-                    disclaimer: scopeSubtitle,
+                PsychologyCoachConversationView(
                     messages: viewModel.messages,
                     isLoading: viewModel.isLoading,
+                    isLoadingBootstrap: viewModel.phase == .loading && viewModel.messages.isEmpty,
                     draft: $draft,
-                    isSendEnabled: !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        && !viewModel.isLoading,
                     onSend: {
                         let text = draft
                         draft = ""
                         Task { await viewModel.sendFollowUp(text) }
-                    },
-                    usesPsychologyStructuredParsing: true
-                )
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("New conversation") {
-                            Task { await viewModel.startNewConversation() }
-                        }
-                        .disabled(viewModel.isLoading)
                     }
-                }
-                .safeAreaInset(edge: .bottom) {
-                    ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.psychologyCoach)
-                        .padding(.horizontal, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.xs)
-                }
+                )
             }
         }
+        .aiCoachConversationRootChrome()
+        .experienceNavigationTitle("Psychology Coach")
+        .experienceChevronOnlyBackNavigationChrome()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    Task { await viewModel.startNewConversation() }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(colors.accent)
+                        .frame(
+                            width: ExperienceAccessibility.minTouchTarget,
+                            height: ExperienceAccessibility.minTouchTarget
+                        )
+                        .contentShape(Rectangle())
+                }
+                .disabled(viewModel.isLoading)
+                .accessibilityLabel("New conversation")
+                .accessibilityIdentifier("psychologyCoach.newConversation")
+            }
+        }
+        .toolbar(.hidden, for: .tabBar)
         .task(id: viewModel.bootstrapGeneration) {
             await viewModel.bootstrap()
         }
         .accessibilityIdentifier("psychologyCoach.view")
-    }
-
-    private var scopeSubtitle: String? {
-        let label = viewModel.facts.scope.label.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !label.isEmpty else { return nil }
-        return "Scope: \(label)"
     }
 }

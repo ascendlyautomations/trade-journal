@@ -7,6 +7,7 @@ struct TradeAIMessageCard: View {
     var showsTradeAttachments: Bool = true
     var tradeForAttachment: ((TradeID) -> Trade?)?
     var onOpenTrade: ((TradeID) -> Void)?
+    var renderingMode: TradeAIMessageRenderingMode = .automatic
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -15,6 +16,13 @@ struct TradeAIMessageCard: View {
     private var coachSections: TradeAICoachSections? {
         guard message.role == .assistant else { return nil }
         return TradeAICoachResponseParser.parse(message.content)
+    }
+
+    /// Avoids the legacy section parser stripping free-form Markdown (General Trade, custom questions).
+    private var useStructuredCoachLayout: Bool {
+        guard renderingMode != .preferMarkdown else { return false }
+        guard let sections = coachSections, sections.isStructured else { return false }
+        return sections.verdict != nil
     }
 
     var body: some View {
@@ -46,7 +54,7 @@ struct TradeAIMessageCard: View {
                 } else if !showsTradeAttachments, !imageAttachments.isEmpty {
                     imageOnlyAttachmentStrip
                 }
-                if let sections = coachSections {
+                if useStructuredCoachLayout, let sections = coachSections {
                     coachBody(sections)
                 } else {
                     markdownBody
@@ -161,38 +169,12 @@ struct TradeAIMessageCard: View {
     }
 
     @ViewBuilder
-    private func coachMarkdownText(
-        _ text: String,
-        emphasis: Bool = false,
-        useFullMarkdown: Bool = false
-    ) -> some View {
-        let source = AIGeneratedTextNormalizer.normalize(text)
-        let syntax: AttributedString.MarkdownParsingOptions.InterpretedSyntax =
-            useFullMarkdown ? .full : .inlineOnlyPreservingWhitespace
-        if let attributed = try? AttributedString(
-            markdown: source,
-            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: syntax)
-        ) {
-            Text(attributed)
-                .font(emphasis ? .body.weight(.semibold) : .body)
-                .foregroundStyle(colors.primaryText)
-                .tint(colors.accent)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-                .lineSpacing(4)
-        } else {
-            Text(source)
-                .font(emphasis ? .body.weight(.semibold) : .body)
-                .foregroundStyle(colors.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-                .lineSpacing(4)
-        }
+    private func coachMarkdownText(_ text: String, emphasis: Bool = false) -> some View {
+        AICoachMarkdownText(content: text, emphasis: emphasis)
     }
 
-    @ViewBuilder
     private var markdownBody: some View {
-        coachMarkdownText(message.content, useFullMarkdown: true)
+        AICoachMarkdownText(content: message.content)
     }
 
     private var shouldOfferCollapse: Bool {

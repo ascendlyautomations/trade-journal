@@ -14,11 +14,14 @@ struct GeneralTradeAIConversationView: View {
         VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    scopeContextHeader
-
                     if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
                         ExperienceIndeterminateProgress()
                             .padding(.top, ExperienceSpacing.sm)
+                    }
+
+                    if viewModel.showsConversationStarters {
+                        emptyStateIntro
+                        suggestedQuestions
                     }
 
                     ForEach(viewModel.messages) { message in
@@ -28,7 +31,8 @@ struct GeneralTradeAIConversationView: View {
                             tradeForAttachment: { viewModel.tradeForAttachment($0) },
                             onOpenTrade: { tradeID in
                                 navigationCoordinator.pushHome(.tradeDetail(tradeID))
-                            }
+                            },
+                            renderingMode: .preferMarkdown
                         )
                         .id(message.id)
                     }
@@ -36,6 +40,8 @@ struct GeneralTradeAIConversationView: View {
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.vertical, ExperienceSpacing.sm)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .aiCoachConversationMessageScroll()
             .scrollPosition(id: $scrollPosition, anchor: .bottom)
             .onChange(of: viewModel.messages.count) { _, count in
                 guard count > 0 else { return }
@@ -65,12 +71,15 @@ struct GeneralTradeAIConversationView: View {
 
             composer
         }
-        .experienceScreenBackground()
+        .aiCoachConversationRootChrome()
+        .safeAreaInset(edge: .top, spacing: 0) {
+            pinnedScopeFilterBar
+        }
         .toolbar(.hidden, for: .tabBar)
     }
 
-    private var scopeContextHeader: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+    private var pinnedScopeFilterBar: some View {
+        ExperiencePinnedAnalyticsFilterBar {
             TradingRulesAnalyticsFilterBar(
                 scope: viewModel.scopeController,
                 onManageAccounts: {
@@ -82,13 +91,51 @@ struct GeneralTradeAIConversationView: View {
                 }
             )
         }
-        .padding(ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            colors.fillSecondary,
-            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-        )
         .accessibilityIdentifier("generalTradeAI.scopeFilters")
+    }
+
+    private var emptyStateIntro: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text(GeneralTradeAISuggestedQuestions.introTitle)
+                .experienceStyle(.headline, color: colors.primaryText)
+            Text(GeneralTradeAISuggestedQuestions.introBody)
+                .experienceStyle(.subheadline, color: colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, ExperienceSpacing.sm)
+        .accessibilityIdentifier("generalTradeAI.emptyState.intro")
+    }
+
+    private var suggestedQuestions: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text("Suggested questions")
+                .experienceStyle(.caption2, color: colors.secondaryText)
+                .textCase(.uppercase)
+                .tracking(0.35)
+                .padding(.top, ExperienceSpacing.xs)
+
+            ForEach(Array(GeneralTradeAISuggestedQuestions.starters.enumerated()), id: \.offset) { index, question in
+                Button {
+                    Task { await viewModel.submitSuggestedQuestion(question) }
+                } label: {
+                    Text(question)
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.vertical, 10)
+                        .background(
+                            colors.fillSecondary,
+                            in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                        )
+                }
+                .buttonStyle(.experiencePlain)
+                .disabled(viewModel.isLoading)
+                .accessibilityIdentifier("generalTradeAI.starter.\(index)")
+            }
+        }
+        .accessibilityIdentifier("generalTradeAI.suggestedQuestions")
     }
 
     private var composer: some View {

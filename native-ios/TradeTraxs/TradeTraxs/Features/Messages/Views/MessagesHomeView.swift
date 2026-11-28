@@ -208,16 +208,6 @@ struct MessagesHomeView: View {
                 }
             }
 
-            if !ExploreModeSupport.isActive {
-                AICoachInboxListSection(
-                    ai: data.ai,
-                    detailCache: data.detailCache,
-                    onOpen: { item in
-                        viewModel.openAICoachConversation(item)
-                    }
-                )
-            }
-
             if !viewModel.pinnedItems.isEmpty {
                 Section {
                     ForEach(viewModel.pinnedItems) { item in

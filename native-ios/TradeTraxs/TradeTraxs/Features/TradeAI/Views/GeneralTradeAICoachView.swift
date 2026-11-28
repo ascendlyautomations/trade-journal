@@ -119,7 +119,6 @@ final class GeneralTradeAICoachViewModel {
             conversations = inbox
                 .filter { $0.kind == "general_trade" }
                 .sorted { ($0.lastMessageAt ?? .distantPast) > ($1.lastMessageAt ?? .distantPast) }
-            await AICoachInboxStore.shared.refresh(using: ai)
         } catch {
             conversations = []
         }
@@ -196,15 +195,29 @@ final class GeneralTradeAICoachViewModel {
         }
     }
 
+    var showsConversationStarters: Bool {
+        messages.isEmpty && !isLoading && !isLoadingHistory
+    }
+
+    func submitSuggestedQuestion(_ question: String) async {
+        await sendMessage(question)
+    }
+
     func send() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        draft = ""
+        await sendMessage(text)
+    }
+
+    private func sendMessage(_ rawText: String) async {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         if Self.isPremiumRestricted {
             ProUpgradeCoordinator.shared.present(reason: .feature(.aiAnalyst))
             return
         }
 
-        draft = ""
         errorMessage = nil
         persistErrorMessage = nil
         pendingPersistTurn = nil
@@ -365,6 +378,7 @@ struct GeneralTradeAICoachView: View {
             navigationCoordinator: navigationCoordinator
         )
         .navigationBarTitleDisplayMode(.inline)
+        .experienceChevronOnlyBackNavigationChrome()
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Button {

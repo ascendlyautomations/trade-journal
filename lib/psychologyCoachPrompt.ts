@@ -1,3 +1,5 @@
+import { AI_COACH_MARKDOWN_FORMATTING } from "@/lib/aiCoachMarkdownFormatting"
+
 export const PSYCHOLOGY_COACH_SYSTEM_PROMPT = `You are TradeTraxs Psychology Coach, a trading-behavior coach, NOT a financial advisor.
 
 CRITICAL RULES:
@@ -11,13 +13,9 @@ CRITICAL RULES:
 8. Cite sample sizes and both sides of comparisons when you mention a pattern.
 9. Writing style: do not use em dashes (—). Use commas instead.
 
-You may answer follow-up questions ONLY about the user's psychology/performance analytics in the facts payload.`
+You may answer follow-up questions ONLY about the user's psychology/performance analytics in the facts payload.
 
-export const PSYCHOLOGY_COACH_INITIAL_SECTIONS = `## Biggest Psychological Insight
-## Performance Patterns
-## Areas for Improvement
-## Recommended Guardrails
-## Next Session Focus`
+${AI_COACH_MARKDOWN_FORMATTING}`
 
 export type PsychologyCoachComparisonSide = {
   label?: string
@@ -123,23 +121,18 @@ export type PsychologyCoachFactsPayload = {
 
 const INITIAL_MODE_INSTRUCTION = `Produce an evidence-driven psychology coaching brief for this trader.
 
-Use ONLY numbers from the facts JSON. When data is limited, say so briefly in Biggest Psychological Insight and keep other sections short.
+Use ONLY numbers from the facts JSON. When data is limited, say so in the opening answer and keep the rest brief.
 
-Use EXACTLY these markdown headings (one section each):
-${PSYCHOLOGY_COACH_INITIAL_SECTIONS}
-
-Section guidance:
-- Biggest Psychological Insight: 1-2 sentences with the single strongest supported pattern, include sample sizes and key stats.
-- Performance Patterns: 3-5 bullet points with concrete comparisons (win rate, avg P&L, expectancy) where available.
-- Areas for Improvement: 2-4 bullet points tied to weaker buckets in comparisons or compliance, no generic trading tips.
-- Recommended Guardrails: 2-3 actionable behavioral guardrails supported by guardrailFacts or comparisons.
-- Next Session Focus: exactly one sentence, highest-priority focus for the next session.
+Structure with descriptive ## headings that fit the data (for example patterns, risks, guardrails), not a fixed template.
+Cover: strongest supported pattern with sample sizes, concrete comparisons, weaknesses tied to facts, 2-3 behavioral guardrails, and end with one sentence for next session focus.
 
 Do not repeat the same point across sections. No motivational filler.`
 
-const FOLLOW_UP_MODE_INSTRUCTION = `Answer the trader's follow-up in natural conversational prose (no required section headings).
+const FOLLOW_UP_MODE_INSTRUCTION = `Answer the trader's follow-up in natural conversational prose.
 
-Stay grounded in the facts payload. Reference specific numbers and sample sizes when relevant. If the question cannot be answered from facts, say what is missing.`
+Stay grounded in the facts payload. Reference specific numbers and sample sizes when relevant. If the question cannot be answered from facts, say what is missing.
+
+${AI_COACH_MARKDOWN_FORMATTING}`
 
 export function buildPsychologyCoachUserPrompt(
   facts: PsychologyCoachFactsPayload,
@@ -167,11 +160,32 @@ Structured psychology facts (authoritative, do not recalculate):
 ${factsJson}`
 }
 
+type PsychologyOpenAiTurnMessage = {
+  role: "system" | "user" | "assistant"
+  content: string
+}
+
+/** OpenAI rejects some threads with back-to-back user/assistant turns. */
+function coalesceConsecutiveTurnMessages(
+  messages: Array<{ role: "user" | "assistant"; content: string }>
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const out: Array<{ role: "user" | "assistant"; content: string }> = []
+  for (const message of messages) {
+    const prev = out[out.length - 1]
+    if (prev && prev.role === message.role) {
+      prev.content = `${prev.content}\n\n${message.content}`.trim()
+    } else {
+      out.push({ ...message, content: message.content.trim() })
+    }
+  }
+  return out
+}
+
 export function buildPsychologyCoachOpenAiMessages(
   facts: PsychologyCoachFactsPayload,
   mode: string,
   priorMessages: Array<{ role: string; content: string }> = []
-): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+): PsychologyOpenAiTurnMessage[] {
   const trimmed = priorMessages
     .filter(
       (m) =>
@@ -180,13 +194,42 @@ export function buildPsychologyCoachOpenAiMessages(
         m.content.trim().length > 0
     )
     .slice(-24)
+    .map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content.trim(),
+    }))
+
+  const history = coalesceConsecutiveTurnMessages(trimmed)
 
   return [
     { role: "system", content: PSYCHOLOGY_COACH_SYSTEM_PROMPT },
     { role: "user", content: buildPsychologyCoachUserPrompt(facts, mode) },
-    ...trimmed.map((m) => ({
+    ...history,
+  ]
+}
+
+/** Splits {@link buildPsychologyCoachOpenAiMessages} for `runTradeAiCompletion`. */
+export function splitPsychologyCoachOpenAiTurn(messages: PsychologyOpenAiTurnMessage[]): {
+  systemPrompt: string
+  primaryUserPrompt: string
+  priorMessages: Array<{ role: "user" | "assistant"; content: string }>
+} {
+  const systemPrompt = messages.find((m) => m.role === "system")?.content ?? PSYCHOLOGY_COACH_SYSTEM_PROMPT
+  const anchorUser = messages.find((m) => m.role === "user")?.content ?? ""
+  let prior = messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice(1)
+    .map((m) => ({
       role: m.role as "user" | "assistant",
       content: m.content,
-    })),
-  ]
+    }))
+
+  let primaryUserPrompt = anchorUser
+  if (prior[0]?.role === "user") {
+    primaryUserPrompt = `${primaryUserPrompt}\n\n${prior[0].content}`.trim()
+    prior = prior.slice(1)
+  }
+  prior = coalesceConsecutiveTurnMessages(prior)
+
+  return { systemPrompt, primaryUserPrompt, priorMessages: prior }
 }

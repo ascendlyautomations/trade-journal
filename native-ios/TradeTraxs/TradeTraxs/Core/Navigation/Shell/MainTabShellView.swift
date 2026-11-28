@@ -1687,6 +1687,7 @@ struct PsychologyAnalyticsHomeRouteView: View {
                     postUnlockGapMessages: PsychologyAnalyticsSessionStore.shared.postUnlockGapMessages,
                     highlightedSectionID: PsychologyAnalyticsSessionStore.shared.highlightedSectionID,
                     onOpenCoach: {
+                        PsychologyCoachSessionStore.shared.clearReopenConversation()
                         navigationCoordinator.pushHome(.psychologyCoach)
                     },
                     onOpenCheckInHistory: {
@@ -1721,6 +1722,7 @@ struct PsychologyAnalyticsHomeRouteView: View {
                 )
             }
         }
+        .experienceChevronOnlyBackNavigationChrome()
         .task(id: activeProfileID?.rawValue) {
             guard !showsPsychologyAnalyticsFreePreview, !showsEntitlementVerification else { return }
             await refreshAnalytics(forceReveal: true)

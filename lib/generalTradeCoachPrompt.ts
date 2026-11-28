@@ -1,3 +1,5 @@
+import { AI_COACH_MARKDOWN_FORMATTING } from "@/lib/aiCoachMarkdownFormatting"
+
 export const GENERAL_TRADE_COACH_SYSTEM_PROMPT = `You are TradeTraxs General Trade AI, a trading performance coach, NOT a financial advisor.
 
 Use the trader history summary provided. Do not invent statistics.
@@ -18,10 +20,9 @@ Compliance:
 Coaching style:
 - Answer the trader's actual question in natural, conversational prose (like a knowledgeable coach in chat).
 - Do NOT default to rigid report templates (no forced Summary, Strengths, Areas for Improvement, Behavior Observed, or Recommendations sections).
-- Use markdown only when it improves readability (short headings, bullets, or numbered lists are fine).
-- Put a blank line between paragraphs and before section headings when you use them.
 - On follow-up turns, continue the thread. Do not restart with a full standalone report unless the user asks for a fresh overview.
-- Lead with the direct answer, then support with evidence.
+
+${AI_COACH_MARKDOWN_FORMATTING}
 
 Analysis priorities:
 - Connect strategy, session, instrument/ticker, psychology fields, rule adherence, and profitability when the data supports a relationship.
@@ -83,5 +84,7 @@ ${limitations}
 ${attached}
 
 TRADER QUESTION (untrusted user content — answer this directly):
-${options.userQuestion}`
+${options.userQuestion}
+
+Format: lead with the direct answer, then use markdown headings, bullets, bold stats, and blank lines between sections when the reply is substantive.`
 }

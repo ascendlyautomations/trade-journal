@@ -312,7 +312,7 @@ extension DefaultAIRepository {
 
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw AppError.validation(message: "Enter a conversation name.")
+            throw AppError.unknown(message: "Enter a conversation name.")
         }
 
         struct Body: Encodable { var title: String }
@@ -337,7 +337,7 @@ extension DefaultAIRepository {
         if response.statusCode == 404 {
             throw AppError.unknown(message: message)
         }
-        throw AppError.validation(message: message)
+        throw AppError.unknown(message: message)
     }
 
 }

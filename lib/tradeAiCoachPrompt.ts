@@ -1,3 +1,5 @@
+import { AI_COACH_MARKDOWN_FORMATTING } from "@/lib/aiCoachMarkdownFormatting"
+
 /**
  * Individual Trade AI turn prompts — used by `/api/ai/trade-turn` only.
  * Native clients send richer `openaiContent`; these helpers align the BFF system
@@ -39,7 +41,9 @@ Output:
 - Follow the RESPONSE FORMAT section in the latest user message exactly.
 - If that section names markdown headings, use those headings verbatim on their own lines with a blank line before each section body.
 - Do NOT use legacy headings such as Summary, Strengths, Areas for Improvement, Behavior Observed, or Recommendations unless the RESPONSE FORMAT explicitly requires them (journal summary preset only).
-- For conversational custom questions, answer naturally in short paragraphs or tight bullets without forcing coach section headings.`
+- For conversational custom questions, apply the markdown rules below instead of preset headings.
+
+${AI_COACH_MARKDOWN_FORMATTING}`
 
 const IMPROVEMENT_FORMAT = `RESPONSE FORMAT (this reply only):
 Use EXACTLY these markdown headings (no Verdict section):
@@ -89,9 +93,10 @@ Up to 2 factual notes on process (bullets with "- ").
 One sentence takeaway for the next session.`
 
 const CUSTOM_FORMAT = `RESPONSE FORMAT (this reply only):
-Answer the trader's question directly in natural coach prose.
-Use short paragraphs or tight bullets as needed (max ~280 words).
-Do NOT force Verdict / Biggest Insight headings unless they genuinely help readability.`
+Answer the trader's question directly in natural coach prose (max ~280 words unless depth is clearly needed).
+Do NOT force Verdict / Biggest Insight headings unless they genuinely help readability.
+
+${AI_COACH_MARKDOWN_FORMATTING}`
 
 function focusDirective(promptKey: string): string {
   switch (promptKey) {

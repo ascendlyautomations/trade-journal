@@ -38,7 +38,10 @@ nonisolated enum PsychologyCoachHTTPMapping {
             throw AppError.unknown(message: message)
         }
 
-        if let rawReply, !rawReply.isEmpty {
+        if (200 ... 299).contains(statusCode),
+            let rawReply,
+            !rawReply.isEmpty
+        {
             let normalized = AIGeneratedTextNormalizer.normalize(rawReply)
             guard !normalized.isEmpty else {
                 throw AppError.unknown(message: "No response generated")
@@ -55,6 +58,10 @@ nonisolated enum PsychologyCoachHTTPMapping {
         #if DEBUG
         PsychologyCoachTrace.requestFailed(status: statusCode, byteCount: data.count, category: category)
         #endif
+
+        if let rawReply, !rawReply.isEmpty {
+            throw AppError.unknown(message: AIGeneratedTextNormalizer.normalize(rawReply))
+        }
 
         if statusCode == 401 {
             throw AppError.domain(.permission(.notAuthenticated))

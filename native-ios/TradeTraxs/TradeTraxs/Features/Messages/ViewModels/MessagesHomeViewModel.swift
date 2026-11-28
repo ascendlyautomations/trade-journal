@@ -204,25 +204,6 @@ final class MessagesHomeViewModel {
         navigationCoordinator.pushMessages(.settings(.notifications))
     }
 
-    func openAICoachConversation(_ item: TradeAIConversationInboxItem) {
-        switch item.kind {
-        case "psychology":
-            PsychologyCoachSessionStore.shared.noteReopenConversation(id: item.id)
-            navigationCoordinator.pushHome(.psychologyCoach)
-        case "general_trade":
-            GeneralTradeCoachSessionStore.shared.noteReopenConversation(id: item.id)
-            navigationCoordinator.pushMessages(.tradeAIConversation(item.id, tradeID: nil))
-        case "trade":
-            if let tradeID = item.tradeID {
-                navigationCoordinator.pushMessages(
-                    .tradeAIConversation(item.id, tradeID: tradeID)
-                )
-            }
-        default:
-            break
-        }
-    }
-
     func exploreTradeRooms() {
         navigationCoordinator.pushTradeRoomsHome()
     }

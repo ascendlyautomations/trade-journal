@@ -3,8 +3,11 @@ import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUs
 import { openAiApiKey } from "@/lib/server/openAiRouteSupport"
 import {
   buildPsychologyCoachOpenAiMessages,
+  splitPsychologyCoachOpenAiTurn,
   type PsychologyCoachFactsPayload,
 } from "@/lib/psychologyCoachPrompt"
+import { runTradeAiCompletion } from "@/lib/server/ai/aiOpenAiTurn"
+import { openAiErrorMetaForLog } from "@/lib/server/openAiRouteSupport"
 import { normalizeAIProseResponse } from "@/lib/normalizeAIGeneratedText"
 import {
   consumeDurableUserRateLimit,
@@ -12,11 +15,7 @@ import {
 } from "@/lib/server/durableUserRateLimit"
 import { requireAIFeatureEntitlement } from "@/lib/server/requireAIFeatureEntitlement"
 import type { Json } from "@/lib/database.types"
-import {
-  createOpenAiChatCompletion,
-  mapOpenAiErrorToHttp,
-  openAiCoachModel,
-} from "@/lib/server/openAiChatCompletion"
+import { mapOpenAiErrorToHttp, openAiCoachModel } from "@/lib/server/openAiChatCompletion"
 import {
   appendAssistantMessageIdempotent,
   appendTurnIdempotent,
@@ -153,20 +152,24 @@ export async function POST(req: Request) {
 
     tracePhase = "openai"
     const openAiMessages = buildPsychologyCoachOpenAiMessages(facts, openAiMode, messages)
+    const turn = splitPsychologyCoachOpenAiTurn(openAiMessages)
 
-    const maxCompletionTokens =
-      mode === "reportSummary" ? 420 : mode === "summary" ? 520 : 1_200
-
-    const completion = await createOpenAiChatCompletion({
-      messages: openAiMessages,
-      temperature: mode === "reportSummary" ? 0.3 : 0.35,
-      maxCompletionTokens,
-      route: "psychology-coach",
-      userId: user.id,
+    console.info("[PsychologyCoachTrace] openai.request", {
+      traceId,
+      phase: tracePhase,
+      model: openAiCoachModel(),
+      mode: openAiMode,
+      anchorUserChars: turn.primaryUserPrompt.length,
+      priorTurns: turn.priorMessages.length,
     })
 
-    const rawReply = completion.content
-    const reply = normalizeAIProseResponse(rawReply) ?? rawReply
+    const completion = await runTradeAiCompletion({
+      systemPrompt: turn.systemPrompt,
+      primaryUserPrompt: turn.primaryUserPrompt,
+      priorMessages: turn.priorMessages,
+    })
+
+    const reply = completion.reply
     if (!reply) {
       return NextResponse.json({ error: "No response generated" }, { status: 500 })
     }
@@ -178,9 +181,9 @@ export async function POST(req: Request) {
         conversationId: conversationId || null,
         route: "psychology-coach",
         model: openAiCoachModel(),
-        promptTokens: completion.usage?.prompt_tokens ?? null,
-        completionTokens: completion.usage?.completion_tokens ?? null,
-        totalTokens: completion.usage?.total_tokens ?? null,
+        promptTokens: completion.usage.promptTokens,
+        completionTokens: completion.usage.completionTokens,
+        totalTokens: completion.usage.totalTokens,
       })
     } catch (usageError) {
       console.warn("[PsychologyCoachTrace] usage.log_failed", {
@@ -262,18 +265,29 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({
       reply,
-      usage: completion.usage ?? null,
+      usage: {
+        prompt_tokens: completion.usage.promptTokens,
+        completion_tokens: completion.usage.completionTokens,
+        total_tokens: completion.usage.totalTokens,
+      },
       conversationId: conversationId || null,
       assistantMessageId,
       persistError: persistError ?? null,
     })
   } catch (error) {
     const mapped = mapOpenAiErrorToHttp(error)
+    const openAiMeta = openAiErrorMetaForLog(error)
+    const openAiDetail =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message?: string }).message ?? "").slice(0, 240)
+        : ""
     console.warn("[PsychologyCoachTrace] request.error", {
       traceId,
       phase: tracePhase,
       status: mapped.status,
       code: mapped.body.code ?? null,
+      openAi: openAiMeta,
+      openAiDetail: openAiDetail || null,
     })
     if (mapped.status >= 500 || mapped.body.code) {
       console.error("[psychology-coach]", error)

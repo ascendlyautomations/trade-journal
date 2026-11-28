@@ -113,6 +113,43 @@ export async function createOpenAiChatCompletion(
   }
 }
 
+/**
+ * Psychology Coach completion — matches Trade AI (`runTradeAiCompletion`) request shape.
+ * Some analyst models reject `temperature` / `max_completion_tokens`, which yields HTTP 400
+ * (`openai_request_invalid`) while trade turns succeed.
+ */
+export async function createPsychologyCoachChatCompletion(
+  options: Pick<OpenAiChatCompletionOptions, "messages" | "route" | "userId">
+): Promise<OpenAiChatCompletionResult> {
+  const openai = getOpenAiClient()
+  if (!openai) {
+    throw Object.assign(new Error("OPENAI_API_KEY missing"), {
+      code: "openai_not_configured",
+    })
+  }
+
+  const messages = options.messages.map((message) => ({
+    role: message.role,
+    content: capPromptSize(message.content),
+  }))
+
+  const response = await runWithTransientRetry(() =>
+    openai.chat.completions.create({
+      model: openAiCoachModel(),
+      messages,
+    })
+  )
+
+  logOpenAiTokenUsage(options.route, options.userId, response.usage)
+
+  const content = response.choices[0]?.message?.content?.trim() ?? ""
+  return {
+    content,
+    usage: response.usage,
+    finishReason: response.choices[0]?.finish_reason,
+  }
+}
+
 export function mapOpenAiErrorToHttp(error: unknown): {
   status: number
   body: { error: string; reply?: string; code?: string }

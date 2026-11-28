@@ -20,9 +20,13 @@ nonisolated enum TradeAICoachPrompts {
   static func apiContentForCustomQuestion(_ question: String) -> String {
     """
     RESPONSE FORMAT (this reply only):
-    Answer the trader's question directly in natural coach prose.
-    Use short paragraphs or tight bullets as needed (max ~280 words).
+    Answer the trader's question directly in natural coach prose (max ~280 words unless depth is clearly needed).
     Do NOT force Verdict / Biggest Insight headings unless they genuinely help readability.
+
+    Readable output (Markdown when substantive):
+    - Start with a concise direct answer.
+    - Use ## headings, "-" bullets, numbered lists, and **bold** for key stats and actions.
+    - Put a blank line between paragraphs and before headings.
 
     Trader question:
     \(question)

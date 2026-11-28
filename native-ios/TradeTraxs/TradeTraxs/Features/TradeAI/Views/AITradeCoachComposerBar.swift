@@ -44,28 +44,24 @@ struct AITradeCoachComposerBar: View {
                 .padding(.horizontal, ExperienceSpacing.md)
             }
 
-            HStack(alignment: .bottom, spacing: ExperienceSpacing.xxs) {
+            HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
                 attachmentLauncher
 
                 TextField("Ask a follow-up…", text: $draft, axis: .vertical)
                     .lineLimit(1 ... 5)
                     .textFieldStyle(.plain)
                     .padding(10)
+                    .frame(minHeight: ExperienceAccessibility.minTouchTarget, alignment: .center)
                     .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md))
                     .focused($composerFocused)
 
-                Button(action: onSend) {
-                    Image(systemName: isLoading ? "hourglass" : "arrow.up.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(canSend ? colors.accent : colors.tertiaryText)
-                }
-                .disabled(!canSend)
-                .accessibilityLabel("Send")
+                sendButton
             }
             .padding(.horizontal, ExperienceSpacing.sm)
             .padding(.vertical, ExperienceSpacing.xs)
             .background(colors.navigationBackground.opacity(0.96))
         }
+        .experienceFormFocusSync($composerFocused)
         .photosPicker(
             isPresented: $showsPhotoPicker,
             selection: $photoItem,
@@ -112,6 +108,24 @@ struct AITradeCoachComposerBar: View {
         .fixedSize(horizontal: true, vertical: true)
         .disabled(isLoading)
         .accessibilityLabel("Add")
+    }
+
+    private var sendButton: some View {
+        Button(action: onSend) {
+            Image(systemName: isLoading ? "hourglass" : "arrow.up.circle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(canSend ? colors.accent : colors.tertiaryText)
+                .frame(width: 28, height: 28)
+                .frame(
+                    width: ExperienceAccessibility.minTouchTarget,
+                    height: ExperienceAccessibility.minTouchTarget
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.experiencePlain)
+        .fixedSize(horizontal: true, vertical: true)
+        .disabled(!canSend)
+        .accessibilityLabel("Send")
     }
 
     private var canSend: Bool {

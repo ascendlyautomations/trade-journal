@@ -186,6 +186,20 @@ struct PsychologyAnalyticsDetailView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Psychology Analytics")
+        .toolbar {
+            if openPsychologyCoachAction != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        ExperienceHaptics.play(.selection)
+                        openPsychologyCoachAction?()
+                    } label: {
+                        Image(systemName: "brain.head.profile")
+                    }
+                    .accessibilityLabel("Psychology Coach")
+                    .accessibilityIdentifier("psychologyAnalytics.psychologyCoach")
+                }
+            }
+        }
         .accessibilityIdentifier("psychologyAnalytics.detail")
     }
 
