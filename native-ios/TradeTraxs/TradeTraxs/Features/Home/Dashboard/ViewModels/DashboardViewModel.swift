@@ -3122,6 +3122,7 @@ final class DashboardViewModel {
 
         if scope.needsClientScopedTradeMetrics, !ownerTradesCoverActiveAnalyticsScope() {
             isScopeFilteredMetricsLoading = true
+            scheduleTradingRulesComplianceRecompute()
             if let profileID {
                 kickDashboardOwnerTradesHydration(
                     profileID: profileID,
@@ -3150,6 +3151,7 @@ final class DashboardViewModel {
 
         if scope.needsClientScopedTradeMetrics {
             isScopeFilteredMetricsLoading = true
+            scheduleTradingRulesComplianceRecompute()
             if let profileID {
                 kickDashboardOwnerTradesHydration(
                     profileID: profileID,
@@ -5219,10 +5221,6 @@ final class DashboardViewModel {
     }
 
     func recomputeTradingRulesCompliance() {
-        let ready = loadsTraxsProPreviewSampleOnly
-            ? (profileID != nil)
-            : (!isScopeFilteredMetricsLoading && profileID != nil)
-
         guard let profileID else {
             TradingRulesComplianceRecomputeCoordinator.resetForSessionBoundary()
             return
@@ -5246,6 +5244,11 @@ final class DashboardViewModel {
         )
 
         let scopedTrades = complianceScopedTradesForRules()
+        let ready: Bool = {
+            if loadsTraxsProPreviewSampleOnly { return true }
+            if isScopeFilteredMetricsLoading, scopedTrades.isEmpty { return false }
+            return true
+        }()
 
         let isFreeRulesTier = loadsTraxsProPreviewSampleOnly
             ? false

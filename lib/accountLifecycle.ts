@@ -193,21 +193,29 @@ export async function graduateEvalToFunded(
   }
 
   const funded = mapTradingAccountRow(data as Record<string, unknown>)
-  const purchaseExpenseWarning =
-    (await syncPropFirmAccountPurchaseExpense(client, userId, funded.id, {
+  const purchaseExpenseResult = await syncPropFirmAccountPurchaseExpense(
+    client,
+    userId,
+    funded.id,
+    {
       name: funded.name,
       category: String(funded.category ?? payload.category),
       mode: funded.mode ?? payload.mode,
       purchaseCost: payload.purchaseCost,
-      purchaseDate: payload.purchaseDate,
-    })) ?? null
+      datePaid: payload.purchaseDate,
+    }
+  )
+
+  let purchaseExpenseWarning: string | null = null
+  if (!purchaseExpenseResult.ok) {
+    console.error(purchaseExpenseResult.message)
+    purchaseExpenseWarning =
+      "Account saved, but the purchase cost was not recorded. Save the account again to retry."
+  }
 
   return {
     fundedAccount: funded,
     error: null,
-    purchaseExpenseWarning:
-      purchaseExpenseWarning && purchaseExpenseWarning.length > 0
-        ? purchaseExpenseWarning
-        : null,
+    purchaseExpenseWarning,
   }
 }

@@ -3,7 +3,10 @@ import {
   clearBrokerConnectionPendingLink,
   setBrokerConnectionPendingLink,
 } from "@/lib/integrations/brokerConnectionPendingLink"
-import { parseBrokerLinkCreateAccountPayload } from "@/lib/integrations/brokerLinkCreateAccountPayload"
+import {
+  parseBrokerLinkCreateAccountPayload,
+  type BrokerLinkCreateAccountBody,
+} from "@/lib/integrations/brokerLinkCreateAccountPayload"
 import { insertTradingAccount } from "@/lib/tradingAccounts"
 import { proLimitResponseFromError } from "@/lib/server/proLimitFromError"
 
@@ -77,7 +80,7 @@ export async function mutateTradovateConnectionPendingLink(
       tradetraxsAccountId = raw
     } else {
       const parsed = parseBrokerLinkCreateAccountPayload(
-        body.createAccount ?? {},
+        (body.createAccount ?? {}) as BrokerLinkCreateAccountBody,
         "Tradovate Account"
       )
       if (!parsed.ok) {

@@ -59,6 +59,22 @@ struct DashboardQuickActionRow<Icon: View>: View {
             .padding(.horizontal, DashboardQuickActionStyle.horizontalPadding)
             .padding(.vertical, DashboardQuickActionStyle.verticalPadding)
             .frame(minHeight: DashboardQuickActionStyle.rowMinHeight, alignment: .center)
+            .dashboardQuickActionCardChrome()
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .accessibilityLabel("\(title). \(subtitle)")
+        .accessibilityHint(accessibilityHint ?? "")
+    }
+}
+
+// MARK: - Shared quick-action card chrome (Daily Check-In, Broker Integration, Getting Started)
+
+private struct DashboardQuickActionCardChrome: ViewModifier {
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        content
             .background(colors.surfacePrimary)
             .clipShape(
                 RoundedRectangle(
@@ -73,10 +89,11 @@ struct DashboardQuickActionRow<Icon: View>: View {
                 )
                 .stroke(colors.border, lineWidth: 1)
             )
-        }
-        .buttonStyle(.experiencePlain)
-        .accessibilityIdentifier(accessibilityIdentifier)
-        .accessibilityLabel("\(title). \(subtitle)")
-        .accessibilityHint(accessibilityHint ?? "")
+    }
+}
+
+extension View {
+    func dashboardQuickActionCardChrome() -> some View {
+        modifier(DashboardQuickActionCardChrome())
     }
 }

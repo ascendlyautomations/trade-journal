@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { createStorySignedMediaUrl } from "@/lib/storySignedMedia"
-import type { ActiveStoryRow } from "@/lib/activeStories"
-
-type StoryMediaLike = Pick<ActiveStoryRow, "image_url" | "storage_path">
+type StoryMediaLike = {
+  image_url?: string | null
+  storage_path?: string | null
+}
 
 export function useStorySignedPlaybackUrl(
   story: StoryMediaLike | null | undefined

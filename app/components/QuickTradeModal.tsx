@@ -532,6 +532,9 @@ export default function QuickTradeModal({
         show_in_account_dropdowns: account.show_in_account_dropdowns !== false,
         note: "",
         rules: null,
+        account_lifecycle_id: null,
+        graduated_to_account_id: null,
+        graduated_from_account_id: null,
       })),
     [accounts]
   )

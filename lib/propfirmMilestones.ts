@@ -183,6 +183,9 @@ export function milestoneAccountToTradingListItem(
       winningDays: parseOptionalNumber(account.winning_days),
       winningDayThreshold: parseOptionalNumber(account.winning_day_threshold),
     },
+    account_lifecycle_id: null,
+    graduated_to_account_id: null,
+    graduated_from_account_id: null,
   }
 }
 

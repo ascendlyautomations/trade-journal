@@ -5,6 +5,7 @@ struct TradingAnalyticsPreferencesView: View {
     @State private var viewModel: TradingAnalyticsPreferencesViewModel
     let navigationCoordinator: NavigationCoordinator
     @State private var showsInstrumentPicker = false
+    @State private var showsAllowedDaysPicker = false
     @State private var showsUnsavedDialog = false
     @State private var unsavedNavigationIntercept = TradingRulesUnsavedNavigationGuard.UnsavedNavigationInterceptBox()
     @FocusState private var focusedField: TradingAnalyticsPreferencesViewModel.DraftField?
@@ -113,6 +114,13 @@ struct TradingAnalyticsPreferencesView: View {
                 NavigationStack {
                     TradingPreferenceInstrumentPicker(viewModel: viewModel) {
                         showsInstrumentPicker = false
+                    }
+                }
+            }
+            .sheet(isPresented: $showsAllowedDaysPicker) {
+                NavigationStack {
+                    TradingRulesAllowedDaysPicker(viewModel: viewModel) {
+                        showsAllowedDaysPicker = false
                     }
                 }
             }
@@ -233,25 +241,11 @@ struct TradingAnalyticsPreferencesView: View {
                     identifier: "settings.tradingAnalytics.instruments"
                 )
                 settingsInlineDivider()
-                dropdownRow(
+                allowedTradingDaysPickerRow(
                     "Allowed Trading Days",
                     info: .allowedTradingDays,
-                    value: allowedDaysSummary,
-                    isPlaceholder: viewModel.preferences.allowedTradingDays.isEmpty,
                     identifier: "settings.tradingAnalytics.allowedDays"
-                ) {
-                    ForEach(TradingRuleWeekday.displayOrder, id: \.self) { day in
-                        Button {
-                            viewModel.toggleAllowedDay(day)
-                        } label: {
-                            if viewModel.preferences.allowedTradingDays.contains(day.rawValue) {
-                                Label(day.displayLabel, systemImage: "checkmark")
-                            } else {
-                                Text(day.displayLabel)
-                            }
-                        }
-                    }
-                }
+                )
                 settingsInlineDivider()
                 scopedNumericField(
                     TradingRulesFieldInfo.maxTradesPerDay.title,
@@ -577,25 +571,11 @@ struct TradingAnalyticsPreferencesView: View {
                     identifier: "settings.tradingAnalytics.instruments"
                 )
                 settingsInlineDivider()
-                dropdownRow(
+                allowedTradingDaysPickerRow(
                     "Allowed trading days",
                     info: .allowedTradingDays,
-                    value: allowedDaysSummary,
-                    isPlaceholder: viewModel.preferences.allowedTradingDays.isEmpty,
                     identifier: "settings.tradingAnalytics.allowedDays"
-                ) {
-                    ForEach(TradingRuleWeekday.displayOrder, id: \.self) { day in
-                        Button {
-                            viewModel.toggleAllowedDay(day)
-                        } label: {
-                            if viewModel.preferences.allowedTradingDays.contains(day.rawValue) {
-                                Label(day.displayLabel, systemImage: "checkmark")
-                            } else {
-                                Text(day.displayLabel)
-                            }
-                        }
-                    }
-                }
+                )
                 settingsInlineDivider()
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                     TradingRulesPlannedTimePicker(
@@ -890,6 +870,26 @@ struct TradingAnalyticsPreferencesView: View {
         .tradingRulesSettingsRow()
     }
 
+    private func allowedTradingDaysPickerRow(
+        _ title: String,
+        info: TradingRulesFieldInfo?,
+        identifier: String
+    ) -> some View {
+        Button {
+            showsAllowedDaysPicker = true
+        } label: {
+            dropdownLabel(
+                title,
+                info: info,
+                value: allowedDaysSummary,
+                isPlaceholder: viewModel.preferences.allowedTradingDays.isEmpty
+            )
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityIdentifier(identifier)
+        .tradingRulesSettingsRow()
+    }
+
     private func dropdownValueLabel(value: String, isPlaceholder: Bool) -> some View {
         HStack(spacing: ExperienceSpacing.xxs) {
             Text(value)
@@ -1049,6 +1049,53 @@ struct TradingAnalyticsPreferencesView: View {
         .accessibilityIdentifier(identifier)
     }
 
+}
+
+private struct TradingRulesAllowedDaysPicker: View {
+    @Bindable var viewModel: TradingAnalyticsPreferencesViewModel
+    var onClose: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    private var selectedWeekdays: Set<TradingRuleWeekday> {
+        Set(TradingPreferenceRules.normalizeAllowedTradingDays(viewModel.preferences.allowedTradingDays))
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(TradingRuleWeekday.displayOrder, id: \.self) { day in
+                    Button {
+                        viewModel.toggleAllowedDay(day)
+                    } label: {
+                        HStack {
+                            Text(day.displayLabel)
+                                .experienceStyle(.body, color: colors.primaryText)
+                            Spacer()
+                            if selectedWeekdays.contains(day) {
+                                Image(systemName: "checkmark")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(colors.accent)
+                            }
+                        }
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .accessibilityIdentifier("settings.tradingAnalytics.allowedDays.\(day.rawValue)")
+                }
+            } footer: {
+                Text("Tap days to add or remove. Changes apply when you save Trading Rules.")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+        }
+        .experienceInsetGroupedListStyle(pageBackground: true)
+        .experienceNavigationTitle("Allowed Trading Days")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", action: onClose)
+            }
+        }
+        .accessibilityIdentifier("settings.tradingAnalytics.allowedDaysPicker")
+    }
 }
 
 private struct TradingPreferenceInstrumentPicker: View {

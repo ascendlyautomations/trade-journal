@@ -1082,6 +1082,14 @@ function StoryReplyMessageBubble({
   const payload = decodeStoryReplyContent(message.content)
   const replyText = payload?.text?.trim() ?? ""
   const contextLabel = isMe ? "Replied to their story" : "Replied to your story"
+  if (!payload?.story_id) {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <p className="text-sm italic text-gray-400">Story unavailable</p>
+      </div>
+    )
+  }
+  const storyId = payload.story_id
   const menuOpen = activeMenuId === message.id
 
   return (
@@ -1130,7 +1138,7 @@ function StoryReplyMessageBubble({
             />
 
             <StoryReplyPreviewRow
-              storyId={payload.story_id}
+              storyId={storyId}
               isMe={isMe}
               contextLabel={contextLabel}
               onOpenStory={onViewStory}

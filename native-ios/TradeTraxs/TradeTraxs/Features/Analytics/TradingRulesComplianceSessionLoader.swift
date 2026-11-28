@@ -200,6 +200,28 @@ enum TradingRulesComplianceSessionLoader {
         if let tradesError = output.tradesError, output.scopedTradeCount == 0, output.ownerTradeCount == 0 {
             return .failed(tradesError)
         }
+        if !usesBundledSample,
+           output.result != nil,
+           !output.isAuthoritative,
+           !SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        {
+            Task {
+                do {
+                    _ = try await SessionOwnerTradesStore.shared.ensureCompleteAnalyticsSnapshot(
+                        for: profileID,
+                        detailCache: dependencies.detailCache,
+                        repository: dependencies.tradesRepository
+                    )
+                } catch {
+                    return
+                }
+                _ = await performColdRefresh(
+                    dependencies: dependencies,
+                    profileID: profileID,
+                    presentationStore: presentationStore
+                )
+            }
+        }
         return .ready
     }
 

@@ -7,7 +7,7 @@ import {
   resolveStoryPlaybackUrl,
 } from "@/lib/storyMediaAccess"
 import { storyMediaIsVideo } from "@/lib/activeStories"
-import { PhotoIcon, PlayIcon } from "@heroicons/react/24/solid"
+import { Image, Play } from "lucide-react"
 
 type Props = {
   storyId: string
@@ -60,7 +60,7 @@ export default function StoryReplyPreviewRow({
   if (!allowed) {
     return (
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
-        <PhotoIcon className="h-5 w-5 shrink-0 text-gray-500" aria-hidden />
+        <Image className="h-5 w-5 shrink-0 text-gray-500" strokeWidth={2} aria-hidden />
         <p className="min-w-0 text-xs font-medium text-gray-400">Story unavailable</p>
       </div>
     )
@@ -101,7 +101,11 @@ export default function StoryReplyPreviewRow({
     >
       {thumb}
       {isVideo ? (
-        <PlayIcon className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+        <Play
+          className="h-4 w-4 shrink-0 fill-current text-gray-400"
+          strokeWidth={0}
+          aria-hidden
+        />
       ) : null}
       <p className="min-w-0 flex-1 text-xs font-medium text-gray-400">{contextLabel}</p>
     </button>

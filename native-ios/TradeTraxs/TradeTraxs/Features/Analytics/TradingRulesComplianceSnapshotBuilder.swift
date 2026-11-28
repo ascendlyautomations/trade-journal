@@ -86,31 +86,36 @@ enum TradingRulesComplianceSnapshotBuilder {
             historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
         }
 
-        if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome,
-           !historyComplete || ownerTrades.isEmpty
-        {
-            do {
-                ownerTrades = try await SessionOwnerTradesStore.shared.ensureCompleteAnalyticsSnapshot(
-                    for: profileID,
-                    detailCache: dependencies.detailCache,
-                    repository: dependencies.tradesRepository
-                )
-                historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
-            } catch {
-                tradesError = "Check your connection and try again."
-                if ownerTrades.isEmpty {
-                    return Output(
-                        result: nil,
-                        hasConfiguredRules: false,
-                        scopedTradeCount: 0,
-                        ownerTradeCount: 0,
-                        preferencesContext: preferences,
-                        preferencesError: preferencesError,
-                        tradesError: tradesError,
-                        insufficientScope: false,
-                        historyComplete: historyComplete,
-                        eligibility: nil
+        if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome, !historyComplete {
+            let scopedProbe = PsychologyAnalyticsTradeScope.complianceScopedTrades(
+                ownerTrades: ownerTrades,
+                accounts: accounts,
+                scope: scope.filter
+            )
+            if ownerTrades.isEmpty || scopedProbe.isEmpty {
+                do {
+                    ownerTrades = try await SessionOwnerTradesStore.shared.ensureCompleteAnalyticsSnapshot(
+                        for: profileID,
+                        detailCache: dependencies.detailCache,
+                        repository: dependencies.tradesRepository
                     )
+                    historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+                } catch {
+                    tradesError = "Check your connection and try again."
+                    if ownerTrades.isEmpty {
+                        return Output(
+                            result: nil,
+                            hasConfiguredRules: false,
+                            scopedTradeCount: 0,
+                            ownerTradeCount: 0,
+                            preferencesContext: preferences,
+                            preferencesError: preferencesError,
+                            tradesError: tradesError,
+                            insufficientScope: false,
+                            historyComplete: historyComplete,
+                            eligibility: nil
+                        )
+                    }
                 }
             }
         }
@@ -199,20 +204,7 @@ enum TradingRulesComplianceSnapshotBuilder {
             preferences: preferences,
             historyComplete: historyComplete
         )
-        if prepared.requiresCompleteHistoryForPsychology, !historyComplete {
-            return Output(
-                result: nil,
-                hasConfiguredRules: hasRules,
-                scopedTradeCount: scoped.count,
-                ownerTradeCount: ownerTrades.count,
-                preferencesContext: preferences,
-                preferencesError: preferencesError,
-                tradesError: "Loading complete trade history for psychology rule checks.",
-                insufficientScope: false,
-                historyComplete: false,
-                eligibility: nil
-            )
-        }
+        let complianceAuthoritative = historyComplete || !prepared.requiresCompleteHistoryForPsychology
         let discipline = prepared.discipline
         let payload = await TradingRulesComplianceCompute.computeScoped(
             trades: scoped,
@@ -232,7 +224,7 @@ enum TradingRulesComplianceSnapshotBuilder {
             tradesError: tradesError,
             insufficientScope: false,
             historyComplete: historyComplete,
-            isAuthoritative: historyComplete
+            isAuthoritative: complianceAuthoritative
         )
         if previewChromeActive {
             RulesPreviewDebugLog.log(
@@ -297,20 +289,7 @@ enum TradingRulesComplianceSnapshotBuilder {
             preferences: preferences,
             historyComplete: historyComplete
         )
-        if prepared.requiresCompleteHistoryForPsychology, !historyComplete {
-            return Output(
-                result: nil,
-                hasConfiguredRules: true,
-                scopedTradeCount: trades.count,
-                ownerTradeCount: owner.count,
-                preferencesContext: preferences,
-                preferencesError: nil,
-                tradesError: "Loading complete trade history for psychology rule checks.",
-                insufficientScope: false,
-                historyComplete: false,
-                eligibility: nil
-            )
-        }
+        let complianceAuthoritative = historyComplete || !prepared.requiresCompleteHistoryForPsychology
 
         let payload = await TradingRulesComplianceCompute.computeScoped(
             trades: trades,
@@ -330,7 +309,7 @@ enum TradingRulesComplianceSnapshotBuilder {
             tradesError: nil,
             insufficientScope: false,
             historyComplete: historyComplete,
-            isAuthoritative: historyComplete
+            isAuthoritative: complianceAuthoritative
         )
     }
 

@@ -43,6 +43,8 @@ struct DashboardTradingRulesComplianceSection: View {
                     filteredEmptyCard
                 } else if let result = session.result {
                     card(result: result)
+                } else if session.scopedTradeCount > 0 {
+                    computingPlaceholder
                 } else {
                     emptyCard
                 }
@@ -142,6 +144,17 @@ struct DashboardTradingRulesComplianceSection: View {
 
     private var loadingPlaceholder: some View {
         ExperienceSkeleton(height: 100, cornerRadius: ExperienceRadius.lg)
+    }
+
+    private var computingPlaceholder: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("Calculating rule compliance for your scoped trades…")
+                .experienceStyle(.caption, color: colors.secondaryText)
+            viewAnalyticsFooter
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .experienceDashboardCard(prominence: .featured)
     }
 
     private var filteredEmptyCard: some View {

@@ -74,7 +74,7 @@ struct TradingRulesComplianceDetailView: View {
                     message: "Widen the date range or account filter to see rule compliance for this scope."
                 )
             } else {
-                ExperienceLoadingSpinner(message: "Loading trading rules analytics…")
+                ExperienceLoadingSpinner(message: "Calculating rule compliance…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }

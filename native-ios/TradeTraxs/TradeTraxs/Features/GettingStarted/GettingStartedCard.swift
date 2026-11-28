@@ -23,7 +23,7 @@ struct GettingStartedCard: View {
             }
         }
         .padding(ExperienceSpacing.md)
-        .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
+        .dashboardQuickActionCardChrome()
         .contextualTourTarget(.dashboardGettingStarted)
         .accessibilityIdentifier("gettingStarted.card")
     }

@@ -156,17 +156,17 @@ enum ContextualTourCatalog {
             surface: .dashboard
         ),
         ContextualTourStep(
-            target: .dashboardAccountAndDates,
-            title: "Accounts & Timeframe",
-            message: "Choose which trading accounts and dates to analyze.",
-            surface: .dashboard
-        ),
-        ContextualTourStep(
             target: .dashboardGettingStarted,
             title: "Getting Started",
             message: "Complete these quick tasks to set up your trading journal, explore TradeTraxs, and get the most out of your experience.",
             surface: .dashboard,
             presentsIfUnmeasured: true
+        ),
+        ContextualTourStep(
+            target: .dashboardAccountAndDates,
+            title: "Accounts & Timeframe",
+            message: "Choose which trading accounts and dates to analyze.",
+            surface: .dashboard
         ),
         ContextualTourStep(
             target: .dashboardTrades,
