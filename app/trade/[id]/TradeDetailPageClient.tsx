@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import FeedPostHeader from "@/app/components/feed/FeedPostHeader"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
+import TradeDetailAuthorSubline from "@/app/components/trade/TradeDetailAuthorSubline"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import {
@@ -534,13 +535,16 @@ export default function TradeDetailPageClient({
                       userId={String(ownerProfile.id)}
                       avatarUrl={ownerProfile.avatar_url ?? null}
                       username={
+                        profileSeoDisplayName(ownerProfile) ||
                         ownerProfile.username ||
-                        ownerProfile.name ||
                         "User"
                       }
-                      metaLabel="Trade"
-                      metaLabelClassName="font-medium text-amber-400/90"
-                      postedAt={trade.created_at}
+                      meta={
+                        <TradeDetailAuthorSubline
+                          username={ownerProfile.username}
+                          trade={trade}
+                        />
+                      }
                     />
                   ) : undefined
                 }
@@ -552,10 +556,9 @@ export default function TradeDetailPageClient({
                       avatarUrl={ownerProfile.avatar_url}
                       meta={
                         <>
-                          <FeedPostMetaRow
-                            label="Trade"
-                            labelClassName="font-medium text-amber-400/90"
-                            createdAt={trade.created_at}
+                          <TradeDetailAuthorSubline
+                            username={ownerProfile.username}
+                            trade={trade}
                           />
                           <div className="mt-0.5 truncate text-xs font-medium text-gray-300">
                             {tradeCompactMeta}

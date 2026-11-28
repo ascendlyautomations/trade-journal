@@ -8,7 +8,9 @@ final class StoryBootstrapMappingTests: XCTestCase {
             id: "story-1",
             user_id: "user-1",
             image_url: "https://cdn.example/story.jpg",
-            created_at: ISO8601.string(from: created)
+            created_at: ISO8601.string(from: created),
+            storage_path: nil,
+            viewer_has_seen: nil
         )
         let story = StoryBootstrapMapping.map(preview)
         XCTAssertEqual(story?.id.rawValue, "story-1")
@@ -22,7 +24,9 @@ final class StoryBootstrapMappingTests: XCTestCase {
             id: "story-old",
             user_id: "user-1",
             image_url: "https://cdn.example/story.jpg",
-            created_at: ISO8601.string(from: expired)
+            created_at: ISO8601.string(from: expired),
+            storage_path: nil,
+            viewer_has_seen: nil
         )
         XCTAssertNil(StoryBootstrapMapping.map(preview))
     }

@@ -49,8 +49,7 @@ struct CreateRoomView: View {
             Group {
                 switch viewModel.phase {
                 case .idle, .loading:
-                    ExperienceLoadingSpinner(label: "Loading")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceLoadingOverlay(label: "Loading")
                 case .failed(let message):
                     ExperienceErrorState(
                         title: "Couldn't open Create Room",

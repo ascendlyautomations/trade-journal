@@ -46,7 +46,7 @@ struct BacktestTradingDayDetailView: View {
         .experienceNavigationTitle(TradingCalendarDay.displayDate(from: dayKey))
         .overlay {
             if viewModel.isLoading && viewModel.summary == nil {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .onAppear { viewModel.loadIfNeeded() }

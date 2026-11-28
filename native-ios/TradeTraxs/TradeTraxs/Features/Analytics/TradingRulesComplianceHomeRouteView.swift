@@ -3,6 +3,7 @@ import SwiftUI
 struct TradingRulesComplianceHomeRouteView: View {
     let navigationCoordinator: NavigationCoordinator
     let data: DataEnvironment
+    var embeddedInTraxsProPreview: Bool = false
 
     @State private var scopeController = TradingRulesAnalyticsScopeController()
     @State private var presentationRevision = 0
@@ -29,6 +30,7 @@ struct TradingRulesComplianceHomeRouteView: View {
     }
 
     private var showsEntitlementVerification: Bool {
+        if embeddedInTraxsProPreview { return false }
         _ = entitlementGateRevision
         return ProMonetizationPolicy.shouldShowEntitlementVerification(
             demoModeActive: ExploreModeSupport.isActive,
@@ -37,6 +39,7 @@ struct TradingRulesComplianceHomeRouteView: View {
     }
 
     private var restrictsFullAnalytics: Bool {
+        if embeddedInTraxsProPreview { return false }
         _ = entitlementGateRevision
         return ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
             demoModeActive: ExploreModeSupport.isActive,
@@ -45,35 +48,69 @@ struct TradingRulesComplianceHomeRouteView: View {
     }
 
     private var analyticsPresentation: TradingRulesComplianceDetailView.AnalyticsPresentation {
-        if restrictsFullAnalytics { return .freeSamplePreview }
-        return .fullAnalytics
+        if embeddedInTraxsProPreview || !restrictsFullAnalytics { return .fullAnalytics }
+        return .freeSamplePreview
+    }
+
+    private var rulesPresentationStore: TradingRulesComplianceSessionStore {
+        TradingRulesCompliancePresentationStores.store(for: data)
+    }
+
+    private var usesTraxsProPreviewDataPlane: Bool {
+        embeddedInTraxsProPreview || TradingRulesCompliancePresentationStores.isPreviewDataPlane(data)
+    }
+
+    /// TraxsPro preview: require populated compliance math (Reports-style), not merely `ready`.
+    private var canShowDetailView: Bool {
+        guard let activeProfileID else { return false }
+        guard rulesPresentationStore.profileID == activeProfileID, rulesPresentationStore.ready else {
+            return false
+        }
+        if usesTraxsProPreviewDataPlane {
+            return rulesPresentationStore.hasConfiguredRules
+                && !rulesPresentationStore.insufficientScope
+                && rulesPresentationStore.result != nil
+        }
+        return true
     }
 
     var body: some View {
+        let homeBranch = RulesPreviewDebugLog.homeRouteBranch(
+            embeddedInTraxsProPreview: embeddedInTraxsProPreview,
+            showsEntitlementVerification: showsEntitlementVerification,
+            canShowDetail: canShowDetailView,
+            isRefreshing: isRefreshing,
+            loadOutcome: loadOutcome,
+            store: rulesPresentationStore
+        )
         Group {
             if showsEntitlementVerification {
                 TraxProEntitlementVerificationView(profileID: activeProfileID) {
                     Task { await TraxProEntitlementRefreshAction.refresh(data: data) }
                 }
-            } else if snapshotMatchesActiveViewer {
+            } else if canShowDetailView {
                 TradingRulesComplianceDetailView(
                     scopeController: scopeController,
                     scrollAnchor: scrollAnchor,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
                     loadDependencies: loadDependencies,
+                    sessionStore: rulesPresentationStore,
                     presentation: analyticsPresentation,
-                    onRetry: { Task { await refreshAnalytics(forceReveal: false) } }
+                    onRetry: { Task { await refreshAnalytics(forceReveal: false) } },
+                    onScopeRecompute: usesTraxsProPreviewDataPlane
+                        ? { republishPreviewRulesForCurrentScope() }
+                        : nil
                 )
                 .id(presentationRevision)
                 .overlay(alignment: .top) {
                     if isRefreshing {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .padding(.top, ExperienceSpacing.md)
                     }
                 }
             } else if isRefreshing {
-                ProgressView("Loading trading rules analytics…")
+                ExperienceLoadingSpinner(message: "Loading trading rules analytics…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .experienceScreenBackground()
             } else if case .failed(let message) = loadOutcome {
@@ -83,14 +120,26 @@ struct TradingRulesComplianceHomeRouteView: View {
                     onRetry: { Task { await refreshAnalytics(forceReveal: false) } }
                 )
             } else {
-                ProgressView("Loading trading rules analytics…")
+                ExperienceLoadingSpinner(message: "Loading trading rules analytics…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .experienceScreenBackground()
             }
         }
+        .onAppear {
+            RulesPreviewDebugLog.log(
+                "TradingRulesComplianceHomeRouteView onAppear branch=\(homeBranch) usesPreviewPlane=\(usesTraxsProPreviewDataPlane) embedded=\(embeddedInTraxsProPreview) store=\(RulesPreviewDebugLog.storeID(rulesPresentationStore)) \(RulesPreviewDebugLog.describe(session: rulesPresentationStore))"
+            )
+        }
+        .onChange(of: rulesPresentationStore.contentRevision) { _, _ in
+            RulesPreviewDebugLog.log(
+                "TradingRulesComplianceHomeRouteView contentRevision branch=\(RulesPreviewDebugLog.homeRouteBranch(embeddedInTraxsProPreview: embeddedInTraxsProPreview, showsEntitlementVerification: showsEntitlementVerification, canShowDetail: canShowDetailView, isRefreshing: isRefreshing, loadOutcome: loadOutcome, store: rulesPresentationStore)) \(RulesPreviewDebugLog.describe(session: rulesPresentationStore))"
+            )
+        }
         .task(id: taskIdentity) {
             guard !showsEntitlementVerification else { return }
-            if restrictsFullAnalytics, let profileID = activeProfileID {
+            if !usesTraxsProPreviewDataPlane,
+               restrictsFullAnalytics, let profileID = activeProfileID
+            {
                 TradingRulesAnalyticsPreviewSupport.beginEphemeralSampleIfNeeded(
                     profileID: profileID,
                     detailCache: data.detailCache
@@ -100,6 +149,9 @@ struct TradingRulesComplianceHomeRouteView: View {
             await refreshAnalytics(forceReveal: true)
         }
         .task(id: restrictsFullAnalytics) {
+            if usesTraxsProPreviewDataPlane {
+                return
+            }
             if restrictsFullAnalytics {
                 guard let profileID = activeProfileID else { return }
                 TradingRulesAnalyticsPreviewSupport.beginEphemeralSampleIfNeeded(
@@ -179,7 +231,6 @@ struct TradingRulesComplianceHomeRouteView: View {
         }
     }
 
-    /// Stable identity, must not include `contentRevision` (publish bumps would retrigger `.task` forever).
     private var taskIdentity: String {
         activeProfileID?.rawValue ?? "none"
     }
@@ -213,16 +264,6 @@ struct TradingRulesComplianceHomeRouteView: View {
         return false
     }
 
-    private var rulesPresentationStore: TradingRulesComplianceSessionStore {
-        TradingRulesCompliancePresentationStores.store(for: data)
-    }
-
-    private var snapshotMatchesActiveViewer: Bool {
-        guard let activeProfileID else { return false }
-        return rulesPresentationStore.profileID == activeProfileID
-            && rulesPresentationStore.ready
-    }
-
     private func refreshAnalytics(forceReveal: Bool) async {
         guard let profileID = activeProfileID else {
             rulesPresentationStore.reset()
@@ -230,40 +271,25 @@ struct TradingRulesComplianceHomeRouteView: View {
             return
         }
 
+        if usesTraxsProPreviewDataPlane {
+            await refreshTraxsProPreviewAnalytics(profileID: profileID, forceReveal: forceReveal)
+            return
+        }
+
         let accounts = await loadAccountsForScope(profileID: profileID)
         scopeController.hydrate(profileID: profileID, accounts: accounts)
-        if TraxsProPreviewSupport.isTradingRulesPreviewActive {
-            scopeController.applyTraxsProPreviewScopeDefaultsIfNeeded()
-        }
 
         loadGeneration += 1
         let generation = loadGeneration
-
-        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome,
-           let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
-           preview.viewer == profileID
-        {
-            await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
-                profileID: profileID,
-                dependencies: loadDependencies,
-                preferenceContext: preview.preferenceContext
-            )
-            if snapshotMatchesActiveViewer {
-                presentationRevision = rulesPresentationStore.contentRevision
-            }
-        }
 
         if forceReveal {
             _ = TradingRulesCompliancePresentationBridge.revealCachedSnapshotIfPossible(
                 profileID: profileID,
                 detailCache: data.detailCache
             )
-            if snapshotMatchesActiveViewer {
-                presentationRevision = rulesPresentationStore.contentRevision
-            }
         }
 
-        let hadSnapshot = snapshotMatchesActiveViewer
+        let hadSnapshot = rulesPresentationStore.ready && rulesPresentationStore.profileID == profileID
         isRefreshing = !hadSnapshot
         defer { isRefreshing = false }
 
@@ -272,16 +298,91 @@ struct TradingRulesComplianceHomeRouteView: View {
         )
         guard generation == loadGeneration else { return }
         loadOutcome = outcome
-        let nextRevision = rulesPresentationStore.contentRevision
-        if nextRevision != presentationRevision {
-            presentationRevision = nextRevision
+        presentationRevision = rulesPresentationStore.contentRevision
+    }
+
+    private func refreshTraxsProPreviewAnalytics(profileID: ProfileID, forceReveal: Bool) async {
+        let accounts = TradingRulesAnalyticsPreviewSupport.previewAccounts(
+            profileID: profileID,
+            dependencies: loadDependencies
+        )
+        scopeController.hydrate(profileID: profileID, accounts: accounts)
+        scopeController.applyTraxsProPreviewScopeDefaultsIfNeeded()
+
+        loadGeneration += 1
+        let generation = loadGeneration
+
+        isRefreshing = !canShowDetailView
+        defer { isRefreshing = false }
+
+        if forceReveal, rulesPresentationStore.result != nil {
+            presentationRevision = rulesPresentationStore.contentRevision
         }
-        if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
-            scopeController.syncFromDashboardIfAvailable()
+
+        if let dashboard = TradingRulesCompliancePresentationBridge.dashboardViewModel,
+           dashboard.isTradingRulesComplianceDashboardSource(profileID: profileID)
+        {
+            RulesPreviewDebugLog.log("HomeRouteView refresh via dashboard recompute (preview plane)")
+            await dashboard.ensureTradingRulesComplianceForPresentation(dependencies: loadDependencies)
+        } else if rulesPresentationStore.result == nil || rulesPresentationStore.profileID != profileID {
+            RulesPreviewDebugLog.log("HomeRouteView refresh seed bundled preview snapshot")
+            TradingRulesAnalyticsPreviewSupport.seedActivePreviewEnvironmentRulesPresentation()
+            if rulesPresentationStore.result == nil {
+                let generation = TraxsProPreviewSession.shared.activePreviewEnvironment?.generation ?? 0
+                _ = TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshotSynchronously(
+                    profileID: profileID,
+                    presentationStore: rulesPresentationStore,
+                    preferenceContext: TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID),
+                    accounts: accounts,
+                    ownerTrades: TradingRulesAnalyticsPreviewSupport.previewOwnerTrades(profileID: profileID),
+                    generation: generation,
+                    dashboardScopeFilter: scopeController.clientScopeFilter()
+                )
+            }
         }
+
+        guard generation == loadGeneration else { return }
+        loadOutcome = .ready
+        presentationRevision = rulesPresentationStore.contentRevision
+        scopeController.syncFromDashboardIfAvailable()
+        RulesPreviewDebugLog.log(
+            "HomeRouteView refreshTraxsProPreview done \(RulesPreviewDebugLog.describe(session: rulesPresentationStore))"
+        )
+    }
+
+    private func republishPreviewRulesForCurrentScope() {
+        guard let profileID = activeProfileID else { return }
+        guard usesTraxsProPreviewDataPlane else { return }
+        if let dashboard = TradingRulesCompliancePresentationBridge.dashboardViewModel,
+           dashboard.isTradingRulesComplianceDashboardSource(profileID: profileID)
+        {
+            dashboard.applyClientScopeFromAnalytics(scopeController.clientScopeFilter())
+            return
+        }
+        let accounts = TradingRulesAnalyticsPreviewSupport.previewAccounts(
+            profileID: profileID,
+            dependencies: loadDependencies
+        )
+        let generation = TraxsProPreviewSession.shared.activePreviewEnvironment?.generation ?? 0
+        _ = TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshotSynchronously(
+            profileID: profileID,
+            presentationStore: rulesPresentationStore,
+            preferenceContext: TradingRulesAnalyticsPreviewSupport.resolvedPreferenceContext(for: profileID),
+            accounts: accounts,
+            ownerTrades: TradingRulesAnalyticsPreviewSupport.previewOwnerTrades(profileID: profileID),
+            generation: generation,
+            dashboardScopeFilter: scopeController.clientScopeFilter()
+        )
+        presentationRevision = rulesPresentationStore.contentRevision
     }
 
     private func loadAccountsForScope(profileID: ProfileID) async -> [TradingAccount] {
+        if usesTraxsProPreviewDataPlane {
+            return TradingRulesAnalyticsPreviewSupport.previewAccounts(
+                profileID: profileID,
+                dependencies: loadDependencies
+            )
+        }
         if let cached = SessionAccountsStore.shared.cached(for: profileID), !cached.isEmpty {
             return cached
         }

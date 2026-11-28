@@ -41,6 +41,12 @@ nonisolated protocol TradeRepository: Sendable {
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount]
     /// Web `insertTradingAccount`.
     func createAccount(ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount
+    /// Web `graduate_eval_to_funded` RPC.
+    func graduateEvalToFunded(
+        evalAccountID: TradingAccountID,
+        ownerID: ProfileID,
+        draft: TradingAccountDraft
+    ) async throws -> TradingAccount
     /// Web `/api/accounts/select-free-slots` → `select_free_plan_trade_accounts`.
     func selectFreePlanTradeAccounts(
         ownerID: ProfileID,
@@ -180,6 +186,14 @@ extension TradeRepository {
 
     func createAccount(ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount {
         throw AppError.notImplemented(feature: "createAccount")
+    }
+
+    func graduateEvalToFunded(
+        evalAccountID: TradingAccountID,
+        ownerID: ProfileID,
+        draft: TradingAccountDraft
+    ) async throws -> TradingAccount {
+        throw AppError.notImplemented(feature: "graduateEvalToFunded")
     }
 
     func selectFreePlanTradeAccounts(

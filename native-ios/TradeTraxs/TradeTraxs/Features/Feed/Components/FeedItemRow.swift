@@ -420,17 +420,9 @@ struct FeedItemRow: View {
         tradeMetrics(summary)
     }
 
-    /// Trade metrics and copy-trade metadata, always below the engagement row.
-    @ViewBuilder
+    /// Trade metrics always below the engagement row; caption follows in `feedCaptionPreview`.
     private func tradePostDetails(_ summary: TradeSummary, opensOnTap: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            tradeMetrics(summary, opensOnTap: opensOnTap)
-            if summary.mode == .copyTraded {
-                copyTradeFeedFooter(summary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .feedOpensOnTap(opensOnTap, action: onOpen)
-            }
-        }
+        tradeMetrics(summary, opensOnTap: opensOnTap)
     }
 
     private func feedAccountProviderName(for summary: TradeSummary) -> String? {
@@ -441,7 +433,7 @@ struct FeedItemRow: View {
     }
 
     private func tradeMetrics(_ summary: TradeSummary, opensOnTap: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             PublicTradeHeadlineRow(
                 ticker: summary.symbol.ticker,
                 realizedPnL: summary.realizedPnL
@@ -450,13 +442,53 @@ struct FeedItemRow: View {
             .feedOpensOnTap(opensOnTap, action: onOpen)
             .accessibilityIdentifier("feed.trade.headline")
 
-            PublicTradeMetaChipRow(
-                summary: summary,
-                showsSession: summary.mode != .copyTraded,
-                accountProviderName: feedAccountProviderName(for: summary)
-            )
+            feedTradeAccountOrCopyLine(summary, opensOnTap: opensOnTap)
+
+            PublicTradeFeedMetaInlineRow(summary: summary)
                 .accessibilityIdentifier("feed.trade.badges")
-                .feedOpensOnTap(opensOnTap, allowsSiblingScroll: true, action: onOpen)
+                .feedOpensOnTap(opensOnTap, action: onOpen)
+
+            if let executionTiming = feedTradeExecutionTimingText(for: summary) {
+                Text(executionTiming)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(2)
+                    .accessibilityIdentifier(
+                        summary.mode == .copyTraded
+                            ? "feed.trade.copyExecutionTiming"
+                            : "feed.trade.executionTiming"
+                    )
+                    .feedOpensOnTap(opensOnTap, action: onOpen)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func feedTradeAccountOrCopyLine(
+        _ summary: TradeSummary,
+        opensOnTap: Bool
+    ) -> some View {
+        if summary.mode == .copyTraded {
+            copyTradedSummaryText(
+                modeSuffix: CopyTradePresentation.modeCountSegment(
+                    fromPublicSummary: summary.copyTradePublicModeSummary
+                )
+            )
+            .foregroundStyle(colors.primaryText)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("feed.trade.copyTradedTitle")
+            .feedOpensOnTap(opensOnTap, action: onOpen)
+        } else if let accountCaption = TradeDisplay.publicPostedAccountCaption(
+            providerName: feedAccountProviderName(for: summary),
+            accountMode: summary.accountMode,
+            publicAccountBadge: summary.publicAccountBadge
+        ) {
+            Text(accountCaption)
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("feed.trade.accountType")
+                .feedOpensOnTap(opensOnTap, action: onOpen)
         }
     }
 
@@ -468,27 +500,14 @@ struct FeedItemRow: View {
             .accessibilityIdentifier("feed.achievement.content")
     }
 
-    private func copyTradeFeedFooter(_ summary: TradeSummary) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            copyTradedSummaryText(
-                modeSuffix: CopyTradePresentation.modeCountSegment(
-                    fromPublicSummary: summary.copyTradePublicModeSummary
-                )
-            )
-            .foregroundStyle(colors.primaryText)
-            .lineLimit(2)
-            .accessibilityIdentifier("feed.trade.copyTradedTitle")
-
-            Text(
-                TradeDisplay.feedCopyExecutionMetadata(
-                    entryAt: summary.entryAt,
-                    exitAt: summary.exitAt
-                )
-            )
-            .experienceStyle(.caption, color: colors.secondaryText)
-            .lineLimit(2)
-            .accessibilityIdentifier("feed.trade.copyExecutionTiming")
-        }
+    /// Entry/exit clocks and trade date — same presentation as copy-traded feed rows (`feedCopyExecutionMetadata`).
+    private func feedTradeExecutionTimingText(for summary: TradeSummary) -> String? {
+        let line = TradeDisplay.feedCopyExecutionMetadata(
+            entryAt: summary.entryAt,
+            exitAt: summary.exitAt
+        )
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : line
     }
 
     private func copyTradedSummaryText(modeSuffix: String?) -> Text {

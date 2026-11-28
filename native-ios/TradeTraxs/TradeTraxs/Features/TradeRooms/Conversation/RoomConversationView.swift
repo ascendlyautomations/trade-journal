@@ -35,7 +35,7 @@ struct RoomConversationView: View {
     @State private var broadcastChatUserId: String?
     @State private var broadcastChatDisplayName = "You"
     @State private var liveDeepLinkEndedNotice: String?
-    @State private var handledLiveDeepLink = false
+    @State private var fulfilledLiveWatchIntentRevision: UInt64 = 0
     @State private var navigationIntentEpoch: UInt64 = 0
     @State private var showsInviteShareSheet = false
     @State private var showsRoomNotificationSettings = false
@@ -125,6 +125,7 @@ struct RoomConversationView: View {
             .syncTradeRoomSessionChromeEmbedding(tabIsActive: tabIsActive)
             .experienceScreenBackground(fillsContentArea: false)
             .experienceNavigationTitle(viewModel.title)
+            .experienceChevronOnlyBackNavigationChrome()
             .toolbar(.hidden, for: .tabBar)
             .toolbar { conversationNavigationToolbarContent }
     }
@@ -394,7 +395,7 @@ struct RoomConversationView: View {
         content.modifier(
             RoomConversationBroadcastLifecycleModifier(
                 viewModel: viewModel,
-                tryOpenLiveBroadcast: { await tryOpenLiveBroadcastFromNotificationIfReady() },
+                tryOpenLiveBroadcast: { await tryOpenLiveBroadcastFromNavigationIfReady() },
                 handleWillEnterForeground: handleWillEnterForeground,
                 reloadRoomMetadata: { await viewModel.reloadRoomMetadataIfNeeded() },
                 reloadChannels: { await viewModel.reloadChannelsIfNeeded() }
@@ -429,6 +430,8 @@ struct RoomConversationView: View {
             for: viewModel.roomID,
             resolvedRoomID: viewModel.room?.id
         )
+        viewModel.applyNavigationIntentIfNeeded()
+        Task { await tryOpenLiveBroadcastFromNavigationIfReady() }
     }
 
     private func runActiveRoomLifecycleTask() async {
@@ -453,7 +456,8 @@ struct RoomConversationView: View {
                 roomTitle: viewModel.room?.name
             )
         }
-        await tryOpenLiveBroadcastFromNotificationIfReady()
+        await broadcastCoordinator.refreshStatus(roomID: viewModel.activeRoomID)
+        await tryOpenLiveBroadcastFromNavigationIfReady()
     }
 
     private var conversationMainColumn: some View {
@@ -524,10 +528,10 @@ struct RoomConversationView: View {
             currentUserId: obsBroadcastController.viewerUserId,
             onJoinStream: {
                 Task {
-                    await broadcastCoordinator.watch(roomID: room.id, roomTitle: room.name)
-                    if broadcastCoordinator.canPresentViewer(for: room.id) {
-                        broadcastCoordinator.presentViewer()
-                    }
+                    _ = await broadcastCoordinator.openLiveWatchFromNavigation(
+                        roomID: room.id,
+                        roomTitle: room.name
+                    )
                 }
             },
             onManageStream: {
@@ -632,8 +636,7 @@ struct RoomConversationView: View {
         switch viewModel.phase {
         case .idle, .loading:
             if viewModel.messages.isEmpty {
-                ExperienceLoadingSpinner(label: "Loading room")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading room")
             } else {
                 messageList
             }
@@ -712,7 +715,7 @@ struct RoomConversationView: View {
             ScrollView {
                 LazyVStack(spacing: ExperienceSpacing.xs) {
                     if viewModel.hasMoreOlder, viewModel.isInitialScrollConfirmed {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, ExperienceSpacing.sm)
                             .onAppear {
@@ -738,6 +741,8 @@ struct RoomConversationView: View {
                                 item: bubble,
                                 peerProfile: viewModel.senderProfile(for: bubble.message.senderProfileID),
                                 imagePipeline: imagePipeline,
+                                feed: data?.feed,
+                                objectStorage: data?.objectStorage,
                                 sharedTrade: viewModel.sharedTrade(for: bubble.message),
                                 sharedPost: viewModel.sharedPost(for: bubble.message),
                                 sharedReel: viewModel.sharedReel(for: bubble.message),
@@ -799,6 +804,7 @@ struct RoomConversationView: View {
                                     guard let data else { return }
                                     StoryShareNavigation.open(
                                         payload: payload,
+                                        feed: data.feed,
                                         cache: data.detailCache,
                                         coordinator: navigationCoordinator
                                     )
@@ -807,6 +813,7 @@ struct RoomConversationView: View {
                                     guard let data else { return }
                                     StoryReplyNavigation.open(
                                         payload: payload,
+                                        feed: data.feed,
                                         cache: data.detailCache,
                                         coordinator: navigationCoordinator
                                     )
@@ -1075,7 +1082,8 @@ struct RoomConversationView: View {
 
     private func maintainInitialPinAfterRichContentHydration(proxy: ScrollViewProxy) {
         guard viewModel.initialScrollPhase == .settling else { return }
-        guard let sample = lastScrollSample else { return }
+        guard !userReleasedInitialPin else { return }
+        guard let sample = lastScrollSample, sample.isNearBottom else { return }
         maintainInitialBottomPin(sample: sample, proxy: proxy, reason: "shared-content-hydrated")
         scheduleSettlingStabilityCheck(proxy: proxy)
     }
@@ -1135,11 +1143,8 @@ struct RoomConversationView: View {
     ) {
         guard viewModel.initialScrollPhase == .settling else { return }
         guard !userReleasedInitialPin else { return }
-        if sample.contentHeight > 0,
-           (!sample.isNearBottom || sample.distanceFromBottom > ConversationThreadScrollSupport.bottomProximityThreshold / 2)
-        {
-            scrollToLatest(proxy: proxy, animated: false, reason: reason)
-        }
+        guard ConversationThreadScrollSupport.shouldMaintainInitialBottomPin(sample: sample) else { return }
+        scrollToLatest(proxy: proxy, animated: false, reason: reason)
     }
 
     private func scheduleSettlingStabilityCheck(proxy: ScrollViewProxy) {
@@ -1278,7 +1283,8 @@ struct RoomConversationView: View {
         )
         viewModel.applyNavigationIntentIfNeeded()
         Task {
-            await broadcastCoordinator.refreshStatus(roomID: viewModel.roomID)
+            await broadcastCoordinator.refreshStatus(roomID: viewModel.activeRoomID)
+            await tryOpenLiveBroadcastFromNavigationIfReady()
             await liveVoiceCoordinator.refreshGeneralVoicePresenceIfStale(for: viewModel.roomID)
             if broadcastCoordinator.isCurrentUserObsBroadcaster(
                 for: viewModel.roomID,
@@ -1289,39 +1295,26 @@ struct RoomConversationView: View {
         }
     }
 
-    private func tryOpenLiveBroadcastFromNotificationIfReady() async {
-        guard !handledLiveDeepLink, viewModel.pendingOpenLiveBroadcast else { return }
+    private func tryOpenLiveBroadcastFromNavigationIfReady() async {
+        guard viewModel.pendingOpenLiveBroadcast else { return }
         guard viewModel.phase == .loaded, viewModel.room != nil else { return }
-        if await openLiveBroadcastFromDeepLinkIfNeeded() {
-            handledLiveDeepLink = true
-            viewModel.clearPendingOpenLiveBroadcast()
-        }
-    }
+        guard let revision = viewModel.pendingLiveWatchIntentRevision else { return }
+        guard revision > fulfilledLiveWatchIntentRevision else { return }
 
-    /// - Returns: `true` when the deep-link intent is fully handled (live viewer presented or stream not live).
-    @MainActor
-    private func openLiveBroadcastFromDeepLinkIfNeeded() async -> Bool {
         let roomID = viewModel.activeRoomID
         let roomTitle = viewModel.room?.name ?? "Trade Room"
-        await broadcastCoordinator.refreshStatus(roomID: roomID)
-        guard broadcastCoordinator.isStreamLive(for: roomID) else {
+        switch await broadcastCoordinator.openLiveWatchFromNavigation(roomID: roomID, roomTitle: roomTitle) {
+        case .presented:
             liveDeepLinkEndedNotice = nil
-            return true
+            fulfilledLiveWatchIntentRevision = revision
+            viewModel.completeLiveWatchNavigationIntent(revision: revision)
+        case .streamEnded:
+            liveDeepLinkEndedNotice = "This live stream has ended."
+            fulfilledLiveWatchIntentRevision = revision
+            viewModel.completeLiveWatchNavigationIntent(revision: revision)
+        case .pending:
+            break
         }
-        liveDeepLinkEndedNotice = nil
-        if broadcastCoordinator.isWatchingRoomConnected(roomID) {
-            broadcastCoordinator.presentViewer()
-            return true
-        }
-        if broadcastCoordinator.isBusy {
-            return false
-        }
-        await broadcastCoordinator.watch(roomID: roomID, roomTitle: roomTitle)
-        guard broadcastCoordinator.canPresentViewer(for: roomID) else {
-            return false
-        }
-        broadcastCoordinator.presentViewer()
-        return true
     }
 
     @ToolbarContentBuilder

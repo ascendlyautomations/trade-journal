@@ -576,10 +576,34 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     private func fetchActiveStories(viewer: ProfileID) async throws -> [Story] {
+        if await session.currentUserID != nil,
+           let rpcStories = try await fetchActiveStoriesViaRPC()
+        {
+            return rpcStories
+        }
+        return try await fetchActiveStoriesViaREST(viewer: viewer)
+    }
+
+    /// `rpc_v1_viewer_active_stories`: following graph + `viewer_has_seen` from `story_views`.
+    private func fetchActiveStoriesViaRPC() async throws -> [Story]? {
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_viewer_active_stories",
+            parametersJSON: Data("{}".utf8)
+        )
+        let previews = try JSONDecoder().decode([FeedStoryPreviewV1].self, from: data)
+        let mapped = StoryBootstrapMapping.map(previews)
+        let pathByStoryID = Dictionary(
+            uniqueKeysWithValues: previews.map { ($0.id, $0.storage_path) }
+        )
+        return await signHydratedActiveStories(mapped, storagePathByStoryID: pathByStoryID)
+    }
+
+    private func fetchActiveStoriesViaREST(viewer: ProfileID) async throws -> [Story] {
         struct Row: Codable {
             var id: String?
             var user_id: String?
             var image_url: String?
+            var storage_path: String?
             var created_at: String?
         }
 
@@ -608,7 +632,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             Row.self,
             from: "stories",
             query: [
-                SupabaseQuery.select("id,user_id,image_url,created_at"),
+                SupabaseQuery.select("id,user_id,image_url,storage_path,created_at"),
                 SupabaseQuery.isIn("user_id", candidateIDs),
                 URLQueryItem(name: "created_at", value: "gt.\(cutoff)"),
                 URLQueryItem(name: "order", value: "created_at.desc"),
@@ -621,18 +645,22 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         var parseFailures = 0
         let mapped: [Story] = rows.compactMap { row in
             guard let id = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
-                  let author = row.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty,
-                  let media = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines), !media.isEmpty
+                  let author = row.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty
             else { return nil }
+            let imageURL = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let storagePath = row.storage_path?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let mediaSeed = !imageURL.isEmpty ? imageURL : storagePath
+            guard !mediaSeed.isEmpty else { return nil }
             // Web `isStoryActive`: invalid `created_at` → inactive (never invent distantPast).
             guard let created = ISO8601.date(from: row.created_at) else {
                 parseFailures += 1
                 return nil
             }
+            let kind = Self.storyMediaKind(forPublicURL: storagePath.isEmpty ? mediaSeed : storagePath)
             return Story(
                 id: StoryID(id),
                 authorProfileID: ProfileID(author),
-                media: MediaReference(id: media, kind: .image, altText: nil),
+                media: MediaReference(id: mediaSeed, kind: kind, altText: nil),
                 expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
                 createdAt: created,
                 viewerHasSeen: false
@@ -645,8 +673,53 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         )
         #endif
 
+        let pathByStoryID = Dictionary(
+            uniqueKeysWithValues: rows.compactMap { row -> (String, String?)? in
+                guard let id = row.id else { return nil }
+                return (id, row.storage_path)
+            }
+        )
+        return await signHydratedActiveStories(mapped, storagePathByStoryID: pathByStoryID)
+    }
+
+    private func signHydratedActiveStories(
+        _ mapped: [Story],
+        storagePathByStoryID: [String: String?]
+    ) async -> [Story] {
         let now = Date()
         let active = ActiveStorySemantics.filterActive(mapped, now: now)
+        var signed: [Story] = []
+        for story in active {
+            let kind = story.media.kind
+            let rowPath = storagePathByStoryID[story.id.rawValue] ?? nil
+            let resolvedPath = StoryStoragePathSupport.resolve(
+                storagePath: rowPath,
+                imageURL: story.media.id
+            )
+            if let media = await StorySignedMediaResolver.shared.signedMediaReference(
+                storagePath: resolvedPath,
+                imageURL: story.media.id,
+                isVideo: kind == .video
+            ) {
+                var copy = story
+                copy.media = media
+                signed.append(copy)
+                StoryDebug.logMediaRef(
+                    "fetchActiveStories.signed",
+                    storyID: story.id.rawValue,
+                    mediaID: media.id,
+                    kind: kind.rawValue
+                )
+            } else {
+                signed.append(story)
+                StoryDebug.logMediaRef(
+                    "fetchActiveStories.unsigned",
+                    storyID: story.id.rawValue,
+                    mediaID: story.media.id,
+                    kind: kind.rawValue
+                )
+            }
+        }
         #if DEBUG
         if mapped.count > 0, active.isEmpty {
             let ages = mapped.map { Int(now.timeIntervalSince($0.createdAt)) }
@@ -656,40 +729,197 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             )
         }
         #endif
-        return active
+        return signed
     }
 
     func story(id: StoryID) async throws -> Story? {
-        struct Row: Codable {
+        guard let loaded = try await storyForViewer(id: id) else {
+            StoryDebug.log("story(id)", "story=\(id.rawValue) rpc=nil")
+            return nil
+        }
+        let active = ActiveStorySemantics.isActive(createdAt: loaded.createdAt)
+        guard active else {
+            StoryDebug.log(
+                "story(id)",
+                "story=\(id.rawValue) rejected inactive created=\(loaded.createdAt)"
+            )
+            return nil
+        }
+        return loaded
+    }
+
+    func storyForViewer(id: StoryID) async throws -> Story? {
+        struct Args: Encodable { var p_story_id: String }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_story_for_viewer",
+            parametersJSON: try JSONEncoder().encode(Args(p_story_id: id.rawValue))
+        )
+        let isNull = data.isEmpty || data == Data("null".utf8)
+        StoryDebug.log(
+            "rpc_v1_story_for_viewer",
+            "story=\(id.rawValue) bytes=\(data.count) null=\(isNull)"
+        )
+        guard !isNull else { return nil }
+        do {
+            let mapped = try await mapStoryRPCPayload(data)
+            StoryDebug.log(
+                "rpc_v1_story_for_viewer.mapped",
+                "story=\(id.rawValue) ok=\(mapped != nil)"
+            )
+            return mapped
+        } catch {
+            StoryDebug.log(
+                "rpc_v1_story_for_viewer.decode",
+                "story=\(id.rawValue) error=\(error.localizedDescription)"
+            )
+            throw error
+        }
+    }
+
+    func archivedStories(limit: Int = 60, offset: Int = 0) async throws -> [Story] {
+        struct Args: Encodable {
+            var p_limit: Int
+            var p_offset: Int
+        }
+        struct Payload: Decodable {
+            var stories: [StoryRPCRowFull]?
+        }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_owner_story_archive",
+            parametersJSON: try JSONEncoder().encode(Args(p_limit: limit, p_offset: offset))
+        )
+        let decoder = JSONDecoder()
+        let payload = try decoder.decode(Payload.self, from: data)
+        var stories: [Story] = []
+        for row in payload.stories ?? [] {
+            if let story = await mapStoryRow(row) {
+                stories.append(story)
+            }
+        }
+        return stories
+    }
+
+    func storyDmMediaAccess(id: StoryID) async throws -> StoryDmMediaAccess {
+        struct Args: Encodable { var p_story_id: String }
+        struct Payload: Decodable {
+            var allowed: Bool?
+            var reason: String?
             var id: String?
             var user_id: String?
-            var image_url: String?
             var created_at: String?
+            var storage_path: String?
+            var image_url: String?
+        }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_story_dm_media_access",
+            parametersJSON: try JSONEncoder().encode(Args(p_story_id: id.rawValue))
+        )
+        let payload = try JSONDecoder().decode(Payload.self, from: data)
+        return StoryDmMediaAccess(
+            allowed: payload.allowed == true,
+            reason: payload.reason ?? "unavailable",
+            storyID: payload.id.flatMap { StoryID($0) },
+            ownerID: payload.user_id.flatMap { ProfileID($0) },
+            createdAt: payload.created_at.flatMap { ISO8601.date(from: $0) },
+            storagePath: payload.storage_path,
+            imageURL: payload.image_url
+        )
+    }
+
+    private struct StoryRPCRowFull: Decodable {
+        var id: String?
+        var user_id: String?
+        var image_url: String?
+        var storage_path: String?
+        var resolved_storage_path: String?
+        var created_at: String?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = Self.decodeFlexibleString(container, key: .id)
+            user_id = Self.decodeFlexibleString(container, key: .user_id)
+            image_url = try container.decodeIfPresent(String.self, forKey: .image_url)
+            storage_path = try container.decodeIfPresent(String.self, forKey: .storage_path)
+            resolved_storage_path = try container.decodeIfPresent(String.self, forKey: .resolved_storage_path)
+            created_at = Self.decodeFlexibleString(container, key: .created_at)
         }
 
-        let cutoff = ISO8601.string(from: Date().addingTimeInterval(-ActiveStorySemantics.window))
-        let rows: [Row] = try await supabase.database.select(
-            Row.self,
-            from: "stories",
-            query: [
-                SupabaseQuery.select("id,user_id,image_url,created_at"),
-                SupabaseQuery.eq("id", id.rawValue),
-                URLQueryItem(name: "created_at", value: "gt.\(cutoff)"),
-                URLQueryItem(name: "limit", value: "1"),
-            ]
-        )
-        guard let row = rows.first,
-              let storyID = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !storyID.isEmpty,
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case user_id
+            case image_url
+            case storage_path
+            case resolved_storage_path
+            case created_at
+        }
+
+        private static func decodeFlexibleString(
+            _ container: KeyedDecodingContainer<CodingKeys>,
+            key: CodingKeys
+        ) -> String? {
+            if let value = try? container.decodeIfPresent(String.self, forKey: key) {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+            if let value = try? container.decodeIfPresent(UUID.self, forKey: key) {
+                return value.uuidString
+            }
+            return nil
+        }
+    }
+
+    private func mapStoryRPCPayload(_ data: Data) async throws -> Story? {
+        let row = try JSONDecoder().decode(StoryRPCRowFull.self, from: data)
+        return await mapStoryRow(row)
+    }
+
+    private func mapStoryRow(_ row: StoryRPCRowFull) async -> Story? {
+        guard let storyID = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !storyID.isEmpty,
               let author = row.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty,
-              let media = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines), !media.isEmpty,
-              let created = ISO8601.date(from: row.created_at),
-              ActiveStorySemantics.isActive(createdAt: created)
-        else { return nil }
+              let created = row.created_at.flatMap({ ISO8601.date(from: $0) })
+        else {
+            StoryDebug.log(
+                "mapStoryRow.invalidRow",
+                "id=\(row.id ?? "nil") user=\(row.user_id ?? "nil") created=\(row.created_at ?? "nil")"
+            )
+            return nil
+        }
+
+        let path = row.resolved_storage_path ?? row.storage_path
+        let imageURL = row.image_url
+        let kind = Self.storyMediaKind(forPublicURL: path ?? imageURL ?? "")
+        let active = ActiveStorySemantics.isActive(createdAt: created)
+        StoryDebug.log(
+            "mapStoryRow.row",
+            """
+            story=\(storyID) storage_path=\(row.storage_path ?? "nil") \
+            resolved=\(row.resolved_storage_path ?? "nil") image_url=\(imageURL ?? "nil") \
+            active24h=\(active) created=\(row.created_at ?? "nil")
+            """
+        )
+        let media: MediaReference
+        if let signed = await StorySignedMediaResolver.shared.signedMediaReference(
+            storagePath: path,
+            imageURL: imageURL,
+            isVideo: kind == .video
+        ) {
+            media = signed
+        } else if let fallback = await fallbackStoryMediaReference(
+            storagePath: path,
+            imageURL: imageURL,
+            kind: kind
+        ) {
+            StoryDebug.log("mapStoryRow.signFailed", "story=\(storyID) usingUnsignedFallback")
+            media = fallback
+        } else {
+            StoryDebug.log("mapStoryRow.signFailed", "story=\(storyID) noMedia")
+            return nil
+        }
 
         return Story(
             id: StoryID(storyID),
             authorProfileID: ProfileID(author),
-            media: MediaReference(id: media, kind: .image, altText: nil),
+            media: media,
             expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
             createdAt: created,
             viewerHasSeen: false
@@ -708,10 +938,12 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         struct PlainBody: Encodable {
             var user_id: String
             var image_url: String
+            var storage_path: String
         }
         struct OverlayBody: Encodable {
             var user_id: String
             var image_url: String
+            var storage_path: String
             var text_overlays: [StoryTextOverlayRecord]
         }
         struct Row: Codable {
@@ -725,6 +957,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         guard !trimmedURL.isEmpty else {
             throw AppError.unknown(message: "Missing story image")
         }
+        let objectPath = StoryStoragePathSupport.resolve(storagePath: nil, imageURL: trimmedURL) ?? trimmedURL
 
         let overlays = textOverlays.filter {
             !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -732,7 +965,11 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         let row: Row
         if overlays.isEmpty {
             row = try await supabase.database.insert(
-                PlainBody(user_id: userID.rawValue, image_url: trimmedURL),
+                PlainBody(
+                    user_id: userID.rawValue,
+                    image_url: objectPath,
+                    storage_path: objectPath
+                ),
                 into: "stories",
                 returning: Row.self
             )
@@ -740,7 +977,8 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             row = try await supabase.database.insert(
                 OverlayBody(
                     user_id: userID.rawValue,
-                    image_url: trimmedURL,
+                    image_url: objectPath,
+                    storage_path: objectPath,
                     text_overlays: overlays
                 ),
                 into: "stories",
@@ -755,6 +993,11 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         else {
             throw AppError.unknown(message: "Story couldn't be published. Please try again.")
         }
+
+        StoryDebug.log(
+            "createStory.inserted",
+            "story=\(id) image_url=\(media) storage_path=\(objectPath)"
+        )
 
         return Story(
             id: StoryID(id),
@@ -793,6 +1036,26 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             return .video
         }
         return .image
+    }
+
+    private func fallbackStoryMediaReference(
+        storagePath: String?,
+        imageURL: String?,
+        kind: MediaKind
+    ) async -> MediaReference? {
+        if let url = await StorySignedMediaResolver.shared.playableURL(
+            storagePath: storagePath,
+            imageURL: imageURL
+        ) {
+            return MediaReference(id: url.absoluteString, kind: kind, altText: nil)
+        }
+        let trimmedPath = storagePath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedPath.isEmpty {
+            return MediaReference(id: trimmedPath, kind: kind, altText: nil)
+        }
+        let trimmedURL = imageURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedURL.isEmpty else { return nil }
+        return MediaReference(id: trimmedURL, kind: kind, altText: nil)
     }
 
     func deleteStory(id: StoryID) async throws {

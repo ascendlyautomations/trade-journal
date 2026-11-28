@@ -3,10 +3,17 @@
 import { useCallback, useEffect, useRef } from "react"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { feedContentKey } from "@/lib/feedRotatingSession"
-import { queueFeedImpression, flushFeedImpressionQueue } from "@/lib/feedImpressionRecorder"
-import { isBackendV2Enabled } from "@/lib/backendV2/flags"
+import {
+  queueFeedImpression,
+  flushFeedImpressionQueue,
+  recordsCreatorContentViewsEnabled,
+} from "@/lib/feedImpressionRecorder"
 
-type TrackableItem = { id: string; feedKind?: string }
+type TrackableItem = {
+  id: string
+  feedKind?: string
+  surface?: string
+}
 
 type Options = {
   active: boolean
@@ -33,7 +40,7 @@ export function useFeedImpressionTracker(options: Options) {
     (el: HTMLElement | null, item: TrackableItem) => {
       if (
         !el ||
-        !isBackendV2Enabled("feedRotatingRank") ||
+        !recordsCreatorContentViewsEnabled() ||
         !item?.id ||
         !item.feedKind
       ) {
@@ -71,7 +78,11 @@ export function useFeedImpressionTracker(options: Options) {
                   : item.feedKind === "achievement"
                     ? "achievement_post"
                     : "reel"
-            queueFeedImpression({ content_kind: kind, content_id: String(item.id) })
+            queueFeedImpression({
+              content_kind: kind,
+              content_id: String(item.id),
+              surface: item.surface ?? "feed",
+            })
             observer.disconnect()
             observersRef.current.delete(key)
           }, 2000)

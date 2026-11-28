@@ -211,7 +211,7 @@ export function senderDisplayName(
   )
 }
 
-export type EngagementTarget = "post" | "trade" | "achievement" | "reel"
+export type EngagementTarget = "post" | "trade" | "achievement" | "reel" | "story"
 
 function engagementContentPostId(
   postId?: string | null,
@@ -237,8 +237,12 @@ export function engagementTarget(
   tradeId: string | null | undefined,
   profilePostId?: string | null,
   achievementPostId?: string | null,
-  reelId?: string | null
+  reelId?: string | null,
+  storyId?: string | null
 ): EngagementTarget {
+  if (storyId != null && String(storyId).trim() !== "") {
+    return "story"
+  }
   if (reelId != null && String(reelId).trim() !== "") {
     return "reel"
   }
@@ -264,7 +268,8 @@ export function formatLikeGroupMessage(
   profilePostId?: string | null,
   achievementPostId?: string | null,
   reelId?: string | null,
-  commentId?: string | null
+  commentId?: string | null,
+  storyId?: string | null
 ): string {
   const noun = commentId
     ? "comment"
@@ -274,7 +279,8 @@ export function formatLikeGroupMessage(
           tradeId,
           profilePostId,
           achievementPostId,
-          reelId
+          reelId,
+          storyId
         )
       )
   const ordered = names.filter(Boolean)
@@ -394,24 +400,24 @@ export function formatFollowGroupMessage(
   totalFollows: number
 ): string {
   const ordered = names.filter(Boolean)
-  if (totalFollows <= 0) return "Someone followed you"
+  if (totalFollows <= 0) return "Someone started following you"
   if (totalFollows === 1) {
-    return `${ordered[0] ?? "Someone"} followed you`
+    return `${ordered[0] ?? "Someone"} started following you`
   }
   if (totalFollows === 2) {
     const second = ordered[1] ?? "someone else"
-    return `${ordered[0] ?? "Someone"} and ${second} followed you`
+    return `${ordered[0] ?? "Someone"} and ${second} started following you`
   }
   if (ordered.length >= 2) {
     const others = totalFollows - 2
     return `${ordered[0]}, ${ordered[1]} and ${others} other${
       others === 1 ? "" : "s"
-    } followed you`
+    } started following you`
   }
   const others = totalFollows - 1
   return `${ordered[0] ?? "Someone"} and ${others} other${
     others === 1 ? "" : "s"
-  } followed you`
+  } started following you`
 }
 
 function engagementGroupKey(row: NotificationRecord): string {
@@ -778,7 +784,7 @@ export function commentPreview(
 ): string {
   const text = content?.trim() ?? ""
   if (!text) {
-    const noun = engagementTarget(postId, tradeId)
+    const noun = engagementTargetLabel(engagementTarget(postId, tradeId))
     return `New comment on your ${noun}`
   }
   if (text.length <= 120) return text
@@ -954,18 +960,18 @@ export function affiliateNotificationTitle(notification: NotificationRecord): st
   const meta = parseAffiliateNotificationContent(notification.content)
   if (meta.title?.trim()) return meta.title.trim()
   if (notification.type === "affiliate_commission_earned") {
-    return "💰 Commission Earned!"
+    return "Commission Earned"
   }
-  return "🎉 New Referral!"
+  return "New Referral"
 }
 
 export function affiliateNotificationBody(notification: NotificationRecord): string {
   const meta = parseAffiliateNotificationContent(notification.content)
   if (meta.body?.trim()) return meta.body.trim()
   if (notification.type === "affiliate_commission_earned") {
-    return "You earned affiliate commission from a referred subscriber."
+    return "You earned a commission from a referred subscription."
   }
-  return "A new user signed up using your referral code."
+  return "Someone signed up using your referral code."
 }
 
 export function affiliateNotificationHref(notification: NotificationRecord): string {
@@ -996,7 +1002,9 @@ export function tradingReportNotificationTitle(
 ): string {
   const meta = parseTradingReportNotificationContent(notification.content)
   if (meta.title?.trim()) return meta.title.trim()
-  return "Your Trading Report is Ready"
+  const periodId = meta.periodId?.trim() ?? ""
+  if (periodId.startsWith("month:")) return "Monthly Report"
+  return "Weekly Report"
 }
 
 export function tradingReportNotificationBody(
@@ -1004,7 +1012,11 @@ export function tradingReportNotificationBody(
 ): string {
   const meta = parseTradingReportNotificationContent(notification.content)
   if (meta.body?.trim()) return meta.body.trim()
-  return "Your trading summary is ready to review."
+  const periodId = meta.periodId?.trim() ?? ""
+  if (periodId.startsWith("month:")) {
+    return "Your monthly performance report is ready."
+  }
+  return "Your weekly performance report is ready."
 }
 
 export function tradingReportNotificationHref(
@@ -1022,8 +1034,12 @@ export function tradingReportNotificationHref(
   return href || "/dashboard?report=weekly_last"
 }
 
-export function formatRoomJoinMessage(username: string): string {
-  return `${username} joined your room`
+export function formatRoomJoinMessage(
+  username: string,
+  roomName?: string | null
+): string {
+  const room = roomName?.trim() || "a Trade Room"
+  return `${username} joined ${room}.`
 }
 
 export function formatTradeRoomJoinRequestMessage(
@@ -1031,21 +1047,21 @@ export function formatTradeRoomJoinRequestMessage(
   roomName: string | null | undefined
 ): string {
   const room = roomName?.trim() || "a Trade Room"
-  return `${username} requested to join ${room}`
+  return `${username} requested to join ${room}.`
 }
 
 export function formatTradeRoomJoinAcceptedMessage(
   roomName: string | null | undefined
 ): string {
   const room = roomName?.trim() || "the Trade Room"
-  return `Your request to join ${room} was accepted`
+  return `Your request to join ${room} was accepted.`
 }
 
 export function formatTradeRoomJoinDeclinedMessage(
   roomName: string | null | undefined
 ): string {
   const room = roomName?.trim() || "the Trade Room"
-  return `Your request to join ${room} was declined`
+  return `Your request to join ${room} was declined.`
 }
 
 /** @deprecated Use formatRoomMessageGroupTitle for grouped room notifications. */
@@ -1062,7 +1078,7 @@ export function formatFollowMessage(username: string): string {
 }
 
 export function formatFollowRequestAcceptedMessage(username: string): string {
-  return `${username} accepted your follow request`
+  return `${username} accepted your follow request.`
 }
 
 export function buildTradeRoomHref(

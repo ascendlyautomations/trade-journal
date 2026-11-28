@@ -34,6 +34,53 @@ enum TradingRulesAnalyticsPreviewSupport {
         return DemoCanonicalDataset.previewPreferenceContext(for: profileID)
     }
 
+    /// TraxsPro / bundled sample plane only — never production `SessionAccountsStore` (IDs won’t match demo trades).
+    static func previewAccounts(profileID: ProfileID, detailCache: DetailPresentationCache) -> [TradingAccount] {
+        previewAccounts(
+            profileID: profileID,
+            dependencies: TradingRulesComplianceLoadDependencies(
+                detailCache: detailCache,
+                tradesRepository: DemoTradeRepository(
+                    ownerID: profileID,
+                    trades: previewOwnerTrades(profileID: profileID),
+                    accounts: DemoCanonicalDataset.accounts(owner: profileID)
+                )
+            )
+        )
+    }
+
+    static func previewAccounts(
+        profileID: ProfileID,
+        dependencies: TradingRulesComplianceLoadDependencies
+    ) -> [TradingAccount] {
+        if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+           preview.viewer == profileID,
+           !preview.accounts.isEmpty
+        {
+            return preview.accounts
+        }
+        if TradingRulesCompliancePresentationStores.isPreviewDetailCache(dependencies.detailCache),
+           let seeded = dependencies.detailCache.accounts(for: profileID),
+           !seeded.isEmpty
+        {
+            return seeded
+        }
+        return DemoCanonicalDataset.accounts(owner: profileID)
+    }
+
+    static func previewOwnerTrades(profileID: ProfileID) -> [Trade] {
+        if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+           preview.viewer == profileID
+        {
+            return preview.trades.filter { $0.mode != .backtest }
+        }
+        return DemoCanonicalDataset.trades().filter { $0.mode != .backtest }
+    }
+
+    static var usesUnrestrictedPreviewRuleFamilies: Bool {
+        TraxsProPreviewSession.shared.isAnyPreviewActive || ephemeralSampleActive
+    }
+
     /// Fixed 1Y / all-accounts scope for bundled sample analytics.
     static func sampleClientScopeFilter(accounts: [TradingAccount]) -> DashboardClientScopeFilter {
         DashboardClientScopeFilter(
@@ -46,6 +93,84 @@ enum TradingRulesAnalyticsPreviewSupport {
         )
     }
 
+    /// Synchronous bundled rules analytics — same data plane as Dashboard / Reports TraxsPro preview.
+    @discardableResult
+    static func publishBundledSampleSnapshotSynchronously(
+        profileID: ProfileID,
+        presentationStore: TradingRulesComplianceSessionStore,
+        preferenceContext: PreferenceRuleContext,
+        accounts: [TradingAccount],
+        ownerTrades: [Trade],
+        generation: UInt64,
+        dashboardScopeFilter: DashboardClientScopeFilter? = nil
+    ) -> Bool {
+        guard showsSampleDataChrome else { return false }
+        guard !accounts.isEmpty else { return false }
+
+        let filter = dashboardScopeFilter ?? sampleClientScopeFilter(accounts: accounts)
+        let scope = PsychologyAnalyticsScopeResolver.resolve(
+            filter: filter,
+            profileID: profileID,
+            accounts: accounts
+        )
+        let scoped = PsychologyAnalyticsTradeScope.complianceScopedTrades(
+            ownerTrades: ownerTrades,
+            accounts: accounts,
+            scope: filter
+        )
+        guard TradingRulesPlanTier.hasConfiguredRules(context: preferenceContext, isFreeTier: false),
+              !scoped.isEmpty
+        else { return false }
+
+        let prepared = TradingRulesComplianceDisciplineContextBuilder.prepare(
+            ownerTrades: ownerTrades,
+            accounts: accounts,
+            scopeFilter: filter,
+            preferences: preferenceContext,
+            historyComplete: true
+        )
+        let payload = TradingRulesComplianceCompute.computeScopedSync(
+            trades: scoped,
+            context: preferenceContext,
+            dashboardInsights: nil,
+            preferDashboardInsightsCache: false,
+            discipline: prepared.discipline,
+            allowedRuleIDs: nil
+        )
+        let output = TradingRulesComplianceSnapshotBuilder.outputFromComputedPayload(
+            payload: payload,
+            preferences: preferenceContext,
+            scopedTradeCount: scoped.count,
+            ownerTradeCount: prepared.ownerTradeCount,
+            historyComplete: true,
+            isAuthoritative: true
+        )
+        presentationStore.publish(
+            output: output,
+            profileID: profileID,
+            scope: scope,
+            ready: true,
+            inputFingerprint: nil,
+            generation: generation
+        )
+        TradingRulesCompliancePreferencesCache.store(preferenceContext, for: profileID)
+        return output.result != nil
+    }
+
+    /// Seeds the active TraxsPro preview environment rules store before first paint.
+    static func seedActivePreviewEnvironmentRulesPresentation() {
+        guard let preview = TraxsProPreviewSession.shared.activePreviewEnvironment else { return }
+        let eligible = preview.trades.filter { $0.mode != .backtest }
+        _ = publishBundledSampleSnapshotSynchronously(
+            profileID: preview.viewer,
+            presentationStore: preview.rulesPresentationStore,
+            preferenceContext: preview.preferenceContext,
+            accounts: preview.accounts,
+            ownerTrades: eligible,
+            generation: preview.generation
+        )
+    }
+
     /// Builds compliance from preview-environment demo trades + preferences only.
     @discardableResult
     static func publishBundledSampleSnapshot(
@@ -54,11 +179,38 @@ enum TradingRulesAnalyticsPreviewSupport {
         preferenceContext: PreferenceRuleContext,
         dashboardScopeFilter: DashboardClientScopeFilter? = nil
     ) async -> Bool {
+        guard let store = TraxsProPreviewSession.shared.activePreviewEnvironment?.rulesPresentationStore else {
+            return false
+        }
+        return await publishBundledSampleSnapshot(
+            profileID: profileID,
+            dependencies: dependencies,
+            preferenceContext: preferenceContext,
+            presentationStore: store,
+            dashboardScopeFilter: dashboardScopeFilter
+        )
+    }
+
+    @discardableResult
+    static func publishBundledSampleSnapshot(
+        profileID: ProfileID,
+        dependencies: TradingRulesComplianceLoadDependencies,
+        preferenceContext: PreferenceRuleContext,
+        presentationStore: TradingRulesComplianceSessionStore,
+        dashboardScopeFilter: DashboardClientScopeFilter? = nil
+    ) async -> Bool {
         RulesPreviewDebugLog.log(
             "publishBundledSampleSnapshot enter profileID=\(profileID.rawValue) showsSampleDataChrome=\(showsSampleDataChrome)"
         )
         guard showsSampleDataChrome else {
             RulesPreviewDebugLog.log("publishBundledSampleSnapshot guard fail: showsSampleDataChrome=false")
+            return false
+        }
+        guard presentationStore === TraxsProPreviewSession.shared.activePreviewEnvironment?.rulesPresentationStore
+        else {
+            RulesPreviewDebugLog.log(
+                "publishBundledSampleSnapshot guard fail: presentationStore not env rules store got=\(RulesPreviewDebugLog.storeID(presentationStore))"
+            )
             return false
         }
         guard let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
@@ -109,9 +261,8 @@ enum TradingRulesAnalyticsPreviewSupport {
             )
             return false
         }
-        let presentationStore = TradingRulesCompliancePresentationStores.store(forPreviewUI: true)
         RulesPreviewDebugLog.log(
-            "publishBundledSampleSnapshot publishing to store=\(RulesPreviewDebugLog.storeID(presentationStore)) envRulesStore=\(RulesPreviewDebugLog.storeID(active.rulesPresentationStore)) sameInstance=\(presentationStore === active.rulesPresentationStore) generation=\(generation)"
+            "publishBundledSampleSnapshot publishing to store=\(RulesPreviewDebugLog.storeID(presentationStore)) generation=\(generation)"
         )
         presentationStore.publish(
             output: output,

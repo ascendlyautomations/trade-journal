@@ -39,8 +39,7 @@ struct RoomMembersView: View {
         Group {
             switch viewModel.phase {
             case .idle, .loading:
-                ExperienceLoadingSpinner(label: "Loading members")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading members")
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn't load members",
@@ -84,6 +83,7 @@ struct RoomMembersView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Members")
+        .experienceChevronOnlyBackNavigationChrome()
         .toolbar {
             if viewModel.canManageRoom {
                 ToolbarItem(placement: .topBarTrailing) {

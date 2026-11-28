@@ -5,63 +5,132 @@ import Foundation
 final class FeedImpressionCoordinator {
     static let shared = FeedImpressionCoordinator()
 
-  private struct Item: Hashable {
+    private struct Item: Hashable {
         let contentKind: String
         let contentID: String
+        let surface: String
     }
 
-    private var pending: Set<Item> = []
+    private var rpc: (any RPCClient)?
+    private var boundViewerID: String?
+    private var pendingByViewer: [String: Set<Item>] = [:]
     private var flushTask: Task<Void, Never>?
+    private var isFlushing = false
     private let maxBatch = 50
+    private let debounceNanoseconds: UInt64 = 4_000_000_000
 
     private init() {}
 
-    func trackVisibleContent(kind: String, contentID: String) {
-        guard BackendV2FeatureFlags.isEnabled(.feedRotatingRank) else { return }
-        pending.insert(Item(contentKind: kind, contentID: contentID))
-        scheduleFlush()
+    func configure(rpc: (any RPCClient)?, viewerID: ProfileID?) {
+        self.rpc = rpc
+        if let viewerID {
+            let raw = viewerID.rawValue
+            if boundViewerID != raw {
+                boundViewerID = raw
+            }
+        }
     }
 
-    private func scheduleFlush() {
+    func clearViewer(_ viewerID: ProfileID) {
+        let raw = viewerID.rawValue
+        pendingByViewer.removeValue(forKey: raw)
+        if boundViewerID == raw {
+            boundViewerID = nil
+        }
+    }
+
+    func resetForSessionBoundary() {
+        flushTask?.cancel()
+        flushTask = nil
+        pendingByViewer.removeAll(keepingCapacity: false)
+        boundViewerID = nil
+        isFlushing = false
+    }
+
+    func trackVisibleContent(kind: String, contentID: String, surface: String = "feed") {
+        guard BackendV2FeatureFlags.recordsCreatorContentViews else { return }
+        guard let viewerID = boundViewerID else { return }
+        let trimmedID = contentID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty else { return }
+        let item = Item(contentKind: kind, contentID: trimmedID, surface: surface)
+        var bucket = pendingByViewer[viewerID, default: []]
+        bucket.insert(item)
+        pendingByViewer[viewerID] = bucket
+        FeedRotatingRankProbe.impressionQualified(kind: kind, contentID: trimmedID)
+        scheduleFlush(for: viewerID)
+    }
+
+    func flushIfNeeded(rpc: (any RPCClient)?, viewerID: ProfileID?) async {
+        let client = rpc ?? self.rpc
+        guard let viewerID, let client else { return }
+        await flush(viewerID: viewerID.rawValue, rpc: client)
+    }
+
+    func flushAllPending(rpc: (any RPCClient)?, viewerID: ProfileID?) async {
+        await flushIfNeeded(rpc: rpc, viewerID: viewerID)
+    }
+
+    private func scheduleFlush(for viewerID: String) {
         guard flushTask == nil else { return }
         flushTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            await self.flush()
+            try? await Task.sleep(nanoseconds: debounceNanoseconds)
+            let client = self.rpc
+            if let client {
+                await self.flush(viewerID: viewerID, rpc: client)
+            }
             self.flushTask = nil
         }
     }
 
-    func flushIfNeeded(rpc: (any RPCClient)?) async {
-        guard !pending.isEmpty, let rpc else { return }
-        await flush(using: rpc)
-    }
+    private func flush(viewerID: String, rpc: any RPCClient) async {
+        guard !isFlushing else { return }
+        guard var pending = pendingByViewer[viewerID], !pending.isEmpty else { return }
+        isFlushing = true
+        defer { isFlushing = false }
 
-    private func flush(using rpc: (any RPCClient)? = nil) async {
-        guard !pending.isEmpty else { return }
-        let batch = Array(pending.prefix(maxBatch))
-        for item in batch { pending.remove(item) }
+        while !pending.isEmpty {
+            let batch = Array(pending.prefix(maxBatch))
+            let batchSet = Set(batch)
+            pending.subtract(batchSet)
 
-        struct Payload: Encodable {
-            var content_kind: String
-            var content_id: String
+            struct Payload: Encodable {
+                var content_kind: String
+                var content_id: String
+                var surface: String
+            }
+
+            let items = batch.map {
+                Payload(
+                    content_kind: $0.contentKind,
+                    content_id: $0.contentID,
+                    surface: $0.surface
+                )
+            }
+            struct Args: Encodable { var p_items: [Payload] }
+            guard let body = try? JSONEncoder().encode(Args(p_items: items)) else {
+                pending.formUnion(batchSet)
+                pendingByViewer[viewerID] = pending
+                return
+            }
+
+            do {
+                _ = try await rpc.call(
+                    functionName: BackendV2Versioning.RPCName.feedRecordImpressions.rawValue,
+                    jsonBody: body
+                )
+                pendingByViewer[viewerID] = pending
+                FeedRotatingRankProbe.impressionUploaded(count: batch.count, viewerID: viewerID)
+            } catch {
+                pending.formUnion(batchSet)
+                pendingByViewer[viewerID] = pending
+                FeedRotatingRankProbe.impressionUploadFailed(count: batch.count, error: error)
+                return
+            }
         }
-
-        let items = batch.map {
-            Payload(content_kind: $0.contentKind, content_id: $0.contentID)
-        }
-        struct Args: Encodable { var p_items: [Payload] }
-        guard let body = try? JSONEncoder().encode(Args(p_items: items)) else { return }
-        guard let rpc else { return }
-
-        do {
-            _ = try await rpc.call(
-                functionName: BackendV2Versioning.RPCName.feedRecordImpressions.rawValue,
-                jsonBody: body
-            )
-        } catch {
-            #if DEBUG
-            print("[FeedImpressionCoordinator] flush failed: \(error)")
-            #endif
+        if pending.isEmpty {
+            pendingByViewer.removeValue(forKey: viewerID)
+        } else {
+            pendingByViewer[viewerID] = pending
         }
     }
 }

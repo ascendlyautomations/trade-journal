@@ -9,11 +9,18 @@ struct TradingRulesRuleDetailView: View {
     @Environment(\.themeColors) private var colors
     @State private var showsTradesSheet = false
 
-    init(ruleIDRaw: String, navigationCoordinator: NavigationCoordinator, detailCache: DetailPresentationCache) {
+    init(
+        ruleIDRaw: String,
+        navigationCoordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache,
+        sessionStore: TradingRulesComplianceSessionStore? = nil
+    ) {
         self.ruleIDRaw = ruleIDRaw
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
-        _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
+        _session = Bindable(
+            sessionStore ?? TradingRulesCompliancePresentationStores.store(detailCache: detailCache)
+        )
     }
 
     private var ruleID: TradingRulesComplianceAnalytics.RuleID? {

@@ -59,7 +59,7 @@ struct AspectFitMediaView: View {
             } else if showsPlaceholderWhenUnavailable {
                 loading
             } else {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
             }

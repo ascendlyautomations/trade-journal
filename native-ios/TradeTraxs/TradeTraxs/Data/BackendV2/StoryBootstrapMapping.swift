@@ -20,7 +20,7 @@ nonisolated enum StoryBootstrapMapping {
             media: MediaReference(id: imageURL, kind: .image, altText: nil),
             expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
             createdAt: created,
-            viewerHasSeen: false
+            viewerHasSeen: preview.viewer_has_seen == true
         )
     }
 

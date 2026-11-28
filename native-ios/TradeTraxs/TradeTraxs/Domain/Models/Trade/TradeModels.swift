@@ -122,6 +122,12 @@ nonisolated struct TradingAccount: Hashable, Codable, Sendable, Identifiable {
     var propFirmRules: PropFirmAccountRules? = nil
     /// Live manual-ledger personal drawdown (`accounts.max_drawdown` / `drawdown_type`).
     var livePersonalDrawdown: LivePersonalDrawdownStored? = nil
+    /// Shared free-plan slot with eval / funded successor (`accounts.account_lifecycle_id`).
+    var accountLifecycleID: TradingAccountID?
+    /// Evaluation row → funded successor (`accounts.graduated_to_account_id`).
+    var graduatedToAccountID: TradingAccountID?
+    /// Funded row → source eval (`accounts.graduated_from_account_id`).
+    var graduatedFromAccountID: TradingAccountID?
 
     var isPropFirmAccount: Bool { category == .propFirm }
 
@@ -225,6 +231,8 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     /// Compact public account badge (Eval / Funded / Live / …) from denormalized trade mode fields.
     var publicAccountBadge: String? = nil
     var copyTrade: CopyTradeJournalMetadata? = nil
+    /// When the trade was first made public (`trades.first_published_at`), not record `created_at`.
+    var firstPublishedAt: Date? = nil
     var createdAt: Date
     var updatedAt: Date
 }

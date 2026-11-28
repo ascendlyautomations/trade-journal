@@ -71,7 +71,7 @@ struct BrokerIntegrationSettingsButton: View {
         }) {
             HStack(spacing: ExperienceSpacing.xxs) {
                 if isLoading {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .controlSize(.small)
                 } else if let icon {
                     ExperienceIcon(icon: icon, size: .sm, color: labelColor)
@@ -243,7 +243,7 @@ struct BrokerLinkExistingAccountsSection: View {
         switch presentation {
         case .loading:
             HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .controlSize(.small)
                 Text("Loading your TradeTraxs accounts…")
                     .experienceStyle(.footnote, color: colors.secondaryText)

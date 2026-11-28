@@ -1,4 +1,11 @@
 import SwiftUI
+import UIKit
+
+private enum StoryReplyInputViewMetrics {
+    static var singleLineFieldHeight: CGFloat {
+        ceil(UIFont.preferredFont(forTextStyle: .body).lineHeight)
+    }
+}
 
 struct StoryReplyInputView: View {
     @Binding var text: String
@@ -72,7 +79,8 @@ struct StoryReplyInputView: View {
                     isEnabled: !isSending,
                     onSubmit: submitFromKeyboard
                 )
-                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .frame(height: StoryReplyInputViewMetrics.singleLineFieldHeight)
             }
             .padding(.horizontal, ExperienceSpacing.md)
             .padding(.vertical, ExperienceSpacing.sm + 2)
@@ -93,6 +101,7 @@ struct StoryReplyInputView: View {
             .opacity(canSend ? 1 : 0.45)
             .accessibilityLabel("Send story reply")
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.sm)
         .background {

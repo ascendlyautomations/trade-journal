@@ -120,15 +120,19 @@ enum StoryShareNavigation {
     @MainActor
     static func open(
         payload: StoryShareMessageSupport.Payload,
+        feed: any FeedRepository,
         cache: DetailPresentationCache,
         coordinator: NavigationCoordinator?
     ) {
         let storyID = StoryID(payload.storyID)
-        if cache.story(id: storyID) == nil {
-            cache.seed(StoryShareMessageSupport.provisionalStory(from: payload))
+        Task {
+            guard let story = try? await feed.storyForViewer(id: storyID) else { return }
+            cache.seed(story)
+            await MainActor.run {
+                ExperienceHaptics.play(.selection)
+                coordinator?.present(fullScreen: .storyViewer(storyID, .dmReferencedStory))
+            }
         }
-        ExperienceHaptics.play(.selection)
-        coordinator?.present(fullScreen: .storyViewer(storyID, .dmReferencedStory))
     }
 }
 
@@ -136,14 +140,18 @@ enum StoryReplyNavigation {
     @MainActor
     static func open(
         payload: StoryReplyMessageSupport.Payload,
+        feed: any FeedRepository,
         cache: DetailPresentationCache,
         coordinator: NavigationCoordinator?
     ) {
         let storyID = StoryID(payload.storyID)
-        if cache.story(id: storyID) == nil {
-            cache.seed(StoryReplyMessageSupport.provisionalStory(from: payload))
+        Task {
+            guard let story = try? await feed.storyForViewer(id: storyID) else { return }
+            cache.seed(story)
+            await MainActor.run {
+                ExperienceHaptics.play(.selection)
+                coordinator?.present(fullScreen: .storyViewer(storyID, .dmReferencedStory))
+            }
         }
-        ExperienceHaptics.play(.selection)
-        coordinator?.present(fullScreen: .storyViewer(storyID, .dmReferencedStory))
     }
 }

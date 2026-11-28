@@ -1365,6 +1365,30 @@ export function setBroadcastRoomStatusPollDemand(
   reconcileRoomBroadcastStatusPolling(!resumed)
 }
 
+let roomLiveBroadcastRealtimeDebounce: ReturnType<typeof setTimeout> | null = null
+
+/** Postgres `room_live_broadcasts` on the shared Community room-live channel. */
+export function handleRoomLiveBroadcastRealtimeChange(roomId: string): void {
+  const trimmed = roomId.trim()
+  if (!trimmed || !roomStatusPollActive || roomStatusPollRoomId !== trimmed) {
+    return
+  }
+  if (roomLiveBroadcastRealtimeDebounce) {
+    clearTimeout(roomLiveBroadcastRealtimeDebounce)
+  }
+  roomLiveBroadcastRealtimeDebounce = setTimeout(() => {
+    roomLiveBroadcastRealtimeDebounce = null
+    if (roomStatusPollPausedAuth || roomStatusPollInFlight) {
+      return
+    }
+    if (roomStatusPollMode === "obs-prep") {
+      void runRoomBroadcastStatusPollTick(false, false)
+    } else {
+      void runRoomBroadcastStatusPollTick(true, false)
+    }
+  }, 400)
+}
+
 function scheduleViewerBroadcastStatusRefresh(): void {
   if (viewerStatusRefreshTimer) {
     clearTimeout(viewerStatusRefreshTimer)

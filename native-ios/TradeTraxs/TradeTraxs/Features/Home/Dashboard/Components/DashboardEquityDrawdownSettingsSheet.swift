@@ -135,7 +135,7 @@ struct DashboardEquityDrawdownSettingsSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if isSaving {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                     } else {
                         Button("Save", action: onSave)
                             .fontWeight(.semibold)

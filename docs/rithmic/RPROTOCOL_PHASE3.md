@@ -55,6 +55,7 @@ Body:
 
 | Variable | Purpose |
 |----------|---------|
+| `NODE_ENV=development` **or** `RITHMIC_DEV_INTEGRATION_ENABLED=1` | User-facing Rithmic broker UX and APIs (required; production hides Rithmic) |
 | `RITHMIC_USER_CONNECT_ENABLED=1` | Show Connect Rithmic UI + POST `/api/integrations/rithmic/connect` |
 | `RITHMIC_PRODUCTION_USER_AUTH_CONFIRMED=1` | Mark vendor-confirmed (metadata only; still require `RITHMIC_API_ENV=test` until production URI is configured) |
 | `RITHMIC_PHASE1_API_ENABLED=1` | Unchanged Phase 1 dev discovery |

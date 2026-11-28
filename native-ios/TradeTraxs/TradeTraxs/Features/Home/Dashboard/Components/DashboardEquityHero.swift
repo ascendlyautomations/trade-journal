@@ -122,7 +122,7 @@ struct DashboardEquityHero: View {
             .accessibilityIdentifier("dashboard.equity.empty")
             .accessibilityLabel(DashboardEquityCurvePresentation.emptyAccessibilityLabel)
         case .loading:
-            ProgressView()
+            ExperienceIndeterminateProgress()
                 .frame(maxWidth: .infinity)
                 .frame(height: 280)
                 .accessibilityIdentifier("dashboard.equity.loading")

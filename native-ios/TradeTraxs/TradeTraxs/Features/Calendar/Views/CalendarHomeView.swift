@@ -107,7 +107,7 @@ struct CalendarHomeView: View {
                             value: viewModel.isYearTransitioning
                         )
                     } else if viewModel.phase == .loaded {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, ExperienceSpacing.xl)
                     }
@@ -270,7 +270,7 @@ struct CalendarHomeView: View {
         ToolbarItem(placement: .topBarTrailing) {
             HStack(spacing: ExperienceSpacing.sm) {
                 if viewModel.isMonthTransitioning || viewModel.isYearTransitioning {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                 }
                 accountMenu
             }

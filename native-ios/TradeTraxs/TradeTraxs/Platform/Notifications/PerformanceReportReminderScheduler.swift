@@ -18,8 +18,10 @@ enum PerformanceReportReminderScheduler {
   static let reminderHour = 13
   static let reminderMinute = 0
 
-  static let weeklyNotificationBody = "Your weekly performance report is ready!"
-  static let monthlyNotificationBody = "Your monthly performance report is ready!"
+  static let weeklyNotificationTitle = "Weekly Report"
+  static let weeklyNotificationBody = "Your weekly performance report is ready."
+  static let monthlyNotificationTitle = "Monthly Report"
+  static let monthlyNotificationBody = "Your monthly performance report is ready."
 
   static var canonicalIdentifiers: [String] {
     [weeklyIdentifier, monthlyIdentifier]
@@ -46,16 +48,11 @@ enum PerformanceReportReminderScheduler {
       return false
     }
 
-    let hasCanonical = Set(pendingIDs).isSuperset(of: Set(canonicalIdentifiers))
-    if hasCanonical {
-      return true
-    }
-
-    let staleIDs = pendingIDs.filter {
+    let productionIDs = pendingIDs.filter {
       shouldRemove(identifier: $0) && !isDebugProbeIdentifier($0)
     }
-    if !staleIDs.isEmpty {
-      center.removePendingNotificationRequests(withIdentifiers: staleIDs)
+    if !productionIDs.isEmpty {
+      center.removePendingNotificationRequests(withIdentifiers: productionIDs)
     }
 
     await scheduleWeekly(center: center)
@@ -88,8 +85,8 @@ enum PerformanceReportReminderScheduler {
   @MainActor
   private static func scheduleWeekly(center: UNUserNotificationCenter) async {
     let content = UNMutableNotificationContent()
-    content.title = weeklyNotificationBody
-    content.body = ""
+    content.title = weeklyNotificationTitle
+    content.body = weeklyNotificationBody
     content.sound = .default
     content.userInfo = [
       "type": "trading_report",
@@ -121,8 +118,8 @@ enum PerformanceReportReminderScheduler {
   @MainActor
   private static func scheduleMonthly(center: UNUserNotificationCenter) async {
     let content = UNMutableNotificationContent()
-    content.title = monthlyNotificationBody
-    content.body = ""
+    content.title = monthlyNotificationTitle
+    content.body = monthlyNotificationBody
     content.sound = .default
     content.userInfo = [
       "type": "trading_report",
@@ -192,8 +189,8 @@ enum PerformanceReportReminderScheduler {
     titleSuffix: String
   ) async {
     let content = UNMutableNotificationContent()
-    content.title = (kind == .weekly ? weeklyNotificationBody : monthlyNotificationBody) + titleSuffix
-    content.body = ""
+    content.title = (kind == .weekly ? weeklyNotificationTitle : monthlyNotificationTitle) + titleSuffix
+    content.body = kind == .weekly ? weeklyNotificationBody : monthlyNotificationBody
     content.sound = .default
     content.userInfo = [
       "type": "trading_report",

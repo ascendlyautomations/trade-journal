@@ -152,6 +152,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .followers: return "followers"
         case .following: return "following"
         case .otherProfile: return "otherProfile"
+        case .profileInsights: return "profileInsights"
         case .rooms: return "rooms"
         case .room: return "room"
         case .roomMembers: return "roomMembers"

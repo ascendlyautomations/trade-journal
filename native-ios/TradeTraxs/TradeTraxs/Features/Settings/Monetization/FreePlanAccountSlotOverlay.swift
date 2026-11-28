@@ -59,7 +59,8 @@ final class FreePlanAccountSlotViewModel {
     var canReconfigure: Bool {
         guard let profileID = accounts.first?.ownerProfileID else { return false }
         if TradeEntryEntitlementGate.viewerHasTraxProAccess(profileID: profileID) { return false }
-        return accounts.count > FreeTierPolicy.maxTradeEntryAccounts
+        return TradingAccountLifecyclePolicy.countDistinctAccountSlots(accounts)
+            > FreeTierPolicy.maxTradeEntryAccounts
     }
 
     var isPresented: Bool {

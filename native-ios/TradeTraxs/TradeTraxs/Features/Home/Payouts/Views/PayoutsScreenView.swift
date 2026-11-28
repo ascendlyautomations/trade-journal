@@ -146,7 +146,7 @@ struct PayoutsScreenView: View {
                 .padding(.horizontal, ExperienceSpacing.md)
 
                 if showInitialLoading {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .frame(maxWidth: .infinity)
                         .padding(.top, ExperienceSpacing.xl)
                 } else if historyItems.isEmpty {

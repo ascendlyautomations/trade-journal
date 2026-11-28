@@ -9,6 +9,7 @@ import StoryFrame from "./StoryFrame"
 import StoryReplyInput from "./StoryReplyInput"
 import { optimizeStorageImageUrl } from "@/lib/optimizedStorageImage"
 import type { StoryTextOverlay } from "@/lib/activeStories"
+import { useStorySignedPlaybackUrl } from "@/lib/useStorySignedPlaybackUrl"
 
 type StorySlide = {
   id: string
@@ -203,6 +204,8 @@ function FeedStoryViewer({
     [activeStoryUser, users]
   )
 
+  const signedPlaybackUrl = useStorySignedPlaybackUrl(currentStory)
+
   const activeUserIndex = useMemo(
     () => users.findIndex((u) => u.id === activeStoryUser),
     [activeStoryUser, users]
@@ -328,7 +331,7 @@ function FeedStoryViewer({
           <StoryFrame
             key={activeStoryUser}
             profile={activeProfile}
-            imageUrl={currentStory.image_url}
+            imageUrl={signedPlaybackUrl ?? currentStory.image_url}
             textOverlays={currentStory.text_overlays}
             priority={phoneWeb}
             imageKey={currentStory.id}

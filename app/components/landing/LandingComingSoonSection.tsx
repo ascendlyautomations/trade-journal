@@ -57,7 +57,7 @@ const COMING_SOON_CARDS: readonly ComingSoonCard[] = [
   {
     icon: "🔗",
     title: "More Broker Platforms",
-    description: "Tradovate and Rithmic connections are available today in Settings.",
+    description: "Tradovate connections are available today in Settings.",
     bullets: ["NinjaTrader", "Additional prop firm imports", "Expanded auto-sync"],
     status: "Coming Soon",
   },

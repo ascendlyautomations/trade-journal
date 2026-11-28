@@ -160,7 +160,7 @@ struct ExploreHomeView: View {
                 }
 
                 if viewModel.isLoadingMoreTraders {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, ExperienceSpacing.sm)
                 }
@@ -297,7 +297,7 @@ struct ExploreHomeView: View {
         let _ = joinCoordinator.mutationStates
         let _ = membershipStore.revision
         if viewModel.searchPhase == .searching && viewModel.searchPeople.isEmpty && viewModel.searchRooms.isEmpty {
-            ProgressView("Searching…")
+            ExperienceLoadingSpinner(message: "Searching…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if case .failed(let message) = viewModel.searchPhase {
             ExperienceErrorState(

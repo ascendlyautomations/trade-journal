@@ -2,13 +2,11 @@
 
 import {
   type Achievement,
-  achievementTypeLabel,
   badgeIconForKey,
   formatAchievementDate,
-  formatAchievementValue,
-  isPayoutAchievementType,
   tierClassName,
 } from "../../lib/achievements"
+import AchievementPublicContentStack from "@/app/components/achievement/AchievementPublicContentStack"
 import { achievementImagePublicUrl } from "../../lib/storagePublicUrl"
 import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import { CONTENT_IMAGE_DISPLAY_PRESET } from "@/lib/contentImagePipeline"
@@ -42,12 +40,6 @@ export default function AchievementCard({
   onImageClick,
 }: AchievementCardProps) {
   const imageSrc = achievementImagePublicUrl(achievement.image_url)
-  const valueText = formatAchievementValue(achievement)
-  const isPayout = isPayoutAchievementType(achievement.achievement_type)
-  const headerLabel =
-    isPayout && valueText
-      ? `${achievementTypeLabel(achievement.achievement_type)} • ${valueText}`
-      : achievementTypeLabel(achievement.achievement_type)
 
   const openDetail = onOpenDetail
     ? () => onOpenDetail(achievement)
@@ -94,29 +86,17 @@ export default function AchievementCard({
       }
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-blue-300">
-            {headerLabel}
-          </p>
-          <h3 className="truncate text-sm font-semibold text-white">{achievement.title}</h3>
-          {featured ? (
-            <p className="tt-ach-desc text-xs text-gray-300">{achievement.description || "Achievement unlocked"}</p>
-          ) : null}
+        <div className="min-w-0 flex-1">
+          <AchievementPublicContentStack
+            achievement={achievement}
+            titleClassName="truncate text-sm font-semibold text-white"
+            descriptionClassName="tt-ach-desc text-xs text-gray-300"
+          />
         </div>
         <span className="text-lg leading-none">
           {badgeIconForKey(achievement.badge_key, achievement.achievement_type)}
         </span>
       </div>
-
-      {!featured ? (
-        <p className="tt-ach-desc mt-1 text-xs text-gray-300">
-          {achievement.description || "Achievement unlocked"}
-        </p>
-      ) : null}
-
-      {(featured || valueText) && !(isPayout && valueText) ? (
-        <p className="mt-1 text-xs text-emerald-300">{valueText || "Achievement unlocked"}</p>
-      ) : null}
 
       <p className="mt-1 text-[11px] text-gray-400">
         {featured ? "Achieved " : ""}

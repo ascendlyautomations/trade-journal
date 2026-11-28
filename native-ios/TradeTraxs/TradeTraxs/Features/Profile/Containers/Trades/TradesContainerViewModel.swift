@@ -5,6 +5,15 @@ import Observation
 @MainActor
 final class TradesContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
+
+    var sectionChromeState: ProfileSectionLoadState {
+        let settled = hasLoaded || !journalItems.isEmpty
+        return state.preservingSettledContent(
+            hasSettledLoad: settled,
+            itemCount: journalItems.count
+        )
+    }
+
     private(set) var journalItems: [TradeOwnerJournalSummary] = []
     /// Grouped Profile Trades cards, rebuilt with ``updateStateForVisibleItems()`` (includes copy mode summary).
     private(set) var renderedTradeSummaries: [TradeSummary] = []
@@ -319,7 +328,7 @@ final class TradesContainerViewModel {
             return
         }
         if awaitingScreenBootstrap {
-            if journalItems.isEmpty {
+            if journalItems.isEmpty, !state.hasSettledPresentation {
                 state = .loading
             }
             return
@@ -707,7 +716,7 @@ final class TradesContainerViewModel {
             return
         }
 
-        if reset, journalItems.isEmpty {
+        if reset, journalItems.isEmpty, !state.hasSettledPresentation {
             state = .loading
         }
         initialLoadFailureGrace.cancel()
@@ -1202,8 +1211,12 @@ final class TradesContainerViewModel {
             deferCopyModeSummaryUntilAuthoritativeJournal:
                 isHydratingAuthoritativeJournal && !hasAuthoritativeV2Journal
         )
-        if !hasLoaded {
+        if !hasLoaded, journalItems.isEmpty, !state.hasSettledPresentation {
             state = .loading
+            return
+        }
+        if !hasLoaded, !journalItems.isEmpty {
+            state = .loaded(itemCount: journalItems.count)
             return
         }
         if journalItems.isEmpty {

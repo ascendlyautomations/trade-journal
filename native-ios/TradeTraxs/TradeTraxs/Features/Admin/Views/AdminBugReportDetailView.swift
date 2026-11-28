@@ -135,7 +135,7 @@ struct AdminBugReportDetailView: View {
             if viewModel.statusBusy {
                 HStack {
                     Spacer()
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                     Spacer()
                 }
             }

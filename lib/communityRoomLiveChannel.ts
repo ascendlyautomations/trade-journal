@@ -30,6 +30,8 @@ export type RoomLiveChannelOptions = {
   isMessageVisible: (messageId: string) => boolean
   /** When true, subscribe with room_id filter (requires migration). */
   useRoomScopedReactions?: boolean
+  /** Passive stream discovery — debounced status refresh is owned by the caller. */
+  onRoomLiveBroadcastChange?: () => void
   /** Optional Realtime Presence on the same channel. */
   presence?: {
     presenceKey: string
@@ -55,6 +57,7 @@ export function subscribeCommunityRoomLiveChannel(
     onReactionChange,
     isMessageVisible,
     useRoomScopedReactions = true,
+    onRoomLiveBroadcastChange,
     presence,
   } = options
 
@@ -90,6 +93,43 @@ export function subscribeCommunityRoomLiveChannel(
       onMessageInsert({ id, new: payload.new as Record<string, unknown> })
     }
   )
+
+  if (onRoomLiveBroadcastChange) {
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "room_live_broadcasts",
+        filter: `room_id=eq.${roomId}`,
+      },
+      (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+        const eventType = payload.eventType
+        if (eventType === "INSERT" || eventType === "DELETE") {
+          onRoomLiveBroadcastChange()
+          return
+        }
+        if (eventType === "UPDATE") {
+          const row = payload.new as Record<string, unknown> | undefined
+          if (!row) {
+            onRoomLiveBroadcastChange()
+            return
+          }
+          if (typeof row.ended_at === "string" && row.ended_at.trim()) {
+            onRoomLiveBroadcastChange()
+            return
+          }
+          if (
+            "visibility" in row ||
+            "host_connected" in row ||
+            "primary_media_publisher_connected" in row
+          ) {
+            onRoomLiveBroadcastChange()
+          }
+        }
+      }
+    )
+  }
 
   if (useRoomScopedReactions) {
     channel.on(

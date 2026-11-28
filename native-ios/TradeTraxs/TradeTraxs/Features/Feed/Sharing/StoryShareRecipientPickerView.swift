@@ -15,8 +15,7 @@ struct StoryShareRecipientPickerView: View {
             Group {
                 switch viewModel.phase {
                 case .idle, .loading:
-                    ExperienceLoadingSpinner(label: loadingLabel)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceLoadingOverlay(label: loadingLabel)
                 case .failed(let message):
                     ExperienceErrorState(
                         title: "Couldn't load recipients",
@@ -98,7 +97,7 @@ struct StoryShareRecipientPickerView: View {
             .experiencePlainListStyle()
             .overlay {
                 if viewModel.phase == .sending {
-                    ProgressView("Sending…")
+                    ExperienceLoadingSpinner(message: "Sending…")
                         .padding()
                         .experienceFloatingPanelBackground(
                             in: RoundedRectangle(cornerRadius: 12, style: .continuous)

@@ -119,7 +119,7 @@ struct WithdrawalFlowView: View {
             if viewModel.isLoading, withdrawalAccounts.isEmpty {
                 Section {
                     HStack {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                         Text("Loading accounts…")
                             .experienceStyle(.footnote, color: colors.secondaryText)
                     }

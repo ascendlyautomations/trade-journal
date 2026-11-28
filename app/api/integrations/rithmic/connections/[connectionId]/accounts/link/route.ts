@@ -9,6 +9,10 @@ import { parseBrokerLinkCreateAccountPayload } from "@/lib/integrations/brokerLi
 import { insertTradingAccount } from "@/lib/tradingAccounts"
 import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
 import { proLimitResponseFromError } from "@/lib/server/proLimitFromError"
+import {
+  isRithmicDevelopmentIntegrationEnabled,
+  rithmicDevelopmentIntegrationDisabledResponse,
+} from "@/lib/integrations/rithmic/rithmicDevIntegration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -37,6 +41,10 @@ export async function POST(req: Request, context: RouteContext) {
   const user = await getRouteUser(req)
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!isRithmicDevelopmentIntegrationEnabled()) {
+    return rithmicDevelopmentIntegrationDisabledResponse()
   }
 
   const { connectionId } = await context.params

@@ -16,6 +16,7 @@ export type ContextualTourStepRole =
 
 export type ContextualTourTargetId =
   | "dashboardAccountAndDates"
+  | "dashboardGettingStarted"
   | "dashboardPerformance"
   | "dashboardTrades"
   | "dashboardReports"

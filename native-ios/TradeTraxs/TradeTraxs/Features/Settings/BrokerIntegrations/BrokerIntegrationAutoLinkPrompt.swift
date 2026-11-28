@@ -58,10 +58,19 @@ enum BrokerIntegrationAutoLinkPrompt {
         gate: BrokerIntegrationLinkPromptGate,
         linkTarget: Binding<BrokerIntegrationLinkTarget?>,
         createLinkTarget: Binding<BrokerIntegrationCreateLinkTarget?>,
+        pendingConfirmTarget: Binding<BrokerPendingTradovateLinkConfirmTarget?>? = nil,
         onExpandConnectedLogin: ((BrokerIntegrationProvider, String) -> Void)? = nil
     ) {
         Task { @MainActor in
-            await waitUntilReadyForPresentation(viewModel)
+            let ready = await waitUntilReadyForPresentation(viewModel)
+            guard ready else { return }
+            if let pendingConfirmTarget {
+                presentPendingConfirmIfNeeded(
+                    viewModel: viewModel,
+                    gate: gate,
+                    pendingConfirmTarget: pendingConfirmTarget
+                )
+            }
             presentIfNeeded(
                 viewModel: viewModel,
                 gate: gate,
@@ -72,18 +81,57 @@ enum BrokerIntegrationAutoLinkPrompt {
         }
     }
 
-    static func waitUntilReadyForPresentation(_ viewModel: BrokerIntegrationsViewModel) async {
-        for _ in 0 ..< 120 {
+    static func schedulePendingConfirmOnly(
+        viewModel: BrokerIntegrationsViewModel,
+        gate: BrokerIntegrationLinkPromptGate,
+        pendingConfirmTarget: Binding<BrokerPendingTradovateLinkConfirmTarget?>
+    ) {
+        Task { @MainActor in
+            let ready = await waitUntilReadyForPresentation(viewModel)
+            guard ready else { return }
+            presentPendingConfirmIfNeeded(
+                viewModel: viewModel,
+                gate: gate,
+                pendingConfirmTarget: pendingConfirmTarget
+            )
+        }
+    }
+
+    private static func presentPendingConfirmIfNeeded(
+        viewModel: BrokerIntegrationsViewModel,
+        gate: BrokerIntegrationLinkPromptGate,
+        pendingConfirmTarget: Binding<BrokerPendingTradovateLinkConfirmTarget?>
+    ) {
+        guard pendingConfirmTarget.wrappedValue == nil else { return }
+        guard !blocksLinkPrompt(viewModel) else { return }
+        guard let next = viewModel.firstPendingTradovateLinkConfirmation(
+            excludingBrokerMappingIDs: gate.excludedFromAutoPrompt
+        ) else {
+            return
+        }
+        gate.recordPresentation(mappingID: next.account.id)
+        pendingConfirmTarget.wrappedValue = BrokerPendingTradovateLinkConfirmTarget(
+            connectionId: next.connectionId,
+            brokerAccount: next.account,
+            pending: next.pending
+        )
+    }
+
+    /// Waits for auth sheets, connect mutations, and post-connect broker account discovery.
+    static func waitUntilReadyForPresentation(_ viewModel: BrokerIntegrationsViewModel) async -> Bool {
+        for _ in 0 ..< 180 {
             if blocksLinkPrompt(viewModel) || viewModel.isDiscoveringBrokerAccountsAfterConnect {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 continue
             }
-            return
+            return true
         }
+        return false
     }
 
     private static func blocksLinkPrompt(_ viewModel: BrokerIntegrationsViewModel) -> Bool {
         viewModel.isBrokerConnectionMutationActive
+            || viewModel.isRunningPostConnectAutoLinkDiscovery
             || viewModel.showsRithmicConnectSheet
             || viewModel.showsTradovateEnvironmentPicker
     }
@@ -103,7 +151,13 @@ enum BrokerIntegrationAutoLinkPrompt {
         guard let next = viewModel.firstUnlinkedBrokerAccount(
             excludingMappingIDs: gate.excludedFromAutoPrompt
         ) else {
+            if viewModel.isRunningPostConnectAutoLinkDiscovery {
+                return
+            }
             if viewModel.isDiscoveringBrokerAccountsAfterConnect {
+                return
+            }
+            if viewModel.unlinkedBrokerAccountsCount > 0 {
                 return
             }
             gate.endAutoLinkSequence()
@@ -142,6 +196,7 @@ extension View {
                 gate: gate,
                 linkTarget: linkTarget,
                 createLinkTarget: createLinkTarget,
+                pendingConfirmTarget: .constant(nil),
                 onExpandConnectedLogin: onExpandConnectedLogin
             )
         } else {
@@ -155,6 +210,7 @@ extension View {
         gate: BrokerIntegrationLinkPromptGate,
         linkTarget: Binding<BrokerIntegrationLinkTarget?>,
         createLinkTarget: Binding<BrokerIntegrationCreateLinkTarget?>,
+        pendingConfirmTarget: Binding<BrokerPendingTradovateLinkConfirmTarget?>,
         onExpandConnectedLogin: ((BrokerIntegrationProvider, String) -> Void)? = nil
     ) -> some View {
         modifier(
@@ -163,6 +219,7 @@ extension View {
                 gate: gate,
                 linkTarget: linkTarget,
                 createLinkTarget: createLinkTarget,
+                pendingConfirmTarget: pendingConfirmTarget,
                 onExpandConnectedLogin: onExpandConnectedLogin
             )
         )
@@ -174,6 +231,7 @@ private struct BrokerIntegrationAutoLinkPromptModifier: ViewModifier {
     var gate: BrokerIntegrationLinkPromptGate
     @Binding var linkTarget: BrokerIntegrationLinkTarget?
     @Binding var createLinkTarget: BrokerIntegrationCreateLinkTarget?
+    @Binding var pendingConfirmTarget: BrokerPendingTradovateLinkConfirmTarget?
     var onExpandConnectedLogin: ((BrokerIntegrationProvider, String) -> Void)?
 
     func body(content: Content) -> some View {
@@ -203,6 +261,17 @@ private struct BrokerIntegrationAutoLinkPromptModifier: ViewModifier {
                 guard wasShowing, !isShowing else { return }
                 requestPrompt()
             }
+            .onChange(of: viewModel.autoLinkPromptSignal) { _, _ in
+                requestPrompt()
+            }
+            .onChange(of: viewModel.isRunningPostConnectAutoLinkDiscovery) { wasRunning, isRunning in
+                guard wasRunning, !isRunning else { return }
+                requestPrompt()
+                requestPendingConfirm()
+            }
+            .onChange(of: viewModel.pendingTradovateLinkConfirmSignal) { _, _ in
+                requestPendingConfirm()
+            }
     }
 
     private func requestPrompt() {
@@ -212,7 +281,16 @@ private struct BrokerIntegrationAutoLinkPromptModifier: ViewModifier {
             gate: gate,
             linkTarget: $linkTarget,
             createLinkTarget: $createLinkTarget,
+            pendingConfirmTarget: $pendingConfirmTarget,
             onExpandConnectedLogin: onExpandConnectedLogin
+        )
+    }
+
+    private func requestPendingConfirm() {
+        BrokerIntegrationAutoLinkPrompt.schedulePendingConfirmOnly(
+            viewModel: viewModel,
+            gate: gate,
+            pendingConfirmTarget: $pendingConfirmTarget
         )
     }
 }

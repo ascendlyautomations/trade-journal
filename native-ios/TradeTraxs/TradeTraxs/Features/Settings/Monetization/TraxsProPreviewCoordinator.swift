@@ -89,7 +89,10 @@ final class TraxsProPreviewCoordinator {
         presentPreview(feature: feature, entryPoint: entryPoint)
     }
 
-    func dismissPreview(productionData: DataEnvironment) {
+    func dismissPreview(
+        productionData: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator? = nil
+    ) {
         guard isPresented || TraxsProPreviewSession.shared.isAnyPreviewActive else {
             isPresented = false
             return
@@ -101,6 +104,7 @@ final class TraxsProPreviewCoordinator {
         let viewer = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
         isPresented = false
         TraxsProPreviewSession.shared.endActivePreview()
+        navigationCoordinator?.restoreTradingRulesSettingsAfterPreview(entryPoint: entryPoint)
         if let viewer {
             TraxsProProductionRecovery.recoverAfterPreview(
                 production: productionData,
@@ -145,6 +149,7 @@ final class TraxsProPreviewCoordinator {
 struct TraxsProPreviewCoverModifier: ViewModifier {
     @Bindable private var previewCoordinator = TraxsProPreviewCoordinator.shared
     let data: DataEnvironment
+    let navigationCoordinator: NavigationCoordinator
 
     func body(content: Content) -> some View {
         content
@@ -152,7 +157,10 @@ struct TraxsProPreviewCoverModifier: ViewModifier {
                 isPresented: $previewCoordinator.isPresented,
                 onDismiss: {
                     if TraxsProPreviewSession.shared.isAnyPreviewActive {
-                        previewCoordinator.dismissPreview(productionData: data)
+                        previewCoordinator.dismissPreview(
+                            productionData: data,
+                            navigationCoordinator: navigationCoordinator
+                        )
                     } else {
                         previewCoordinator.isPresented = false
                         previewCoordinator.resetPresentationStateKeepingSessionFlags()
@@ -160,7 +168,10 @@ struct TraxsProPreviewCoverModifier: ViewModifier {
                 },
                 content: {
                     TraxsProPreviewCoverContent(productionData: data) {
-                        previewCoordinator.dismissPreview(productionData: data)
+                        previewCoordinator.dismissPreview(
+                            productionData: data,
+                            navigationCoordinator: navigationCoordinator
+                        )
                     }
                 }
             )
@@ -193,12 +204,12 @@ private struct TraxsProPreviewCoverContent: View {
 
 extension View {
     @MainActor
-    func traxsProPreviewCover(data: DataEnvironment) -> some View {
-        modifier(TraxsProPreviewCoverModifier(data: data))
+    func traxsProPreviewCover(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) -> some View {
+        modifier(TraxsProPreviewCoverModifier(data: data, navigationCoordinator: navigationCoordinator))
     }
 
     @MainActor
-    func traxsProReportsPreviewCover(data: DataEnvironment) -> some View {
-        traxsProPreviewCover(data: data)
+    func traxsProReportsPreviewCover(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) -> some View {
+        traxsProPreviewCover(data: data, navigationCoordinator: navigationCoordinator)
     }
 }

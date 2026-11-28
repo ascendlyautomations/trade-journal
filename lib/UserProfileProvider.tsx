@@ -42,6 +42,7 @@ import { clearFeedSessionsForUser } from "./feedSessionCache"
 import { clearConversationSessionsForUser } from "./conversationSessionCache"
 import { clearImageUrlCache } from "./imageUrlCache"
 import { invalidateStoriesSession } from "./storiesSessionCache"
+import { clearStoryViewerSession } from "./storyViewerSession"
 import { resetRoutePrefetchSession } from "./routePrefetch"
 import { warmAppDataCaches, resetDataPrefetchSession } from "./dataPrefetch"
 import { resetNotificationRealtimeSession } from "./notificationRealtime"
@@ -428,6 +429,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       clearAppDataCache()
       invalidateExploreSession()
       invalidateStoriesSession()
+      clearStoryViewerSession()
       clearImageUrlCache()
       resetRoutePrefetchSession()
       resetDataPrefetchSession()

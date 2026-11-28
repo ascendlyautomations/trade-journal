@@ -59,10 +59,10 @@ struct CreatingAccountView: View {
                 .foregroundStyle(colors.primaryText)
                 .accessibilityIdentifier("postSignup.creatingAccount.title")
 
-            ProgressView()
-                .progressViewStyle(.circular)
-                .tint(colors.secondaryText)
-                .accessibilityLabel("Setting up your account")
+            ExperienceLoadingSpinner(
+                label: "Setting up your account",
+                tint: colors.secondaryText
+            )
         }
         .frame(maxWidth: .infinity)
     }

@@ -57,4 +57,17 @@ nonisolated enum FeedPersistentReconcile {
         }
         return FeedSupport.sortDescending(result)
     }
+
+    /// Appends `incoming` after `existing` without re-sorting; drops duplicate ids.
+    static func appendUniquePreservingOrder(
+        existing: [FeedTimelineEntry],
+        incoming: [FeedTimelineEntry]
+    ) -> [FeedTimelineEntry] {
+        var seen = Set(existing.map(\.id))
+        var merged = existing
+        for entry in incoming where seen.insert(entry.id).inserted {
+            merged.append(entry)
+        }
+        return merged
+    }
 }

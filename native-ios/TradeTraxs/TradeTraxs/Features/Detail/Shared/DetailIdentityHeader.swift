@@ -9,6 +9,8 @@ struct DetailIdentityHeader: View {
     /// Optional second-line suffix after username (e.g. Trade account identity).
     var subtitle: String? = nil
     let dateText: String
+    /// Feed-style `@username · 1d` (caption / secondary / tertiary), overrides username row styling.
+    var relativePostedAt: Date? = nil
     var showsVerifiedBadge: Bool = false
     let isOwner: Bool
     var contentLink: DetailContentLink? = nil
@@ -74,7 +76,7 @@ struct DetailIdentityHeader: View {
             )
             .accessibilityHidden(onOpenAuthor == nil)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: relativePostedAt == nil ? 2 : 1) {
                 HStack(spacing: 4) {
                     Text(displayName)
                         .experienceStyle(.headline, color: colors.primaryText)
@@ -85,28 +87,43 @@ struct DetailIdentityHeader: View {
                 }
                 .padding(.trailing, 28)
 
-                HStack(spacing: 4) {
-                    if !username.isEmpty {
-                        Text(username)
-                            .experienceStyle(.footnote, color: colors.secondaryText)
+                if let relativePostedAt {
+                    HStack(spacing: 4) {
+                        if !username.isEmpty {
+                            Text(username)
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                                .lineLimit(1)
+                            Text("·")
+                                .experienceStyle(.caption, color: colors.tertiaryText)
+                        }
+                        Text(MessagesInboxSupport.relativeTimestamp(relativePostedAt))
+                            .experienceStyle(.caption, color: colors.tertiaryText)
                             .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
                     }
-                    if let subtitle, !subtitle.isEmpty {
-                        Text("·")
-                            .experienceStyle(.footnote, color: colors.tertiaryText)
-                            .fixedSize(horizontal: true, vertical: false)
-                        Text(subtitle)
-                            .experienceStyle(.footnote, color: colors.secondaryText)
-                            .lineLimit(1)
-                            .layoutPriority(1)
-                            .minimumScaleFactor(0.9)
+                } else {
+                    HStack(spacing: 4) {
+                        if !username.isEmpty {
+                            Text(username)
+                                .experienceStyle(.footnote, color: colors.secondaryText)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        if let subtitle, !subtitle.isEmpty {
+                            Text("·")
+                                .experienceStyle(.footnote, color: colors.tertiaryText)
+                                .fixedSize(horizontal: true, vertical: false)
+                            Text(subtitle)
+                                .experienceStyle(.footnote, color: colors.secondaryText)
+                                .lineLimit(1)
+                                .layoutPriority(1)
+                                .minimumScaleFactor(0.9)
+                        }
                     }
-                }
 
-                if !dateText.isEmpty {
-                    Text(dateText)
-                        .experienceStyle(.caption, color: colors.tertiaryText)
+                    if !dateText.isEmpty {
+                        Text(dateText)
+                            .experienceStyle(.caption, color: colors.tertiaryText)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

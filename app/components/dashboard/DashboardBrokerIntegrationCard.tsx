@@ -39,7 +39,7 @@ function providerLabel(provider: LinkedAccount["provider"]): string {
 }
 
 function subtitleFor(eligibility: Eligibility | null): string {
-  if (!eligibility) return "Connect Tradovate or Rithmic"
+  if (!eligibility) return "Connect Tradovate"
   const count = Math.max(
     eligibility.linkedAccountCount,
     eligibility.linkedAccounts.length
@@ -50,7 +50,7 @@ function subtitleFor(eligibility: Eligibility | null): string {
   if (eligibility.hasSupportedConnection || eligibility.connectionCount > 0) {
     return "Link a broker account to import trades"
   }
-  return "Connect Tradovate or Rithmic"
+  return "Connect Tradovate"
 }
 
 export default function DashboardBrokerIntegrationCard({
@@ -316,7 +316,7 @@ export default function DashboardBrokerIntegrationCard({
                     Connect Broker
                   </span>
                   <span className="block text-xs text-gray-400">
-                    Sync trades from Tradovate or Rithmic
+                    Sync trades from Tradovate
                   </span>
                 </span>
               </button>

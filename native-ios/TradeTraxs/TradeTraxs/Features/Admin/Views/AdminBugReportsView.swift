@@ -52,7 +52,7 @@ struct AdminBugReportsView: View {
                 if viewModel.isLoading, viewModel.snapshots.isEmpty {
                     HStack {
                         Spacer()
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                         Spacer()
                     }
                     .listRowBackground(Color.clear)
@@ -79,7 +79,7 @@ struct AdminBugReportsView: View {
                     if viewModel.isLoadingMore {
                         HStack {
                             Spacer()
-                            ProgressView()
+                            ExperienceIndeterminateProgress()
                             Spacer()
                         }
                     }

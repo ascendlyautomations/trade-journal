@@ -1,3 +1,4 @@
+import { isRithmicDevelopmentIntegrationEnabled } from "@/lib/integrations/rithmic/rithmicDevIntegration"
 import {
   isRithmicProductionUserAuthConfirmed,
   isRithmicUserConnectEnabled,
@@ -9,6 +10,7 @@ export type RithmicConnectCapabilities = {
   productionUserAuthConfirmed: boolean
   apiEnvironment: string
   showConnectUi: boolean
+  developmentIntegrationEnabled: boolean
   credentialModelStatus: "confirmed_with_vendor" | "not_yet_confirmed"
 }
 
@@ -21,13 +23,14 @@ export type RithmicConnectCapabilities = {
  *   (`RITHMIC_PRODUCTION_USER_AUTH_CONFIRMED=1`) — do not imply approval otherwise.
  */
 export function resolveRithmicConnectCapabilities(): RithmicConnectCapabilities {
+  const developmentIntegrationEnabled = isRithmicDevelopmentIntegrationEnabled()
   const userConnectEnabled = isRithmicUserConnectEnabled()
   const productionUserAuthConfirmed = isRithmicProductionUserAuthConfirmed()
   const apiEnvironmentLabel =
     process.env.RITHMIC_API_ENV?.trim() || "test"
 
   let showConnectUi = false
-  if (userConnectEnabled) {
+  if (developmentIntegrationEnabled && userConnectEnabled) {
     if (apiEnvironmentLabel === "test") {
       try {
         loadRithmicProtocolEnv()
@@ -55,6 +58,7 @@ export function resolveRithmicConnectCapabilities(): RithmicConnectCapabilities 
     productionUserAuthConfirmed,
     apiEnvironment,
     showConnectUi,
+    developmentIntegrationEnabled,
     credentialModelStatus: productionUserAuthConfirmed
       ? "confirmed_with_vendor"
       : "not_yet_confirmed",

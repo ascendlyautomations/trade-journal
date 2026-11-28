@@ -263,7 +263,7 @@ struct BacktestCalendarView: View {
     private var toolbar: some ToolbarContent {
         if viewModel.phase == .loading, !viewModel.allTrades.isEmpty {
             ToolbarItem(placement: .topBarTrailing) {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
     }

@@ -39,8 +39,9 @@ struct CSVImportView: View {
             case .chooseFile:
                 chooseFile
             case .parsing, .importing:
-                ProgressView(viewModel.phase == .parsing ? "Reading CSV…" : "Importing trades…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(
+                    message: viewModel.phase == .parsing ? "Reading CSV…" : "Importing trades…"
+                )
             case .mapping:
                 CSVImportMappingView(viewModel: viewModel)
             case .preview:

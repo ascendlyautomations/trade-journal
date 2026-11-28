@@ -35,9 +35,19 @@ struct StoryReplyMultilineTextField: UIViewRepresentable {
         textView.autocorrectionType = .default
         textView.spellCheckingType = .default
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        textView.setContentHuggingPriority(.required, for: .vertical)
         textView.accessibilityIdentifier = "feed.story.replyField"
         context.coordinator.attach(textView)
         return textView
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: ExperienceNoKeyboardAccessoryTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? UIScreen.main.bounds.width
+        let lineHeight = uiView.font?.lineHeight ?? UIFont.preferredFont(forTextStyle: .body).lineHeight
+        let maxHeight = lineHeight * CGFloat(maxLines) + uiView.textContainerInset.top + uiView.textContainerInset.bottom
+        let measured = min(uiView.contentSize.height, maxHeight)
+        return CGSize(width: width, height: max(measured, lineHeight))
     }
 
     func updateUIView(_ textView: ExperienceNoKeyboardAccessoryTextView, context: Context) {
@@ -83,7 +93,9 @@ struct StoryReplyMultilineTextField: UIViewRepresentable {
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
-            ExperienceKeyboardAccessoryStrip.clearOnFirstResponderIfNeeded()
+            if !ExperienceKeyboardNativeIsolation.isEnabled {
+                ExperienceKeyboardAccessoryStrip.clearOnFirstResponderIfNeeded()
+            }
             if !isProgrammaticFocusChange, !isFocused {
                 isFocused = true
             }

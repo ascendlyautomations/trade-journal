@@ -167,6 +167,14 @@ struct ConversationView: View {
                 onViewInChat: { messageID in
                     sharedMediaSheetPresentation = nil
                     viewModel.navigateToMessageFromSharedMedia(messageID)
+                },
+                onOpenSharedTrade: { tradeID, preview in
+                    sharedMediaSheetPresentation = nil
+                    navigationCoordinator?.pushSocialTrade(
+                        tradeID,
+                        cache: detailCache,
+                        preview: preview
+                    )
                 }
             )
             .accessibilityIdentifier("conversation.sharedMedia.sheet")
@@ -309,8 +317,7 @@ struct ConversationView: View {
         switch viewModel.phase {
         case .idle, .loading:
             if viewModel.messages.isEmpty {
-                ExperienceLoadingSpinner(label: "Loading conversation")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading conversation")
             } else {
                 messageList
             }
@@ -342,7 +349,7 @@ struct ConversationView: View {
             ScrollView {
                 LazyVStack(spacing: ExperienceSpacing.xs) {
                     if viewModel.hasMoreOlder, viewModel.isInitialScrollConfirmed {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, ExperienceSpacing.sm)
                             .onAppear {
@@ -359,6 +366,8 @@ struct ConversationView: View {
                                 item: bubble,
                                 peerProfile: viewModel.peerProfile,
                                 imagePipeline: imagePipeline,
+                                feed: dataEnvironment?.feed,
+                                objectStorage: dataEnvironment?.objectStorage,
                                 viewerProfileID: viewModel.viewerID,
                                 sharedTrade: viewModel.sharedTrade(for: bubble.message),
                                 sharedPost: viewModel.sharedPost(for: bubble.message),
@@ -415,15 +424,19 @@ struct ConversationView: View {
                                     }
                                 },
                                 onSharedStoryTap: { payload in
+                                    guard let feed = dataEnvironment?.feed else { return }
                                     StoryShareNavigation.open(
                                         payload: payload,
+                                        feed: feed,
                                         cache: detailCache,
                                         coordinator: navigationCoordinator
                                     )
                                 },
                                 onStoryReplyTap: { payload in
+                                    guard let feed = dataEnvironment?.feed else { return }
                                     StoryReplyNavigation.open(
                                         payload: payload,
+                                        feed: feed,
                                         cache: detailCache,
                                         coordinator: navigationCoordinator
                                     )
@@ -657,7 +670,8 @@ struct ConversationView: View {
 
     private func maintainInitialPinAfterRichContentHydration(proxy: ScrollViewProxy) {
         guard viewModel.initialScrollPhase == .settling else { return }
-        guard let sample = lastScrollSample else { return }
+        guard !userReleasedInitialPin else { return }
+        guard let sample = lastScrollSample, sample.isNearBottom else { return }
         maintainInitialBottomPin(sample: sample, proxy: proxy, reason: "shared-content-hydrated")
         scheduleSettlingStabilityCheck(proxy: proxy)
     }
@@ -811,12 +825,8 @@ struct ConversationView: View {
 
     private var sharedMediaMenuButton: some View {
         Button("Shared Media") {
-            let galleryViewModel = ConversationSharedMediaViewModel(
-                conversationID: viewModel.conversationID,
-                rpc: viewModel.conversationSharedMediaRPC
-            )
             sharedMediaSheetPresentation = ConversationSharedMediaSheetPresentation(
-                viewModel: galleryViewModel
+                viewModel: viewModel.makeSharedMediaViewModel()
             )
         }
     }
@@ -960,11 +970,8 @@ struct ConversationView: View {
     ) {
         guard viewModel.initialScrollPhase == .settling else { return }
         guard !userReleasedInitialPin else { return }
-        if sample.contentHeight > 0,
-           (!sample.isNearBottom || sample.distanceFromBottom > ConversationThreadScrollSupport.bottomProximityThreshold / 2)
-        {
-            scrollToLatest(proxy: proxy, animated: false, reason: reason)
-        }
+        guard ConversationThreadScrollSupport.shouldMaintainInitialBottomPin(sample: sample) else { return }
+        scrollToLatest(proxy: proxy, animated: false, reason: reason)
     }
 
     private func scheduleSettlingStabilityCheck(proxy: ScrollViewProxy) {

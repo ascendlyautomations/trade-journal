@@ -47,6 +47,7 @@ enum ContextualTourTargetID: String, CaseIterable, Hashable, Sendable {
     case mainTabMessages
     case mainTabProfile
     case dashboardAccountAndDates
+    case dashboardGettingStarted
     case dashboardPerformance
     case dashboardTrades
     case dashboardReports
@@ -58,6 +59,7 @@ enum ContextualTourTargetID: String, CaseIterable, Hashable, Sendable {
     case feedExplore
     case profileIdentity
     case profileTradeRoom
+    case profileInsights
     case profileSettings
     case settingsAppearance
     case settingsTradingRules
@@ -85,6 +87,8 @@ extension ContextualTourTargetID {
     var prefersWalkthroughCardAboveSpotlight: Bool {
         isMainTabBarTarget
     }
+
+    var debugLabel: String { rawValue }
 }
 
 struct ContextualTourStep: Equatable, Sendable {
@@ -158,10 +162,11 @@ enum ContextualTourCatalog {
             surface: .dashboard
         ),
         ContextualTourStep(
-            target: .dashboardPerformance,
-            title: "Trading Performance",
-            message: "Track your account's performance over time.",
-            surface: .dashboard
+            target: .dashboardGettingStarted,
+            title: "Getting Started",
+            message: "Complete these quick tasks to set up your trading journal, explore TradeTraxs, and get the most out of your experience.",
+            surface: .dashboard,
+            presentsIfUnmeasured: true
         ),
         ContextualTourStep(
             target: .dashboardTrades,
@@ -242,6 +247,12 @@ enum ContextualTourCatalog {
             surface: .profile
         ),
         ContextualTourStep(
+            target: .profileInsights,
+            title: "Profile Insights",
+            message: "Track your profile visits, content views, follower growth, and engagement to see how your trading community is growing.",
+            surface: .profile
+        ),
+        ContextualTourStep(
             target: .profileSettings,
             title: "Settings button — Settings",
             message: "Manage your accounts, preferences, and TradeTraxs experience.",
@@ -257,7 +268,8 @@ enum ContextualTourCatalog {
             target: .settingsTradingRules,
             title: "Trading Rules",
             message: "Set trading limits and measure how consistently you follow them.",
-            surface: .settings
+            surface: .settings,
+            presentsIfUnmeasured: true
         ),
         ContextualTourStep(
             title: "Trading Rules",

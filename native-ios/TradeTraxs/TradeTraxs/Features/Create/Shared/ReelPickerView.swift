@@ -12,7 +12,7 @@ struct ReelPickerView: View {
     var body: some View {
         Group {
             if isLoading {
-                ProgressView("Loading clips…")
+                ExperienceLoadingSpinner(message: "Loading clips…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if reels.isEmpty {
                 ExperienceEmptyState(

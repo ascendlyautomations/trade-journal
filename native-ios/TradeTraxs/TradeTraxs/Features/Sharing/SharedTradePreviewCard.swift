@@ -115,7 +115,7 @@ struct SharedTradePreviewCard: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                 } else {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .controlSize(.small)
                 }
             }

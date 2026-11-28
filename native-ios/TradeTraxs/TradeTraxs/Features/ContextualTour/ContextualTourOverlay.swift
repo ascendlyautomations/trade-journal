@@ -58,6 +58,7 @@ private struct ContextualTourHostModifier: ViewModifier {
                 ContextualTourOverlay(anchors: anchors)
             }
             .onAppear {
+                ContextualTourDebug.logTourTrace("overlay host mounted")
                 ContextualTourCoordinator.shared.syncShell(
                     userID: input.userID,
                     createdAt: input.accountCreatedAt,
@@ -102,6 +103,7 @@ private struct ContextualTourOverlay: View {
 
     @Bindable private var globalFrames = ContextualTourGlobalFrameStore.shared
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AccessibilityFocusState private var cardFocused: Bool
     @State private var cardHeight: CGFloat = 0
@@ -121,34 +123,19 @@ private struct ContextualTourOverlay: View {
                 proxy: proxy,
                 viewport: viewport
             )
+            let _ = globalFrames.reportGeneration
             let overlayMeasurement = ContextualTourOverlayMeasurement(
+                revision: coordinator.stepRevision,
                 target: target,
                 frame: resolved
             )
-            let liveHole: CGRect? = {
-                guard let frame = resolved,
-                      ContextualTourGeometry.isRenderableSpotlight(frame, in: viewport)
-                else {
-                    return nil
-                }
-                return frame
-            }()
             let retainedHole =
                 coordinator.phase == .presenting
                 && ContextualTourGeometry.isRenderableSpotlight(coordinator.spotlightFrame, in: viewport)
-                ? coordinator.spotlightFrame
+                ? ContextualTourGeometry.refinedSpotlightFrame(coordinator.spotlightFrame, for: target)
                 : nil
-            let holeFrame: CGRect? = {
-                switch coordinator.phase {
-                case .presenting:
-                    return retainedHole
-                case .measuring:
-                    return liveHole
-                case .idle:
-                    return nil
-                }
-            }()
-            let hole = holeFrame.map { spotlightHole(around: $0, in: viewport) } ?? .zero
+            let hole = retainedHole.map { spotlightHole(around: $0, in: viewport) } ?? .zero
+            let scrimOpacity = ContextualTourGeometry.spotlightScrimOpacity(colorScheme: colorScheme)
             let topInset = proxy.safeAreaInsets.top
                 + ExperienceSpacing.sm
                 + ContextualTourGeometry.measurementTopInset(for: target)
@@ -158,24 +145,42 @@ private struct ContextualTourOverlay: View {
             )
             let showsChrome = coordinator.showsOverlay
             let showsHole = hole.width > 1 && hole.height > 1 && showsChrome
-            let showsExplanationCard =
-                coordinator.showsExplanationCard
-                && (coordinator.visibleStep?.role == .tradingRulesPrompt || showsHole)
-            let canLock = coordinator.phase == .presenting && showsExplanationCard
-                && (coordinator.spotlightTarget == nil || showsHole)
+            let showsExplanationCard = coordinator.showsExplanationCard && showsChrome
+            let canLock = showsExplanationCard
+                && (
+                    coordinator.visibleStep?.role == .tradingRulesPrompt
+                        || coordinator.visibleStep?.presentsIfUnmeasured == true && !showsHole
+                        || coordinator.spotlightTarget == nil
+                        || showsHole
+                )
             let stepKey = ContextualTourCardPlacement.stepKey(
                 stepIndex: coordinator.visibleStepIndex,
                 role: coordinator.visibleStep?.role ?? .spotlight
             )
-            let proposedTop = ContextualTourCardPlacement.proposedTop(
-                hole: showsHole ? hole : nil,
-                cardHeight: cardHeight,
-                containerSize: proxy.size,
-                statusBarInset: proxy.safeAreaInsets.top,
-                bottomInset: bottomInset,
-                preferAboveHole: target?.prefersWalkthroughCardAboveSpotlight ?? false
+            let proposedTop =
+                target?.isMainTabBarTarget == true
+                ? ContextualTourCardPlacement.proposedTopForMainTab(
+                    target: target,
+                    cardHeight: cardHeight,
+                    containerSize: proxy.size,
+                    statusBarInset: proxy.safeAreaInsets.top,
+                    bottomInset: bottomInset
+                )
+                : ContextualTourCardPlacement.proposedTop(
+                    hole: showsHole ? hole : nil,
+                    cardHeight: cardHeight,
+                    containerSize: proxy.size,
+                    statusBarInset: proxy.safeAreaInsets.top,
+                    bottomInset: bottomInset,
+                    preferAboveHole: target?.prefersWalkthroughCardAboveSpotlight ?? false,
+                    target: target
+                )
+            let cardTop = resolvedExplanationCardTop(
+                target: target,
+                stepKey: stepKey,
+                proposedTop: proposedTop,
+                cardHeight: cardHeight
             )
-            let cardTop = lockedStepKey == stepKey ? lockedCardTop : proposedTop
             let lockToken = ContextualTourCardLock(
                 stepKey: stepKey,
                 canLock: canLock,
@@ -183,13 +188,13 @@ private struct ContextualTourOverlay: View {
             )
 
             ZStack(alignment: .topLeading) {
-                if showsChrome && !showsHole {
-                    Color.black.opacity(0.55)
+                if showsChrome, !showsHole, showsExplanationCard {
+                    Color.black.opacity(scrimOpacity)
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .accessibilityHidden(true)
                 }
                 if showsHole {
-                    spotlight(hole: hole, size: proxy.size)
+                    spotlight(hole: hole, size: proxy.size, scrimOpacity: scrimOpacity)
                         .transaction { transaction in
                             if coordinator.phase == .presenting {
                                 transaction.animation = nil
@@ -208,6 +213,9 @@ private struct ContextualTourOverlay: View {
                         transaction.animation = nil
                     }
                     .onAppear {
+                        ContextualTourDebug.logTourTrace(
+                            "explanation card onAppear step=\(coordinator.visibleStepIndex) title=\(step.title) showsOverlay=\(coordinator.showsOverlay)"
+                        )
                         ContextualTourDebug.logMarker("overlay rendering")
                         if coordinator.visibleStep?.target == .dashboardAccountAndDates {
                             ContextualTourDebug.logMarker("Dashboard Step 1 visible")
@@ -218,28 +226,32 @@ private struct ContextualTourOverlay: View {
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             .allowsHitTesting(showsChrome)
             .onChange(of: overlayMeasurement, initial: true) { _, measurement in
-                guard coordinator.phase == .measuring else { return }
-                let accepted: CGRect? = {
-                    guard let candidate = measurement.frame else { return nil }
-                    guard ContextualTourGeometry.isMeasurableTarget(candidate, in: viewport) else { return nil }
-                    return candidate
-                }()
-#if DEBUG
-                if target == .feedContentFilters, let accepted {
-                    ContextualTourDebug.log(
-                        "feedFilters overlay resolved=\(accepted) holeWillUse=\(coordinator.spotlightFrame)"
-                    )
-                }
-#endif
-                coordinator.noteMeasuredFrame(
-                    accepted,
+                deliverOverlayMeasurement(
+                    measurement: measurement,
+                    viewport: viewport,
+                    topInset: topInset,
+                    bottomInset: bottomInset
+                )
+            }
+            .onChange(of: globalFrames.reportGeneration) { _, _ in
+                deliverOverlayMeasurement(
+                    measurement: overlayMeasurement,
                     viewport: viewport,
                     topInset: topInset,
                     bottomInset: bottomInset
                 )
             }
             .onChange(of: lockToken, initial: true) { _, token in
-                guard token.canLock, lockedStepKey != token.stepKey else { return }
+                let isProfileIdentity = coordinator.spotlightTarget == .profileIdentity
+                let mayLock =
+                    token.canLock
+                    || (
+                        isProfileIdentity
+                            && coordinator.phase == .presenting
+                            && showsExplanationCard
+                            && showsHole
+                    )
+                guard mayLock, lockedStepKey != token.stepKey else { return }
                 lockedCardTop = token.proposedTop
                 lockedStepKey = token.stepKey
             }
@@ -248,15 +260,20 @@ private struct ContextualTourOverlay: View {
                     lockedStepKey = ""
                 }
             }
-            .onChange(of: coordinator.stepIndex) { _, _ in
+            .onChange(of: coordinator.stepRevision) { _, _ in
+                lockedStepKey = ""
                 cardFocused = coordinator.showsOverlay
             }
             .onChange(of: coordinator.showsOverlay) { _, showing in
+                ContextualTourDebug.logTourTrace(
+                    "showsOverlay=\(showing) phase=\(coordinator.phase) showsExplanationCard=\(coordinator.showsExplanationCard)"
+                )
                 if showing {
                     cardFocused = true
                 }
             }
         }
+        .allowsHitTesting(coordinator.showsOverlay)
         .ignoresSafeArea()
         .accessibilityHidden(!coordinator.showsOverlay)
     }
@@ -269,43 +286,138 @@ private struct ContextualTourOverlay: View {
     ) -> CGRect? {
         guard let target else { return nil }
         if ContextualTourTargetCatalog.globalMeasuredTargets.contains(target),
+           coordinator.acceptsGlobalMeasurement(for: target),
            let global = globalFrames.frames[target]
         {
-            let origin = proxy.frame(in: .global).origin
-            let local = CGRect(
-                x: global.minX - origin.x,
-                y: global.minY - origin.y,
-                width: global.width,
-                height: global.height
-            )
-            if ContextualTourGeometry.isMeasurableTarget(local, in: viewport) {
-                return local
+            let local = globalFrameInOverlay(global: global, proxy: proxy)
+            if let refined = measurableRefinedFrame(local, in: viewport, target: target) {
+                return refined
             }
         }
         if let anchor = anchors[target] {
             let local = proxy[anchor]
-            if ContextualTourGeometry.isMeasurableTarget(local, in: viewport) {
-                return local
+            if let refined = measurableRefinedFrame(local, in: viewport, target: target) {
+                return refined
             }
         }
-        if let global = globalFrames.frames[target] {
-            let origin = proxy.frame(in: .global).origin
-            let local = CGRect(
-                x: global.minX - origin.x,
-                y: global.minY - origin.y,
-                width: global.width,
-                height: global.height
-            )
-            if ContextualTourGeometry.isMeasurableTarget(local, in: viewport) {
-                return local
+        if coordinator.acceptsGlobalMeasurement(for: target),
+           let global = globalFrames.frames[target]
+        {
+            let local = globalFrameInOverlay(global: global, proxy: proxy)
+            if let refined = measurableRefinedFrame(local, in: viewport, target: target) {
+                return refined
             }
         }
         return nil
     }
 
+    private func measurableRefinedFrame(
+        _ local: CGRect,
+        in viewport: CGRect,
+        target: ContextualTourTargetID
+    ) -> CGRect? {
+        guard ContextualTourGeometry.isMeasurableTarget(local, in: viewport) else { return nil }
+        return ContextualTourGeometry.refinedSpotlightFrame(local, for: target)
+    }
+
+    /// Card top is locked for most steps; main tabs and feed filters follow live layout so placement tweaks apply.
+    private func resolvedExplanationCardTop(
+        target: ContextualTourTargetID?,
+        stepKey: String,
+        proposedTop: CGFloat,
+        cardHeight: CGFloat
+    ) -> CGFloat {
+        if target == .profileIdentity,
+           coordinator.phase == .presenting,
+           lockedStepKey == stepKey
+        {
+            return lockedCardTop
+        }
+        let usesLivePlacement =
+            target?.isMainTabBarTarget == true || target == .feedContentFilters
+        if target == .mainTabHome, cardHeight > 1 {
+            let effectiveHeight = max(cardHeight, ContextualTourCardPlacement.minCardHeightEstimate)
+            ContextualTourCardPlacement.mainTabHomeRenderedCardBottom = proposedTop + effectiveHeight
+        }
+        if usesLivePlacement {
+            return proposedTop
+        }
+        return lockedStepKey == stepKey ? lockedCardTop : proposedTop
+    }
+
+    private func globalFrameInOverlay(global: CGRect, proxy: GeometryProxy) -> CGRect {
+        let origin = proxy.frame(in: .global).origin
+        return CGRect(
+            x: global.minX - origin.x,
+            y: global.minY - origin.y,
+            width: global.width,
+            height: global.height
+        )
+    }
+
     private func cardWidth(in container: CGSize) -> CGFloat {
         min(360, max(0, container.width - ExperienceSpacing.lg * 2))
     }
+
+  private func deliverOverlayMeasurement(
+    measurement: ContextualTourOverlayMeasurement,
+    viewport: CGRect,
+    topInset: CGFloat,
+    bottomInset: CGFloat
+  ) {
+    let target = measurement.target
+    let accepted: CGRect? = {
+      guard let candidate = measurement.frame else {
+        ContextualTourDebug.logTourTrace(
+          "overlay measurement resolved=nil target=\(target?.debugLabel ?? "none") phase=\(coordinator.phase)"
+        )
+        return nil
+      }
+      guard ContextualTourGeometry.isMeasurableTarget(candidate, in: viewport) else {
+        ContextualTourDebug.logTourTrace(
+          "overlay measurement rejected not-measurable target=\(target?.debugLabel ?? "none") local=\(candidate) viewport=\(viewport)"
+        )
+        return nil
+      }
+      if target == .mainTabHome {
+        ContextualTourDebug.logTourTrace(
+          "overlay mainTabHome local=\(candidate) viewport=\(viewport) globalInStore=\(globalFrames.frames[.mainTabHome]?.debugDescription ?? "nil")"
+        )
+      }
+      return candidate
+    }()
+    let revision = measurement.revision
+    ContextualTourDebug.logTourTrace(
+      "overlay forwards measurement phase=\(coordinator.phase) accepted=\(accepted?.debugDescription ?? "nil") revision=\(revision)"
+    )
+#if DEBUG
+    if target == .feedContentFilters, let accepted {
+      ContextualTourDebug.log(
+        "feedFilters overlay resolved=\(accepted) holeWillUse=\(coordinator.spotlightFrame)"
+      )
+    }
+#endif
+    switch coordinator.phase {
+    case .preparing:
+      coordinator.noteMeasuredFrame(
+        accepted,
+        viewport: viewport,
+        topInset: topInset,
+        bottomInset: bottomInset,
+        revision: revision
+      )
+    case .presenting:
+      coordinator.notePresentingLayoutFrame(
+        accepted,
+        viewport: viewport,
+        topInset: topInset,
+        bottomInset: bottomInset,
+        revision: coordinator.presentedStepRevision
+      )
+    case .idle:
+      ContextualTourDebug.logTourTrace("overlay measurement ignored phase=idle")
+    }
+  }
 
     private func bottomChrome(safeBottom: CGFloat, target: ContextualTourTargetID?) -> CGFloat {
         let tabReserve: CGFloat
@@ -319,27 +431,34 @@ private struct ContextualTourOverlay: View {
 
     /// Padding around the live target, clipped to this overlay's coordinate space.
     private func spotlightHole(around frame: CGRect, in viewport: CGRect) -> CGRect {
-        let padded = frame.insetBy(dx: -ExperienceSpacing.xs, dy: -ExperienceSpacing.xs)
+        let padding = ContextualTourGeometry.spotlightHolePadding(for: coordinator.spotlightTarget)
+        let padded = frame.insetBy(dx: -padding.horizontal, dy: -padding.vertical)
         let visible = viewport.insetBy(dx: 1, dy: 1)
         let hole = padded.intersection(visible)
         return hole.isNull ? .zero : hole
     }
 
-    private func spotlight(hole: CGRect, size: CGSize) -> some View {
-        ContextualTourSpotlightShape(hole: hole, cornerRadius: ExperienceRadius.md)
-            .fill(Color.black.opacity(0.55), style: FillStyle(eoFill: true))
-            .frame(width: size.width, height: size.height, alignment: .topLeading)
-            .animation(
-                reduceMotion ? nil : ContextualTourMotion.spotlightAnimation(reduceMotion: reduceMotion),
-                value: hole
-            )
-            .id(reduceMotion ? coordinator.stepIndex : 0)
-            .transition(reduceMotion ? .opacity : .identity)
-            .animation(
-                reduceMotion ? .easeInOut(duration: MotionDuration.fast.value) : nil,
-                value: coordinator.stepIndex
-            )
-            .accessibilityHidden(true)
+    private func spotlight(hole: CGRect, size: CGSize, scrimOpacity: CGFloat) -> some View {
+        let cornerRadius = ExperienceRadius.md
+        return ZStack(alignment: .topLeading) {
+            ContextualTourSpotlightShape(hole: hole, cornerRadius: cornerRadius)
+                .fill(Color.black.opacity(scrimOpacity), style: FillStyle(eoFill: true))
+            if colorScheme == .dark, hole.width > 1, hole.height > 1 {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(colors.primaryText.opacity(0.38), lineWidth: 1)
+                    .frame(width: hole.width, height: hole.height)
+                    .offset(x: hole.minX, y: hole.minY)
+            }
+        }
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .animation(nil, value: hole)
+        .id(reduceMotion ? coordinator.stepRevision : 0)
+        .transition(reduceMotion ? .opacity : .identity)
+        .animation(
+            reduceMotion ? .easeInOut(duration: MotionDuration.fast.value) : nil,
+            value: coordinator.stepRevision
+        )
+        .accessibilityHidden(true)
     }
 
     /// Content height, capped only when Dynamic Type no longer fits. `.position` lays this out at that size.
@@ -448,13 +567,15 @@ private struct ContextualTourCardLock: Equatable {
 
 /// Stable, equatable snapshot of a resolved spotlight frame for `onChange` (optional `CGRect` is awkward for inference).
 private struct ContextualTourOverlayMeasurement: Equatable {
+    var revision: UInt64
     var target: ContextualTourTargetID?
     var minX: CGFloat
     var minY: CGFloat
     var width: CGFloat
     var height: CGFloat
 
-    init(target: ContextualTourTargetID?, frame: CGRect?) {
+    init(revision: UInt64, target: ContextualTourTargetID?, frame: CGRect?) {
+        self.revision = revision
         self.target = target
         if let frame, ContextualTourGeometry.isUsable(frame) {
             minX = frame.minX
@@ -483,19 +604,47 @@ enum ContextualTourCardPlacement {
     static let gap = ExperienceSpacing.sm
     static let navigationClearance: CGFloat = 44
     static let minCardHeightEstimate: CGFloat = 168
+    /// Shared baseline for all main-tab walkthrough cards (matches Home tab positioning).
+    static let mainTabCardLiftAboveChrome: CGFloat = ExperienceSpacing.lg + ExperienceSpacing.sm
+    /// Bottom edge of the rendered Home tab explanation card (set while S1 is on screen).
+    static var mainTabHomeRenderedCardBottom: CGFloat?
 
     static func stepKey(stepIndex: Int, role: ContextualTourStepRole) -> String {
         "step-\(stepIndex)-\(role)"
     }
 
     /// Prefer directly below the spotlight; above if below does not fit; clamp within safe bounds.
+    /// Fixed vertical position for bottom-tab steps so every card sits comfortably above the tab bar.
+    static func proposedTopForMainTab(
+        target: ContextualTourTargetID?,
+        cardHeight: CGFloat,
+        containerSize: CGSize,
+        statusBarInset: CGFloat,
+        bottomInset: CGFloat
+    ) -> CGFloat {
+        let effectiveHeight = max(cardHeight, minCardHeightEstimate)
+        let minTop = statusBarInset + navigationClearance + ExperienceSpacing.xs
+        let maxTop = max(minTop, containerSize.height - bottomInset - effectiveHeight)
+
+        if target == .mainTabFeed || target == .mainTabCreate,
+           let referenceBottom = mainTabHomeRenderedCardBottom
+        {
+            let alignedTop = referenceBottom - effectiveHeight
+            return min(max(alignedTop, minTop), maxTop)
+        }
+
+        let targetTop = containerSize.height - bottomInset - effectiveHeight - mainTabCardLiftAboveChrome
+        return min(max(targetTop, minTop), maxTop)
+    }
+
     static func proposedTop(
         hole: CGRect?,
         cardHeight: CGFloat,
         containerSize: CGSize,
         statusBarInset: CGFloat,
         bottomInset: CGFloat,
-        preferAboveHole: Bool = false
+        preferAboveHole: Bool = false,
+        target: ContextualTourTargetID? = nil
     ) -> CGFloat {
         let effectiveHeight = max(cardHeight, minCardHeightEstimate)
         let minTop = statusBarInset + navigationClearance + ExperienceSpacing.xs
@@ -503,6 +652,11 @@ enum ContextualTourCardPlacement {
 
         guard let hole, hole.width > 1, hole.height > 1 else {
             return minTop + (maxTop - minTop) / 2
+        }
+
+        if target == .feedContentFilters || target == .dashboardGettingStarted {
+            let belowTop = hole.maxY + gap + ExperienceSpacing.md
+            return min(max(belowTop, minTop), maxTop)
         }
 
         let aboveTop = hole.minY - gap - effectiveHeight

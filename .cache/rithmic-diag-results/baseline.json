@@ -1,0 +1,67 @@
+
+> trade-journal@0.1.0 rithmic:phase1-discovery
+> tsx scripts/rithmic-phase1-discovery.ts
+
+[rithmic] {"event":"rithmic_socket_connecting","wssHost":"rituz00100.rithmic.com"}
+[rithmic] {"event":"rithmic_socket_connected","wssHost":"rituz00100.rithmic.com"}
+[rithmic] {"event":"system_info_requested"}
+[rithmic] {"event":"system_info_encoded","byteLength":33}
+[rithmic] {"event":"system_info_sent"}
+[rithmic] {"event":"rithmic_system_info_received","systemCount":1,"rpCode0":"0"}
+[rithmic] {"event":"rithmic_socket_closed"}
+[rithmic] {"event":"login_socket_connecting","wssHost":"rituz00100.rithmic.com"}
+[rithmic] {"event":"login_socket_connected","wssHost":"rituz00100.rithmic.com"}
+[rithmic] {"event":"rithmic_login_started","systemName":"Rithmic Test","infraType":2}
+[rithmic] {"event":"rithmic_login_response","rpCode0":"13"}
+[rithmic] {"event":"rithmic_login_failed","rpCode0":"13"}
+[rithmic] {"event":"rithmic_socket_closed"}
+{
+  "ok": false,
+  "userMessage": "Rithmic Test login was rejected: 13 · permission denied",
+  "lastSuccessfulStage": "rithmic_login_response",
+  "failureStage": "rithmic_login_success",
+  "loginAttempted": true,
+  "accountListAttempted": false,
+  "runtimeAssets": {
+    "protoBundlePresent": true,
+    "sslCaPresent": true,
+    "missingProtoCount": 0
+  },
+  "apiEnvironment": "test",
+  "wssUrl": "wss://rituz00100.rithmic.com:443",
+  "systemNames": [
+    "Rithmic Test"
+  ],
+  "selectedSystemName": "Rithmic Test",
+  "infraType": 2,
+  "infraTypeLabel": "ORDER_PLANT",
+  "loginSuccess": false,
+  "loginRpCode": [
+    "13",
+    "permission denied"
+  ],
+  "agreementRequired": false,
+  "uniqueUserIdMasked": null,
+  "accountListRpCode": [],
+  "accounts": [],
+  "accountCount": 0,
+  "connectionId": null,
+  "diagnostics": [
+    "login_not_successful"
+  ],
+  "stagesCompleted": [
+    "env_preflight",
+    "runtime_assets_verified",
+    "rithmic_socket_connecting",
+    "rithmic_socket_connected",
+    "system_info_requested",
+    "system_info_encoded",
+    "system_info_sent",
+    "rithmic_system_info_received",
+    "system_name_selected",
+    "login_socket_connecting",
+    "login_socket_connected",
+    "rithmic_login_started",
+    "rithmic_login_response"
+  ]
+}

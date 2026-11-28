@@ -13,9 +13,10 @@ const walkthroughSteps: ContextualTourStep[] = [
     surface: "dashboard",
   },
   {
-    target: "dashboardPerformance",
-    title: "Equity curve",
-    message: "See how your account has performed over time.",
+    target: "dashboardGettingStarted",
+    title: "Getting Started",
+    message:
+      "Complete these quick tasks to set up your trading journal, explore TradeTraxs, and get the most out of your experience.",
     surface: "dashboard",
     presentsIfUnmeasured: true,
   },
@@ -143,7 +144,7 @@ const walkthroughSteps: ContextualTourStep[] = [
   {
     target: "settingsBroker",
     title: "Broker connections",
-    message: "Link Tradovate or Rithmic to import trades automatically.",
+    message: "Link Tradovate to import trades automatically.",
     surface: "settings",
     presentsIfUnmeasured: true,
   },

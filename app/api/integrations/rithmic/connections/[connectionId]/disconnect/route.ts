@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { disconnectBrokerIntegrationById } from "@/lib/integrations/brokerIntegrationConnection"
+import {
+  isRithmicDevelopmentIntegrationEnabled,
+  rithmicDevelopmentIntegrationDisabledResponse,
+} from "@/lib/integrations/rithmic/rithmicDevIntegration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,6 +17,10 @@ export async function POST(_req: Request, context: RouteContext) {
   const user = await getRouteUser(_req)
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!isRithmicDevelopmentIntegrationEnabled()) {
+    return rithmicDevelopmentIntegrationDisabledResponse()
   }
 
   const { connectionId } = await context.params

@@ -855,7 +855,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
 
     /// Mirror web `ACCOUNTS_SELECT` column order/meanings + owner insight columns + `user_id`.
     private static let accountsSelect =
-        "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,drawdown_type,drawdown_floor_cap,daily_drawdown,profit_target,winning_days,winning_day_threshold,show_in_account_dropdowns,custom_public_status,payout_drawdown_behavior,user_id"
+        "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,drawdown_type,drawdown_floor_cap,daily_drawdown,profit_target,winning_days,winning_day_threshold,show_in_account_dropdowns,custom_public_status,payout_drawdown_behavior,account_lifecycle_id,graduated_to_account_id,graduated_from_account_id,user_id"
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
         // Mirror web `loadTradingAccounts` / `ACCOUNTS_SELECT`, `trades.account_id` → `accounts.id`.
@@ -935,6 +935,69 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 into: "accounts",
                 returning: TradeDTO.Account.self
             )
+            let account = try TradingAccountMapper.mapToDomain(row)
+            await Self.syncAccountPurchaseExpense(
+                supabase: supabase,
+                ownerID: ownerID,
+                accountID: account.id,
+                draft: draft
+            )
+            return account
+        } catch {
+            throw Self.mapAccountMutationError(error)
+        }
+    }
+
+    func graduateEvalToFunded(
+        evalAccountID: TradingAccountID,
+        ownerID: ProfileID,
+        draft: TradingAccountDraft
+    ) async throws -> TradingAccount {
+        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            throw AppError.unknown(message: "Account name is required.")
+        }
+        let body = TradingAccountMapper.writeBody(ownerID: nil, draft: draft)
+        struct GraduatePayload: Encodable {
+            var name: String
+            var account_size: String?
+            var account_number: String?
+            var category: String
+            var mode: String
+            var consistency: Double?
+            var max_drawdown: Double?
+            var daily_drawdown: Double?
+            var profit_target: Double?
+            var winning_days: Double?
+            var winning_day_threshold: Double?
+        }
+        struct Params: Encodable {
+            var p_eval_account_id: String
+            var p_payload: GraduatePayload
+        }
+        let params = Params(
+            p_eval_account_id: evalAccountID.rawValue,
+            p_payload: GraduatePayload(
+                name: body.name,
+                account_size: body.account_size,
+                account_number: body.account_number,
+                category: body.category,
+                mode: "Funded",
+                consistency: body.consistency,
+                max_drawdown: body.max_drawdown,
+                daily_drawdown: body.daily_drawdown,
+                profit_target: body.profit_target,
+                winning_days: body.winning_days,
+                winning_day_threshold: body.winning_day_threshold
+            )
+        )
+        do {
+            let data = try JSONEncoder().encode(params)
+            let response = try await supabase.database.rpcData(
+                functionName: "graduate_eval_to_funded",
+                parametersJSON: data
+            )
+            let row = try JSONDecoder().decode(TradeDTO.Account.self, from: response)
             let account = try TradingAccountMapper.mapToDomain(row)
             await Self.syncAccountPurchaseExpense(
                 supabase: supabase,

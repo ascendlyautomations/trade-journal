@@ -58,7 +58,7 @@ struct FeedClipsPagerView: View {
             if isLoadingMore {
                 VStack {
                     Spacer()
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .tint(colors.primaryText)
                         .padding(.vertical, ExperienceSpacing.lg)
                 }
@@ -145,6 +145,7 @@ struct FeedClipsPagerView: View {
                     onOpenDetail: { onOpenDetail(entry) }
                 )
             }
+            .feedImpressionTracked(contentKind: "reel", contentID: entry.id, surface: "clips")
         } else {
             Color.black
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -377,6 +378,12 @@ private struct FeedClipsPageView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
+
+                ClipVideoBufferingOverlay(
+                    player: player,
+                    suppressWhenUserPaused: playbackCoordinator.shouldShowPlayIndicator(for: reel.id),
+                    suppressWhenReachedEnd: false
+                )
             }
 
             if playbackCoordinator.shouldShowPlayIndicator(for: reel.id) {

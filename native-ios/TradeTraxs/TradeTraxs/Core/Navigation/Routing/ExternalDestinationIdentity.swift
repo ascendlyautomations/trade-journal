@@ -294,6 +294,8 @@ enum ExternalDestinationIdentity {
             return "achievement:\(id.rawValue)"
         case .otherProfile(let id):
             return "profile:\(id.rawValue)"
+        case .profileInsights:
+            return "screen:profile-insights"
         case .room(let id), .roomMembers(let id), .roomInfo(let id), .manageRoom(let id), .roomSettings(let id):
             return roomLogicalKey(id)
         case .activity:

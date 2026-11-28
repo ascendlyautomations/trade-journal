@@ -64,7 +64,10 @@ struct DashboardImportTradesSection: View {
         if store.hasSupportedConnection || store.connectionCount > 0 {
             return "Link a broker account to import trades"
         }
-        return "Connect Tradovate or Rithmic"
+        if brokerViewModel?.isRithmicBrokerIntegrationVisible == true {
+            return "Connect Tradovate or Rithmic"
+        }
+        return "Connect Tradovate"
     }
 
     private var accountsSheet: some View {
@@ -176,7 +179,7 @@ struct DashboardImportTradesSection: View {
 
     private var loadingRow: some View {
         HStack(spacing: ExperienceSpacing.sm) {
-            ProgressView()
+            ExperienceIndeterminateProgress()
                 .controlSize(.small)
             Text("Loading broker connections…")
                 .experienceStyle(.footnote, color: colors.secondaryText)
@@ -226,7 +229,9 @@ struct DashboardImportTradesSection: View {
             }
         }
         append(provider: .tradovate, connections: brokerViewModel.tradovateConnections)
-        append(provider: .rithmic, connections: brokerViewModel.rithmicConnections)
+        if brokerViewModel.isRithmicBrokerIntegrationVisible {
+            append(provider: .rithmic, connections: brokerViewModel.rithmicConnections)
+        }
         return targets
     }
 
@@ -239,12 +244,15 @@ struct DashboardImportTradesSection: View {
         case .loaded, .failed:
             break
         }
-        switch brokerViewModel.rithmicConnectionsLoadPhase {
-        case .idle, .loading:
-            return true
-        case .loaded, .failed:
-            return false
+        if brokerViewModel.isRithmicBrokerIntegrationVisible {
+            switch brokerViewModel.rithmicConnectionsLoadPhase {
+            case .idle, .loading:
+                return true
+            case .loaded, .failed:
+                break
+            }
         }
+        return false
     }
 
     private var hasConnectedBroker: Bool {
@@ -252,8 +260,11 @@ struct DashboardImportTradesSection: View {
             return true
         }
         guard let brokerViewModel else { return false }
+        let hasRithmic =
+            brokerViewModel.isRithmicBrokerIntegrationVisible
+            && brokerViewModel.rithmicConnections.contains(where: \.isActiveForBrokerUI)
         return brokerViewModel.tradovateConnections.contains(where: \.isActiveForBrokerUI)
-            || brokerViewModel.rithmicConnections.contains(where: \.isActiveForBrokerUI)
+            || hasRithmic
     }
 
     private func linkedAccountCard(_ target: BrokerImportEligibilityTarget) -> some View {
@@ -342,7 +353,9 @@ struct DashboardImportTradesSection: View {
         VStack(spacing: ExperienceSpacing.sm) {
             DashboardQuickActionRow(
                 title: "Connect Broker",
-                subtitle: "Sync trades from Tradovate or Rithmic",
+                subtitle: brokerViewModel?.isRithmicBrokerIntegrationVisible == true
+                    ? "Sync trades from Tradovate or Rithmic"
+                    : "Sync trades from Tradovate",
                 accessibilityIdentifier: "dashboard.importTrades.connectBroker"
             ) {
                 ZStack {

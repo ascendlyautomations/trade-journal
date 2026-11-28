@@ -48,7 +48,11 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             )
             for connection in decoded.connections {
                 let idPresent = !connection.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                BrokerIntegrationDebugLog.connectionRow(idPresent: idPresent, status: connection.status.rawValue)
+                BrokerIntegrationDebugLog.connectionRow(
+                    idPresent: idPresent,
+                    status: connection.status.rawValue,
+                    apiEnvironment: connection.apiEnvironment
+                )
             }
             return decoded
         } catch {
@@ -135,14 +139,96 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
         guard (200 ... 299).contains(response.statusCode) else {
             throw brokerError(from: response, fallback: "Could not load broker accounts for this connection.")
         }
+        let payloadProbe = Self.probeTradovateAccountsPayload(response.data)
         do {
             let decoded = try transport.decoder.decode(TradovateConnectionAccountsResponse.self, from: response)
             BrokerIntegrationDebugLog.accountsDecoded(count: decoded.accounts.count)
+            BrokerIntegrationDebugLog.accountsDiscoverySummary(
+                state: decoded.state,
+                connectionStatus: decoded.connectionStatus,
+                forceRefresh: forceRefresh,
+                rawAccountsCount: payloadProbe.rawAccountsCount,
+                accountsKeyPresent: payloadProbe.accountsKeyPresent,
+                discoveryOk: decoded.discovery?.ok ?? payloadProbe.discoveryOk,
+                discoveryReason: decoded.discovery?.reason ?? payloadProbe.discoveryReason,
+                discoveryAccountCount: decoded.discovery?.accountCount ?? payloadProbe.discoveryAccountCount
+            )
             return decoded
         } catch {
             BrokerIntegrationDebugLog.decodeFailure(context: "accounts", detail: String(describing: error))
+            if let rawCount = payloadProbe.rawAccountsCount, rawCount > 0 {
+                BrokerIntegrationDebugLog.accountsItemDecodeProbe(
+                    expectedRawCount: rawCount,
+                    decodedCount: 0
+                )
+            }
+            BrokerIntegrationDebugLog.accountsDiscoverySummary(
+                state: payloadProbe.state ?? "decode_failed",
+                connectionStatus: payloadProbe.connectionStatus,
+                forceRefresh: forceRefresh,
+                rawAccountsCount: payloadProbe.rawAccountsCount,
+                accountsKeyPresent: payloadProbe.accountsKeyPresent,
+                discoveryOk: payloadProbe.discoveryOk,
+                discoveryReason: payloadProbe.discoveryReason,
+                discoveryAccountCount: payloadProbe.discoveryAccountCount
+            )
             throw AppError.unknown(message: brokerDecodeUserMessage)
         }
+    }
+
+    private struct TradovateAccountsPayloadProbe: Sendable {
+        var state: String?
+        var connectionStatus: String?
+        var accountsKeyPresent: Bool
+        var rawAccountsCount: Int?
+        var discoveryOk: Bool?
+        var discoveryReason: String?
+        var discoveryAccountCount: Int?
+    }
+
+    private static func probeTradovateAccountsPayload(_ data: Data) -> TradovateAccountsPayloadProbe {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return TradovateAccountsPayloadProbe(
+                state: nil,
+                connectionStatus: nil,
+                accountsKeyPresent: false,
+                rawAccountsCount: nil,
+                discoveryOk: nil,
+                discoveryReason: nil,
+                discoveryAccountCount: nil
+            )
+        }
+        let state = object["state"] as? String
+        let connectionStatus =
+            (object["connectionStatus"] as? String) ?? (object["connection_status"] as? String)
+        let accountsValue = object["accounts"]
+        let accountsKeyPresent = object.keys.contains("accounts")
+        let rawAccountsCount: Int? = {
+            if let list = accountsValue as? [Any] { return list.count }
+            if accountsValue == nil || accountsValue is NSNull { return 0 }
+            return nil
+        }()
+        var discoveryOk: Bool?
+        var discoveryReason: String?
+        var discoveryAccountCount: Int?
+        if let discovery = object["discovery"] as? [String: Any] {
+            if let ok = discovery["ok"] as? Bool {
+                discoveryOk = ok
+            }
+            discoveryReason = discovery["reason"] as? String
+            discoveryAccountCount = discovery["accountCount"] as? Int
+        }
+        return TradovateAccountsPayloadProbe(
+            state: state,
+            connectionStatus: connectionStatus,
+            accountsKeyPresent: accountsKeyPresent,
+            rawAccountsCount: rawAccountsCount,
+            discoveryOk: discoveryOk,
+            discoveryReason: discoveryReason,
+            discoveryAccountCount: discoveryAccountCount
+        )
     }
 
     func linkTradovateAccount(
@@ -240,10 +326,190 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
         }
     }
 
+    func setTradovatePendingLink(
+        connectionId: String,
+        tradetraxsAccountId: String
+    ) async throws -> BrokerConnectionPendingLinkPreference {
+        struct Body: Encodable {
+            var action: String = "link"
+            var tradetraxsAccountId: String
+        }
+        let body = try transport.encodeJSON(
+            Body(tradetraxsAccountId: tradetraxsAccountId)
+        )
+        return try await postPendingLink(connectionId: connectionId, body: body)
+    }
+
+    func createTradovatePendingLink(
+        connectionId: String,
+        draft: TradingAccountDraft
+    ) async throws -> BrokerConnectionPendingLinkPreference {
+        struct CreatePayload: Encodable {
+            var name: String
+            var size: String
+            var accountNumber: String
+            var category: String
+            var mode: String
+            var rules: String? = nil
+            var purchaseCost: String
+            var purchaseDate: String
+        }
+        struct Body: Encodable {
+            var action: String = "create"
+            var createAccount: CreatePayload
+        }
+        let payload = CreatePayload(
+            name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+            size: NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits),
+            accountNumber: draft.accountNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: BrokerIntegrationAccountDraftEncoding.webCategory(draft.category),
+            mode: BrokerIntegrationAccountDraftEncoding.webMode(draft.mode, category: draft.category),
+            purchaseCost: NumericInputFieldSupport.plainNumericString(from: draft.purchaseCostDigits),
+            purchaseDate: draft.purchaseDate.map { PropFirmExpenseMoney.dayString(from: $0) } ?? ""
+        )
+        let body = try transport.encodeJSON(Body(createAccount: payload))
+        return try await postPendingLink(connectionId: connectionId, body: body)
+    }
+
+    func clearTradovatePendingLink(connectionId: String) async throws {
+        let clearBody = try transport.encodeJSON(PendingTradetraxsLinkClearBody())
+        do {
+            _ = try await postPendingLinkResponse(connectionId: connectionId, innerBody: clearBody)
+            return
+        } catch {
+            // Fall through for older BFF builds that only exposed DELETE on the dedicated path.
+        }
+
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/integrations/tradovate/connections/\(connectionId)/pending-link",
+            method: .delete,
+            requiresAuthentication: true
+        )
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw brokerError(from: response, fallback: "Could not clear pending link.")
+        }
+    }
+
+    private struct PendingTradetraxsLinkClearBody: Encodable {
+        var action: String = "clear"
+    }
+
+    private func postPendingLink(
+        connectionId: String,
+        body: Data
+    ) async throws -> BrokerConnectionPendingLinkPreference {
+        let response = try await postPendingLinkResponse(connectionId: connectionId, innerBody: body)
+        do {
+            return try transport.decoder.decode(
+                TradovatePendingLinkMutationResponse.self,
+                from: response
+            ).pendingLink
+        } catch {
+            BrokerIntegrationDebugLog.decodeFailure(context: "pending-link", detail: String(describing: error))
+            throw AppError.unknown(message: brokerDecodeUserMessage)
+        }
+    }
+
+    private func postPendingLinkResponse(
+        connectionId: String,
+        innerBody: Data
+    ) async throws -> HTTPResponse {
+        let refreshPath = "/api/integrations/tradovate/connections/\(connectionId)/accounts/refresh"
+        let dedicatedPath = "/api/integrations/tradovate/connections/\(connectionId)/pending-link"
+        let refreshBody = try wrapPendingTradetraxsLinkEnvelope(innerBody)
+
+        var failures: [AppError] = []
+
+        for attempt in [
+            (refreshPath, refreshBody),
+            (dedicatedPath, innerBody),
+        ] {
+            let response: HTTPResponse
+            do {
+                response = try await transport.send(
+                    host: .bff,
+                    path: attempt.0,
+                    method: .post,
+                    body: attempt.1,
+                    requiresAuthentication: true
+                )
+            } catch {
+                failures.append(.unknown(message: UserFacingError.message(for: error)))
+                continue
+            }
+
+            if response.statusCode == 404 {
+                failures.append(.unknown(message: "Pending link API is unavailable (HTTP 404)."))
+                continue
+            }
+
+            guard (200 ... 299).contains(response.statusCode) else {
+                failures.append(brokerError(from: response, fallback: "Could not save pending link."))
+                continue
+            }
+
+            guard Self.responseLooksLikeJSONObject(response.data) else {
+                BrokerIntegrationDebugLog.decodeFailure(
+                    context: "pending-link",
+                    detail: "non_json body status=\(response.statusCode) path=\(attempt.0)"
+                )
+                failures.append(.unknown(message: brokerDecodeUserMessage))
+                continue
+            }
+
+            guard Self.responseLooksLikePendingLinkMutation(response.data) else {
+                BrokerIntegrationDebugLog.decodeFailure(
+                    context: "pending-link",
+                    detail: "missing pendingLink envelope path=\(attempt.0)"
+                )
+                failures.append(.unknown(message: brokerDecodeUserMessage))
+                continue
+            }
+
+            return response
+        }
+
+        throw failures.last ?? AppError.unknown(message: "Could not save pending link.")
+    }
+
+    private func wrapPendingTradetraxsLinkEnvelope(_ innerBody: Data) throws -> Data {
+        guard let object = try JSONSerialization.jsonObject(with: innerBody) as? [String: Any] else {
+            throw AppError.unknown(message: brokerDecodeUserMessage)
+        }
+        return try JSONSerialization.data(withJSONObject: ["pendingTradetraxsLink": object])
+    }
+
+    private static func responseLooksLikeJSONObject(_ data: Data) -> Bool {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data),
+            object is [String: Any]
+        else {
+            return false
+        }
+        return true
+    }
+
+    private static func responseLooksLikePendingLinkMutation(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        if object["pendingLink"] != nil || object["pending_link"] != nil {
+            return true
+        }
+        return (object["ok"] as? Bool) == true
+    }
+
     // MARK: - Rithmic
 
     func fetchRithmicConnectCapabilities() async throws -> RithmicConnectCapabilitiesResponse {
-        try await get("/api/integrations/rithmic/connect")
+        let capabilities: RithmicConnectCapabilitiesResponse = try await get("/api/integrations/rithmic/connect")
+        BrokerIntegrationDebugLog.rithmicConnectCapabilities(
+            apiEnvironment: capabilities.apiEnvironment,
+            userConnectEnabled: capabilities.userConnectEnabled,
+            showConnectUi: capabilities.showConnectUi
+        )
+        return capabilities
     }
 
     func listRithmicConnections() async throws -> TradovateConnectionsResponse {
@@ -271,13 +537,21 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
                 reconnectConnectionId: Self.optionalTrimmed(reconnectConnectionId)
             )
         )
-        let response = try await transport.send(
-            host: .bff,
-            path: "/api/integrations/rithmic/connect",
-            method: .post,
-            body: body,
-            requiresAuthentication: true
-        )
+        let requestedSystem = Self.optionalTrimmed(systemName)
+        let response: HTTPResponse
+        do {
+            response = try await transport.send(
+                host: .bff,
+                path: "/api/integrations/rithmic/connect",
+                method: .post,
+                body: body,
+                requiresAuthentication: true,
+                acceptsNonSuccessStatusCodes: true
+            )
+        } catch {
+            BrokerIntegrationDebugLog.rithmicConnectTransportFailure(detail: String(describing: error))
+            throw error
+        }
         let decoded: RithmicConnectResponse
         do {
             decoded = try transport.decoder.decode(RithmicConnectResponse.self, from: response)
@@ -285,6 +559,15 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             BrokerIntegrationDebugLog.decodeFailure(context: "rithmic.connect", detail: String(describing: error))
             throw AppError.unknown(message: brokerDecodeUserMessage)
         }
+        BrokerIntegrationDebugLog.rithmicConnectResponse(
+            httpStatus: response.statusCode,
+            ok: decoded.ok,
+            code: decoded.code,
+            requestedSystemName: requestedSystem,
+            responseSystemName: decoded.systemName,
+            loginRpCode: decoded.loginRpCode,
+            systemNamesCount: decoded.systemNames?.count
+        )
         if decoded.code == "system_selection_required",
            let names = decoded.systemNames,
            !names.isEmpty

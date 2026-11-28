@@ -151,11 +151,11 @@ struct DashboardHomeView: View {
                     viewModel.openCalendar()
                 } label: {
                     ExperienceIcon(icon: .calendar, size: .md, color: colors.primaryText)
+                        .contextualTourTarget(.dashboardCalendar)
+                        .contextualTourGlobalFrame(.dashboardCalendar)
                 }
                 .accessibilityLabel("Calendar")
                 .accessibilityIdentifier("dashboard.calendar")
-                .contextualTourTarget(.dashboardCalendar)
-                .contextualTourGlobalFrame(.dashboardCalendar)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -276,12 +276,10 @@ struct DashboardHomeView: View {
         .onDisappear {
             preserveScrollOffset()
             viewModel.onDisappear()
-            ContextualTourCoordinator.shared.setDashboardAnalyticsReady(false)
         }
         .onAppear {
             PsychologyAnalyticsPresentationBridge.bind(viewModel)
             TradingRulesCompliancePresentationBridge.bind(viewModel)
-            ContextualTourCoordinator.shared.setDashboardAnalyticsReady(dashboardTourAnalyticsReady)
         }
         .onChange(of: viewModel.listScrollPresentationEpoch) { _, _ in
             scrollAnchor.resetToTop()
@@ -291,16 +289,35 @@ struct DashboardHomeView: View {
     @ViewBuilder
     private func applyDashboardTourModifiers<Content: View>(to content: Content) -> some View {
         content
-        .onChange(of: dashboardTourAnalyticsReady) { _, ready in
-            ContextualTourCoordinator.shared.setDashboardAnalyticsReady(ready)
+        .accessibilityIdentifier("dashboard.home")
+        .onChange(of: ContextualTourCoordinator.shared.stepRevision) { _, _ in
+            reconcileGettingStartedWalkthroughStep()
         }
-        .onChange(of: dashboardTourAnalyticsDebugLine, initial: true) { _, line in
-            ContextualTourDebug.log(line)
+        .onChange(of: gettingStartedStore.signalsReady) { _, _ in
+            reconcileGettingStartedWalkthroughStep()
         }
         .onChange(of: gettingStartedStore.shouldShowDashboardCard) { _, _ in
-            ContextualTourCoordinator.shared.noteScrollTargetLayoutChanged()
+            reconcileGettingStartedWalkthroughStep()
         }
-        .accessibilityIdentifier("dashboard.home")
+        .onChange(of: ContextualTourCoordinator.shared.phase) { _, phase in
+            if phase == .preparing {
+                reconcileGettingStartedWalkthroughStep()
+            }
+        }
+    }
+
+    private func reconcileGettingStartedWalkthroughStep() {
+        let coordinator = ContextualTourCoordinator.shared
+        guard coordinator.phase == .preparing,
+              coordinator.spotlightTarget == .dashboardGettingStarted
+        else { return }
+
+        gettingStartedStore.loadIfNeeded()
+
+        guard gettingStartedStore.isWalkthroughResolutionReady else { return }
+        if !gettingStartedStore.isAvailableForAppWalkthrough {
+            coordinator.commitGettingStartedExplanationOnlyIfNeeded()
+        }
     }
 
     @ViewBuilder
@@ -353,11 +370,6 @@ struct DashboardHomeView: View {
             .padding(.top, ExperienceSpacing.xs)
             .padding(.bottom, ExperienceSpacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { _, _ in
-                let tour = ContextualTourCoordinator.shared
-                guard tour.phase == .measuring, tour.spotlightTarget == .dashboardAccountAndDates else { return }
-                tour.noteScrollTargetLayoutChanged()
-            }
             .accessibilityIdentifier("dashboard.filters")
     }
 
@@ -415,18 +427,6 @@ struct DashboardHomeView: View {
         )
     }
 
-    /// Dashboard chrome that owns the tour anchors is on screen.
-    /// A new account may still have zero trades and the Getting Started card.
-    private var dashboardTourAnalyticsReady: Bool {
-        tabIsActive && contentRevealed && viewModel.summary != nil
-    }
-
-    private var dashboardTourAnalyticsDebugLine: String {
-        let trades = viewModel.summary?.tradeCount
-        let summary = viewModel.summary != nil
-        return "analytics tab=\(tabIsActive) revealed=\(contentRevealed) summary=\(summary) trades=\(trades.map(String.init) ?? "nil") gettingStarted=\(gettingStartedStore.shouldShowDashboardCard) ready=\(dashboardTourAnalyticsReady)"
-    }
-
     private var discoveryUserID: ProfileID? {
         SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
     }
@@ -479,7 +479,7 @@ struct DashboardHomeView: View {
             compliancePresentation: premiumAnalyticsPresentation,
             onOpenDetail: { viewModel.openTradingRulesAnalytics() },
             onOpenSettings: { viewModel.openTradingRulesSettings() },
-            sessionStore: TradingRulesCompliancePresentationStores.store(forPreviewUI: true)
+            sessionStore: TradingRulesCompliancePresentationStores.store(forPreviewUI: embeddedInTraxsProPreview)
         )
         .padding(.bottom, ExperienceSpacing.xl)
 
@@ -539,7 +539,6 @@ struct DashboardHomeView: View {
                 showsDrawdownSettings: viewModel.canConfigureEquityDrawdownSettings,
                 onDrawdownSettingsTap: viewModel.openEquityDrawdownSettings
             )
-            .contextualTourTarget(.dashboardPerformance)
 
             DashboardMetricStrip(chips: viewModel.metricChips)
 
@@ -664,14 +663,8 @@ struct DashboardHomeView: View {
         .onChange(of: ContextualTourCoordinator.shared.scrollGeneration) { _, _ in
             guard let target = ContextualTourCoordinator.shared.scrollTarget else { return }
             let anchor = ContextualTourGeometry.scrollAnchor(for: target)
-            let scroll = { proxy.scrollTo(target, anchor: anchor) }
-            if reduceMotion {
-                scroll()
-            } else {
-                withAnimation(ExperienceMotion.navigation) {
-                    scroll()
-                }
-            }
+            proxy.scrollTo(target, anchor: anchor)
+            ContextualTourCoordinator.shared.noteScrollTargetLayoutChanged()
         }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -759,6 +752,7 @@ struct DashboardHomeView: View {
                 .padding(.horizontal, ExperienceSpacing.md)
             ExperienceSkeleton(height: 280, cornerRadius: ExperienceRadius.md)
                 .padding(.horizontal, ExperienceSpacing.md)
+                .frame(maxWidth: .infinity)
             ExperienceSkeleton(height: 56, cornerRadius: ExperienceRadius.md)
                 .padding(.horizontal, ExperienceSpacing.md)
             HStack(spacing: ExperienceSpacing.sm) {
@@ -805,11 +799,6 @@ struct DashboardHomeView: View {
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.sm)
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { _, _ in
-            let tour = ContextualTourCoordinator.shared
-            guard tour.phase == .measuring, tour.spotlightTarget == .dashboardPerformance else { return }
-            tour.noteScrollTargetLayoutChanged()
-        }
     }
 
     @ViewBuilder

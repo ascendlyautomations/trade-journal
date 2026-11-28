@@ -20,7 +20,7 @@ struct PsychologyReportDetailView: View {
         Group {
             switch viewModel.phase {
             case .idle, .loading:
-                ProgressView("Loading report…")
+                ExperienceLoadingSpinner(message: "Loading report…")
             case .failed(let message):
                 ExperienceErrorState(title: "Couldn't open report", message: message) {
                     Task { await viewModel.bootstrapIfNeeded() }

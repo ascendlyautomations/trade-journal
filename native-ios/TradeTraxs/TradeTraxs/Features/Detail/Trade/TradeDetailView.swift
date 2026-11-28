@@ -62,8 +62,7 @@ struct TradeDetailView: View {
         Group {
             switch viewModel.phase {
             case .loading where viewModel.trade == nil:
-                ExperienceLoadingSpinner(label: "Loading trade")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading trade")
             case .failed(let failure) where viewModel.trade == nil:
                 ExperienceErrorState(
                     title: failure.title,
@@ -72,7 +71,13 @@ struct TradeDetailView: View {
                 )
             default:
                 content
-                    .onAppear { logContentRenderedIfReady() }
+                    .onAppear {
+                        logContentRenderedIfReady()
+                        if experience == .social {
+                            socialEngagementTarget(for: viewModel.tradeID)
+                                .recordCreatorImpression(surface: "detail")
+                        }
+                    }
             }
         }
         .id(viewModel.tradeID)
@@ -226,7 +231,7 @@ struct TradeDetailView: View {
         }
         .overlay {
             if viewModel.isDeleting {
-                ProgressView("Deleting…")
+                ExperienceLoadingSpinner(message: "Deleting…")
                     .padding(ExperienceSpacing.md)
                     .experienceFloatingPanelBackground(
                         in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
@@ -249,6 +254,7 @@ struct TradeDetailView: View {
             username: viewModel.authorUsername,
             subtitle: experience == .social ? nil : viewModel.accountIdentityLine,
             dateText: experience == .social ? "" : TradeDisplay.dateText(trade.entryAt),
+            relativePostedAt: viewModel.socialFeedPostPublishedAt,
             isOwner: viewModel.isOwner,
             contentLink: .trade(trade.id),
             ownerProfileID: trade.ownerProfileID,

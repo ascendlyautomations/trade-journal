@@ -127,6 +127,12 @@ enum ConversationThreadScrollSupport {
         value.isFinite ? value : 0
     }
 
+    /// Only re-pin during the initial open pass when the reader is still at the bottom.
+    static func shouldMaintainInitialBottomPin(sample: LayoutSample) -> Bool {
+        guard sample.contentHeight > 0, sample.isNearBottom else { return false }
+        return sample.distanceFromBottom > bottomProximityThreshold / 2
+    }
+
     /// Synthetic scroll scope for Trade Room channels (coordinator conversation binding).
     static func roomChannelScrollScope(roomID: RoomID, channelID: RoomChannelID?) -> ConversationID {
         let channel = channelID?.rawValue ?? "none"

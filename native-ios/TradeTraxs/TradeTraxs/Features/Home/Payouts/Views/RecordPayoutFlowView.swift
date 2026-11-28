@@ -38,7 +38,7 @@ struct RecordPayoutFlowView: View {
             Group {
                 switch viewModel.phase {
                 case .loading:
-                    ProgressView("Loading payout setup…")
+                    ExperienceLoadingSpinner(message: "Loading payout setup…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .failed(let message):
                     ExperienceErrorState(

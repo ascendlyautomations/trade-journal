@@ -96,7 +96,9 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
         container.placeholderLabel.textColor = UIColor.placeholderText
         container.placeholderLabel.numberOfLines = 0
         container.updatePlaceholderVisibility()
+        container.applyHeightLimits(minHeight: minHeight, maxHeight: maxHeight)
         context.coordinator.attach(container: container)
+        container.remeasureIfNeeded(layoutWidth: ProfileBioPolicy.referenceContentWidth())
         return container
     }
 
@@ -108,14 +110,19 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
         )
         uiView.placeholderLabel.text = placeholder
         let width = Self.contentWidth(for: uiView)
-        let display = ProfileBioPolicy.constrained(text, contentWidth: width)
-        if uiView.textView.text != display {
-            uiView.textView.text = display
+        if !uiView.textView.isFirstResponder {
+            let display = ProfileBioPolicy.constrained(text, contentWidth: width)
+            if uiView.textView.text != display {
+                uiView.textView.text = display
+                uiView.updatePlaceholderVisibility()
+                uiView.remeasureIfNeeded(layoutWidth: width)
+            }
         }
-        uiView.updatePlaceholderVisibility()
-        uiView.minHeight = minHeight
-        uiView.maxHeight = maxHeight
-        uiView.invalidateIntrinsicContentSize()
+        if uiView.applyHeightLimits(minHeight: minHeight, maxHeight: maxHeight) {
+            uiView.remeasureIfNeeded(layoutWidth: width)
+        } else {
+            uiView.updatePlaceholderVisibility()
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: BioTextViewContainer, context: Context) -> CGSize? {
@@ -123,10 +130,7 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
         let width = proposed.width.isFinite && proposed.width > 0
             ? proposed.width
             : ProfileBioPolicy.referenceContentWidth()
-        uiView.bounds.size = CGSize(width: width, height: proposed.height)
-        uiView.setNeedsLayout()
-        uiView.layoutIfNeeded()
-        let height = uiView.intrinsicContentSize.height
+        let height = uiView.reportedHeight(layoutWidth: width)
         return CGSize(width: width, height: max(height, minHeight ?? 44))
     }
 
@@ -185,10 +189,13 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
                 return false
             case .apply(let capped):
                 textView.text = capped
-                text.wrappedValue = capped
+                if text.wrappedValue != capped {
+                    text.wrappedValue = capped
+                }
                 container?.updatePlaceholderVisibility()
                 let offset = min(range.location + (string as NSString).length, (capped as NSString).length)
                 textView.selectedRange = NSRange(location: offset, length: 0)
+                container?.remeasureIfNeeded(layoutWidth: width)
                 return false
             }
         }
@@ -204,11 +211,11 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
                 text.wrappedValue = capped
             }
             container?.updatePlaceholderVisibility()
-            container?.invalidateIntrinsicContentSize()
+            container?.remeasureIfNeeded(layoutWidth: width)
         }
 
         private func contentWidth(for container: BioTextViewContainer?) -> CGFloat {
-            guard let width = container?.bounds.width, width > 0 else {
+            guard let width = container?.layoutWidthForMeasurement, width > 0 else {
                 return ProfileBioPolicy.referenceContentWidth()
             }
             return width
@@ -216,7 +223,7 @@ private struct ProfileBioTextViewRepresentable: UIViewRepresentable {
     }
 
     private static func contentWidth(for container: BioTextViewContainer) -> CGFloat {
-        let width = container.bounds.width
+        let width = container.layoutWidthForMeasurement
         if width > 0 { return width }
         return ProfileBioPolicy.referenceContentWidth()
     }
@@ -229,6 +236,21 @@ private final class BioTextViewContainer: UIView {
 
     var minHeight: CGFloat?
     var maxHeight: CGFloat?
+
+    private var cachedIntrinsicHeight: CGFloat = 44
+    private var lastMeasurement: ContentMeasurement?
+    private var lastLaidOutWidth: CGFloat = 0
+
+    private struct ContentMeasurement: Equatable {
+        let layoutWidth: CGFloat
+        let text: String
+        let minHeight: CGFloat?
+        let maxHeight: CGFloat?
+    }
+
+    var layoutWidthForMeasurement: CGFloat {
+        bounds.width > 0 ? bounds.width : 0
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -258,25 +280,56 @@ private final class BioTextViewContainer: UIView {
         placeholderLabel.isHidden = !empty
     }
 
+    @discardableResult
+    func applyHeightLimits(minHeight: CGFloat?, maxHeight: CGFloat?) -> Bool {
+        let changed = self.minHeight != minHeight || self.maxHeight != maxHeight
+        self.minHeight = minHeight
+        self.maxHeight = maxHeight
+        return changed
+    }
+
+    /// Read-only height for SwiftUI sizing — does not mutate layout or scroll state.
+    func reportedHeight(layoutWidth: CGFloat) -> CGFloat {
+        let width = max(layoutWidth, 1)
+        return clampedReportedHeight(naturalContentHeight(layoutWidth: width))
+    }
+
+    /// Updates cached intrinsic height only when text, width, or height limits change.
+    func remeasureIfNeeded(layoutWidth: CGFloat) {
+        let width = layoutWidth > 0 ? layoutWidth : ProfileBioPolicy.referenceContentWidth()
+        let snapshot = ContentMeasurement(
+            layoutWidth: width,
+            text: textView.text ?? "",
+            minHeight: minHeight,
+            maxHeight: maxHeight
+        )
+        guard snapshot != lastMeasurement else { return }
+        lastMeasurement = snapshot
+
+        let natural = naturalContentHeight(layoutWidth: width)
+        updateScrollEnabledIfNeeded(naturalContentHeight: natural)
+
+        let reported = clampedReportedHeight(natural)
+        guard abs(reported - cachedIntrinsicHeight) > 0.5 else { return }
+        cachedIntrinsicHeight = reported
+        invalidateIntrinsicContentSize()
+    }
+
     override var intrinsicContentSize: CGSize {
-        let width = bounds.width > 0 ? bounds.width : ProfileBioPolicy.defaultReferenceScreenWidth
-        let fitting = textView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        var height = fitting.height
-        if let minHeight {
-            height = max(height, minHeight)
-        }
-        if let maxHeight {
-            height = min(height, maxHeight)
-            textView.isScrollEnabled = fitting.height > maxHeight
-        } else {
-            textView.isScrollEnabled = false
-        }
-        return CGSize(width: UIView.noIntrinsicMetric, height: height)
+        CGSize(width: UIView.noIntrinsicMetric, height: cachedIntrinsicHeight)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        invalidateIntrinsicContentSize()
+        let width = bounds.width
+        guard width > 0 else { return }
+        if abs(width - lastLaidOutWidth) > 0.5 {
+            lastLaidOutWidth = width
+            remeasureIfNeeded(layoutWidth: width)
+        } else {
+            let natural = naturalContentHeight(layoutWidth: width)
+            updateScrollEnabledIfNeeded(naturalContentHeight: natural)
+        }
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
@@ -285,5 +338,33 @@ private final class BioTextViewContainer: UIView {
         }
         guard bounds.contains(point) else { return nil }
         return textView
+    }
+
+    private func naturalContentHeight(layoutWidth: CGFloat) -> CGFloat {
+        textView.sizeThatFits(
+            CGSize(width: layoutWidth, height: .greatestFiniteMagnitude)
+        ).height
+    }
+
+    private func clampedReportedHeight(_ naturalHeight: CGFloat) -> CGFloat {
+        var height = naturalHeight
+        if let minHeight {
+            height = max(height, minHeight)
+        }
+        if let maxHeight {
+            height = min(height, maxHeight)
+        }
+        return height
+    }
+
+    private func updateScrollEnabledIfNeeded(naturalContentHeight: CGFloat) {
+        let shouldScroll: Bool
+        if let maxHeight {
+            shouldScroll = naturalContentHeight > maxHeight + 0.5
+        } else {
+            shouldScroll = false
+        }
+        guard textView.isScrollEnabled != shouldScroll else { return }
+        textView.isScrollEnabled = shouldScroll
     }
 }

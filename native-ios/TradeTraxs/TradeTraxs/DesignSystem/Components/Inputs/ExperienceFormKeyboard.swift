@@ -25,14 +25,9 @@ private struct ExperienceFormFocusSyncOptionalModifier<F: Hashable>: ViewModifie
             .onReceive(NotificationCenter.default.publisher(for: .experienceKeyboardWillDismiss)) { _ in
                 focus = nil
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { notification in
-                // After the keyboard is gone. Clearing focus on will-hide runs during the
-                // show animation and steals the field before the first keystroke.
-                DispatchQueue.main.async {
-                    guard TextInputFocusGuard.shouldReleaseBoundFocus(onKeyboardWillHide: notification) else { return }
-                    focus = nil
-                }
-            }
+            .modifier(ExperienceFormKeyboardDidHideFocusReleaseModifier {
+                focus = nil
+            })
     }
 }
 
@@ -44,12 +39,29 @@ private struct ExperienceFormFocusSyncBoolModifier: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .experienceKeyboardWillDismiss)) { _ in
                 isFocused = false
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { notification in
+            .modifier(ExperienceFormKeyboardDidHideFocusReleaseModifier {
+                isFocused = false
+            })
+    }
+}
+
+/// Clears bound focus when the keyboard hides, unless native isolation is enabled.
+private struct ExperienceFormKeyboardDidHideFocusReleaseModifier: ViewModifier {
+    let releaseFocus: () -> Void
+
+    func body(content: Content) -> some View {
+        if ExperienceKeyboardNativeIsolation.isEnabled {
+            content
+        } else {
+            content.onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { notification in
+                // After the keyboard is gone. Clearing focus on will-hide runs during the
+                // show animation and steals the field before the first keystroke.
                 DispatchQueue.main.async {
                     guard TextInputFocusGuard.shouldReleaseBoundFocus(onKeyboardWillHide: notification) else { return }
-                    isFocused = false
+                    releaseFocus()
                 }
             }
+        }
     }
 }
 

@@ -2,6 +2,13 @@ import Foundation
 
 /// Maps native navigation destinations → product analytics screen ids (stack + tabs).
 enum ProductAnalyticsScreenTracking {
+    private static func trackOtherProfileVisit(_ profileID: ProfileID) {
+        ProductAnalyticsCoordinator.shared.noteProfileViewed(
+            profileID: profileID,
+            viewerOwnsProfile: false
+        )
+    }
+
     static func trackHome(_ route: HomeRoute) {
         switch route {
         case .trades:
@@ -22,6 +29,8 @@ enum ProductAnalyticsScreenTracking {
             ProductAnalyticsCoordinator.shared.noteScreen(.tradeRoom)
         case .settings:
             ProductAnalyticsCoordinator.shared.noteScreen(.settings)
+        case .otherProfile(let profileID):
+            trackOtherProfileVisit(profileID)
         default:
             break
         }
@@ -37,6 +46,8 @@ enum ProductAnalyticsScreenTracking {
             ProductAnalyticsCoordinator.shared.noteScreen(.tradeRoom)
         case .settings:
             ProductAnalyticsCoordinator.shared.noteScreen(.settings)
+        case .profile(let profileID):
+            trackOtherProfileVisit(profileID)
         default:
             break
         }
@@ -52,6 +63,8 @@ enum ProductAnalyticsScreenTracking {
             ProductAnalyticsCoordinator.shared.noteScreen(.tradeRoom)
         case .settings:
             ProductAnalyticsCoordinator.shared.noteScreen(.settings)
+        case .profile(let profileID):
+            trackOtherProfileVisit(profileID)
         default:
             break
         }
@@ -61,6 +74,8 @@ enum ProductAnalyticsScreenTracking {
         switch route {
         case .settings:
             ProductAnalyticsCoordinator.shared.noteScreen(.settings)
+        case .otherProfile(let profileID):
+            trackOtherProfileVisit(profileID)
         default:
             break
         }

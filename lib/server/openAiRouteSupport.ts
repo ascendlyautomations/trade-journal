@@ -1,5 +1,13 @@
 import OpenAI from "openai"
 
+const DEFAULT_OPENAI_MODEL = "gpt-6-luna"
+
+/** Trade AI Analyst (`/api/analyze-trade`). Override via `OPENAI_MODEL`. */
+export function openAiAnalystModel(): string {
+  const configured = process.env.OPENAI_MODEL?.trim()
+  return configured && configured.length > 0 ? configured : DEFAULT_OPENAI_MODEL
+}
+
 export function openAiApiKey(): string | null {
   const key = process.env.OPENAI_API_KEY?.trim()
   return key && key.length > 0 ? key : null

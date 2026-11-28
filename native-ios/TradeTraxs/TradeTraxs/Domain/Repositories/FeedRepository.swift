@@ -42,6 +42,12 @@ nonisolated protocol FeedRepository: Sendable {
     func allActiveStories(for viewer: ProfileID) async throws -> [Story]
     /// Resolves a single active story when the viewer is allowed to see it (RLS + 24h window).
     func story(id: StoryID) async throws -> Story?
+    /// Active or owner-archived story via `rpc_v1_story_for_viewer`.
+    func storyForViewer(id: StoryID) async throws -> Story?
+    /// Owner-only expired stories (`rpc_v1_owner_story_archive`).
+    func archivedStories(limit: Int, offset: Int) async throws -> [Story]
+    /// DM preview authorization (`rpc_v1_story_dm_media_access`).
+    func storyDmMediaAccess(id: StoryID) async throws -> StoryDmMediaAccess
     func createStory(userID: ProfileID, imageURL: String) async throws -> Story
     /// Video stories persist text beside the media. Empty overlays use the image-only insert.
     func createStory(
@@ -97,6 +103,18 @@ extension FeedRepository {
 
     func story(id: StoryID) async throws -> Story? {
         nil
+    }
+
+    func storyForViewer(id: StoryID) async throws -> Story? {
+        try await story(id: id)
+    }
+
+    func archivedStories(limit: Int, offset: Int) async throws -> [Story] {
+        []
+    }
+
+    func storyDmMediaAccess(id: StoryID) async throws -> StoryDmMediaAccess {
+        StoryDmMediaAccess(allowed: false, reason: "unavailable")
     }
 
     func createStory(

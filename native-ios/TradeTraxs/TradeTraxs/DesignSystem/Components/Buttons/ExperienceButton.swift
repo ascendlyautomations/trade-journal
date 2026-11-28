@@ -51,8 +51,7 @@ struct ExperienceButton: View {
         }) {
             HStack(spacing: ExperienceSpacing.xs) {
                 if isLoading {
-                    ProgressView()
-                        .tint(buttonForeground)
+                    ExperienceIndeterminateProgress(tint: buttonForeground)
                 } else if let icon {
                     ExperienceIcon(icon: icon, size: .sm, color: buttonForeground)
                 }

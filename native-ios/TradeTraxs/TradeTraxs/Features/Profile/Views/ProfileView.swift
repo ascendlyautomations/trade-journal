@@ -115,6 +115,7 @@ struct ProfileView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .navigationInteractivePopFromLeadingEdgeOnly()
+        .experienceChevronOnlyBackNavigationChrome(when: !showsOwnerChrome)
         .experienceScreenBackground()
         .experienceNavigationTitle(profileNavigationTitle)
         .toolbar {
@@ -127,13 +128,27 @@ struct ProfileView: View {
                         transaction.animation = nil
                     }
             }
-            if showsOwnerChrome {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Settings", systemImage: AppIcon.settings.systemName) {
-                        screen.openSettings()
+            if showsOwnerChrome, BackendV2FeatureFlags.isEnabled(.profileInsights) {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        screen.openProfileInsights()
+                    } label: {
+                        Image(systemName: AppIcon.chart.systemName)
+                            .contextualTourTarget(.profileInsights)
+                            .contextualTourGlobalFrame(.profileInsights)
                     }
-                    .contextualTourTarget(.profileSettings)
-                    .contextualTourGlobalFrame(.profileSettings)
+                    .accessibilityLabel("Insights")
+                    .accessibilityIdentifier("profile.toolbar.insights")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        screen.openSettings()
+                    } label: {
+                        Image(systemName: AppIcon.settings.systemName)
+                            .contextualTourTarget(.profileSettings)
+                            .contextualTourGlobalFrame(.profileSettings)
+                    }
+                    .accessibilityLabel("Settings")
                     .accessibilityIdentifier("profile.toolbar.settings")
                 }
             } else {
@@ -252,6 +267,7 @@ struct ProfileView: View {
             guard let target = ContextualTourCoordinator.shared.scrollTarget else { return }
             guard !ContextualTourGeometry.skipsTourAutoscroll(for: target) else { return }
             tourProxy.scrollTo(target, anchor: ContextualTourGeometry.scrollAnchor(for: target))
+            ContextualTourCoordinator.shared.noteScrollTargetLayoutChanged()
         }
         }
     }

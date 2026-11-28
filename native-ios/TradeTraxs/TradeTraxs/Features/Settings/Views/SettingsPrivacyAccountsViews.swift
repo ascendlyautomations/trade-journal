@@ -131,7 +131,7 @@ struct SettingsBlockedAccountsView: View {
         .experienceNavigationTitle("Blocked Accounts")
         .overlay {
             if viewModel.isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .refreshable {
@@ -204,7 +204,7 @@ struct SettingsMutedAccountsView: View {
         .experienceNavigationTitle("Muted Accounts")
         .overlay {
             if viewModel.isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .refreshable {

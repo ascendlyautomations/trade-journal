@@ -43,16 +43,17 @@ enum StoryPublishPipeline {
         )
         onProgress?(0.78)
 
-        let publicURL = objectStorage.publicURL(
-            bucket: StorageBucket.stories.rawValue,
-            path: uploaded.id
-        )?.absoluteString ?? uploaded.id
+        let objectPath = uploaded.id
 
         onProgress?(0.85)
-        onPrepared?(publicURL, uploaded.id)
+        onPrepared?(objectPath, uploaded.id)
+        StoryDebug.log(
+            "upload.image.prepared",
+            "author=\(authorID.rawValue) storagePath=\(storagePath) uploadedId=\(uploaded.id)"
+        )
         let story = try await feed.createStory(
             userID: authorID,
-            imageURL: publicURL
+            imageURL: objectPath
         )
         onProgress?(1)
         return story
@@ -110,16 +111,17 @@ enum StoryPublishPipeline {
         )
         onProgress?(0.78)
 
-        let publicURL = objectStorage.publicURL(
-            bucket: StorageBucket.stories.rawValue,
-            path: uploaded.id
-        )?.absoluteString ?? uploaded.id
+        let objectPath = uploaded.id
 
         onProgress?(0.85)
-        onPrepared?(publicURL, uploaded.id)
+        onPrepared?(objectPath, uploaded.id)
+        StoryDebug.log(
+            "upload.video.prepared",
+            "author=\(authorID.rawValue) storagePath=\(storagePath) uploadedId=\(uploaded.id)"
+        )
         let story = try await feed.createStory(
             userID: authorID,
-            imageURL: publicURL,
+            imageURL: objectPath,
             textOverlays: textOverlays
         )
         onProgress?(1)

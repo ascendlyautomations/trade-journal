@@ -29,7 +29,7 @@ struct AdminChartsView: View {
                 if viewModel.isLoading, viewModel.bundle == nil {
                     HStack {
                         Spacer()
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                         Spacer()
                     }
                     .padding(.vertical, ExperienceSpacing.xl)

@@ -16,6 +16,22 @@ nonisolated enum ActiveStorySemantics {
         stories.filter { isActive(createdAt: $0.createdAt, now: now) }
     }
 
+    /// Active stories for one author, oldest → newest (viewer slide order).
+    static func chronologicallyOrderedActive(_ stories: [Story], now: Date = Date()) -> [Story] {
+        filterActive(stories, now: now).sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// First unviewed slide in chronological order; otherwise the oldest active slide.
+    static func preferredEntryStoryID(
+        in stories: [Story],
+        hasViewed: (Story) -> Bool,
+        now: Date = Date()
+    ) -> StoryID? {
+        let ordered = chronologicallyOrderedActive(stories, now: now)
+        guard let first = ordered.first else { return nil }
+        return ordered.first(where: { !hasViewed($0) })?.id ?? first.id
+    }
+
     /// Groups active stories by author, oldest first within each author (Instagram slide order).
     static func groupByAuthor(_ active: [Story]) -> [ProfileID: [Story]] {
         var grouped: [ProfileID: [Story]] = [:]

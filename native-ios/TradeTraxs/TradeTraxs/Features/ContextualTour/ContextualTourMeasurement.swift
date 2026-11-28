@@ -9,15 +9,24 @@ final class ContextualTourGlobalFrameStore {
   static let shared = ContextualTourGlobalFrameStore()
 
   private(set) var frames: [ContextualTourTargetID: CGRect] = [:]
+  /// Bumps on each accepted global report so the shell overlay re-resolves tab/toolbar targets.
+  private(set) var reportGeneration: UInt64 = 0
 
   func report(_ target: ContextualTourTargetID, frame: CGRect) {
-    guard ContextualTourCoordinator.shared.measures(target) else { return }
+    let coordinator = ContextualTourCoordinator.shared
+    guard coordinator.measures(target) else { return }
+    guard coordinator.acceptsGlobalMeasurement(for: target) else { return }
     guard ContextualTourGeometry.isUsable(frame) else { return }
+    let previous = frames[target]
     frames[target] = frame
+    if previous != frame {
+      reportGeneration &+= 1
+    }
   }
 
   func reset() {
     frames = [:]
+    reportGeneration &+= 1
   }
 }
 
@@ -53,7 +62,9 @@ enum ContextualTourTargetCatalog {
     .dashboardCalendar,
     .feedExplore,
     .feedTradeRooms,
+    .profileInsights,
     .profileSettings,
+    .feedContentFilters,
   ]
 }
 
@@ -67,7 +78,7 @@ struct ContextualTourMainTabBarFrameReporter: UIViewRepresentable {
   }
 
   func updateUIView(_ uiView: UIView, context: Context) {
-    context.coordinator.attach(to: uiView)
+    context.coordinator.syncPolling(to: uiView)
   }
 
   func makeCoordinator() -> Coordinator {
@@ -95,12 +106,35 @@ struct ContextualTourMainTabBarFrameReporter: UIViewRepresentable {
       link?.invalidate()
     }
 
+    func detach() {
+      link?.invalidate()
+      link = nil
+      host = nil
+    }
+
+    func syncPolling(to view: UIView) {
+      let coordinator = ContextualTourCoordinator.shared
+      let shouldPoll =
+        coordinator.phase == .preparing
+        && coordinator.spotlightTarget?.isMainTabBarTarget == true
+      if shouldPoll {
+        attach(to: view)
+      } else {
+        detach()
+      }
+    }
+
     @objc private func tick() {
       let coordinator = ContextualTourCoordinator.shared
-      guard coordinator.phase == .measuring || coordinator.phase == .presenting else { return }
+      guard coordinator.phase == .preparing,
+            coordinator.spotlightTarget?.isMainTabBarTarget == true
+      else { return }
       for tabTarget in ContextualTourTargetID.allCases where tabTarget.isMainTabBarTarget {
-        guard coordinator.measures(tabTarget), let tab = tabTarget.mainTabIdentifier else { continue }
-        guard let frame = ContextualTourTabBarIntrospection.globalFrame(for: tab) else { continue }
+        guard coordinator.acceptsGlobalMeasurement(for: tabTarget),
+              let tab = tabTarget.mainTabIdentifier
+        else { continue }
+        let frame = ContextualTourTabBarIntrospection.globalFrame(for: tab, trace: false)
+        guard let frame else { continue }
         ContextualTourGlobalFrameStore.shared.report(tabTarget, frame: frame)
       }
     }

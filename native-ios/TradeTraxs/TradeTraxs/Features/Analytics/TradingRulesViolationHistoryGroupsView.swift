@@ -7,10 +7,16 @@ struct TradingRulesViolationHistoryGroupsView: View {
     @Bindable private var session: TradingRulesComplianceSessionStore
     @Environment(\.themeColors) private var colors
 
-    init(navigationCoordinator: NavigationCoordinator, detailCache: DetailPresentationCache) {
+    init(
+        navigationCoordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache,
+        sessionStore: TradingRulesComplianceSessionStore? = nil
+    ) {
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
-        _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
+        _session = Bindable(
+            sessionStore ?? TradingRulesCompliancePresentationStores.store(detailCache: detailCache)
+        )
     }
 
     var body: some View {

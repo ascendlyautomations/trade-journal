@@ -114,7 +114,7 @@ struct ContentDraftsListView: View {
         }
         .overlay {
             if model.isLoading && model.drafts.isEmpty {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .refreshable { await model.reload() }

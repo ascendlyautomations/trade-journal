@@ -1,15 +1,67 @@
 import SwiftUI
 
+/// Spinner-only loading indicator (UIKit spinner, no caption slot).
 struct ExperienceLoadingSpinner: View {
+    /// VoiceOver when `message` is nil.
     var label: String = "Loading"
+    /// Optional visible caption under the spinner.
+    var message: String? = nil
+    var controlSize: ControlSize = .regular
+    var tint: Color? = nil
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        ProgressView()
-            .progressViewStyle(.circular)
-            .tint(colors.accent)
-            .experienceAccessibility(label: label, identifier: "loading.spinner")
+        Group {
+            if let message, !message.isEmpty {
+                VStack(spacing: ExperienceSpacing.xs) {
+                    progressIndicator
+                    Text(message)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .multilineTextAlignment(.center)
+                }
+            } else {
+                progressIndicator
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(visibleAccessibilityLabel))
+        .accessibilityIdentifier("loading.spinner")
+    }
+
+    private var visibleAccessibilityLabel: String {
+        if let message, !message.isEmpty { return message }
+        return label
+    }
+
+    private var progressIndicator: some View {
+        ExperienceActivityIndicatorView(controlSize: controlSize, color: tint ?? colors.accent)
+    }
+}
+
+/// Centers ``ExperienceLoadingSpinner`` in a screen or sheet without extra label chrome.
+struct ExperienceLoadingOverlay: View {
+    var label: String = "Loading"
+    var message: String? = nil
+
+    var body: some View {
+        ExperienceLoadingSpinner(label: label, message: message)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+}
+
+/// Inline indeterminate spinner (buttons, list footers, composer).
+struct ExperienceIndeterminateProgress: View {
+    var controlSize: ControlSize = .regular
+    var tint: Color? = nil
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        ExperienceActivityIndicatorView(
+            controlSize: controlSize,
+            color: tint ?? colors.accent
+        )
     }
 }
 
@@ -232,7 +284,7 @@ struct ExperienceFeedbackHost: View {
             ExperienceLoadingSpinner()
         case .syncing:
             HStack(spacing: ExperienceSpacing.xs) {
-                ExperienceLoadingSpinner(label: "Syncing")
+                ExperienceIndeterminateProgress()
                 Text("Syncing…")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }

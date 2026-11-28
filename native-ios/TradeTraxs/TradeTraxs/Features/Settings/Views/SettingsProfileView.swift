@@ -114,7 +114,7 @@ struct SettingsProfileView: View {
         }
         .overlay {
             if viewModel.isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .onAppear {
@@ -160,7 +160,7 @@ struct SettingsProfileView: View {
                 }
 
                 if viewModel.isUploadingAvatar {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .controlSize(.small)
                 }
 

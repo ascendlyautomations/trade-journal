@@ -9,7 +9,14 @@ import ProfileVisitorModerationMenu from "@/app/components/profile/ProfileVisito
 import type { ProfileHeaderData } from "@/app/components/profile/profileTypes"
 import { normalizeTraderType } from "@/lib/traderType"
 import Link from "next/link"
-import { ChevronRight, Settings, Share, TrendingUp } from "lucide-react"
+import {
+  BarChart3,
+  ChevronRight,
+  Settings,
+  Share,
+  TrendingUp,
+} from "lucide-react"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags"
 import MobileWebProfileStatsRow from "./MobileWebProfileStatsRow"
 
 type MobileWebProfileHeaderProps = {
@@ -160,6 +167,20 @@ export default function MobileWebProfileHeader({
       className="relative px-1 pt-1"
       {...(isOwnProfile ? { "data-tt-tour-target": "profileIdentity" } : {})}
     >
+      {isOwnProfile ? (
+        <div className="absolute left-0 top-0 z-10 flex items-center gap-0.5">
+          {isBackendV2Enabled("profileInsights") ? (
+            <Link
+              href="/profile/insights"
+              prefetch={false}
+              className="tt-mobile-web-hit flex h-11 w-11 items-center justify-center rounded-full text-[color:var(--tt-text,#1f2328)] active:bg-black/5"
+              aria-label="Insights"
+            >
+              <BarChart3 className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
       {isOwnProfile ? (
         <div className="absolute right-0 top-0 z-10 flex items-center gap-0.5">
           <Link
@@ -333,7 +354,7 @@ export default function MobileWebProfileHeader({
           type="button"
           onClick={isOwnProfile ? (hasRoom ? onViewRoom : onCreateRoom) : onViewRoom}
           data-tt-tour-target="profileTradeRoom"
-          className="mt-2 flex min-h-11 w-full items-center gap-2 rounded-[18px] border border-border bg-surface-elevated px-3 py-2 text-left"
+          className="mt-2 flex min-h-11 w-full items-center gap-2 rounded-[18px] border border-border bg-transparent px-3 py-2 text-left dark:bg-surface-elevated"
         >
           <TrendingUp className="h-4 w-4 shrink-0 text-info" strokeWidth={2.25} aria-hidden />
           <span className="min-w-0 flex-1 text-[15px] text-[color:var(--tt-text,#1f2328)]">

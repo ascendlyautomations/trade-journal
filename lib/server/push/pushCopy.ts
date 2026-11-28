@@ -15,6 +15,7 @@ export type PushNotificationTarget = {
   profile_post_id?: string | null
   achievement_post_id?: string | null
   reel_id?: string | null
+  story_id?: string | null
   comment_id?: string | null
   room_id?: string | null
   content?: string | null
@@ -54,23 +55,47 @@ function stringField(
   return typeof value === "string" ? value.trim() : ""
 }
 
-function commentBody(target: PushNotificationTarget): string {
+function commentPreviewText(target: PushNotificationTarget): string {
   const raw = String(target.content ?? "").trim()
   if (!raw) return ""
   return truncatePushPreview(raw)
 }
 
-function likeTitle(target: PushNotificationTarget, who: string): string {
-  if (target.comment_id) return `${who} liked your comment`
-  if (target.achievement_post_id) return `${who} liked your achievement`
-  if (target.reel_id) return `${who} liked your reel`
-  if (target.trade_id && !target.post_id && !target.profile_post_id) {
-    return `${who} liked your trade`
-  }
-  return `${who} liked your post`
+function quotedPreview(preview: string): string {
+  const trimmed = preview.trim()
+  if (!trimmed) return ""
+  return `"${trimmed}"`
 }
 
-/** Concise native push copy — professional messaging style, no emojis. */
+function engagementContentNoun(target: PushNotificationTarget): string {
+  if (target.comment_id) return "comment"
+  if (target.story_id) return "story"
+  if (target.achievement_post_id) return "achievement"
+  if (target.reel_id) return "clip"
+  if (target.trade_id && !target.post_id && !target.profile_post_id) {
+    return "trade"
+  }
+  return "post"
+}
+
+function milestoneEntityNoun(entityKind: string): string {
+  switch (entityKind) {
+    case "trade":
+      return "trade"
+    case "reel":
+      return "clip"
+    case "achievement_post":
+      return "achievement"
+    case "story":
+      return "story"
+    case "post":
+    case "profile_post":
+    default:
+      return "post"
+  }
+}
+
+/** Concise native push copy — short Title Case titles, details in the body. */
 export function buildPushAlertCopy(target: PushNotificationTarget): {
   title: string
   body: string
@@ -80,110 +105,141 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
   const json = parseJsonContent(target.content)
 
   if (type === "like") {
-    return { title: likeTitle(target, who), body: "" }
+    const noun = engagementContentNoun(target)
+    return {
+      title: "New Like",
+      body: `${who} liked your ${noun}.`,
+    }
   }
 
   if (type === "like_batch" || type === "follow_batch") {
     return {
-      title: stringField(json, "title") || (type === "follow_batch" ? "New followers" : "New likes"),
+      title:
+        stringField(json, "title") ||
+        (type === "follow_batch" ? "New Followers" : "New Likes"),
       body: stringField(json, "body") || "",
     }
   }
 
   if (type === "like_milestone") {
+    const milestone = json?.milestone
+    const entityKind = stringField(json, "entity_kind")
+    const noun = milestoneEntityNoun(entityKind)
+    const count =
+      typeof milestone === "number" && Number.isFinite(milestone)
+        ? milestone.toLocaleString("en-US")
+        : ""
+    const body =
+      count && noun
+        ? `Your ${noun} reached ${count} likes.`
+        : stringField(json, "body") ||
+          "Your content reached a new like milestone."
     return {
-      title: stringField(json, "title") || "Engagement milestone",
-      body: stringField(json, "body") || "More traders are engaging with your content.",
+      title: "Engagement Milestone",
+      body,
     }
   }
 
   if (type === "comment") {
-    const body = commentBody(target)
+    const preview = commentPreviewText(target)
+    const quoted = quotedPreview(preview)
     if (target.commentKind === "reply") {
-      return { title: `${who} replied`, body }
+      return {
+        title: "Comment Reply",
+        body: quoted
+          ? `${who} replied to your comment: ${quoted}`
+          : `${who} replied to your comment.`,
+      }
     }
     if (target.commentKind === "mention") {
-      return { title: `${who} mentioned you`, body }
+      return {
+        title: "New Mention",
+        body: quoted
+          ? `${who} mentioned you: ${quoted}`
+          : `${who} mentioned you.`,
+      }
     }
-    if (target.achievement_post_id) {
-      return { title: `${who} commented on your achievement`, body }
+    return {
+      title: "New Comment",
+      body: quoted
+        ? `${who} commented: ${quoted}`
+        : `${who} commented on your ${engagementContentNoun(target)}.`,
     }
-    if (target.reel_id) {
-      return { title: `${who} commented on your reel`, body }
-    }
-    if (target.trade_id && !target.post_id && !target.profile_post_id) {
-      return { title: `${who} commented on your trade`, body }
-    }
-    return { title: `${who} commented`, body }
   }
 
   if (type === "follow") {
-    return { title: `${who} followed you`, body: "" }
+    return {
+      title: "New Follower",
+      body: `${who} started following you.`,
+    }
   }
 
   if (type === "follow_request") {
-    return { title: `${who} requested to follow you`, body: "" }
+    return {
+      title: "Follow Request",
+      body: `${who} requested to follow you.`,
+    }
   }
 
   if (type === "follow_request_accepted") {
-    return { title: `${who} accepted your follow request`, body: "" }
+    return {
+      title: "Follow Request Accepted",
+      body: `${who} accepted your follow request.`,
+    }
   }
 
   if (type === "room_join") {
     const meta = parseRoomJoinContent(target.content)
-    const room = meta.room_name?.trim() || "a trade room"
-    return { title: who, body: `joined ${room}` }
+    const room = meta.room_name?.trim() || "a Trade Room"
+    return {
+      title: "New Room Member",
+      body: `${who} joined ${room}.`,
+    }
   }
 
   if (type === "trade_room_join_request") {
-    const json = parseJsonContent(target.content)
     const room =
       stringField(json, "room_name") ||
       stringField(json, "room_slug") ||
       "a Trade Room"
-    return { title: who, body: `requested to join ${room}` }
+    return {
+      title: "Room Join Request",
+      body: `${who} requested to join ${room}.`,
+    }
   }
 
   if (type === "trade_room_join_accepted") {
-    const json = parseJsonContent(target.content)
     const room =
       stringField(json, "room_name") ||
       stringField(json, "room_slug") ||
       "the Trade Room"
     return {
-      title: "Join request accepted",
-      body: `Your request to join ${room} was accepted`,
+      title: "Join Request Accepted",
+      body: `Your request to join ${room} was accepted.`,
     }
   }
 
   if (type === "trade_room_join_declined") {
-    const json = parseJsonContent(target.content)
     const room =
       stringField(json, "room_name") ||
       stringField(json, "room_slug") ||
       "the Trade Room"
     return {
-      title: "Join request declined",
-      body: `Your request to join ${room} was declined`,
+      title: "Join Request Declined",
+      body: `Your request to join ${room} was declined.`,
     }
   }
 
   if (type === "room_live") {
-    const json = parseJsonContent(target.content)
     const streamTitle = stringField(json, "stream_title")
-    if (streamTitle) {
-      return {
-        title: who,
-        body: `is live: ${streamTitle}`,
-      }
-    }
     const room =
       stringField(json, "room_name") ||
       stringField(json, "room_slug") ||
       "Trade Room"
+    const title = streamTitle ? `Live Now: ${streamTitle}` : "Live Now"
     return {
-      title: who,
-      body: `is live in ${room}! Tap to watch.`,
+      title,
+      body: `${who} is live in ${room}. Tap to watch.`,
     }
   }
 
@@ -199,13 +255,6 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
       stringField(json, "sender_name") ||
       stringField(json, "sender_username") ||
       who
-    const isReply = json?.is_reply === true
-    if (isReply) {
-      return {
-        title: room,
-        body: `${senderLabel} replied: ${preview}`,
-      }
-    }
     return {
       title: room,
       body: `${senderLabel}: ${preview}`,
@@ -220,33 +269,59 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
       stringField(json, "sender_name") ||
       stringField(json, "sender_username") ||
       who
+    const quoted = quotedPreview(preview)
     return {
       title: room,
-      body: preview
-        ? `${senderLabel} mentioned you: ${preview}`
-        : `${senderLabel} mentioned you`,
+      body: quoted
+        ? `${senderLabel} mentioned you: ${quoted}`
+        : `${senderLabel} mentioned you.`,
     }
   }
 
-  if (type === "affiliate_referral" || type === "affiliate_commission_earned") {
+  if (type === "affiliate_referral") {
     return {
-      title: stringField(json, "title") || "Affiliate update",
-      body: stringField(json, "body") || "You have a new affiliate update.",
+      title: "New Referral",
+      body:
+        stringField(json, "body") ||
+        "Someone signed up using your referral code.",
+    }
+  }
+
+  if (type === "affiliate_commission_earned") {
+    return {
+      title: "Commission Earned",
+      body:
+        stringField(json, "body") ||
+        "You earned a commission from a referred subscription.",
     }
   }
 
   if (type === "trading_report") {
+    const kind = stringField(json, "kind")
+    const monthly = kind === "monthly"
     return {
-      title: stringField(json, "title") || "Trading report",
-      body:
-        stringField(json, "body") || "Your trading summary is ready to review.",
+      title: monthly ? "Monthly Report" : "Weekly Report",
+      body: monthly
+        ? "Your monthly performance report is ready."
+        : "Your weekly performance report is ready.",
     }
   }
 
   if (type === "message") {
     const preview = stringField(json, "message_preview") || "New message"
+    const messageType = stringField(json, "message_type")
     const isGroup = json?.is_group === true
     const groupName = stringField(json, "group_name")
+
+    if (messageType === "story_reply") {
+      const quoted = quotedPreview(preview)
+      return {
+        title: "Story Reply",
+        body: quoted
+          ? `${who} replied to your story: ${quoted}`
+          : `${who} replied to your story.`,
+      }
+    }
 
     if (isGroup && groupName) {
       return {
@@ -260,7 +335,7 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
     }
   }
 
-  return { title: "TradeTraxs", body: "You have a new notification" }
+  return { title: "TradeTraxs", body: "You have a new notification." }
 }
 
 /** Reuse existing app routes for notification deep links. */

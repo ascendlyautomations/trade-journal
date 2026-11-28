@@ -147,8 +147,7 @@ struct NewChatPickerView: View {
         switch viewModel.mode {
         case .chooser:
             if viewModel.phase == .opening {
-                ExperienceLoadingSpinner(label: "Opening conversation")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Opening conversation")
             } else if let error = viewModel.errorMessage {
                 ExperienceEmptyState(
                     icon: .warning,
@@ -201,11 +200,9 @@ struct NewChatPickerView: View {
     @ViewBuilder
     private func peoplePickerContent(isGroup: Bool) -> some View {
         if viewModel.phase == .opening {
-            ExperienceLoadingSpinner(label: isGroup ? "Creating group" : "Opening conversation")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ExperienceLoadingOverlay(label: isGroup ? "Creating group" : "Opening conversation")
         } else if viewModel.phase == .searching, viewModel.isSearching {
-            ExperienceLoadingSpinner(label: "Searching people")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ExperienceLoadingOverlay(label: "Searching people")
         } else if let error = viewModel.errorMessage {
             ExperienceEmptyState(
                 icon: .warning,
@@ -239,11 +236,9 @@ struct NewChatPickerView: View {
     @ViewBuilder
     private func peopleResultsContent(isGroup: Bool, emptyMessage: String) -> some View {
         if viewModel.phase == .searching, viewModel.isSearching, viewModel.mode == .chooser {
-            ExperienceLoadingSpinner(label: "Searching people")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ExperienceLoadingOverlay(label: "Searching people")
         } else if viewModel.isLoadingSuggestions, !viewModel.isSearching {
-            ExperienceLoadingSpinner(label: "Loading people")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ExperienceLoadingOverlay(label: "Loading people")
         } else if showsPeoplePickerEmptyState {
             ExperienceEmptyState(
                 icon: .search,

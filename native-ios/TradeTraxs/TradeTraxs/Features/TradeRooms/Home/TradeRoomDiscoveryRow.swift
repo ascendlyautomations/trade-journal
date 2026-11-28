@@ -197,7 +197,7 @@ struct TradeRoomDiscoveryRow: View {
 
         switch joinState {
         case .joining, .requesting:
-            ProgressView()
+            ExperienceIndeterminateProgress()
                 .controlSize(.small)
                 .frame(width: 72)
         case .joined, .requested:

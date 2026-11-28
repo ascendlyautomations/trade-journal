@@ -108,7 +108,7 @@ struct AdminProductFeedbackDetailView: View {
             if viewModel.saveBusy {
                 HStack {
                     Spacer()
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                     Spacer()
                 }
             }

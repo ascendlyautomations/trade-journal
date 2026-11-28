@@ -63,6 +63,9 @@ enum PushNotificationGrouping {
             if let reelID = notification.reelID {
                 return "like:reel:\(reelID.rawValue)"
             }
+            if let storyID = notification.storyID {
+                return "like:story:\(storyID.rawValue)"
+            }
             if let tradeID = notification.tradeID {
                 return "like:trade:\(tradeID.rawValue)"
             }

@@ -72,14 +72,22 @@ final class ProfileOnboardingViewModel {
         }
     }
 
+    var showsMissingRequiredFieldsMessage: Bool {
+        hasMissingRequiredOnboardingInput
+    }
+
     var canSubmit: Bool {
         !isSubmitting
-            && ProfileDisplayNamePolicy.validateRequired(displayName) == nil
-            && ProfileUsernamePolicy.validateNotEmpty(username) == nil
-            && !tradingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && traderType != nil
-            && !startedTrading.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !hasMissingRequiredOnboardingInput
             && !StartedTradingDatePolicy.isFuture(startedTrading)
+    }
+
+    private var hasMissingRequiredOnboardingInput: Bool {
+        ProfileDisplayNamePolicy.validateRequired(displayName) != nil
+            || ProfileUsernamePolicy.validateNotEmpty(username) != nil
+            || tradingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || traderType == nil
+            || startedTrading.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var canContinueWithoutPhoto: Bool {

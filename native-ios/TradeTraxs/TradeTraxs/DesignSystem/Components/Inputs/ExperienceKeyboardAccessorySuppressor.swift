@@ -110,12 +110,17 @@ private final class DisplayLinkProxy: NSObject {
 
 extension View {
     /// Story-style composers: no keyboard accessory strip above the system keyboard.
+    @ViewBuilder
     func experienceSuppressKeyboardInputAccessory() -> some View {
-        background {
-            ExperienceKeyboardAccessorySuppressor()
-                .frame(width: 0, height: 0)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+        if ExperienceKeyboardNativeIsolation.isEnabled {
+            self
+        } else {
+            background {
+                ExperienceKeyboardAccessorySuppressor()
+                    .frame(width: 0, height: 0)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
     }
 }

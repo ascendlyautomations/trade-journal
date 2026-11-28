@@ -363,8 +363,7 @@ private struct OwnerAccountFilterDropdownPanel: View {
             HStack(spacing: 8) {
                 selectionMark(isSelected: false)
                 HStack(spacing: ExperienceSpacing.sm) {
-                    ProgressView()
-                        .controlSize(.small)
+                    ExperienceIndeterminateProgress(controlSize: .small)
                     Text("Loading copy trading…")
                         .experienceStyle(.footnote, color: colors.secondaryText)
                         .lineLimit(1)

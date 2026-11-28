@@ -435,11 +435,6 @@ struct AppRootView: View {
             authenticationCoordinator: authenticationCoordinator,
             currentUserProfile: currentUserProfile
         )
-        .environment(
-            \.experienceKeyboardDoneToolbarSuppressed,
-            navigation.store.presentedSheet != nil
-                || navigation.store.presentedFullScreen != nil
-        )
         .onAppear {
             DeepLinkLaunchTrace.event("shell.ready", detail: "main")
             let userID = currentUserProfile.profile?.id.rawValue
@@ -486,10 +481,17 @@ struct AppRootView: View {
             )
         )
         .onChange(of: ContextualTourCoordinator.shared.navigationRequest) { _, request in
-            guard let request else { return }
+            guard let request else {
+                ContextualTourDebug.logTourTrace("navigation-request cleared (nil)")
+                return
+            }
+            ContextualTourDebug.logTourTrace("navigation-request issued surface=\(request)")
             let tour = ContextualTourCoordinator.shared
-            guard tour.phase == .measuring || tour.phase == .presenting else { return }
             applyAppWalkthroughNavigation(request)
+            ContextualTourDebug.logTourTrace("navigation-request applied surface=\(request) phase=\(tour.phase)")
+            if tour.phase == .preparing || tour.phase == .presenting {
+                tour.noteWalkthroughNavigationApplied(to: request)
+            }
         }
         .onChange(of: ContextualTourCoordinator.shared.phase) { _, phase in
             guard phase == .idle else { return }
@@ -808,6 +810,10 @@ struct AppRootView: View {
                         data: appEnvironment.data,
                         onPublished: { story in
                             navigation.coordinator.dismissFullScreen()
+                            if let viewerID = currentUserProfile.profile?.id {
+                                appEnvironment.data.detailCache.seed(story)
+                                FeedStoriesCatalogStore.shared.upsertStory(story, viewerID: viewerID)
+                            }
                             navigation.coordinator.present(fullScreen: .storyViewer(story.id, .feedCarousel))
                         },
                         onDismiss: { navigation.coordinator.dismissFullScreen() }

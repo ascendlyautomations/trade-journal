@@ -5,6 +5,9 @@ struct BrokerIntegrationsView: View {
     @State private var manageAccountsViewModel: ManageAccountsViewModel
     @State private var linkTarget: BrokerIntegrationLinkTarget?
     @State private var createLinkTarget: BrokerIntegrationCreateLinkTarget?
+    @State private var pendingLinkSetupTarget: BrokerTradovatePendingLinkSetupTarget?
+    @State private var pendingLinkCreateTarget: BrokerTradovatePendingLinkSetupTarget?
+    @State private var pendingConfirmTarget: BrokerPendingTradovateLinkConfirmTarget?
     @State private var disconnectTarget: BrokerDisconnectTarget?
     @State private var expandedBrokers: Set<BrokerIntegrationProvider> = []
     @State private var expandedConnections: Set<String> = []
@@ -95,7 +98,7 @@ struct BrokerIntegrationsView: View {
             }
 
             Section {
-                ForEach(BrokerIntegrationsCatalog.providers, id: \.self) { provider in
+                ForEach(viewModel.visibleBrokerProviders, id: \.self) { provider in
                     brokerProviderCard(provider)
                         .brokerIntegrationsCardListRow()
                 }
@@ -118,6 +121,9 @@ struct BrokerIntegrationsView: View {
                 data: data,
                 linkTarget: $linkTarget,
                 createLinkTarget: $createLinkTarget,
+                pendingLinkSetupTarget: $pendingLinkSetupTarget,
+                pendingLinkCreateTarget: $pendingLinkCreateTarget,
+                pendingConfirmTarget: $pendingConfirmTarget,
                 linkPromptGate: linkPromptGate,
                 showsImportedTradesReview: true
             )
@@ -127,6 +133,7 @@ struct BrokerIntegrationsView: View {
             gate: linkPromptGate,
             linkTarget: $linkTarget,
             createLinkTarget: $createLinkTarget,
+            pendingConfirmTarget: $pendingConfirmTarget,
             onExpandConnectedLogin: { provider, connectionID in
                 expandedBrokers.insert(provider)
                 expandedConnections.insert(connectionID)
@@ -458,6 +465,8 @@ struct BrokerIntegrationsView: View {
 
                     if viewModel.isRefreshingAccounts.contains(connection.id) {
                         brokerLoadingRow("Refreshing accounts…")
+                    } else if accounts.isEmpty, provider == .tradovate, connection.connected {
+                        tradovateNoAccountsBody(connection: connection)
                     } else if accounts.isEmpty {
                         Text("No broker accounts returned. Try Refresh Accounts.")
                             .font(ExperienceTypography.caption)
@@ -500,6 +509,38 @@ struct BrokerIntegrationsView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tradovateNoAccountsBody(connection: TradovateConnectionSummary) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text(BrokerTradovateNoAccountsCopy.connectedStatus)
+                .font(ExperienceTypography.caption)
+                .foregroundStyle(colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let pending = viewModel.pendingTradovateLink(for: connection.id) {
+                Text(
+                    "Reserved for \(pending.tradetraxsAccountName ?? "your TradeTraxs account")."
+                )
+                .font(ExperienceTypography.caption)
+                .foregroundStyle(colors.accent)
+                BrokerIntegrationSettingsButton(
+                    title: "Change Reserved Account",
+                    isEnabled: !viewModel.isBrokerConnectionMutationActive
+                ) {
+                    pendingLinkSetupTarget = BrokerTradovatePendingLinkSetupTarget(connectionId: connection.id)
+                }
+            } else {
+                BrokerIntegrationSettingsButton(
+                    title: "Choose TradeTraxs Account",
+                    isEnabled: !viewModel.isBrokerConnectionMutationActive,
+                    accessibilityIdentifier: "brokerIntegrations.tradovate.pendingLink"
+                ) {
+                    pendingLinkSetupTarget = BrokerTradovatePendingLinkSetupTarget(connectionId: connection.id)
                 }
             }
         }
@@ -685,8 +726,7 @@ struct BrokerIntegrationsView: View {
 
     private func brokerLoadingRow(_ text: String) -> some View {
         HStack(spacing: ExperienceSpacing.sm) {
-            ProgressView()
-                .controlSize(.small)
+            ExperienceIndeterminateProgress(controlSize: .small)
             Text(text)
                 .experienceStyle(.footnote, color: colors.secondaryText)
         }

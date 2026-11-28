@@ -81,7 +81,7 @@ struct ReportCard: View {
     private func trailingLabel(showAsButton: Bool, action: (() -> Void)?) -> some View {
         Group {
             if isGenerating {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .controlSize(.small)
                     .tint(colors.accent)
             } else if showAsButton, let action {

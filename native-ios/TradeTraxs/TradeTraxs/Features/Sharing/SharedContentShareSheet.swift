@@ -119,12 +119,17 @@ struct SharedContentShareSheet: View {
             }
         }
         .experienceSheetChrome()
+        .onAppear {
+            CreatorShareTracking.configure(rpc: data.rpc)
+            CreatorShareTracking.recordInitiated(for: target)
+        }
         .sheet(item: $recipientScope) { scope in
             SharedContentShareRecipientPickerView(
                 scope: scope,
                 viewModel: viewModel,
                 imagePipeline: data.imagePipeline,
                 onSendSuccess: {
+                    CreatorShareTracking.recordCompleted(for: target)
                     recipientScope = nil
                     onClose()
                 },
@@ -140,6 +145,7 @@ struct SharedContentShareSheet: View {
         }
         .onChange(of: viewModel.phase) { _, phase in
             if phase == .sent, recipientScope != nil {
+                CreatorShareTracking.recordCompleted(for: target)
                 recipientScope = nil
                 onClose()
             }
@@ -185,6 +191,7 @@ struct SharedContentShareSheet: View {
             makePublicConfirm = .copyLink
         } else {
             DetailOverflowActions.copyLink(target.contentLink)
+            CreatorShareTracking.recordCompleted(for: target)
         }
     }
 
@@ -218,6 +225,7 @@ struct SharedContentShareSheet: View {
                 DetailOverflowActions.copyLink(target.contentLink)
             case .externalShare:
                 showsExternalShare = true
+                CreatorShareTracking.recordCompleted(for: target)
             }
         } catch {
             makePublicErrorMessage = ProfileSectionSupport.message(for: error)

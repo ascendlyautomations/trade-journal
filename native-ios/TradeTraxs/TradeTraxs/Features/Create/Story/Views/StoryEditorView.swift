@@ -115,7 +115,7 @@ struct StoryEditorView: View {
                     onSaveDraft?(viewModel.canvas)
                 } label: {
                     if isSavingDraft {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .controlSize(.small)
                     } else {
                         Text("Save Draft")

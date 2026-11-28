@@ -111,10 +111,17 @@ struct FeedStoryViewerView: View {
 
             switch viewModel.phase {
             case .loading:
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .tint(.white)
+            case .unavailable:
+                Text("Could not display story")
+                    .experienceStyle(.body, color: .white)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, ExperienceSpacing.lg)
+                    .accessibilityIdentifier("feed.story.unavailable")
             case .failed:
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .tint(.white)
             case .loaded:
                 if let story = viewModel.story {
@@ -124,7 +131,6 @@ struct FeedStoryViewerView: View {
         }
         .environment(\.experienceKeyboardDoneToolbarSuppressed, true)
         .toolbar(.hidden, for: .navigationBar)
-        .experienceKeyboardSafeBottom()
         .experienceSuppressKeyboardInputAccessory()
         .experienceSwipeToDismiss(
             isEnabled: canSwipeToDismiss,
@@ -197,53 +203,65 @@ struct FeedStoryViewerView: View {
         }
     }
 
+    /// Messages docks the composer in a bottom `VStack`; media stays full-screen in the background.
     @ViewBuilder
     private func storyContent(_ story: Story) -> some View {
-        VStack(spacing: 0) {
-            GeometryReader { proxy in
-                let storyCanvas = StoryComposerGeometry.aspectFitStoryCanvas(in: proxy.size)
+        GeometryReader { proxy in
+            let storyCanvas = StoryComposerGeometry.aspectFitStoryCanvas(in: proxy.size)
 
-                ZStack {
-                    StoryPlaybackMediaView(
-                        reference: story.media,
-                        imagePipeline: imagePipeline,
-                        objectStorage: data.objectStorage,
-                        player: viewModel.playback.player,
-                        isVideo: viewModel.isVideoStory
-                    )
-                    .frame(width: storyCanvas.width, height: storyCanvas.height)
-                    .position(x: storyCanvas.midX, y: storyCanvas.midY)
-                    .clipped()
-                    .id(story.id)
-                    .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
-                        viewModel.setHoldPaused(holding)
-                    }
-
-                    if viewModel.isVideoStory, !viewModel.videoTextOverlays.isEmpty {
-                        StoryVideoTextPlaybackOverlay(
-                            overlays: viewModel.videoTextOverlays,
-                            canvasSize: storyCanvas.size
-                        )
-                        .position(x: storyCanvas.midX, y: storyCanvas.midY)
-                        .allowsHitTesting(false)
-                        .accessibilityIdentifier("storyViewer.textOverlays")
-                    }
-
-                    storyTapNavigationOverlay
-
-                    VStack(spacing: 0) {
-                        storyTopChrome(for: story)
-                        Spacer(minLength: 0)
-                    }
-                    .safeAreaPadding(.top, StoryViewerChromeMetrics.topBreathingRoom)
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                if viewModel.showReplyComposer {
+                    storyReplyComposer(for: story)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-
-            if viewModel.showReplyComposer {
-                storyReplyComposer(for: story)
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .background {
+                storyMediaLayer(story: story, storyCanvas: storyCanvas, containerSize: proxy.size)
             }
         }
         .simultaneousGesture(storyHorizontalDragGesture)
+    }
+
+    @ViewBuilder
+    private func storyMediaLayer(story: Story, storyCanvas: CGRect, containerSize: CGSize) -> some View {
+        ZStack {
+            StoryPlaybackMediaView(
+                reference: story.media,
+                imagePipeline: imagePipeline,
+                objectStorage: data.objectStorage,
+                player: viewModel.playback.player,
+                isVideo: viewModel.isVideoStory,
+                onMediaLoadFailed: { viewModel.reportMediaUnavailable() }
+            )
+            .frame(width: storyCanvas.width, height: storyCanvas.height)
+            .position(x: storyCanvas.midX, y: storyCanvas.midY)
+            .clipped()
+            .id(story.id)
+            .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
+                viewModel.setHoldPaused(holding)
+            }
+
+            if viewModel.isVideoStory, !viewModel.videoTextOverlays.isEmpty {
+                StoryVideoTextPlaybackOverlay(
+                    overlays: viewModel.videoTextOverlays,
+                    canvasSize: storyCanvas.size
+                )
+                .position(x: storyCanvas.midX, y: storyCanvas.midY)
+                .allowsHitTesting(false)
+                .accessibilityIdentifier("storyViewer.textOverlays")
+            }
+
+            storyTapNavigationOverlay
+
+            VStack(spacing: 0) {
+                storyTopChrome(for: story)
+                Spacer(minLength: 0)
+            }
+            .safeAreaPadding(.top, StoryViewerChromeMetrics.topBreathingRoom)
+        }
+        .frame(width: containerSize.width, height: containerSize.height)
     }
 
     @ViewBuilder
@@ -290,6 +308,7 @@ struct FeedStoryViewerView: View {
         )
         .foregroundStyle(.white)
         .symbolRenderingMode(.monochrome)
+        .storyViewerHeaderContrastShadow()
     }
 
     private var storyHorizontalDragGesture: some Gesture {
@@ -363,17 +382,21 @@ struct FeedStoryViewerView: View {
                                 debugSurface: "storyViewer"
                             )
                             .id(authorID)
+                            .storyViewerHeaderContrastShadow()
                         } else {
                             ExperienceAvatar(initials: "?", size: 32)
                                 .id(authorID)
+                                .storyViewerHeaderContrastShadow()
                         }
                         VStack(alignment: .leading, spacing: 1) {
                             Text(authorLabel)
                                 .experienceStyle(.headline, color: .white)
                                 .lineLimit(1)
+                                .storyViewerHeaderContrastShadow()
                             Text(MessagesInboxSupport.relativeTimestamp(story.createdAt))
-                                .experienceStyle(.caption, color: .white.opacity(0.7))
+                                .experienceStyle(.caption, color: .white.opacity(0.88))
                                 .lineLimit(1)
+                                .storyViewerHeaderContrastShadow()
                         }
                     }
                     .contentShape(Rectangle())
@@ -392,6 +415,9 @@ struct FeedStoryViewerView: View {
         .padding(.horizontal, StoryViewerChromeMetrics.horizontalInset)
         .padding(.bottom, ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .top) {
+            StoryViewerHeaderScrim()
+        }
     }
 }
 

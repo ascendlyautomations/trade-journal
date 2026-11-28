@@ -136,7 +136,7 @@ struct LeaderboardScreenView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             switch viewModel.curvePhase {
             case .idle, .loading:
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity, minHeight: 120)
             case .failed(let message):
                 Text(message)
@@ -201,7 +201,7 @@ struct LeaderboardScreenView: View {
                     }
 
                     if viewModel.isLoadingMore {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, ExperienceSpacing.sm)
                     }

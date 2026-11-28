@@ -88,7 +88,7 @@ struct CopyTradingAccountsView: View {
         .proUpgradeSheet()
         .overlay {
             if viewModel.isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .sheet(item: $viewModel.editor) { _ in

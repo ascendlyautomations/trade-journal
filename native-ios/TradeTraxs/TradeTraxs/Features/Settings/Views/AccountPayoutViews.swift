@@ -53,7 +53,7 @@ struct AccountPayoutListContent: View {
     var body: some View {
         if viewModel.isLoadingPayouts, viewModel.payoutEntries(for: accountID).isEmpty {
             HStack {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                 Text("Loading payouts…")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
@@ -197,7 +197,7 @@ struct AccountPayoutEditorSheet: View {
                     if let image = phase.image {
                         image.resizable().scaledToFit()
                     } else {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                     }
                 }
                 .frame(maxHeight: 180)

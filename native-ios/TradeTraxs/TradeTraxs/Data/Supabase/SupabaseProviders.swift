@@ -29,6 +29,7 @@ nonisolated protocol SupabaseStorageProviding: Sendable {
     ) async throws -> String
     func download(bucket: String, path: String) async throws -> Data
     func delete(bucket: String, path: String) async throws
+    func createSignedURL(bucket: String, path: String, expiresIn: Int) async throws -> URL
 }
 
 extension SupabaseStorageProviding {
@@ -276,6 +277,41 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
             method: .delete,
             body: body
         )
+    }
+
+    func createSignedURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
+        let cleaned = StorySignedURLSupport.sanitizedObjectPathForSignAPI(path, bucket: bucket)
+        struct SignBody: Encodable { var expiresIn: Int }
+        struct SignResponse: Decodable {
+            var signedURL: String?
+        }
+        let response = try await transport.send(
+            host: .supabaseStorage,
+            path: "/storage/v1/object/sign/\(bucket)/\(cleaned)",
+            method: .post,
+            headers: ["Content-Type": "application/json"],
+            body: try transport.encodeJSON(SignBody(expiresIn: expiresIn))
+        )
+        let decoded = try JSONDecoder().decode(SignResponse.self, from: response.data)
+        guard let raw = decoded.signedURL?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            throw AppError.unknown(message: "Couldn't open story media.")
+        }
+        let projectBase = transport.configuration.supabaseURL
+        guard let url = StorySignedURLSupport.normalizedSignedURL(raw, projectBase: projectBase)
+            ?? (URL(string: raw) ?? absoluteSignedURL(raw))
+        else {
+            throw AppError.unknown(message: "Couldn't open story media.")
+        }
+        return url
+    }
+
+    private func absoluteSignedURL(_ raw: String) -> URL? {
+        if raw.hasPrefix("http") { return URL(string: raw) }
+        guard let base = transport.configuration.supabaseURL else { return nil }
+        var root = base.absoluteString
+        while root.hasSuffix("/") { root.removeLast() }
+        let path = raw.hasPrefix("/") ? raw : "/\(raw)"
+        return URL(string: "\(root)\(path)")
     }
 }
 
@@ -965,7 +1001,7 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         return streams.messages
     }
 
-    /// Web `subscribeCommunityRoomLiveChannel`, messages, reactions, and optional presence.
+    /// Web `subscribeCommunityRoomLiveChannel`, messages, reactions, livestream session rows, optional presence.
     func watchRoomLive(
         roomID: String,
         accessToken: String?,
@@ -994,6 +1030,12 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                     filter: "room_id=eq.\(roomID)",
                     routeColumn: "room_id",
                     emitsReactionEvents: true
+                ),
+                PostgresChangeBinding(
+                    table: "room_live_broadcasts",
+                    filter: "room_id=eq.\(roomID)",
+                    routeColumn: "room_id",
+                    emitsReactionEvents: false
                 ),
             ],
             presenceKey: presenceTrack?.presenceKey
@@ -2536,6 +2578,11 @@ private nonisolated struct UnconfiguredObjectStorageAdapter: SupabaseStorageProv
 
     func delete(bucket: String, path: String) async throws {
         _ = (bucket, path)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func createSignedURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
+        _ = (bucket, path, expiresIn)
         throw AppError.authentication(.notConfigured)
     }
 }

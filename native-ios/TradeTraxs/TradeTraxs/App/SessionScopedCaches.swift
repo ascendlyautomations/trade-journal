@@ -27,8 +27,11 @@ enum SessionScopedCaches {
         Task { await LeaderboardTradeRowsCache.shared.invalidate() }
         TradeHistorySessionStore.shared.invalidate()
         FeedSessionStore.shared.invalidate()
+        FeedRotatingSessionStore.resetAll()
+        FeedImpressionCoordinator.shared.resetForSessionBoundary()
         ProfileSessionStore.shared.invalidate()
         FeedStoriesCatalogStore.shared.invalidate()
+        StoryViewerViewRecords.shared.invalidate()
         FeedBlockedAuthorsFilter.shared.clear()
         ViewerActiveStoryStore.shared.invalidate()
         ConversationThreadSessionStore.shared.invalidate()

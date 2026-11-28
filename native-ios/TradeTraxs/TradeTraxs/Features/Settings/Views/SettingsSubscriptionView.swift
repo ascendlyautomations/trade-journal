@@ -65,7 +65,7 @@ struct SettingsSubscriptionView: View {
         .experienceNavigationTitle("Plan")
         .overlay {
             if viewModel.isLoading, viewModel.status == nil {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .onAppear {
@@ -152,7 +152,7 @@ struct SettingsSubscriptionView: View {
 
             if viewModel.isRefreshingEntitlements {
                 HStack(spacing: ExperienceSpacing.xs) {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .controlSize(.small)
                     Text("Updating plan…")
                         .experienceStyle(.caption, color: colors.secondaryText)
@@ -352,7 +352,7 @@ struct SettingsSubscriptionView: View {
         switch viewModel.productsState {
         case .idle, .loading:
             HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                 Text("Loading plans…")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }

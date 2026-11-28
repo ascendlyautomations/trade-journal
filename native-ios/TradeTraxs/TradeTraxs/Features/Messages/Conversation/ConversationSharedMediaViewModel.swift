@@ -14,6 +14,8 @@ final class ConversationSharedMediaViewModel {
 
     let conversationID: ConversationID
     private let rpc: (any RPCClient)?
+    private let messagesRepo: (any MessageRepository)?
+    var tradeBridge: ConversationSharedMediaTradeBridge = .inactive
 
     private(set) var phase: Phase = .idle
     private(set) var items: [ConversationSharedMediaItem] = []
@@ -26,10 +28,16 @@ final class ConversationSharedMediaViewModel {
     private var firstPageLoadGeneration: UInt64 = 0
     private var loadMoreGeneration: UInt64 = 0
     private(set) var openCount = 0
+    private var messageLookupCache: [MessageID: Message] = [:]
 
-    init(conversationID: ConversationID, rpc: (any RPCClient)?) {
+    init(
+        conversationID: ConversationID,
+        rpc: (any RPCClient)?,
+        messagesRepo: (any MessageRepository)? = nil
+    ) {
         self.conversationID = conversationID
         self.rpc = rpc
+        self.messagesRepo = messagesRepo
     }
 
     var visibleItems: [ConversationSharedMediaItem] {
@@ -60,7 +68,7 @@ final class ConversationSharedMediaViewModel {
         }
 
         if let cached = await ConversationSharedMediaSessionCache.shared.snapshot(conversationID: conversationID) {
-            items = cached.items
+            items = await enrichAndResolveMessages(cached.items)
             hasMore = cached.hasMore
             if items.isEmpty {
                 await refreshFirstPage(background: false)
@@ -99,7 +107,8 @@ final class ConversationSharedMediaViewModel {
         guard generation == loadMoreGeneration else { return }
         switch result {
         case .success(let page):
-            items = ConversationSharedMediaPagination.merged(existing: items, page: page)
+            let merged = ConversationSharedMediaPagination.merged(existing: items, page: page)
+            items = await enrichAndResolveMessages(merged)
             hasMore = page.count == ConversationSharedMediaSupport.pageSize
             phase = items.isEmpty ? .empty : .loaded
             await persistCache()
@@ -131,11 +140,12 @@ final class ConversationSharedMediaViewModel {
         switch result {
         case .success(let page):
             if page.isEmpty, !items.isEmpty {
+                items = await enrichAndResolveMessages(items)
                 phase = .loaded
                 await persistCache()
                 return
             }
-            items = page
+            items = await enrichAndResolveMessages(page)
             hasMore = page.count == ConversationSharedMediaSupport.pageSize
             phase = items.isEmpty ? .empty : .loaded
             await persistCache()
@@ -155,4 +165,47 @@ final class ConversationSharedMediaViewModel {
             hasMore: hasMore
         )
     }
+
+    func previewTrade(for item: ConversationSharedMediaItem) -> Trade? {
+        guard let tradeID = item.tradeID else { return nil }
+        if let message = resolvedMessage(for: item.id),
+           let trade = tradeBridge.tradeForMessage(message)
+        {
+            return trade
+        }
+        return tradeBridge.tradeForID(tradeID)
+    }
+
+    private func enrichAndResolveMessages(_ page: [ConversationSharedMediaItem]) async -> [ConversationSharedMediaItem] {
+        await resolveMissingMessages(for: page.map(\.id))
+        let enrichmentBridge = ConversationSharedMediaTradeBridge(
+            messageForID: { [self] id in resolvedMessage(for: id) },
+            tradeForMessage: tradeBridge.tradeForMessage,
+            tradeForID: tradeBridge.tradeForID,
+            hydrateMessageIDs: tradeBridge.hydrateMessageIDs
+        )
+        return await ConversationSharedMediaTradeEnrichment.enrichItems(page, bridge: enrichmentBridge)
+    }
+
+    private func resolvedMessage(for messageID: MessageID) -> Message? {
+        messageLookupCache[messageID] ?? tradeBridge.messageForID(messageID)
+    }
+
+    private func resolveMissingMessages(for messageIDs: [MessageID]) async {
+        guard let messagesRepo else { return }
+        for messageID in messageIDs {
+            if resolvedMessage(for: messageID) != nil { continue }
+            guard let fetched = try? await messagesRepo.message(id: messageID, in: conversationID) else {
+                continue
+            }
+            messageLookupCache[messageID] = fetched
+        }
+        let tradeMessageIDs = messageIDs.compactMap { id -> MessageID? in
+            guard let message = resolvedMessage(for: id) else { return nil }
+            return ConversationSharedMediaTradeEnrichment.isSharedTradeMediaMessage(message) ? id : nil
+        }
+        guard !tradeMessageIDs.isEmpty else { return }
+        await tradeBridge.hydrateMessageIDs(Array(Set(tradeMessageIDs)))
+    }
 }
+

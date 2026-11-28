@@ -8,11 +8,18 @@ struct TradingRulesDayDetailView: View {
     @Bindable private var session: TradingRulesComplianceSessionStore
     @Environment(\.themeColors) private var colors
 
-    init(dayKey: String, navigationCoordinator: NavigationCoordinator, detailCache: DetailPresentationCache) {
+    init(
+        dayKey: String,
+        navigationCoordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache,
+        sessionStore: TradingRulesComplianceSessionStore? = nil
+    ) {
         self.dayKey = dayKey
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
-        _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
+        _session = Bindable(
+            sessionStore ?? TradingRulesCompliancePresentationStores.store(detailCache: detailCache)
+        )
     }
 
     private var dayRow: TradingRulesViolationPatterns.WorstTradingDayRow? {

@@ -16,7 +16,7 @@ struct TradesContainerView: View {
     var body: some View {
         ProfileSectionContainerChrome(
             section: .trades,
-            state: viewModel.state,
+            state: viewModel.sectionChromeState,
             emptyTitle: viewModel.emptyTitle,
             emptyMessage: viewModel.filter == .all && viewModel.showsOwnerActions
                 ? nil

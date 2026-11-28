@@ -270,7 +270,7 @@ struct LoginView: View {
                 Task { await viewModel.resendConfirmationEmail() }
             } label: {
                 if viewModel.isResendingConfirmation {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                 } else {
                     Text("Resend confirmation email")
                 }

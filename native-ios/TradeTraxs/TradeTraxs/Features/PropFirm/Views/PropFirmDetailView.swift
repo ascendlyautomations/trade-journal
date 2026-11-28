@@ -84,7 +84,7 @@ struct PropFirmDetailView: View {
                     .padding(.bottom, ExperienceSpacing.lg)
                 }
             } else if viewModel.isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ExperienceEmptyState(

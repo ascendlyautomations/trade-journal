@@ -5,6 +5,12 @@ import Observation
 @MainActor
 final class PostsContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
+
+    var sectionChromeState: ProfileSectionLoadState {
+        let settled = hasLoaded || !items.isEmpty
+        return state.preservingSettledContent(hasSettledLoad: settled, itemCount: items.count)
+    }
+
     private(set) var items: [Post] = []
 
     let profileOwnerID: ProfileID
@@ -205,7 +211,7 @@ final class PostsContainerViewModel {
     func loadIfNeeded() {
         guard !hasLoaded, loadTask == nil else { return }
         if awaitingScreenBootstrap {
-            if items.isEmpty {
+            if items.isEmpty, !state.hasSettledPresentation {
                 state = .loading
             }
             return
@@ -340,7 +346,9 @@ final class PostsContainerViewModel {
             return
         }
 
-        state = items.isEmpty ? .loading : state
+        if items.isEmpty, !state.hasSettledPresentation {
+            state = .loading
+        }
         paginationGeneration &+= 1
         initialLoadFailureGrace.cancel()
         // Wall pages use pinned and unpinned keysets. `rpc` stays for shell construction.

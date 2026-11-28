@@ -5,8 +5,13 @@ struct TradingRulesComplianceTrendsView: View {
 
     @Environment(\.themeColors) private var colors
 
-    init(detailCache: DetailPresentationCache? = nil) {
-        if let detailCache {
+    init(
+        detailCache: DetailPresentationCache? = nil,
+        sessionStore: TradingRulesComplianceSessionStore? = nil
+    ) {
+        if let sessionStore {
+            _session = Bindable(sessionStore)
+        } else if let detailCache {
             _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
         } else {
             _session = Bindable(
@@ -33,7 +38,7 @@ struct TradingRulesComplianceTrendsView: View {
                     message: "Return to Trading Rules Analytics and try again."
                 )
             } else {
-                ProgressView("Loading trends…")
+                ExperienceLoadingSpinner(message: "Loading trends…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }

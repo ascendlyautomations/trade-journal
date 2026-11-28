@@ -49,7 +49,7 @@ struct AdminUsersView: View {
                 if viewModel.isLoading, viewModel.rows.isEmpty {
                     HStack {
                         Spacer()
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                         Spacer()
                     }
                     .listRowBackground(Color.clear)
@@ -76,7 +76,7 @@ struct AdminUsersView: View {
                     if viewModel.isLoadingMore {
                         HStack {
                             Spacer()
-                            ProgressView()
+                            ExperienceIndeterminateProgress()
                             Spacer()
                         }
                     }

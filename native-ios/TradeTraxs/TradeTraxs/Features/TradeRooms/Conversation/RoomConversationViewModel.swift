@@ -83,6 +83,26 @@ final class RoomConversationViewModel {
         pendingOpenLiveBroadcast = false
     }
 
+    /// Active watch-navigation intent revision, if the store still holds one.
+    var pendingLiveWatchIntentRevision: UInt64? {
+        guard pendingOpenLiveBroadcast else { return nil }
+        guard let intent = RoomNavigationFocusStore.shared.pendingIntent(
+            for: roomID,
+            resolvedRoomID: room?.id
+        ), intent.openLiveBroadcast else { return nil }
+        return intent.revision
+    }
+
+    func completeLiveWatchNavigationIntent(revision: UInt64) {
+        pendingOpenLiveBroadcast = false
+        RoomNavigationFocusStore.shared.acknowledgeIntent(
+            for: roomID,
+            revision: revision,
+            resolvedRoomID: room?.id
+        )
+        lastAcknowledgedIntentRevision = revision
+    }
+
     private let rooms: any RoomRepository
     private let profiles: any ProfileRepository
     private let notifications: (any NotificationRepository)?
@@ -564,6 +584,7 @@ final class RoomConversationViewModel {
         guard intent.revision > lastAcknowledgedIntentRevision else { return }
 
         pendingOpenLiveBroadcast = intent.openLiveBroadcast
+        let deferAckForLiveWatch = intent.openLiveBroadcast
 
         let wantsChannel = intent.channelID != nil
             || !(intent.channelName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
@@ -588,17 +609,19 @@ final class RoomConversationViewModel {
                 scrollTargetMessageID: intent.messageID
             )
 
-            RoomNavigationFocusStore.shared.acknowledgeIntent(
-                for: roomID,
-                revision: intent.revision,
-                resolvedRoomID: room?.id
-            )
-            lastAcknowledgedIntentRevision = intent.revision
+            if !deferAckForLiveWatch {
+                RoomNavigationFocusStore.shared.acknowledgeIntent(
+                    for: roomID,
+                    revision: intent.revision,
+                    resolvedRoomID: room?.id
+                )
+                lastAcknowledgedIntentRevision = intent.revision
+            }
 
             if displayedMessagesMatchSelectedChannel(channelID), intent.messageID == nil {
                 pendingNotificationMessageID = nil
             }
-        } else {
+        } else if !deferAckForLiveWatch {
             RoomNavigationFocusStore.shared.acknowledgeIntent(
                 for: roomID,
                 revision: intent.revision,
@@ -3176,12 +3199,21 @@ final class RoomConversationViewModel {
         } catch {
             // Non-destructive, keep cached thread.
         }
+        await RoomBroadcastCoordinator.shared.refreshPassiveDiscoveryStatusIfNeeded(roomID: resolvedRoomID)
     }
 
     /// Incremental apply from Realtime, never reloads the whole room.
     private func applyRealtimeSignal(_ signal: MessageRealtimeSignal) async {
         if let reaction = signal.reactionEvent {
             applyReactionRealtime(reaction, kind: signal.kind)
+            return
+        }
+
+        if signal.postgresTable == "room_live_broadcasts" {
+            RoomBroadcastCoordinator.shared.handleRoomLiveBroadcastDiscoverySignal(
+                roomID: resolvedRoomID,
+                signal: signal
+            )
             return
         }
 

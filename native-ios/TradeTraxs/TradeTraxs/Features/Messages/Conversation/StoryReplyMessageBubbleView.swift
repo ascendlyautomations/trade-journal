@@ -2,18 +2,19 @@ import SwiftUI
 import UIKit
 
 struct StoryReplyMessageBubbleView: View {
-    private static let storyPreviewWidth: CGFloat = 135
-
     let payload: StoryReplyMessageSupport.Payload
     let viewerProfileID: ProfileID?
     let isOutgoing: Bool
     let imagePipeline: any ImagePipeline
+    let storage: any ObjectStorageProviding
+    let feed: any FeedRepository
     var onStoryPreviewTap: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
     @State private var thumbnail: Image?
-    @State private var thumbnailAspectRatio: CGFloat = 9 / 16
-    @State private var thumbnailFailed = false
+    @State private var mediaAllowed = false
+    @State private var accessChecked = false
+    @State private var mediaLoadFailed = false
 
     private var isVideoStory: Bool {
         StoryReplyMessageSupport.isVideoMediaURL(payload.storyImageURL)
@@ -29,7 +30,6 @@ struct StoryReplyMessageBubbleView: View {
                 .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
 
             storyPreview
-                .frame(width: Self.storyPreviewWidth)
                 .frame(maxWidth: .infinity, alignment: isOutgoing ? .trailing : .leading)
 
             if let replyText = StoryReplyMessageSupport.replyText(from: payload) {
@@ -54,57 +54,56 @@ struct StoryReplyMessageBubbleView: View {
             isOutgoing ? colors.accent : colors.incomingMessageBubble,
             in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
         )
-        .accessibilityIdentifier(
-            isOutgoing ? "conversation.bubble.storyReply.outgoing" : "conversation.bubble.storyReply.incoming"
-        )
-        .task(id: payload.storyImageURL) {
-            await loadThumbnail()
+        .task(id: payload.storyID) {
+            if applyCachedPreviewIfAvailable() { return }
+            await resolveMediaAccess()
         }
     }
 
     @ViewBuilder
     private var storyPreview: some View {
-        let content = storyPreviewContent
+        let slot = storyPreviewSlot
         Group {
-            if let onStoryPreviewTap, !thumbnailFailed {
+            if canOpenStoryPreview, let onStoryPreviewTap {
                 Button {
                     ExperienceHaptics.play(.selection)
                     onStoryPreviewTap()
                 } label: {
-                    content
+                    slot
                 }
                 .buttonStyle(.experiencePlain)
             } else {
-                content
+                slot
             }
         }
-        .accessibilityLabel(storyPreviewAccessibilityLabel)
-        .accessibilityHint(thumbnailFailed ? "" : "Opens story")
+        .accessibilityLabel(StoryReplyMessageSupport.contextLabel(payload: payload, viewerProfileID: viewerProfileID))
+        .accessibilityHint(canOpenStoryPreview ? "Opens story" : "")
     }
 
-    private var storyPreviewAccessibilityLabel: String {
-        if thumbnailFailed {
-            return "Story unavailable"
-        }
-        return StoryReplyMessageSupport.contextLabel(payload: payload, viewerProfileID: viewerProfileID)
+    private var canOpenStoryPreview: Bool {
+        accessChecked && mediaAllowed && !mediaLoadFailed && thumbnail != nil
     }
 
-    private var storyPreviewContent: some View {
+    private var storyPreviewSlot: some View {
         ZStack {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                 .fill(isOutgoing ? Color.white.opacity(0.14) : colors.fillSecondary)
 
-            if thumbnailFailed {
-                storyUnavailablePlaceholder
-            } else if let thumbnail {
+            if canOpenStoryPreview, let thumbnail {
                 thumbnail
                     .resizable()
                     .scaledToFill()
-            } else {
-                progressOrIconPlaceholder
             }
 
-            if isVideoStory, !thumbnailFailed {
+            if !accessChecked || (mediaAllowed && thumbnail == nil && !mediaLoadFailed) {
+                ExperienceIndeterminateProgress(controlSize: .small)
+            }
+
+            if accessChecked && (!mediaAllowed || mediaLoadFailed) {
+                unavailableLabel
+            }
+
+            if canOpenStoryPreview, isVideoStory {
                 Circle()
                     .fill(Color.black.opacity(0.42))
                     .frame(width: 40, height: 40)
@@ -116,7 +115,10 @@ struct StoryReplyMessageBubbleView: View {
                     }
             }
         }
-        .aspectRatio(thumbnailAspectRatio, contentMode: .fit)
+        .frame(
+            width: ConversationStoryBubblePreviewPolicy.replyPreviewWidth,
+            height: ConversationStoryBubblePreviewPolicy.replyPreviewHeight
+        )
         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
@@ -125,74 +127,93 @@ struct StoryReplyMessageBubbleView: View {
                     lineWidth: 1
                 )
         }
+        .clipped()
     }
 
-    private var storyUnavailablePlaceholder: some View {
+    private var unavailableLabel: some View {
         VStack(spacing: ExperienceSpacing.xs) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.7) : colors.tertiaryText)
-            Text("Story unavailable")
-                .experienceStyle(.caption2, color: isOutgoing ? Color.white.opacity(0.85) : colors.secondaryText)
+                .foregroundStyle(isOutgoing ? Color.white.opacity(0.75) : colors.tertiaryText)
+            Text(ConversationStoryBubblePreviewPolicy.unavailableLabel)
+                .experienceStyle(.caption, color: isOutgoing ? Color.white.opacity(0.9) : colors.secondaryText)
                 .fontWeight(.medium)
+                .multilineTextAlignment(.center)
         }
-        .padding(ExperienceSpacing.sm)
-    }
-
-    @ViewBuilder
-    private var progressOrIconPlaceholder: some View {
-        if isVideoStory {
-            Color.clear
-        } else {
-            Image(systemName: "photo")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.65) : colors.tertiaryText)
-        }
+        .padding(.horizontal, ExperienceSpacing.sm)
     }
 
     private var bubbleMaxWidth: CGFloat {
         UIScreen.main.bounds.width * 0.72
     }
 
-    private func loadThumbnail() async {
-        let trimmed = payload.storyImageURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+    private func applyCachedPreviewIfAvailable() -> Bool {
+        guard let cached = ConversationStoryDmReplyPreviewCache.snapshot(storyID: payload.storyID) else {
+            return false
+        }
+        accessChecked = cached.accessChecked
+        mediaAllowed = cached.mediaAllowed
+        mediaLoadFailed = cached.mediaLoadFailed
+        if let uiImage = cached.thumbnail {
+            thumbnail = Image(uiImage: uiImage)
+        } else {
             thumbnail = nil
-            thumbnailFailed = true
+        }
+        return true
+    }
+
+    private func resolveMediaAccess() async {
+        let access = await ConversationStoryDmPreviewLoader.resolveAccess(
+            storyID: payload.storyID,
+            feed: feed
+        )
+
+        guard let access else {
+            mediaAllowed = false
+            mediaLoadFailed = true
+            accessChecked = true
+            storePreviewCache(thumbnailImage: nil)
             return
         }
-        thumbnailFailed = false
-        let reference = MediaReference(
-            id: trimmed,
-            kind: isVideoStory ? .video : .image,
-            altText: nil
-        )
-        do {
-            let data = try await imagePipeline.data(
-                for: ImageRequest(
-                    reference: reference,
-                    purpose: .storyMedia,
-                    maxPixelSize: 360
-                )
-            )
-            if let uiImage = UIImage(data: data) {
-                let aspect = uiImage.size.height > 0 ? uiImage.size.width / uiImage.size.height : 9 / 16
-                thumbnailAspectRatio = min(max(aspect, 0.55), 1.35)
-                thumbnail = Image(uiImage: uiImage)
-            } else if isVideoStory {
-                thumbnail = nil
-                thumbnailAspectRatio = 9 / 16
-                thumbnailFailed = false
-            } else {
-                thumbnail = nil
-                thumbnailFailed = true
-            }
-        } catch {
-            thumbnail = nil
-            thumbnailFailed = !isVideoStory
-            if isVideoStory {
-                thumbnailAspectRatio = 9 / 16
-            }
+
+        guard access.allowed else {
+            mediaAllowed = false
+            mediaLoadFailed = true
+            accessChecked = true
+            storePreviewCache(thumbnailImage: nil)
+            return
         }
+
+        mediaAllowed = true
+        let loaded = await ConversationStoryDmPreviewLoader.loadThumbnailUIImage(
+            imagePipeline: imagePipeline,
+            storage: storage,
+            access: access,
+            fallbackImageURL: payload.storyImageURL,
+            isVideo: isVideoStory,
+            maxPixelSize: 360
+        )
+
+        if let uiImage = loaded.image {
+            thumbnail = Image(uiImage: uiImage)
+            mediaLoadFailed = false
+        } else {
+            thumbnail = nil
+            mediaLoadFailed = true
+        }
+        accessChecked = true
+        storePreviewCache(thumbnailImage: loaded.image)
+    }
+
+    private func storePreviewCache(thumbnailImage: UIImage?) {
+        ConversationStoryDmReplyPreviewCache.store(
+            storyID: payload.storyID,
+            ConversationStoryDmReplyPreviewCache.Snapshot(
+                accessChecked: accessChecked,
+                mediaAllowed: mediaAllowed,
+                mediaLoadFailed: mediaLoadFailed,
+                thumbnail: thumbnailImage
+            )
+        )
     }
 }

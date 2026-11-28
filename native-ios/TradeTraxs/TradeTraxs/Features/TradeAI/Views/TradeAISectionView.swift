@@ -12,7 +12,7 @@ struct TradeAISectionView: View {
                 header
 
                 if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .controlSize(.small)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Loading previous analyses")
@@ -62,7 +62,7 @@ struct TradeAISectionView: View {
                 .fontWeight(.semibold)
             Spacer(minLength: 0)
             if viewModel.isAnalyzing {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .controlSize(.small)
                     .accessibilityLabel("Analyzing trade")
             }

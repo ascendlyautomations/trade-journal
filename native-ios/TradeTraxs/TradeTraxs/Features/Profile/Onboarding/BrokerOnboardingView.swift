@@ -8,6 +8,9 @@ struct BrokerOnboardingView: View {
     @State private var manageAccountsViewModel: ManageAccountsViewModel
     @State private var linkTarget: BrokerIntegrationLinkTarget?
     @State private var createLinkTarget: BrokerIntegrationCreateLinkTarget?
+    @State private var pendingLinkSetupTarget: BrokerTradovatePendingLinkSetupTarget?
+    @State private var pendingLinkCreateTarget: BrokerTradovatePendingLinkSetupTarget?
+    @State private var pendingConfirmTarget: BrokerPendingTradovateLinkConfirmTarget?
     @State private var linkPromptGate = BrokerIntegrationLinkPromptGate()
 
     @Environment(\.themeColors) private var colors
@@ -39,6 +42,7 @@ struct BrokerOnboardingView: View {
 
                 if viewModel.hasActiveConnectedBroker {
                     connectedBrokersSection
+                    tradovateNoAccountsSection
                     if !allSupportedProvidersConnected {
                         connectAnotherBrokerSection
                     }
@@ -68,13 +72,16 @@ struct BrokerOnboardingView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .experienceScreenBackground()
-        .background {
+        .overlay {
             BrokerIntegrationConnectionCoordinator(
                 viewModel: viewModel,
                 manageAccountsViewModel: manageAccountsViewModel,
                 data: data,
                 linkTarget: $linkTarget,
                 createLinkTarget: $createLinkTarget,
+                pendingLinkSetupTarget: $pendingLinkSetupTarget,
+                pendingLinkCreateTarget: $pendingLinkCreateTarget,
+                pendingConfirmTarget: $pendingConfirmTarget,
                 linkPromptGate: linkPromptGate,
                 showsImportedTradesReview: false
             )
@@ -83,7 +90,8 @@ struct BrokerOnboardingView: View {
             viewModel: viewModel,
             gate: linkPromptGate,
             linkTarget: $linkTarget,
-            createLinkTarget: $createLinkTarget
+            createLinkTarget: $createLinkTarget,
+            pendingConfirmTarget: $pendingConfirmTarget
         )
         .onAppear {
             BrokerIntegrationsLoadPriorityGate.setScreenActive(true)
@@ -118,7 +126,9 @@ struct BrokerOnboardingView: View {
         if viewModel.tradovateConnections.contains(where: \.connected) {
             rows.append(.tradovate)
         }
-        if viewModel.rithmicConnections.contains(where: \.connected) {
+        if viewModel.isRithmicBrokerIntegrationVisible,
+           viewModel.rithmicConnections.contains(where: \.connected)
+        {
             rows.append(.rithmic)
         }
         return rows
@@ -171,8 +181,17 @@ struct BrokerOnboardingView: View {
 
             Spacer(minLength: ExperienceSpacing.sm)
 
-            Text("Connected")
-                .experienceStyle(.footnote, color: colors.secondaryText)
+            if provider == .tradovate,
+               let connection = viewModel.tradovateConnections.first(where: \.connected),
+               viewModel.tradovateConnectionHasNoBrokerAccounts(connection.id)
+            {
+                Text(BrokerTradovateNoAccountsCopy.connectedStatus)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .multilineTextAlignment(.trailing)
+            } else {
+                Text("Connected")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: ExperienceAccessibility.minTouchTarget)
@@ -225,6 +244,49 @@ struct BrokerOnboardingView: View {
 
     private func connect(_ provider: BrokerIntegrationProvider) {
         viewModel.beginConnect(for: provider)
+    }
+
+    private var tradovateNoAccountsSection: some View {
+        Group {
+            if let connection = viewModel.tradovateConnections.first(where: { $0.connected }),
+               viewModel.tradovateConnectionHasNoBrokerAccounts(connection.id)
+            {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    if let pending = viewModel.pendingTradovateLink(for: connection.id) {
+                        Text(
+                            "Reserved for \(pending.tradetraxsAccountName ?? "your TradeTraxs account"). We will prompt you when Tradovate accounts appear."
+                        )
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                        Button("Change Reserved Account") {
+                            pendingLinkSetupTarget = BrokerTradovatePendingLinkSetupTarget(
+                                connectionId: connection.id
+                            )
+                        }
+                        .font(ExperienceTypography.callout)
+                        .foregroundStyle(colors.accent)
+                    } else {
+                        Text(
+                            "Choose a TradeTraxs account now and we will link it automatically when Tradovate makes trading accounts available."
+                        )
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                        ExperienceButton(
+                            title: "Choose TradeTraxs Account",
+                            kind: .secondary,
+                            accessibilityIdentifier: "onboarding.broker.tradovate.pendingLink"
+                        ) {
+                            pendingLinkSetupTarget = BrokerTradovatePendingLinkSetupTarget(
+                                connectionId: connection.id
+                            )
+                        }
+                    }
+                }
+                .padding(.top, ExperienceSpacing.xs)
+            }
+        }
     }
 
     private var linkingHint: some View {
@@ -289,6 +351,9 @@ struct BrokerOnboardingView: View {
         linkPromptGate.autoLinkSequenceActive
             || linkTarget != nil
             || createLinkTarget != nil
+            || pendingLinkSetupTarget != nil
+            || pendingLinkCreateTarget != nil
+            || pendingConfirmTarget != nil
             || viewModel.isBrokerConnectionMutationActive
             || viewModel.showsRithmicConnectSheet
             || viewModel.showsTradovateEnvironmentPicker

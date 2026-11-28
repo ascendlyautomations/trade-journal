@@ -620,12 +620,6 @@ final class NavigationCoordinator {
 
     func pushOtherProfile(_ profileID: ProfileID) {
         ExperienceHaptics.play(.selection)
-        Task { @MainActor in
-            ProductAnalyticsCoordinator.shared.noteProfileViewed(
-                profileID: profileID,
-                viewerOwnsProfile: false
-            )
-        }
         switch store.selectedTab {
         case .home:
             pushHome(.otherProfile(profileID))
@@ -1235,5 +1229,162 @@ final class NavigationCoordinator {
             AppLog.navigation.debug("\(String(describing: event), privacy: .public)")
         }
         eventHandler?(event)
+    }
+
+    /// After Settings → Trading Rules sample preview, restore the settings editor instead of a stale analytics route.
+    func restoreTradingRulesSettingsAfterPreview(entryPoint: TraxsProPreviewEntryPoint?) {
+        guard entryPoint == .tradingRulesSettingsGate else { return }
+        store.paths.home = Self.truncateToTradingRulesSettings(store.paths.home)
+        store.paths.feed = Self.truncateToTradingRulesSettings(store.paths.feed)
+        store.paths.messages = Self.truncateToTradingRulesSettings(store.paths.messages)
+        store.paths.profile = Self.truncateToTradingRulesSettings(store.paths.profile)
+    }
+
+    private static func truncateToTradingRulesSettings(_ path: [HomeRoute]) -> [HomeRoute] {
+        var path = path
+        while let last = path.last, isTradingRulesAnalyticsSurface(last) {
+            path.removeLast()
+        }
+        if let idx = path.lastIndex(where: {
+            if case .settings(.tradingAnalytics) = $0 { return true }
+            return false
+        }) {
+            return Array(path.prefix(idx + 1))
+        }
+        return ensureTradingRulesSettingsDestination(path)
+    }
+
+    private static func truncateToTradingRulesSettings(_ path: [FeedRoute]) -> [FeedRoute] {
+        var path = path
+        while let last = path.last, isTradingRulesAnalyticsSurface(last) {
+            path.removeLast()
+        }
+        if let idx = path.lastIndex(where: {
+            if case .settings(.tradingAnalytics) = $0 { return true }
+            return false
+        }) {
+            return Array(path.prefix(idx + 1))
+        }
+        return ensureTradingRulesSettingsDestination(path)
+    }
+
+    private static func truncateToTradingRulesSettings(_ path: [MessagesRoute]) -> [MessagesRoute] {
+        var path = path
+        while let last = path.last, isTradingRulesAnalyticsSurface(last) {
+            path.removeLast()
+        }
+        if let idx = path.lastIndex(where: {
+            if case .settings(.tradingAnalytics) = $0 { return true }
+            return false
+        }) {
+            return Array(path.prefix(idx + 1))
+        }
+        return ensureTradingRulesSettingsDestination(path)
+    }
+
+    private static func truncateToTradingRulesSettings(_ path: [ProfileRoute]) -> [ProfileRoute] {
+        var path = path
+        while let last = path.last, isTradingRulesAnalyticsSurface(last) {
+            path.removeLast()
+        }
+        if let idx = path.lastIndex(where: {
+            if case .settings(.tradingAnalytics) = $0 { return true }
+            return false
+        }) {
+            return Array(path.prefix(idx + 1))
+        }
+        return ensureTradingRulesSettingsDestination(path)
+    }
+
+    private static func ensureTradingRulesSettingsDestination(_ path: [HomeRoute]) -> [HomeRoute] {
+        if let homeIdx = path.lastIndex(where: {
+            if case .settings(.home) = $0 { return true }
+            return false
+        }) {
+            var next = Array(path.prefix(homeIdx + 1))
+            next.append(.settings(.tradingAnalytics))
+            return next
+        }
+        guard path.isEmpty else { return path }
+        return [.settings(.home), .settings(.tradingAnalytics)]
+    }
+
+    private static func ensureTradingRulesSettingsDestination(_ path: [FeedRoute]) -> [FeedRoute] {
+        if let homeIdx = path.lastIndex(where: {
+            if case .settings(.home) = $0 { return true }
+            return false
+        }) {
+            var next = Array(path.prefix(homeIdx + 1))
+            next.append(.settings(.tradingAnalytics))
+            return next
+        }
+        guard path.isEmpty else { return path }
+        return [.settings(.home), .settings(.tradingAnalytics)]
+    }
+
+    private static func ensureTradingRulesSettingsDestination(_ path: [MessagesRoute]) -> [MessagesRoute] {
+        if let homeIdx = path.lastIndex(where: {
+            if case .settings(.home) = $0 { return true }
+            return false
+        }) {
+            var next = Array(path.prefix(homeIdx + 1))
+            next.append(.settings(.tradingAnalytics))
+            return next
+        }
+        guard path.isEmpty else { return path }
+        return [.settings(.home), .settings(.tradingAnalytics)]
+    }
+
+    private static func ensureTradingRulesSettingsDestination(_ path: [ProfileRoute]) -> [ProfileRoute] {
+        if let homeIdx = path.lastIndex(where: {
+            if case .settings(.home) = $0 { return true }
+            return false
+        }) {
+            var next = Array(path.prefix(homeIdx + 1))
+            next.append(.settings(.tradingAnalytics))
+            return next
+        }
+        guard path.isEmpty else { return path }
+        return [.settings(.home), .settings(.tradingAnalytics)]
+    }
+
+    private static func isTradingRulesAnalyticsSurface(_ route: HomeRoute) -> Bool {
+        switch route {
+        case .tradingRulesAnalytics, .tradingRulesRuleDetail, .tradingRulesDayDetail,
+             .tradingRulesTrends, .tradingRulesViolationHistory:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isTradingRulesAnalyticsSurface(_ route: FeedRoute) -> Bool {
+        switch route {
+        case .tradingRulesAnalytics, .tradingRulesRuleDetail, .tradingRulesDayDetail,
+             .tradingRulesTrends, .tradingRulesViolationHistory:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isTradingRulesAnalyticsSurface(_ route: MessagesRoute) -> Bool {
+        switch route {
+        case .tradingRulesAnalytics, .tradingRulesRuleDetail, .tradingRulesDayDetail,
+             .tradingRulesTrends, .tradingRulesViolationHistory:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isTradingRulesAnalyticsSurface(_ route: ProfileRoute) -> Bool {
+        switch route {
+        case .tradingRulesAnalytics, .tradingRulesRuleDetail, .tradingRulesDayDetail,
+             .tradingRulesTrends, .tradingRulesViolationHistory:
+            return true
+        default:
+            return false
+        }
     }
 }

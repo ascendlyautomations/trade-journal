@@ -12,7 +12,7 @@ struct TraxProEntitlementVerificationInlineCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                 Text("Verifying your plan…")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(colors.primaryText)

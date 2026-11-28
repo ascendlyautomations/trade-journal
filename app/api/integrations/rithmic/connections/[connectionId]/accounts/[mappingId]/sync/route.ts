@@ -5,6 +5,10 @@ import { listSafeBrokerIntegrationAccounts } from "@/lib/integrations/brokerInte
 import { attachSyncViewsToBrokerAccounts } from "@/lib/integrations/tradovate/runTradovateAccountTradeSync"
 import { syncRithmicBrokerAccount } from "@/lib/integrations/rithmic/syncRithmicBrokerAccount"
 import { sanitizeRithmicSyncRequestBody } from "@/lib/integrations/rithmic/rithmicConnectSafeResponse"
+import {
+  isRithmicDevelopmentIntegrationEnabled,
+  rithmicDevelopmentIntegrationDisabledResponse,
+} from "@/lib/integrations/rithmic/rithmicDevIntegration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -20,6 +24,10 @@ export async function POST(req: Request, context: RouteContext) {
   const user = await getRouteUser(req)
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!isRithmicDevelopmentIntegrationEnabled()) {
+    return rithmicDevelopmentIntegrationDisabledResponse()
   }
 
   let transientPassword: string | null = null

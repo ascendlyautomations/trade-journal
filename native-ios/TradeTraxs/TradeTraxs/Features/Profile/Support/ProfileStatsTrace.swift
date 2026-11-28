@@ -78,6 +78,41 @@ enum ProfileStatsTrace {
         )
     }
 
+    nonisolated static func computePipeline(
+        mode: String,
+        timeframe: String,
+        rawInputs: Int,
+        sessionTaggedRaw: Int,
+        afterTimeframe: Int,
+        afterMode: Int,
+        afterBacktestExclusion: Int,
+        sessionTaggedAnalytics: Int,
+        sessionTotal: Int,
+        sessionRowCount: Int
+    ) {
+        print(
+            """
+            [ProfileStatsTrace] computePipeline mode=\(mode) timeframe=\(timeframe) \
+            raw=\(rawInputs) sessionTaggedRaw=\(sessionTaggedRaw) \
+            afterTimeframe=\(afterTimeframe) afterMode=\(afterMode) \
+            afterBacktestExclusion=\(afterBacktestExclusion) sessionTaggedAnalytics=\(sessionTaggedAnalytics) \
+            sessionTotal=\(sessionTotal) sessionRows=\(sessionRowCount)
+            """
+        )
+    }
+
+    static func metricsSource(
+        subject: String,
+        source: String,
+        timeframe: String,
+        mode: String,
+        sessionTotal: Int
+    ) {
+        print(
+            "[ProfileStatsTrace] metricsSource subject=\(subject) source=\(source) timeframe=\(timeframe) mode=\(mode) sessionTotal=\(sessionTotal)"
+        )
+    }
+
     private static func elapsedMs(subject: String) -> Int {
         guard let started = loadStartedAt[subject] else { return -1 }
         return Int(Date().timeIntervalSince(started) * 1000)
@@ -108,6 +143,27 @@ enum ProfileStatsTrace {
         loadedInputs: Int,
         sessionTaggedInputs: Int,
         filteredTrades: Int,
+        sessionTotal: Int
+    ) {}
+
+    nonisolated static func computePipeline(
+        mode: String,
+        timeframe: String,
+        rawInputs: Int,
+        sessionTaggedRaw: Int,
+        afterTimeframe: Int,
+        afterMode: Int,
+        afterBacktestExclusion: Int,
+        sessionTaggedAnalytics: Int,
+        sessionTotal: Int,
+        sessionRowCount: Int
+    ) {}
+
+    static func metricsSource(
+        subject: String,
+        source: String,
+        timeframe: String,
+        mode: String,
         sessionTotal: Int
     ) {}
 }

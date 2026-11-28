@@ -121,6 +121,7 @@ import {
   STORY_SHARE_MESSAGE_TYPE,
 } from "@/lib/storyShareMessage"
 import StoryShareMessageCard from "@/app/components/messages/StoryShareMessageCard"
+import StoryReplyPreviewRow from "@/app/components/messages/StoryReplyPreviewRow"
 import { consumeConversationOpenFromInbox, consumeInboxConversationId, peekInboxConversationId } from "@/lib/conversationOpenIntent"
 import {
   dmPostPreviewCacheKey,
@@ -1058,6 +1059,7 @@ function StoryReplyMessageBubble({
   onReplyUnavailable,
   parentMessage,
   onMediaLoad,
+  onViewStory,
   canReact,
   onToggleReaction,
 }: {
@@ -1073,12 +1075,12 @@ function StoryReplyMessageBubble({
   onReplyUnavailable: () => void
   parentMessage?: ReplyParentMessageLike | null
   onMediaLoad?: () => void
+  onViewStory: (storyId: string) => void
 } & DmBubbleReactionProps) {
   if (message.deleted_for_everyone) return null
 
   const payload = decodeStoryReplyContent(message.content)
   const replyText = payload?.text?.trim() ?? ""
-  const storyImageUrl = payload?.story_image_url?.trim() ?? ""
   const contextLabel = isMe ? "Replied to their story" : "Replied to your story"
   const menuOpen = activeMenuId === message.id
 
@@ -1127,26 +1129,13 @@ function StoryReplyMessageBubble({
               onUnavailable={onReplyUnavailable}
             />
 
-            <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
-              {storyImageUrl ? (
-                <StorageImage
-                  src={storyImageUrl}
-                  originalSrc={storyImageUrl}
-                  preset="message-story-thumb"
-                  fallbackToOriginal={false}
-                  alt=""
-                  className="h-10 w-10 shrink-0 rounded-md object-cover ring-1 ring-white/15"
-                  draggable={false}
-                  onLoad={onMediaLoad}
-                  onError={onMediaLoad}
-                />
-              ) : (
-                <div className="h-10 w-10 shrink-0 rounded-md bg-white/10" />
-              )}
-              <p className="min-w-0 text-xs font-medium text-gray-400">
-                {contextLabel}
-              </p>
-            </div>
+            <StoryReplyPreviewRow
+              storyId={payload.story_id}
+              isMe={isMe}
+              contextLabel={contextLabel}
+              onOpenStory={onViewStory}
+              onMediaLoad={onMediaLoad}
+            />
 
             {replyText ? (
               <p className="whitespace-pre-wrap break-words px-3 py-2.5 text-sm text-gray-100">
@@ -4136,6 +4125,7 @@ export default function DMPage() {
                         onReplyUnavailable={notifyReplyUnavailable}
                         parentMessage={parentMessage}
                         onMediaLoad={bumpMessageLayout}
+                        onViewStory={viewSharedStory}
                         canReact={messageCanReact}
                         onToggleReaction={onToggleReaction}
                       />

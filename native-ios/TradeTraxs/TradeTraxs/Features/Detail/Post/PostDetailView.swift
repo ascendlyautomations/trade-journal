@@ -38,8 +38,7 @@ struct PostDetailView: View {
         Group {
             switch viewModel.phase {
             case .loading where viewModel.post == nil:
-                ExperienceLoadingSpinner(label: "Loading post")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading post")
             case .failed(let failure) where viewModel.post == nil:
                 ExperienceErrorState(
                     title: failure.title,
@@ -51,6 +50,11 @@ struct PostDetailView: View {
             }
         }
         .experienceScreenBackground()
+        .creatorContentImpressionTracked(
+            contentKind: viewModel.loadSource == .feedPost ? "post" : "profile_post",
+            contentID: viewModel.postID.rawValue,
+            surface: "detail"
+        )
         .experienceNavigationTitle("Post")
         .liveVoiceTopSessionChrome()
         .toolbar(.hidden, for: .tabBar)
@@ -133,7 +137,7 @@ struct PostDetailView: View {
         }
         .overlay {
             if viewModel.isDeleting {
-                ProgressView("Deleting…")
+                ExperienceLoadingSpinner(message: "Deleting…")
                     .padding(ExperienceSpacing.lg)
                     .experienceFloatingPanelBackground(
                         in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)

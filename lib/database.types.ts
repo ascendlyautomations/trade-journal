@@ -178,6 +178,7 @@ export type Database = {
       }
       accounts: {
         Row: {
+          account_lifecycle_id: string
           account_number: string | null
           account_size: string | null
           can_add_trades: boolean
@@ -188,6 +189,8 @@ export type Database = {
           daily_drawdown: number | null
           drawdown_floor_cap: number | null
           drawdown_type: string | null
+          graduated_from_account_id: string | null
+          graduated_to_account_id: string | null
           id: string
           is_active: boolean | null
           max_drawdown: number | null
@@ -8155,9 +8158,17 @@ export type Database = {
           slug: string
         }[]
       }
+      graduate_eval_to_funded: {
+        Args: { p_eval_account_id: string; p_payload: Json }
+        Returns: Database["public"]["Tables"]["accounts"]["Row"]
+      }
       select_free_plan_trade_accounts: {
         Args: { p_account_ids: string[] }
         Returns: undefined
+      }
+      user_distinct_account_slot_count: {
+        Args: { p_user_id: string }
+        Returns: number
       }
       set_dm_user_block: {
         Args: { p_blocked: boolean; p_conversation_id: string }
@@ -8283,6 +8294,14 @@ export type Database = {
       rpc_v1_story_record_view: {
         Args: { p_story_id: string }
         Returns: undefined
+      }
+      rpc_v1_viewer_active_stories: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      viewer_has_seen_story: {
+        Args: { p_story_id: string }
+        Returns: boolean
       }
       try_story_reply_image_url: {
         Args: { p_content: string }

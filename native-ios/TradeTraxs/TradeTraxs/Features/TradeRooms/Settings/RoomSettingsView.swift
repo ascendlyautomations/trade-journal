@@ -27,8 +27,7 @@ struct RoomSettingsView: View {
         Group {
             switch viewModel.phase {
             case .idle, .loading:
-                ExperienceLoadingSpinner(label: "Loading settings")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading settings")
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn't load settings",
@@ -98,7 +97,7 @@ struct RoomSettingsView: View {
             if viewModel.isLeaving || viewModel.isDeleting {
                 Section {
                     HStack {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                         Text(viewModel.isDeleting ? "Deleting…" : "Leaving…")
                             .experienceStyle(.footnote, color: colors.secondaryText)
                     }

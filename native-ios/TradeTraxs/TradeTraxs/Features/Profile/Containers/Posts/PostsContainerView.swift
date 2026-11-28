@@ -23,7 +23,7 @@ struct PostsContainerView: View {
     var body: some View {
         ProfileSectionContainerChrome(
             section: .posts,
-            state: viewModel.state,
+            state: viewModel.sectionChromeState,
             emptyMessage: viewModel.isOwner ? nil : ProfileSection.posts.emptyMessage,
             emptyActionTitle: viewModel.isOwner ? "Add Post" : nil,
             emptyAction: viewModel.isOwner ? { viewModel.addPost() } : nil,

@@ -10,6 +10,7 @@ enum FeedImpressionVisibility {
 struct FeedImpressionTrackingModifier: ViewModifier {
     let contentKind: String
     let contentID: String
+    let surface: String
     @State private var visibleFraction: CGFloat = 0
     @State private var dwellTask: Task<Void, Never>?
 
@@ -32,7 +33,7 @@ struct FeedImpressionTrackingModifier: ViewModifier {
 
     private func updateVisibility(frame: CGRect) {
         guard FeedImpressionVisibility.feedSurfaceActive,
-              BackendV2FeatureFlags.isEnabled(.feedRotatingRank)
+              BackendV2FeatureFlags.recordsCreatorContentViews
         else {
             dwellTask?.cancel()
             dwellTask = nil
@@ -53,7 +54,8 @@ struct FeedImpressionTrackingModifier: ViewModifier {
                 guard !Task.isCancelled, visibleFraction >= 0.5 else { return }
                 FeedImpressionCoordinator.shared.trackVisibleContent(
                     kind: contentKind,
-                    contentID: contentID
+                    contentID: contentID,
+                    surface: surface
                 )
             }
         } else {
@@ -64,7 +66,17 @@ struct FeedImpressionTrackingModifier: ViewModifier {
 }
 
 extension View {
-    func feedImpressionTracked(contentKind: String, contentID: String) -> some View {
-        modifier(FeedImpressionTrackingModifier(contentKind: contentKind, contentID: contentID))
+    func feedImpressionTracked(
+        contentKind: String,
+        contentID: String,
+        surface: String = "feed"
+    ) -> some View {
+        modifier(
+            FeedImpressionTrackingModifier(
+                contentKind: contentKind,
+                contentID: contentID,
+                surface: surface
+            )
+        )
     }
 }

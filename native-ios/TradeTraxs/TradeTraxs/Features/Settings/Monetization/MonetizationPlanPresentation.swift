@@ -479,7 +479,7 @@ enum MonetizationPlanPresentation {
             HStack(spacing: ExperienceSpacing.xs) {
                 Spacer(minLength: 0)
                 if isLoading {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                 }
                 if let systemImage {
                     Image(systemName: systemImage)

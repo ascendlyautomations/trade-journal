@@ -41,9 +41,10 @@ struct TradingRulesComplianceSection: View {
     @State private var mostBrokenListExpanded = false
     @State private var worstDaysListExpanded = false
     @State private var recurringPatternsListExpanded = false
-    @State private var ruleImpactDetailsExpanded = true
+    @State private var ruleImpactListExpanded = false
+    @State private var largestPnLListExpanded = false
+    @State private var violationHistoryListExpanded = false
 
-    private static let violationPreviewCount = 5
     /// Initial row count on the dedicated Trading Rules Analytics page (full data unchanged).
     private static let analyticsCompactListCount = 3
 
@@ -326,7 +327,11 @@ struct TradingRulesComplianceSection: View {
 
     @ViewBuilder
     private func largestPnLDifferencesSection(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
-        if !analytics.impactHighlights.isEmpty {
+        let highlights = analytics.impactHighlights
+        if !highlights.isEmpty {
+            let visible = visibleAnalyticsRows(highlights, isExpanded: largestPnLListExpanded)
+            let hasMore = highlights.count > Self.analyticsCompactListCount
+
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 AnalyticsSectionHeader(
                     title: "Largest avg P&L differences",
@@ -335,10 +340,17 @@ struct TradingRulesComplianceSection: View {
                     infoAccessibilityID: "tradingRulesAnalytics.largestPnl.info"
                 )
                 TradingRulesRuleImpactHighlightStrip(
-                    highlights: analytics.impactHighlights,
+                    highlights: visible,
                     showsTitle: false,
                     onOpenRule: onOpenRule
                 )
+                analyticsListExpandButton(
+                    isExpanded: largestPnLListExpanded,
+                    hasMore: hasMore,
+                    accessibilityID: "tradingRulesAnalytics.largestPnl.showMore"
+                ) {
+                    largestPnLListExpanded.toggle()
+                }
             }
         }
     }
@@ -350,6 +362,10 @@ struct TradingRulesComplianceSection: View {
 
     @ViewBuilder
     private func ruleImpactSection(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
+        let rows = impactDisplayRows(analytics)
+        let visible = visibleAnalyticsRows(rows, isExpanded: ruleImpactListExpanded)
+        let hasMore = rows.count > Self.analyticsCompactListCount
+
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             AnalyticsSectionHeader(
                 title: "Rule impact",
@@ -357,14 +373,22 @@ struct TradingRulesComplianceSection: View {
                 infoBody: MetricCopy.impact.body,
                 infoAccessibilityID: "tradingRulesAnalytics.impact.info"
             )
-            if ruleImpactDetailsExpanded {
-                ruleImpactExpandedContent(analytics)
-            } else if !impactDisplayRows(analytics).isEmpty {
-                Button("Show per-rule impact") {
-                    ruleImpactDetailsExpanded = true
+            if rows.isEmpty {
+                Text("Not enough priced trades yet.")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            } else {
+                VStack(spacing: ExperienceSpacing.xs) {
+                    ForEach(visible) { row in
+                        TradingRulesRuleImpactCard(row: row, onOpenRule: onOpenRule)
+                    }
                 }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(colors.accent)
+                analyticsListExpandButton(
+                    isExpanded: ruleImpactListExpanded,
+                    hasMore: hasMore,
+                    accessibilityID: "tradingRulesAnalytics.impact.showMore"
+                ) {
+                    ruleImpactListExpanded.toggle()
+                }
             }
         }
     }
@@ -448,8 +472,8 @@ struct TradingRulesComplianceSection: View {
         infoBody: String? = nil,
         infoID: String? = nil
     ) -> some View {
-        VStack(spacing: ExperienceSpacing.xxs) {
-            HStack(spacing: 2) {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 2) {
                 Text(title)
                     .experienceStyle(.caption2, color: colors.tertiaryText)
                     .lineLimit(1)
@@ -463,17 +487,19 @@ struct TradingRulesComplianceSection: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            .frame(height: ComplianceStatTileMetrics.labelRowHeight, alignment: .center)
 
             Text("\(value)")
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(tone)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
         .frame(
             maxWidth: .infinity,
             minHeight: ComplianceStatTileMetrics.height,
             maxHeight: ComplianceStatTileMetrics.height,
-            alignment: .center
+            alignment: .top
         )
         .padding(.vertical, ExperienceSpacing.xxs)
         .padding(.horizontal, ExperienceSpacing.xxs)
@@ -482,6 +508,8 @@ struct TradingRulesComplianceSection: View {
 
     private enum ComplianceStatTileMetrics {
         static let height: CGFloat = 48
+        /// Matches `AnalyticsMetricInfoButton` tap target so tiles with/without ⓘ share one label band.
+        static let labelRowHeight: CGFloat = 28
     }
 
     // MARK: - Violation patterns (expanded page)
@@ -703,7 +731,7 @@ struct TradingRulesComplianceSection: View {
                 }
             } label: {
                 HStack(spacing: ExperienceSpacing.xxs) {
-                    Text(isExpanded ? "Show Less" : "Show More")
+                    Text(isExpanded ? "View Less" : "View More")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(colors.secondaryText)
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -715,7 +743,7 @@ struct TradingRulesComplianceSection: View {
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier(accessibilityID)
-            .accessibilityLabel(isExpanded ? "Show Less" : "Show More")
+            .accessibilityLabel(isExpanded ? "View Less" : "View More")
         }
     }
 
@@ -724,33 +752,32 @@ struct TradingRulesComplianceSection: View {
     @ViewBuilder
     private func violationsBlock(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
         let groups = TradingRulesViolationGrouping.ruleGroups(from: analytics.violations)
-        let previewGroups = Array(groups.prefix(Self.violationPreviewCount))
+        let visible = visibleAnalyticsRows(groups, isExpanded: violationHistoryListExpanded)
+        let hasMore = groups.count > Self.analyticsCompactListCount
 
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-                AnalyticsSectionHeader(
-                    title: "Violation history",
-                    infoTitle: MetricCopy.violations.title,
-                    infoBody: MetricCopy.violations.body,
-                    infoAccessibilityID: "tradingRulesAnalytics.violations.info"
-                )
-                if groups.count > Self.violationPreviewCount, onOpenViolationHistory != nil {
-                    Button("View all") {
-                        onOpenViolationHistory?()
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(colors.accent)
-                }
-            }
+            AnalyticsSectionHeader(
+                title: "Violation history",
+                infoTitle: MetricCopy.violations.title,
+                infoBody: MetricCopy.violations.body,
+                infoAccessibilityID: "tradingRulesAnalytics.violations.info"
+            )
 
             if groups.isEmpty {
                 Text("No violations in this scope.")
                     .experienceStyle(.caption, color: colors.secondaryText)
             } else {
                 VStack(spacing: ExperienceSpacing.xs) {
-                    ForEach(previewGroups) { group in
+                    ForEach(visible) { group in
                         violationHistoryGroupRow(group)
                     }
+                }
+                analyticsListExpandButton(
+                    isExpanded: violationHistoryListExpanded,
+                    hasMore: hasMore,
+                    accessibilityID: "tradingRulesAnalytics.violations.showMore"
+                ) {
+                    violationHistoryListExpanded.toggle()
                 }
             }
         }
@@ -832,23 +859,6 @@ struct TradingRulesComplianceSection: View {
 
     private func compactViolationDate(_ event: TradingRulesComplianceAnalytics.ViolationEvent) -> String {
         TradingRulesViolationFormat.display.string(from: event.at)
-    }
-
-    // MARK: - Rule impact (expanded)
-
-    @ViewBuilder
-    private func ruleImpactExpandedContent(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
-        let rows = impactDisplayRows(analytics)
-        if rows.isEmpty {
-            Text("Not enough priced trades yet.")
-                .experienceStyle(.caption, color: colors.secondaryText)
-        } else {
-            VStack(spacing: ExperienceSpacing.xs) {
-                ForEach(rows) { row in
-                    TradingRulesRuleImpactCard(row: row, onOpenRule: onOpenRule)
-                }
-            }
-        }
     }
 
     private func impactDisplayRows(

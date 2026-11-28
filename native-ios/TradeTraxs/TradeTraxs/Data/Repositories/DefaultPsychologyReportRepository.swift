@@ -116,8 +116,12 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
             throw AppError.unknown(message: SessionViewerIdentity.sessionUnavailableMessage)
         }
 
+        let previewBundle = await MainActor.run(body: { TraxsProPreviewSupport.reportsJournalBundle(for: profileID) })
+
         let loaded: [Trade]
-        if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
+        if let previewBundle {
+            loaded = previewBundle.trades
+        } else if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
             loaded = DemoCanonicalDataset.trades()
         } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             loaded = ProfileTradeFixtures.samples(owner: profileID)
@@ -134,7 +138,9 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         let startKey = CheckInHistoryAggregator.startDateKey()
         let endKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
         let checkIns: [TraderDailyCheckIn]
-        if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
+        if let previewBundle {
+            checkIns = previewBundle.checkIns
+        } else if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
             checkIns = DemoCanonicalDataset.checkIns()
         } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             checkIns = []
@@ -151,6 +157,9 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
     }
 
     private func loadAccounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        if let bundle = await MainActor.run(body: { TraxsProPreviewSupport.reportsJournalBundle(for: profileID) }) {
+            return bundle.accounts
+        }
         if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
             return DemoCanonicalDataset.accounts()
         }

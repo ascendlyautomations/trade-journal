@@ -564,12 +564,30 @@ final class DetailPresentationCache {
     // feed-vs-trade target routing only, not duplicate engagement counts.
 
     private var feedEngagementTargetByTradeID: [TradeID: InteractionTarget] = [:]
+    /// Feed row `created_at` (publication), not trade `entry_time` / `created_at`.
+    private var feedPostPublishedAtByTradeID: [TradeID: Date] = [:]
     private var pendingDetailCommentsScrollIntentKeys: Set<String> = []
     private var feedEngagementTargetByAchievementID: [AchievementID: InteractionTarget] = [:]
 
     /// Web feed trade cards like/comment on `posts.id`, not `trades.id`.
     func seedFeedEngagementTarget(_ target: InteractionTarget, forTrade tradeID: TradeID) {
         feedEngagementTargetByTradeID[tradeID] = target
+    }
+
+    /// Seeds the post publication instant when opening trade detail from the Home feed.
+    func seedFeedPostPublishedAt(_ publishedAt: Date, forTrade tradeID: TradeID) {
+        feedPostPublishedAtByTradeID[tradeID] = publishedAt
+    }
+
+    /// Publication instant for social trade detail headers (feed post > `first_published_at`).
+    func feedPostPublishedAt(forTrade tradeID: TradeID) -> Date? {
+        if let seeded = feedPostPublishedAtByTradeID[tradeID] {
+            return seeded
+        }
+        guard let target = feedEngagementTarget(forTrade: tradeID),
+              target.kind == .feedPost
+        else { return nil }
+        return posts[PostID(target.id)]?.createdAt
     }
 
     func feedEngagementTarget(forTrade tradeID: TradeID) -> InteractionTarget? {
@@ -700,6 +718,7 @@ final class DetailPresentationCache {
         viewerFollowEdgeByProfile = [:]
         viewerFollowRequestByProfile = [:]
         feedEngagementTargetByTradeID = [:]
+        feedPostPublishedAtByTradeID = [:]
         feedEngagementTargetByAchievementID = [:]
         pendingDetailCommentsScrollIntentKeys = []
     }

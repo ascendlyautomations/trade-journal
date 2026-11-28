@@ -9,20 +9,21 @@ struct ProfileHeaderView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
+    @Bindable private var contextualTour = ContextualTourCoordinator.shared
 
     var body: some View {
         Group {
             if let profile = store.profile {
                 loadedHeader(profile)
-            } else             if store.showsHeaderLoadingPresentation {
-                ProfileHeaderSkeleton()
+            } else if store.showsHeaderLoadingPresentation {
+                ProfileHeaderSkeleton(showsOwnerTradeRoomTourTarget: store.isOwner)
             } else {
                 errorState
             }
         }
         .animation(
             ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
-            value: store.phase
+            value: store.profile?.id
         )
         .alert(
             "Couldn’t update block",
@@ -63,7 +64,30 @@ struct ProfileHeaderView: View {
         }
         .onAppear {
             store.consumeCreatedRoomFromIntent()
+            acknowledgeProfileIdentityWalkthroughIfNeeded()
         }
+        .onChange(of: contextualTour.stepRevision) { _, _ in
+            acknowledgeProfileIdentityWalkthroughIfNeeded()
+        }
+        .onChange(of: contextualTour.phase) { _, _ in
+            acknowledgeProfileIdentityWalkthroughIfNeeded()
+        }
+        .onChange(of: store.profile?.id) { _, _ in
+            acknowledgeProfileIdentityWalkthroughIfNeeded()
+        }
+        .onChange(of: store.showsHeaderLoadingPresentation) { _, loading in
+            guard !loading else { return }
+            acknowledgeProfileIdentityWalkthroughIfNeeded()
+        }
+    }
+
+    /// S15: `beginPreparing` clears hydration while the header may already be on screen (no second `onAppear`).
+    private func acknowledgeProfileIdentityWalkthroughIfNeeded() {
+        guard contextualTour.phase == .preparing,
+              contextualTour.spotlightTarget == .profileIdentity,
+              store.profile != nil
+        else { return }
+        contextualTour.noteProfileIdentityHeaderHydrated()
     }
 
     @ViewBuilder
@@ -90,6 +114,9 @@ struct ProfileHeaderView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contextualTourTarget(.profileIdentity)
+            .onAppear {
+                acknowledgeProfileIdentityWalkthroughIfNeeded()
+            }
 
             ProfileActionRow(
                 mode: viewModel.actionMode,
@@ -107,14 +134,15 @@ struct ProfileHeaderView: View {
             )
 
             if store.isOwner, !ExploreModeSupport.isActive {
-                ProfileTradeRoomDestinationRow(
-                    title: store.hasTradeRoom ? "View Trade Room" : "Create Trade Room",
-                    accessibilityIdentifier: store.hasTradeRoom
-                        ? "profile.viewTradeRoom"
-                        : "profile.createTradeRoom",
-                    action: store.hasTradeRoom ? viewModel.openTradeRoom : viewModel.createTradeRoom
-                )
-                .contextualTourTarget(.profileTradeRoom)
+                ProfileOwnerTradeRoomTourAnchor {
+                    ProfileTradeRoomDestinationRow(
+                        title: store.hasTradeRoom ? "View Trade Room" : "Create Trade Room",
+                        accessibilityIdentifier: store.hasTradeRoom
+                            ? "profile.viewTradeRoom"
+                            : "profile.createTradeRoom",
+                        action: store.hasTradeRoom ? viewModel.openTradeRoom : viewModel.createTradeRoom
+                    )
+                }
             } else if store.canShowVisitorTradeRoomCTA {
                 ProfileTradeRoomDestinationRow(action: viewModel.openTradeRoom)
             }

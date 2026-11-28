@@ -11,6 +11,7 @@ import {
   TradeSocialProvider,
 } from "@/app/components/TradeSocialLayer"
 import FeedPostHeader from "@/app/components/feed/FeedPostHeader"
+import TradeDetailAuthorSubline from "@/app/components/trade/TradeDetailAuthorSubline"
 import DropdownMenu from "@/app/components/ui/DropdownMenu"
 import VaultDestinationModal from "@/app/components/vault/VaultDestinationModal"
 import { MOBILE_WEB_CARD_CLASS } from "@/lib/mobileWebPageSurface"
@@ -352,10 +353,17 @@ export default function MobileWebTradeDetailSurface({
         <FeedPostHeader
           userId={String(ownerProfile.id)}
           avatarUrl={ownerProfile.avatar_url ?? null}
-          username={ownerProfile.username || ownerProfile.name || "User"}
-          metaLabel="Trade"
-          metaLabelClassName="font-medium text-amber-400/90"
-          postedAt={trade.created_at}
+          username={
+            profileSeoDisplayName(ownerProfile) ||
+            ownerProfile.username ||
+            "User"
+          }
+          meta={
+            <TradeDetailAuthorSubline
+              username={ownerProfile.username}
+              trade={trade}
+            />
+          }
         />
       ) : null}
 

@@ -76,7 +76,7 @@ struct ReportBugFormView: View {
                     HStack {
                         Spacer()
                         if phase == .submitting {
-                            ProgressView()
+                            ExperienceIndeterminateProgress()
                         } else {
                             Text("Submit report")
                                 .fontWeight(.semibold)

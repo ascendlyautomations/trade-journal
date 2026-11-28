@@ -9,7 +9,7 @@ struct SaveDraftToolbarButton: View {
     var body: some View {
         Button(action: action) {
             if isSaving {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .controlSize(.small)
             } else {
                 Text("Save Draft")

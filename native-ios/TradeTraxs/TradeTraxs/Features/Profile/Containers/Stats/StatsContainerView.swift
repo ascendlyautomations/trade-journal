@@ -9,7 +9,7 @@ struct StatsContainerView: View {
     var body: some View {
         ProfileSectionContainerChrome(
             section: .stats,
-            state: viewModel.state,
+            state: viewModel.sectionChromeState,
             onRetry: { Task { await viewModel.refresh() } }
         ) {
             if let metrics = viewModel.metrics {

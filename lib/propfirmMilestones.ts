@@ -5,8 +5,7 @@ import { getDefaultAchievementDateInputValue } from "@/lib/achievementDate"
 import { resolveAccountModeForSave } from "@/lib/createAccountForm"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
 import {
-  insertTradingAccount,
-  updateTradingAccount,
+  graduateEvalToFunded,
   type CreateTradingAccountPayload,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
@@ -187,24 +186,28 @@ export function milestoneAccountToTradingListItem(
   }
 }
 
-export async function convertEvalAccountToFundedWithRules(
+/** Creates a funded successor row; evaluation history stays on the source account. */
+export async function graduatePropFirmEvalToFunded(
   client: SupabaseClient,
   userId: string,
   account: PropFirmMilestoneAccount,
   payload: CreateTradingAccountPayload
-): Promise<{ account: TradingAccountListItem | null; error: Error | null }> {
-  return updateTradingAccount(
-    client,
-    userId,
-    String(account.id),
-    {
+): Promise<{
+  account: TradingAccountListItem | null
+  error: Error | null
+  purchaseExpenseWarning?: string | null
+}> {
+  const { fundedAccount, error, purchaseExpenseWarning } =
+    await graduateEvalToFunded(client, userId, String(account.id), {
       ...payload,
       category: "Prop Firm",
       mode: resolveAccountModeForSave("Prop Firm", "Funded"),
-    },
-    milestoneAccountToTradingListItem(account)
-  )
+    })
+  return { account: fundedAccount, error, purchaseExpenseWarning }
 }
+
+/** @deprecated Use graduatePropFirmEvalToFunded — in-place conversion removed. */
+export const convertEvalAccountToFundedWithRules = graduatePropFirmEvalToFunded
 
 export function buildCreateFundedAccountFormInitial(
   account: PropFirmMilestoneAccount
@@ -223,38 +226,26 @@ export function buildCreateFundedAccountFormInitial(
 export async function convertPropFirmAccountToFunded(
   client: SupabaseClient,
   userId: string,
-  accountId: string | number,
+  _accountId: string | number,
   account?: PropFirmMilestoneAccount
 ): Promise<{ error: Error | null }> {
-  if (account) {
-    const payload = buildConvertEvalToFundedFormInitial(account)
-    const { error } = await convertEvalAccountToFundedWithRules(
-      client,
-      userId,
-      account,
-      {
-        name: payload.name,
-        size: payload.size,
-        id: payload.accountNumber,
-        category: "Prop Firm",
-        mode: resolveAccountModeForSave("Prop Firm", "Funded"),
-        rules: payload.rules,
-      }
-    )
-    return { error }
+  if (!account) {
+    return {
+      error: new Error(
+        "Use graduatePropFirmEvalToFunded with full account context."
+      ),
+    }
   }
-
-  const { error } = await client
-    .from("accounts")
-    .update({ mode: "Funded" })
-    .eq("id", accountId)
-    .eq("user_id", userId)
-
-  if (error) {
-    return { error: new Error(error.message) }
-  }
-
-  return { error: null }
+  const payload = buildFundedAccountPayloadFromEval(account)
+  const { error } = await graduatePropFirmEvalToFunded(client, userId, account, {
+    name: payload.name,
+    size: payload.size,
+    id: payload.id,
+    category: "Prop Firm",
+    mode: resolveAccountModeForSave("Prop Firm", "Funded"),
+    rules: payload.rules,
+  })
+  return { error }
 }
 
 export async function createFundedAccountFromEval(
@@ -263,9 +254,12 @@ export async function createFundedAccountFromEval(
   account: PropFirmMilestoneAccount,
   nickname?: string
 ): Promise<{ account: TradingAccountListItem | null; error: Error | null }> {
-  return insertTradingAccount(
+  const payload = buildFundedAccountPayloadFromEval(account, nickname)
+  const { account: funded, error } = await graduatePropFirmEvalToFunded(
     client,
     userId,
-    buildFundedAccountPayloadFromEval(account, nickname)
+    account,
+    payload
   )
+  return { account: funded, error }
 }

@@ -260,7 +260,7 @@ struct TradeHistoryView: View {
                 if viewModel.isLoadingMore {
                     HStack {
                         Spacer()
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                         Spacer()
                     }
                     .padding(.vertical, ExperienceSpacing.sm)
@@ -367,7 +367,7 @@ struct TradeHistoryView: View {
                 if viewModel.isLoadingMore {
                     HStack {
                         Spacer()
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                         Spacer()
                     }
                     .listRowBackground(Color.clear)

@@ -273,10 +273,39 @@ enum FeedRpcProjectionSeeder {
         guard var dto else { return false }
         if dto.id == nil || dto.id?.isEmpty == true { dto.id = achievementID }
         if dto.user_id == nil || dto.user_id?.isEmpty == true { dto.user_id = row.author_id }
+        if let nested = object(row.payload["achievements"]), !nested.isEmpty {
+            enrichAchievementDTO(&dto, nested: nested)
+        }
 
         guard let achievement = try? mapAchievementDTO(dto) else { return false }
         detailCache.seed(achievement)
         return true
+    }
+
+    private static func enrichAchievementDTO(_ dto: inout AchievementDTO.Achievement, nested: [String: JSONValue]) {
+        if dto.achievement_type == nil {
+            dto.achievement_type = string(nested, keys: ["achievement_type"])
+        }
+        if DecimalParser.parseFlexible(dto.value_numeric) == nil,
+           let parsed = flexibleNumber(nested["value_numeric"])
+        {
+            dto.value_numeric = parsed
+        }
+        if dto.value_text == nil {
+            dto.value_text = string(nested, keys: ["value_text"])
+        }
+        if dto.currency == nil {
+            dto.currency = string(nested, keys: ["currency"])
+        }
+        if dto.title == nil {
+            dto.title = string(nested, keys: ["title"])
+        }
+        if dto.description == nil {
+            dto.description = string(nested, keys: ["description"])
+        }
+        if dto.firm == nil {
+            dto.firm = string(nested, keys: ["firm"])
+        }
     }
 
     private static func mapAchievementDTO(_ dto: AchievementDTO.Achievement) throws -> Achievement {

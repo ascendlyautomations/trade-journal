@@ -101,7 +101,10 @@ const TradeRoomBroadcastPanel = dynamic(
   () => import("@/app/components/tradeRooms/live/TradeRoomBroadcastPanel"),
   { ssr: false, loading: () => null }
 )
-import { presentTradeRoomBroadcastStreamEndedNotice } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
+import {
+  handleRoomLiveBroadcastRealtimeChange,
+  presentTradeRoomBroadcastStreamEndedNotice,
+} from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
 import TradeRoomBroadcastViewerRemovalOverlay from "@/app/components/tradeRooms/live/TradeRoomBroadcastViewerRemovalOverlay.tsx"
 import { useTradeRoomLiveVoiceStableConnection } from "@/app/components/tradeRooms/live/useTradeRoomLiveVoice"
 import { useTradeRoomBroadcast } from "@/app/components/tradeRooms/live/useTradeRoomBroadcast.ts"
@@ -3676,6 +3679,7 @@ function CommunityContent() {
     const detach = subscribeCommunityRoomLiveChannel({
       supabase,
       roomId,
+      onRoomLiveBroadcastChange: () => handleRoomLiveBroadcastRealtimeChange(roomId),
       isMessageVisible: (messageId) =>
         roomMessageIdsRef.current.has(messageId),
       onReactionChange: ({ eventType, row }) => {

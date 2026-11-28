@@ -1068,11 +1068,16 @@ final class GlobalUploadCoordinator {
         }
 
         do {
+            StoryDebug.log(
+                "upload.job.insert",
+                "job=\(jobID) imageURL=\(publicURL)"
+            )
             let created = try await services.feed.createStory(
                 userID: spec.authorID,
                 imageURL: publicURL,
                 textOverlays: spec.textOverlays
             )
+            StoryDebug.log("upload.job.inserted", "job=\(jobID) story=\(created.id.rawValue)")
             var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
             saved.savedStoryID = created.id
             saved.insertConfirmedAbsent = false

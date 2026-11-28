@@ -60,6 +60,7 @@ nonisolated enum TradeDTO {
         var image_crop: ContentImagePresentation?
         var notes: String?
         var created_at: String?
+        var first_published_at: String?
         var date: String?
         var trade_date: String?
         var account_name: String?
@@ -143,6 +144,9 @@ nonisolated enum TradeDTO {
         var winning_days: FlexibleNumber?
         var winning_day_threshold: FlexibleNumber?
         var payout_drawdown_behavior: String?
+        var account_lifecycle_id: String?
+        var graduated_to_account_id: String?
+        var graduated_from_account_id: String?
     }
 
     struct AccountWriteBody: Encodable, Sendable {

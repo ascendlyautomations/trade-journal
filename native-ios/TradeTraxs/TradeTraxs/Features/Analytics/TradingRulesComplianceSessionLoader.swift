@@ -31,9 +31,7 @@ enum TradingRulesComplianceSessionLoader {
 
         presentationStore.clearIfProfileMismatch(profileID)
 
-        let usesBundledSample = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
-        if !usesBundledSample,
-           let dashboardViewModel,
+        if let dashboardViewModel,
            dashboardViewModel.isTradingRulesComplianceDashboardSource(profileID: profileID)
         {
             await dashboardViewModel.ensureTradingRulesComplianceForPresentation(
@@ -75,7 +73,9 @@ enum TradingRulesComplianceSessionLoader {
     ) -> Bool {
         let presentationStore = TradingRulesCompliancePresentationStores.store(detailCache: detailCache)
         presentationStore.clearIfProfileMismatch(profileID)
-        let accounts = SessionAccountsStore.shared.cached(for: profileID) ?? []
+        let accounts: [TradingAccount] = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+            ? TradingRulesAnalyticsPreviewSupport.previewAccounts(profileID: profileID, detailCache: detailCache)
+            : (SessionAccountsStore.shared.cached(for: profileID) ?? [])
         let linked = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
         let scope: PsychologyAnalyticsScopeResolver.Resolved
         if let dashboardViewModel,
@@ -111,6 +111,16 @@ enum TradingRulesComplianceSessionLoader {
         presentationStore: TradingRulesComplianceSessionStore
     ) async -> TradingRulesComplianceLoadOutcome {
         let usesBundledSample = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+        if usesBundledSample,
+           presentationStore.ready,
+           presentationStore.profileID == profileID,
+           presentationStore.result != nil
+        {
+            RulesPreviewDebugLog.log(
+                "SessionLoader.performColdRefresh skip — populated preview snapshot retained \(RulesPreviewDebugLog.describe(session: presentationStore))"
+            )
+            return .ready
+        }
         if !usesBundledSample {
             await SessionNetworkGate.shared.awaitReady()
         }
@@ -159,6 +169,17 @@ enum TradingRulesComplianceSessionLoader {
             }
             return .ready
         }
+        if usesBundledSample,
+           presentationStore.result != nil,
+           output.result == nil,
+           output.scopedTradeCount == 0
+        {
+            RulesPreviewDebugLog.log(
+                "SessionLoader.performColdRefresh blocked empty overwrite of populated preview \(RulesPreviewDebugLog.describe(output: output)) kept \(RulesPreviewDebugLog.describe(session: presentationStore))"
+            )
+            return .ready
+        }
+
         let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
         let keptExistingRules = !presentationStore.commit(
             output: output,
@@ -186,6 +207,18 @@ enum TradingRulesComplianceSessionLoader {
         profileID: ProfileID,
         dependencies: TradingRulesComplianceLoadDependencies
     ) async -> [TradingAccount] {
+        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+            let previewAccounts = TradingRulesAnalyticsPreviewSupport.previewAccounts(
+                profileID: profileID,
+                dependencies: dependencies
+            )
+            if !previewAccounts.isEmpty {
+                RulesPreviewDebugLog.log(
+                    "SessionLoader.loadAccounts preview plane accounts=\(previewAccounts.count) profileID=\(profileID.rawValue)"
+                )
+                return previewAccounts
+            }
+        }
         if let cached = SessionAccountsStore.shared.cached(for: profileID), !cached.isEmpty {
             return cached
         }

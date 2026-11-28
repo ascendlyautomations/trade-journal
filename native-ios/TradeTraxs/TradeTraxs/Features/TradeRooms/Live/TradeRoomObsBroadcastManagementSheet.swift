@@ -218,7 +218,7 @@ struct TradeRoomObsBroadcastManagementSheet: View {
     private var initializingSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                 Text("Preparing OBS...")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(colors.textSecondary)
@@ -246,7 +246,7 @@ struct TradeRoomObsBroadcastManagementSheet: View {
     private var goingLiveSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                 Text("Opening live stream controls…")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundStyle(colors.textSecondary)

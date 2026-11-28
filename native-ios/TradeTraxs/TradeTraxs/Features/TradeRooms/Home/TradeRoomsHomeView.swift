@@ -242,7 +242,7 @@ struct TradeRoomsHomeView: View {
            viewModel.searchDiscoveryDisplayRooms.isEmpty,
            viewModel.filteredItems.isEmpty
         {
-            ProgressView("Searching…")
+            ExperienceLoadingSpinner(message: "Searching…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("tradeRooms.search.loading")
         } else if viewModel.showsFilteredEmpty {
@@ -296,7 +296,7 @@ struct TradeRoomsHomeView: View {
             {
                 HStack {
                     Spacer()
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                     Spacer()
                 }
                 .listRowBackground(Color.clear)
@@ -403,7 +403,7 @@ struct TradeRoomsHomeView: View {
                         HStack {
                             Spacer()
                             if viewModel.isLoadingMoreDiscovery {
-                                ProgressView()
+                                ExperienceIndeterminateProgress()
                             } else {
                                 Text("Show More")
                                     .font(.subheadline.weight(.semibold))

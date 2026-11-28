@@ -8,6 +8,12 @@ final class StatsContainerViewModel {
     private(set) var metrics: ProfileStatisticsMetrics.Result?
     private(set) var isRefreshing = false
 
+    var sectionChromeState: ProfileSectionLoadState {
+        let hasSettled = hasLoadedAnalytics || metrics != nil || state.hasSettledPresentation
+        let count = metrics?.filteredTradeCount ?? 0
+        return state.preservingSettledContent(hasSettledLoad: hasSettled, itemCount: count)
+    }
+
     var selectedMode: ProfileStatisticsMetrics.Mode = .all {
         didSet {
             guard oldValue != selectedMode else { return }
@@ -110,7 +116,7 @@ final class StatsContainerViewModel {
         }
 
         var nextState: ProfileSectionLoadState?
-        if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil {
+        if (snapshot.phase == .loading || snapshot.didBootstrap), metrics == nil, !state.hasSettledPresentation {
             nextState = .loading
         }
 
@@ -142,21 +148,11 @@ final class StatsContainerViewModel {
 
     func refresh() async {
         if isScreenOwned {
-            hasLoadedAnalytics = false
-            modeResults = [:]
-            tradeInputs = []
-            hasLoadedTradeInputs = false
-            tradeInputsTask?.cancel()
-            tradeInputsTask = nil
-            didScheduleLockedProfileShadow = false
             analyticsTask?.cancel()
             analyticsTask = nil
-            Task {
-                await ProfileAnalyticsV2ShadowSession.shared.clearShadowKeys(
-                    forSubjectProfile: profileID.rawValue
-                )
-            }
+            isRefreshing = true
             scheduleAnalyticsLoadIfNeeded(force: true)
+            isRefreshing = false
             return
         }
         analyticsTask?.cancel()
@@ -224,7 +220,7 @@ final class StatsContainerViewModel {
         await ProfileAnalyticsGRDBSession.shared.setActiveSubjectProfile(profileID.rawValue)
 
         let paintedFromCache = await paintCachedAnalyticsSnapshotIfAvailable(forceNetwork: forceNetwork)
-        if !paintedFromCache, metrics == nil {
+        if !paintedFromCache, metrics == nil, !state.hasSettledPresentation {
             state = .loading
         }
 
@@ -519,6 +515,7 @@ final class StatsContainerViewModel {
                     detailCache: detailCache
                 )
                 guard !Task.isCancelled else { return }
+                guard !inputs.isEmpty else { return }
                 tradeInputs = inputs
                 hasLoadedTradeInputs = true
                 recompute()
@@ -537,35 +534,23 @@ final class StatsContainerViewModel {
     }
 
     private func recompute() {
-        if selectedTimeframe.isAllTime, let server = modeResults[selectedMode] {
-            metrics = server
-        } else if hasLoadedTradeInputs {
-            let computed = ProfileStatisticsMetrics.compute(
+        if !selectedTimeframe.isAllTime {
+            scheduleTradeInputsLoadIfNeeded()
+        }
+
+        // Client pipeline when we have paginated public trades (timeframes + mode parity with Dashboard).
+        // Server `modeResults` are all-time only; never replace them with an empty client recompute.
+        let canUseClientPipeline = hasLoadedTradeInputs && !tradeInputs.isEmpty
+        if canUseClientPipeline {
+            metrics = ProfileStatisticsMetrics.compute(
                 from: tradeInputs,
                 selectedMode: selectedMode,
                 selectedTimeframe: selectedTimeframe
             )
-            metrics = computed
-#if DEBUG
-            if !selectedTimeframe.isAllTime {
-                let sessionTaggedInputs = tradeInputs.filter {
-                    TradingSessionLabel.canonicalLabel(fromStored: $0.session) != nil
-                }.count
-                ProfileStatsTrace.filteredSessionRecompute(
-                    subject: profileID.rawValue,
-                    timeframe: selectedTimeframe.rawValue,
-                    loadedInputs: tradeInputs.count,
-                    sessionTaggedInputs: sessionTaggedInputs,
-                    filteredTrades: computed.filteredTradeCount,
-                    sessionTotal: computed.sessionTotal
-                )
-            }
-#endif
         } else if selectedTimeframe.isAllTime, let server = modeResults[selectedMode] {
             metrics = server
-        } else {
+        } else if canViewContent, !hasLoadedTradeInputs {
             scheduleTradeInputsLoadIfNeeded()
-            // Retain the last snapshot while paginated trade inputs load for timeframe filters.
             if metrics == nil {
                 metrics = ProfileStatisticsMetrics.compute(
                     from: [],
@@ -573,10 +558,36 @@ final class StatsContainerViewModel {
                     selectedTimeframe: selectedTimeframe
                 )
             }
+        } else if metrics == nil {
+            metrics = ProfileStatisticsMetrics.compute(
+                from: [],
+                selectedMode: selectedMode,
+                selectedTimeframe: selectedTimeframe
+            )
         }
 
+#if DEBUG
+        if let metrics {
+            let source: String
+            if canUseClientPipeline {
+                source = "client_trades"
+            } else if selectedTimeframe.isAllTime, modeResults[selectedMode] != nil {
+                source = "server_mode_results"
+            } else {
+                source = "skeleton_or_retained"
+            }
+            ProfileStatsTrace.metricsSource(
+                subject: profileID.rawValue,
+                source: source,
+                timeframe: selectedTimeframe.rawValue,
+                mode: selectedMode.rawValue,
+                sessionTotal: metrics.sessionTotal
+            )
+        }
+#endif
+
         let allCount: Int = {
-            if hasLoadedTradeInputs {
+            if canUseClientPipeline {
                 return ProfileStatisticsMetrics.compute(
                     from: tradeInputs,
                     selectedMode: .all,
@@ -590,9 +601,9 @@ final class StatsContainerViewModel {
         if allCount == 0 {
             if !hasLoadedAnalytics, case .failed = state {
                 // Keep failure state until analytics retry succeeds.
-            } else if !hasLoadedAnalytics {
+            } else if !hasLoadedAnalytics, metrics == nil, !state.hasSettledPresentation {
                 state = .loading
-            } else {
+            } else if metrics != nil || hasLoadedAnalytics {
                 state = .empty
             }
         } else {

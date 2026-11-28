@@ -25,7 +25,7 @@ struct TradeImportReminderDestinationView: View {
         Group {
             switch viewModel.phase {
             case .loading:
-                ProgressView("Loading…")
+                ExperienceLoadingSpinner()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, ExperienceSpacing.xl)
             case .broker(let accounts):

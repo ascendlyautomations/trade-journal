@@ -312,6 +312,13 @@ final class DataEnvironment {
         )
 
         let engagementStore = makeEngagementStore(interactions: interactions, session: session)
+        Task {
+            await StorySignedMediaResolver.shared.configure(
+                storage: storage,
+                projectBaseURL: appConfiguration.supabaseURL
+            )
+            StoryDebug.log("signedMedia.configure", "storage=\(type(of: storage))")
+        }
         return DataEnvironment(
             configuration: configuration,
             supabase: supabase,
@@ -899,6 +906,15 @@ private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepositor
     func runBrokerImport(mappingIds: [String]) async throws -> BrokerManualImportResponse { throw unavailable() }
     func importEligibility() async throws -> BrokerImportEligibilityResponse { throw unavailable() }
     func disconnectTradovate(connectionId: String) async throws { throw unavailable() }
+    func setTradovatePendingLink(
+        connectionId: String,
+        tradetraxsAccountId: String
+    ) async throws -> BrokerConnectionPendingLinkPreference { throw unavailable() }
+    func createTradovatePendingLink(
+        connectionId: String,
+        draft: TradingAccountDraft
+    ) async throws -> BrokerConnectionPendingLinkPreference { throw unavailable() }
+    func clearTradovatePendingLink(connectionId: String) async throws { throw unavailable() }
     func fetchRithmicConnectCapabilities() async throws -> RithmicConnectCapabilitiesResponse { throw unavailable() }
     func listRithmicConnections() async throws -> TradovateConnectionsResponse { throw unavailable() }
     func connectRithmic(username: String, password: String, systemName: String?, reconnectConnectionId: String?) async throws -> RithmicConnectOutcome {

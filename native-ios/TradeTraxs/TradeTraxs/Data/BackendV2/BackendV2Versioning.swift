@@ -11,6 +11,8 @@ nonisolated enum BackendV2Versioning {
         case feed = "rpc_v1_feed_bootstrap"
         case feedV2 = "rpc_v2_feed_bootstrap"
         case feedRecordImpressions = "rpc_v1_feed_record_impressions"
+        case profileInsightsBootstrap = "rpc_v1_profile_insights_bootstrap"
+        case creatorRecordShares = "rpc_v1_creator_record_shares"
         case profile = "rpc_v1_profile_bootstrap"
         case profileTabTrades = "rpc_v1_profile_tab_trades"
         case profileTabTradesV2 = "rpc_v1_profile_tab_trades_v2"

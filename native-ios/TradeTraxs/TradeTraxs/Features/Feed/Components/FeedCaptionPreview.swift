@@ -32,8 +32,9 @@ extension FeedTimelineEntry {
             raw = post.body
         case .clip(_, let reel):
             raw = ReelCaptionDisplay.bodyText(for: reel)
-        case .achievement(_, let achievement):
-            raw = achievement.description
+        case .achievement:
+            // Description renders inside `PublicAchievementContentStack` on the card.
+            raw = nil
         }
         let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed

@@ -45,7 +45,7 @@ struct MainTabShellView: View {
         .experienceAppChrome(usesFeedOpaqueChrome: store.selectedTab == .feed)
         .globalUploadQueueSheet(coordinator: globalUploadCoordinator)
         .proUpgradeSheet()
-        .traxsProPreviewCover(data: appEnvironment.data)
+        .traxsProPreviewCover(data: appEnvironment.data, navigationCoordinator: coordinator)
         .freePlanAccountSlotOverlay()
         .sheet(isPresented: Binding(
             get: { postTradeReflectionGate.pendingTrade != nil },
@@ -77,6 +77,7 @@ struct MainTabShellView: View {
             Text(reflectionError ?? "")
         }
         .vaultConfirmationOverlay(store: appEnvironment.data.vaultStore)
+        .liveRealtimeSessionSwitchOverlay()
         .broadcastStreamEndedOverlay(
             notice: broadcastCoordinator.streamEndedNotice,
             onClose: { broadcastCoordinator.acknowledgeStreamEndedNotice() }
@@ -110,6 +111,7 @@ struct MainTabShellView: View {
             switch ContentMutationStore.shared.latest {
             case .story(let story):
                 viewerStoryStore.applyStoryCreated(story, viewerID: profileID)
+                FeedStoriesCatalogStore.shared.upsertStory(story, viewerID: profileID)
             case .storyDeleted(let storyID):
                 viewerStoryStore.applyStoryDeleted(storyID)
             default:
@@ -307,6 +309,7 @@ struct HomeNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+            .experienceChevronOnlyBackNavigationChrome()
         case .tradingDay(let dayKey):
             TradingDayDetailView(
                 dayKey: dayKey,
@@ -1040,6 +1043,11 @@ struct ProfileNavigationStack: View {
                 navigationCoordinator: coordinator,
                 data: appEnvironment.data
             )
+        case .profileInsights:
+            ProfileInsightsView(
+                rpc: appEnvironment.data.rpc,
+                navigationCoordinator: coordinator
+            )
         case .rooms:
             TradeRoomsHomeView(
                 data: appEnvironment.data,
@@ -1172,6 +1180,7 @@ struct ProfileNavigationStack: View {
         case .affiliate: return "Affiliate"
         case .help: return "Help"
         case .otherProfile: return "Profile"
+        case .profileInsights: return "Insights"
         case .trade: return "Trade"
         case .post: return "Post"
         case .reel: return "Reel"
@@ -1632,7 +1641,7 @@ struct PsychologyAnalyticsHomeRouteView: View {
                         }
                     )
                 } else {
-                    ProgressView("Loading sample analytics…")
+                    ExperienceLoadingSpinner(message: "Loading sample analytics…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else if let report = PsychologyAnalyticsSessionStore.shared.report,
@@ -1658,12 +1667,12 @@ struct PsychologyAnalyticsHomeRouteView: View {
                 .id(presentationRevision)
                 .overlay(alignment: .top) {
                     if isRefreshing {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .padding(.top, ExperienceSpacing.md)
                     }
                 }
             } else if isRefreshing {
-                ProgressView("Loading psychology analytics…")
+                ExperienceLoadingSpinner(message: "Loading psychology analytics…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if case .failed(let message) = loadOutcome {
                 ExperienceErrorState(

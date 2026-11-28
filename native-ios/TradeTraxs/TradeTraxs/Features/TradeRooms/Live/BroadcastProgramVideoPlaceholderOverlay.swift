@@ -10,13 +10,10 @@ struct BroadcastProgramVideoPlaceholderOverlay: View {
             VStack(spacing: compact ? ExperienceSpacing.xxs : ExperienceSpacing.sm) {
                 if presentation.showsSpinner {
                     if compact {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(.white)
+                        ExperienceIndeterminateProgress(controlSize: .regular, tint: .white)
                             .scaleEffect(0.85)
                     } else {
-                        ExperienceLoadingSpinner(label: presentation.accessibilityLabel)
-                            .tint(.white)
+                        ExperienceLoadingSpinner(label: presentation.accessibilityLabel, tint: .white)
                     }
                 }
                 if !compact {

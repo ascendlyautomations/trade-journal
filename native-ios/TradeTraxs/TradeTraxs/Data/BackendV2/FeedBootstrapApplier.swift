@@ -21,17 +21,7 @@ enum FeedBootstrapApplier {
             }
         }
 
-        let stories = bootstrap.data.stories.compactMap { preview -> Story? in
-            guard let created = ISO8601.date(from: preview.created_at) else { return nil }
-            return Story(
-                id: StoryID(preview.id),
-                authorProfileID: ProfileID(preview.user_id),
-                media: MediaReference(id: preview.image_url, kind: .image, altText: nil),
-                expiresAt: created.addingTimeInterval(86_400),
-                createdAt: created,
-                viewerHasSeen: false
-            )
-        }
+        let stories = StoryBootstrapMapping.map(bootstrap.data.stories)
 
         var engagementByTarget: [InteractionTarget: EngagementSnapshot] = [:]
         for row in bootstrap.data.items {

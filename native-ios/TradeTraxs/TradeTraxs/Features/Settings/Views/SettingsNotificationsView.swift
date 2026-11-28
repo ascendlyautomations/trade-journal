@@ -51,7 +51,7 @@ struct SettingsNotificationsView: View {
         .experienceNavigationTitle(category?.title ?? "Notifications")
         .overlay {
             if viewModel.phase == .loading && viewModel.preferences == nil {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .refreshable { await viewModel.refresh() }

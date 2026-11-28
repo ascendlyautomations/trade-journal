@@ -4,6 +4,7 @@ import { isBackendV2Enabled } from "@/lib/backendV2/flags"
 export type FeedImpressionItem = {
   content_kind: string
   content_id: string
+  surface?: string
 }
 
 const pending = new Map<string, FeedImpressionItem>()
@@ -17,8 +18,15 @@ function queueKey(item: FeedImpressionItem): string {
   return `${item.content_kind}|${item.content_id}`
 }
 
+export function recordsCreatorContentViewsEnabled(): boolean {
+  return (
+    isBackendV2Enabled("feedRotatingRank") ||
+    isBackendV2Enabled("profileInsights")
+  )
+}
+
 export function queueFeedImpression(item: FeedImpressionItem): void {
-  if (!isBackendV2Enabled("feedRotatingRank")) return
+  if (!recordsCreatorContentViewsEnabled()) return
   pending.set(queueKey(item), item)
   scheduleFlush()
 }

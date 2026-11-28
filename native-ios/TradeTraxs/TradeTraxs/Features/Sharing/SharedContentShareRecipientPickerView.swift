@@ -17,8 +17,7 @@ struct SharedContentShareRecipientPickerView: View {
             Group {
                 switch viewModel.phase {
                 case .idle, .loading:
-                    ExperienceLoadingSpinner(label: loadingLabel)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceLoadingOverlay(label: loadingLabel)
                 case .failed(let message):
                     ExperienceErrorState(
                         title: "Couldn't load recipients",

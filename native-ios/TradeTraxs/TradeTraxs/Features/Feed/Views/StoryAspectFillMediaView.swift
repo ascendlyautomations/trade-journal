@@ -6,6 +6,7 @@ struct StoryAspectFillMediaView: View {
     let reference: MediaReference?
     let imagePipeline: any ImagePipeline
     var accessibilityIdentifier: String = "feed.story.media"
+    var onLoadFailed: (() -> Void)?
 
     @Environment(\.displayScale) private var displayScale
     @State private var displayImage: UIImage?
@@ -23,12 +24,16 @@ struct StoryAspectFillMediaView: View {
             } else if didFail || reference == nil {
                 Color.black
             } else {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .tint(.white)
             }
         }
         .task(id: "\(reference?.id ?? "")|\(displayScale)") {
             await loadDisplayImage()
+        }
+        .onChange(of: didFail) { _, failed in
+            guard failed else { return }
+            onLoadFailed?()
         }
         .accessibilityIdentifier(accessibilityIdentifier)
         .accessibilityAddTraits(.isImage)
@@ -37,7 +42,7 @@ struct StoryAspectFillMediaView: View {
     private func loadDisplayImage() async {
         guard let reference else {
             displayImage = nil
-            didFail = false
+            didFail = true
             return
         }
         didFail = false
@@ -57,12 +62,18 @@ struct StoryAspectFillMediaView: View {
             guard let decoded else {
                 didFail = true
                 displayImage = nil
+                StoryDebug.log("viewer.image.decodeFailed", "ref=\(String(reference.id.prefix(80)))")
                 return
             }
             displayImage = decoded
+            StoryDebug.log("viewer.image.ok", "ref=\(String(reference.id.prefix(80))) bytes=\(data.count)")
         } catch {
             didFail = true
             displayImage = nil
+            StoryDebug.log(
+                "viewer.image.error",
+                "ref=\(String(reference.id.prefix(80))) error=\(error.localizedDescription)"
+            )
         }
     }
 }

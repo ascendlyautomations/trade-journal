@@ -194,6 +194,64 @@ struct PublicTradeMetaChipRow: View {
     }
 }
 
+/// Feed trade rows — dot-separated metadata (`Long · RR 1.2 · Pts +3 · …`).
+struct PublicTradeFeedMetaInlineRow: View {
+    let summary: TradeSummary
+    var showsRiskReward: Bool = true
+    var showsQuantity: Bool = true
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        if let line = compositeLine {
+            line
+                .font(ExperienceTypography.caption)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var compositeLine: Text? {
+        var built: Text?
+        func dot() -> Text {
+            Text(" · ").foregroundColor(colors.tertiaryText)
+        }
+        func appendSegment(_ title: String, color: Color) {
+            if built != nil { built = built! + dot() }
+            built = (built ?? Text("")) + Text(title).foregroundColor(color)
+        }
+
+        let sideTone: BannerTone = summary.side == .long ? .success : .error
+        appendSegment(
+            TradeDisplay.sideTitle(summary.side),
+            color: sideTone.color(in: colors)
+        )
+
+        if showsRiskReward, summary.riskReward != nil {
+            appendSegment(
+                TradeDisplay.rrText(summary.riskReward),
+                color: colors.secondaryText
+            )
+        }
+        if let points = TradeDisplay.pointsText(summary.points) {
+            appendSegment("Pts \(points)", color: colors.secondaryText)
+        }
+        if showsQuantity {
+            appendSegment(
+                TradeDisplay.quantityBadgeText(summary.quantity),
+                color: colors.secondaryText
+            )
+        }
+        if let duration = TradeDisplay.cardDurationText(for: summary) {
+            appendSegment(duration, color: colors.secondaryText)
+        }
+
+        return built
+    }
+}
+
 /// Capsule chip insets for trade metadata (MNQ, Long, RR, qty, etc.).
 nonisolated enum TradeMetaChipMetrics {
     static let horizontalPadding: CGFloat = 7
@@ -494,46 +552,40 @@ private enum TradeExecutionEntryExitTypography {
 
 // MARK: - Public achievement cards (feed + detail)
 
-/// Shared achievement copy hierarchy: category → title → amount → optional notes.
+/// Shared achievement copy hierarchy (feed + detail + profile).
+/// Category (+ amount on the same row when present) → title → description.
 struct PublicAchievementContentStack: View {
     let achievement: Achievement
-    var showsInlineNotes: Bool = false
+    /// When false, omit the description even if present (e.g. compact previews).
+    var showsInlineNotes: Bool = true
     var showsFeaturedTag: Bool = false
+    var showsPinnedIndicator: Bool = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             if showsFeaturedTag, achievement.isFeatured {
                 ExperienceTag(title: "Featured", tone: .success)
             }
 
-            Text(AchievementDetailPresentation.categoryContextLine(for: achievement))
-                .font(ExperienceTypography.subheadline.weight(.semibold))
-                .foregroundStyle(colors.accent)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-                .accessibilityIdentifier("achievement.category.context")
+            categoryContextRow
 
-            Text(achievement.title)
-                .font(ExperienceTypography.headline)
-                .foregroundStyle(colors.primaryText)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .minimumScaleFactor(0.82)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("achievement.title")
-
-            if let amount = AchievementDetailPresentation.primaryAmountDisplay(for: achievement) {
-                Text(amount.text)
-                    .font(ExperienceTypography.headline.monospacedDigit())
-                    .foregroundStyle(amountColor(amount))
-                    .lineLimit(1)
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+                Text(achievement.title)
+                    .font(ExperienceTypography.headline)
+                    .foregroundStyle(colors.primaryText)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
                     .minimumScaleFactor(0.82)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("achievement.primaryAmount")
+                    .layoutPriority(1)
+                    .accessibilityIdentifier("achievement.title")
+                if showsPinnedIndicator {
+                    ProfileContentPinIndicator()
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if showsInlineNotes, let notes = normalizedNotes {
                 Text(notes)
@@ -545,6 +597,49 @@ struct PublicAchievementContentStack: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var categoryContextRow: some View {
+        let category = AchievementDetailPresentation.categoryContextLine(for: achievement)
+        if let amount = categoryRowAmount {
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+                Text(category)
+                    .font(ExperienceTypography.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.accent)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .layoutPriority(0)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
+                Text(amount.text)
+                    .font(ExperienceTypography.headline.monospacedDigit())
+                    .foregroundStyle(amountColor(amount))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .layoutPriority(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .accessibilityIdentifier("achievement.primaryAmount")
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("achievement.category.context")
+        } else {
+            categoryOnlyLabel(category)
+        }
+    }
+
+    private func categoryOnlyLabel(_ category: String) -> some View {
+        Text(category)
+            .font(ExperienceTypography.subheadline.weight(.semibold))
+            .foregroundStyle(colors.accent)
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("achievement.category.context")
+    }
+
+    private var categoryRowAmount: (text: String, usesMetricColor: Bool)? {
+        AchievementDetailPresentation.primaryAmountDisplay(for: achievement)
     }
 
     private var normalizedNotes: String? {

@@ -29,7 +29,7 @@ struct GlobalUploadStatusBar: View {
                         ProgressView(value: min(1, max(0, progress)))
                             .tint(theme.colors.accent)
                     } else if !presentation.showsRetry {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .controlSize(.small)
                     }
                 }

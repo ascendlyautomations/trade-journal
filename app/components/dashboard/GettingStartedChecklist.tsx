@@ -238,7 +238,7 @@ export default function GettingStartedChecklist({
 
   return (
     <>
-      <div className={shellClass}>
+      <div className={shellClass} data-tt-tour-target="dashboardGettingStarted">
         {showWelcomeHeading && !compact ? (
           <h2 className="mb-4 text-xl font-semibold text-blue-300 md:mb-5 md:text-3xl">
             Welcome to TradeTraxs

@@ -127,7 +127,7 @@ struct ManageRoomChannelsView: View {
             }
             Spacer(minLength: 0)
             if viewModel.savingChannelPermissionID == channel.id {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .controlSize(.small)
             } else if showsDisclosure {
                 Image(systemName: chevronDown ? "chevron.down" : "chevron.right")

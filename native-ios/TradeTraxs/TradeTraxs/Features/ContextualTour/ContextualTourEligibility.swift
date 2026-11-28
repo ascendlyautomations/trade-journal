@@ -36,14 +36,14 @@ enum ContextualTourTargetResolution: Equatable {
 
 enum ContextualTourGeometry {
     static let stabilityTolerance: CGFloat = 1
-    static let resolveTimeout: TimeInterval = 1.2
+    static let resolveTimeout: TimeInterval = 0.45
 
     static func resolveTimeout(for target: ContextualTourTargetID?) -> TimeInterval {
         switch target {
-        case .dashboardCalendar, .feedExplore, .feedTradeRooms, .profileSettings:
-            return 2.5
+        case .dashboardCalendar, .feedExplore, .feedTradeRooms, .profileInsights, .profileSettings:
+            return 0.65
         case .mainTabHome, .mainTabFeed, .mainTabCreate, .mainTabMessages, .mainTabProfile:
-            return 2.0
+            return 0.55
         default:
             return resolveTimeout
         }
@@ -80,7 +80,7 @@ enum ContextualTourGeometry {
             && abs(previous.height - current.height) <= stabilityTolerance
     }
 
-    /// A target is ready only after two usable, agreeing frames. A timeout skips it.
+    /// A target is ready only after two usable, agreeing frames. A timeout skips it (test helper).
     static func resolve(
         frame: CGRect?,
         previous: CGRect?,
@@ -96,10 +96,21 @@ enum ContextualTourGeometry {
         return .waiting
     }
 
+    /// Two-frame stability for spotlight layout updates while presenting.
+    @discardableResult
+    static func recordStabilityCandidate(_ frame: CGRect, previous: inout CGRect?) -> Bool {
+        guard isUsable(frame) else { return false }
+        if let previous, isUsable(previous), isStable(previous, frame) {
+            return true
+        }
+        previous = frame
+        return false
+    }
+
     /// Profile header targets stay at the top; autoscroll fights shell loading and causes flicker.
     static func skipsTourAutoscroll(for target: ContextualTourTargetID) -> Bool {
         switch target {
-        case .profileIdentity, .profileTradeRoom, .profileSettings,
+        case .profileIdentity, .profileTradeRoom, .profileInsights, .profileSettings,
              .mainTabHome, .mainTabFeed, .mainTabCreate, .mainTabMessages, .mainTabProfile:
             return true
         default:
@@ -131,6 +142,90 @@ enum ContextualTourGeometry {
         }
     }
 
+    /// Toolbar glyph targets: measure the visible icon, not the bar button container.
+    static let toolbarIconSpotlightTargets: Set<ContextualTourTargetID> = [
+        .dashboardCalendar,
+        .profileInsights,
+        .profileSettings,
+    ]
+
+    /// Pre-padding square measurement for `profileSettings` (toolbar gear glyph).
+    static func profileSettingsToolbarGlyphSpotlightMeasurementFrame(_ glyphFrame: CGRect) -> CGRect {
+        let side = max(glyphFrame.width, glyphFrame.height)
+        let center = CGPoint(x: glyphFrame.midX, y: glyphFrame.midY)
+        return CGRect(
+            x: center.x - side * 0.5,
+            y: center.y - side * 0.5,
+            width: side,
+            height: side
+        )
+    }
+
+    static func profileSettingsToolbarGlyphSpotlightHolePadding() -> (horizontal: CGFloat, vertical: CGFloat) {
+        (ExperienceSpacing.sm, ExperienceSpacing.sm)
+    }
+
+    /// Same final hole height as `profileSettings`; width follows the Trade Rooms glyph (no `max(width,height)` square).
+    static func feedTradeRoomsToolbarGlyphSpotlightMeasurementFrame(glyphFrame: CGRect) -> CGRect {
+        let capHeight = max(glyphFrame.height, 1)
+        let settingsHeight = profileSettingsToolbarGlyphSpotlightMeasurementFrame(
+            CGRect(
+                x: glyphFrame.midX,
+                y: glyphFrame.midY,
+                width: capHeight,
+                height: capHeight
+            )
+        ).height
+        let width = max(glyphFrame.width, 1)
+        return CGRect(
+            x: glyphFrame.midX - width * 0.5,
+            y: glyphFrame.midY - settingsHeight * 0.5,
+            width: width,
+            height: settingsHeight
+        )
+    }
+
+    /// Square frame centered on the measured icon bounds so spotlight padding is even on all sides.
+    static func refinedSpotlightFrame(_ frame: CGRect, for target: ContextualTourTargetID?) -> CGRect {
+        guard let target, isUsable(frame) else { return frame }
+        if target == .feedTradeRooms {
+            return feedTradeRoomsToolbarGlyphSpotlightMeasurementFrame(glyphFrame: frame)
+        }
+        if target == .profileSettings {
+            return profileSettingsToolbarGlyphSpotlightMeasurementFrame(frame)
+        }
+        guard toolbarIconSpotlightTargets.contains(target) else { return frame }
+        let side = max(frame.width, frame.height)
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        return CGRect(
+            x: center.x - side * 0.5,
+            y: center.y - side * 0.5,
+            width: side,
+            height: side
+        )
+    }
+
+    static func spotlightScrimOpacity(colorScheme: ColorScheme) -> CGFloat {
+        colorScheme == .dark ? 0.74 : 0.55
+    }
+
+    static func spotlightHolePadding(for target: ContextualTourTargetID?) -> (horizontal: CGFloat, vertical: CGFloat) {
+        if target?.isMainTabBarTarget == true {
+            return (ExperienceSpacing.xxs, ExperienceSpacing.xxs)
+        }
+        switch target {
+        case .feedContentFilters:
+            return (ExperienceSpacing.xxs, ExperienceSpacing.xxs)
+        case .feedTradeRooms:
+            return profileSettingsToolbarGlyphSpotlightHolePadding()
+        case .dashboardCalendar, .profileInsights, .profileSettings:
+            let pad = ExperienceSpacing.sm
+            return (pad, pad)
+        default:
+            return (ExperienceSpacing.xs, ExperienceSpacing.xs)
+        }
+    }
+
     static func needsScroll(
         frame: CGRect,
         viewport: CGRect,
@@ -156,7 +251,8 @@ enum ContextualTourGeometry {
         switch target {
         case .dashboardAccountAndDates:
             return UnitPoint(x: 0.5, y: 0.14)
-        case .dashboardPerformance,
+        case .dashboardGettingStarted,
+             .dashboardPerformance,
              .dashboardTrades,
              .dashboardReports,
              .dashboardWithdrawals,
@@ -166,8 +262,10 @@ enum ContextualTourGeometry {
              .expenseTrackerAnalytics,
              .expenseTrackerExport:
             return .top
-        case .settingsAppearance, .settingsTradingRules:
-            return .center
+        case .settingsAppearance:
+            return UnitPoint(x: 0.5, y: 0.72)
+        case .settingsTradingRules:
+            return UnitPoint(x: 0.5, y: 0.38)
         default:
             return .center
         }
@@ -184,6 +282,19 @@ enum ContextualTourGeometry {
             width: viewport.width,
             height: max(0, viewport.height - topInset - bottomInset)
         )
+    }
+
+    /// Tab-bar spotlights live in chrome excluded by scroll measurement insets; use the full overlay viewport.
+    static func spotlightMeasurementVisibleRect(
+        viewport: CGRect,
+        topInset: CGFloat,
+        bottomInset: CGFloat,
+        target: ContextualTourTargetID?
+    ) -> CGRect {
+        if target?.isMainTabBarTarget == true {
+            return viewport
+        }
+        return measurementVisibleRect(viewport: viewport, topInset: topInset, bottomInset: bottomInset)
     }
 }
 
@@ -206,6 +317,8 @@ nonisolated enum ContextualTourDebug {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var lastMessage = ""
     nonisolated(unsafe) private static var lastAppTourMessage = ""
+    nonisolated(unsafe) private static var lastMeasureReject = ""
+    nonisolated(unsafe) private static var lastTourTraceLine = ""
 
     nonisolated static func logAppTour(_ message: String) {
         #if DEBUG
@@ -232,7 +345,45 @@ nonisolated enum ContextualTourDebug {
         #endif
     }
 
-    /// Exact Debug console markers for the zero-trade overlay test.
+    /// Activation → render pipeline tracing. Consecutive identical lines are suppressed unless `force` is set.
+    nonisolated static func logTourTrace(_ message: String, force: Bool = false) {
+        #if DEBUG
+        let line = "[TOUR_TRACE] \(message)"
+        lock.lock()
+        defer { lock.unlock() }
+        if !force, line == lastTourTraceLine { return }
+        lastTourTraceLine = line
+        print(line)
+        logger.debug("\(line, privacy: .public)")
+        #else
+        _ = message
+        #endif
+    }
+
+    nonisolated static func logMeasureReject(_ reason: String) {
+        #if DEBUG
+        lock.lock()
+        defer { lock.unlock() }
+        let line = "[Walkthrough][measure] reject \(reason)"
+        guard line != lastMeasureReject else { return }
+        lastMeasureReject = line
+        logger.debug("\(line, privacy: .public)")
+        print(line)
+        #else
+        _ = reason
+        #endif
+    }
+
+    nonisolated static func logPhaseTransition(_ from: String, _ to: String, _ detail: String) {
+        #if DEBUG
+        log("[Walkthrough][phase] \(from) -> \(to) (\(detail))")
+        #else
+        _ = from
+        _ = to
+        _ = detail
+        #endif
+    }
+
     nonisolated static func logMarker(_ message: String) {
         #if DEBUG
         let line = "[ContextualTour] \(message)"

@@ -88,6 +88,7 @@ enum SettingsHomeModel {
                 displayTitle: "Expense Tracker"
             ),
             SettingsHomeItem(route: .vault, systemImage: "hexagon.fill"),
+            SettingsHomeItem(route: .storyArchive, systemImage: "clock.arrow.circlepath"),
             SettingsHomeItem(route: .appearance, systemImage: "circle.lefthalf.filled"),
         ]
         if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {

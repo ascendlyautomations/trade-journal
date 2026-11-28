@@ -219,8 +219,35 @@ final class FeedScreenViewModel {
         await refresh(trigger: .followingChanged)
     }
 
+    func flushPendingFeedImpressions() async {
+        guard !ExploreModeSupport.skipsAuthenticatedViewerServices else { return }
+        let viewerID: ProfileID?
+        if let existing = state.viewerID {
+            viewerID = existing
+        } else if let userID = await session.currentUserID {
+            viewerID = ProfileID(userID.rawValue)
+        } else {
+            viewerID = nil
+        }
+        guard let viewerID else { return }
+        FeedImpressionCoordinator.shared.configure(rpc: rpc, viewerID: viewerID)
+        await FeedImpressionCoordinator.shared.flushAllPending(rpc: rpc, viewerID: viewerID)
+    }
+
+    func syncFeedImpressionSession() async {
+        guard !ExploreModeSupport.skipsAuthenticatedViewerServices else { return }
+        if let viewerID = state.viewerID {
+            FeedImpressionCoordinator.shared.configure(rpc: rpc, viewerID: viewerID)
+        } else if let userID = await session.currentUserID {
+            let viewerID = ProfileID(userID.rawValue)
+            state.viewerID = viewerID
+            FeedImpressionCoordinator.shared.configure(rpc: rpc, viewerID: viewerID)
+        }
+    }
+
     func refresh(trigger: FeedLoadTrigger) async {
         reconcileSharedFeedScopeWithState()
+        await flushPendingFeedImpressions()
         cancelInFlightLoads()
         bootstrapGeneration &+= 1
         let generation = bootstrapGeneration
@@ -449,6 +476,7 @@ final class FeedScreenViewModel {
         switch entry {
         case .trade(_, let summary):
             detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+            detailCache.seedFeedPostPublishedAt(entry.createdAt, forTrade: summary.id)
             if let postID = entry.feedTradeEngagementPostID {
                 detailCache.seedFeedEngagementTarget(.feedPost(postID), forTrade: summary.id)
             }
@@ -497,13 +525,31 @@ final class FeedScreenViewModel {
     func openStory(_ story: Story) {
         guard ActiveStorySemantics.isActive(createdAt: story.createdAt) else { return }
         ExperienceHaptics.play(.selection)
+        if let viewerID = state.viewerID {
+            StoryViewerViewRecords.shared.rebindIfNeeded(viewerID: viewerID)
+        }
         detailCache.seed(story)
         if let author = detailCache.profile(id: story.authorProfileID)
             ?? FollowListFixtures.profile(id: story.authorProfileID)
         {
             detailCache.seed(author)
         }
-        navigationCoordinator.present(fullScreen: .storyViewer(story.id, .feedCarousel))
+        let slides = storySlidesForOpening(authorID: story.authorProfileID, fallback: story)
+        let entryID = ActiveStorySemantics.preferredEntryStoryID(
+            in: slides,
+            hasViewed: { StoryViewerViewRecords.shared.hasViewed($0) }
+        ) ?? story.id
+        if let entry = slides.first(where: { $0.id == entryID }) ?? slides.first {
+            detailCache.seed(entry)
+        }
+        navigationCoordinator.present(fullScreen: .storyViewer(entryID, .feedCarousel))
+    }
+
+    /// Full author slide deck when the session catalog has it; otherwise the tapped strip story alone.
+    private func storySlidesForOpening(authorID: ProfileID, fallback: Story) -> [Story] {
+        let fromCatalog = FeedStoriesCatalogStore.shared.slides(for: authorID)
+        if !fromCatalog.isEmpty { return fromCatalog }
+        return ActiveStorySemantics.chronologicallyOrderedActive([fallback])
     }
 
     func openCreateStory() {
@@ -613,11 +659,17 @@ final class FeedScreenViewModel {
         viewerID: ProfileID,
         scope: FeedScope,
         filter: FeedContentFilter,
-        cursor: String?
+        cursor: String?,
+        forceNewSession: Bool
     ) -> FeedRankSessionArguments? {
         guard BackendV2FeatureFlags.isEnabled(.feedRotatingRank) else { return nil }
         if cursor == nil {
-            _ = FeedRotatingSessionStore.begin(viewerID: viewerID, scope: scope, filter: filter)
+            _ = FeedRotatingSessionStore.begin(
+                viewerID: viewerID,
+                scope: scope,
+                filter: filter,
+                forceNew: forceNewSession
+            )
         }
         guard let session = FeedRotatingSessionStore.session(
             viewerID: viewerID,
@@ -942,7 +994,8 @@ final class FeedScreenViewModel {
                     viewerID: viewerID,
                     scope: resolvedScope,
                     filter: resolvedFilter,
-                    cursor: nil
+                    cursor: nil,
+                    forceNewSession: false
                 )
             )
             guard generation == bootstrapGeneration, !Task.isCancelled else { return }
@@ -1075,6 +1128,11 @@ final class FeedScreenViewModel {
                     viewerID = ExploreModeSupport.guestFeedViewerID
                 }
                 let feedScope = guestPublicFeed ? FeedScope.global : resolvedScope
+                if !guestPublicFeed {
+                    state.viewerID = viewerID
+                    FeedImpressionCoordinator.shared.configure(rpc: rpc, viewerID: viewerID)
+                }
+                let forceNewRankSession = trigger == .pullRefresh && resolvedCursor == nil
                 if hadCachedFirstRender && !forceNetwork && resolvedCursor == nil {
                     #if DEBUG
                     FeedLoadTrace.log(
@@ -1122,7 +1180,8 @@ final class FeedScreenViewModel {
                             viewerID: viewerID,
                             scope: resolvedScope,
                             filter: resolvedFilter,
-                            cursor: resolvedCursor
+                            cursor: resolvedCursor,
+                            forceNewSession: forceNewRankSession
                         )
                     )
                     guard shouldApplyBootstrapResult(
@@ -1146,8 +1205,16 @@ final class FeedScreenViewModel {
                         loaded.stories,
                         viewerID: viewerID
                     )
+                    let rotatingRankOrdered = BackendV2FeatureFlags.isEnabled(.feedRotatingRank)
+                        && !loaded.rotatingRankFallback
+                        && !guestPublicFeed
+                    let useReconcileMerge = resetting
+                        && resolvedCursor == nil
+                        && forceNetwork
+                        && !existingForReconcile.isEmpty
+                        && (!rotatingRankOrdered || trigger == .reconnectRepair)
                     if resetting {
-                        if forceNetwork && !existingForReconcile.isEmpty && resolvedCursor == nil {
+                        if useReconcileMerge {
                             let reconcileStart = Date()
                             let result = FeedPersistentReconcile.reconcileFirstPage(
                                 existing: existingForReconcile,
@@ -1186,6 +1253,13 @@ final class FeedScreenViewModel {
                         }
                     } else if loaded.rotatingRankFallback {
                         assignFeedEntries(filteredEntries)
+                    } else if rotatingRankOrdered {
+                        assignFeedEntries(
+                            FeedPersistentReconcile.appendUniquePreservingOrder(
+                                existing: state.entries,
+                                incoming: filteredEntries
+                            )
+                        )
                     } else {
                         let existing = Set(state.entries.map(\.id))
                         let appended = filteredEntries.filter { !existing.contains($0.id) }

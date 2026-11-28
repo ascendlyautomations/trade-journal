@@ -5,6 +5,7 @@ struct ManageAccountEditorView: View {
     enum Mode {
         case create
         case edit(TradingAccount)
+        case graduate(TradingAccount)
     }
 
     @Bindable var viewModel: ManageAccountsViewModel
@@ -65,6 +66,7 @@ struct ManageAccountEditorView: View {
         case .create:
             return brokerLinkContext == nil ? "Add Account" : "Create & Link Account"
         case .edit: return "Edit Account"
+        case .graduate: return "Upgrade to Funded"
         }
     }
 
@@ -719,6 +721,8 @@ struct ManageAccountEditorView: View {
             } else {
                 ok = await viewModel.create(draft, livePersonalDrawdown: liveDrawdownConfig)
             }
+        case .graduate(let evaluation):
+            ok = await viewModel.graduateEvaluationToFunded(evaluation: evaluation, draft: draft)
         case .edit(let account):
             ok = await viewModel.update(id: account.id, draft: draft)
             if ok, account.mode == .backtest {
@@ -743,9 +747,15 @@ struct ManageAccountEditorView: View {
             }
         }
         if ok {
-            SaveSuccessConfirmationCenter.shared.present(
-                mode.isCreate ? SaveSuccessToastMessage.changesSaved : SaveSuccessToastMessage.settingsSaved
-            )
+            let toast: String = {
+                switch mode {
+                case .create, .graduate:
+                    return SaveSuccessToastMessage.changesSaved
+                case .edit:
+                    return SaveSuccessToastMessage.settingsSaved
+                }
+            }()
+            SaveSuccessConfirmationCenter.shared.present(toast)
             dismiss()
         }
     }

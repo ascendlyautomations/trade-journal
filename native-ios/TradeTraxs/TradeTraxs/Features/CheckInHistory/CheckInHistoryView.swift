@@ -23,7 +23,7 @@ struct CheckInHistoryView: View {
         Group {
             switch viewModel.phase {
             case .loading where viewModel.summaries.isEmpty:
-                ProgressView("Loading history…")
+                ExperienceLoadingSpinner(message: "Loading history…")
             case .failed(let message):
                 ExperienceErrorState(title: "Couldn't load history", message: message) {
                     Task { await viewModel.refresh() }

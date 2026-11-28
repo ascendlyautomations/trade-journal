@@ -46,7 +46,7 @@ struct SuggestedTradersView: View {
                 )
                 .accessibilityIdentifier("suggestedTraders.error")
             } else if showsBootstrapLoading {
-                ProgressView("Loading traders…")
+                ExperienceLoadingSpinner(message: "Loading traders…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("suggestedTraders.loading")
             } else {
@@ -95,7 +95,7 @@ struct SuggestedTradersView: View {
             {
                 HStack {
                     Spacer()
-                    ProgressView("Searching…")
+                    ExperienceLoadingSpinner(message: "Searching…")
                     Spacer()
                 }
                 .padding(.vertical, ExperienceSpacing.lg)
@@ -127,7 +127,7 @@ struct SuggestedTradersView: View {
                 if showsPagination, viewModel.isLoadingMore {
                     HStack {
                         Spacer()
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                         Spacer()
                     }
                     .listRowBackground(Color.clear)

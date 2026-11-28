@@ -19,6 +19,7 @@ nonisolated protocol ObjectStorageProviding: Sendable {
     func download(bucket: String, path: String) async throws -> Data
     func delete(bucket: String, path: String) async throws
     func publicURL(bucket: String, path: String) -> URL?
+    func signedURL(bucket: String, path: String, expiresIn: Int) async throws -> URL
 }
 
 extension ObjectStorageProviding {
@@ -123,5 +124,9 @@ nonisolated struct SupabaseObjectStorageProvider: ObjectStorageProviding {
 
     func publicURL(bucket: String, path: String) -> URL? {
         storage.publicURL(bucket: bucket, path: path)
+    }
+
+    func signedURL(bucket: String, path: String, expiresIn: Int = 3600) async throws -> URL {
+        try await storage.createSignedURL(bucket: bucket, path: path, expiresIn: expiresIn)
     }
 }

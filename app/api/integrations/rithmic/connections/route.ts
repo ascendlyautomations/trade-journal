@@ -1,5 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { listSafeBrokerConnections } from "@/lib/integrations/brokerIntegrationConnection"
+import { isRithmicDevelopmentIntegrationEnabled } from "@/lib/integrations/rithmic/rithmicDevIntegration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -8,6 +9,14 @@ export async function GET(req: Request) {
   const user = await getRouteUser(req)
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!isRithmicDevelopmentIntegrationEnabled()) {
+    return Response.json({
+      provider: "rithmic",
+      connectionCount: 0,
+      connections: [],
+    })
   }
 
   try {

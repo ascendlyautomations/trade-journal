@@ -21,6 +21,12 @@ struct ReportsPreviewContainerView: View {
         store.sessionPhase = .authenticated
         _navigationStore = State(initialValue: store)
         _navigationCoordinator = State(initialValue: NavigationCoordinator(store: store))
+        if let viewer = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) }) {
+            TraxsProPreviewSession.shared.beginReportsPreview(
+                production: productionData,
+                viewer: viewer
+            )
+        }
     }
 
     var body: some View {
@@ -49,14 +55,6 @@ struct ReportsPreviewContainerView: View {
         .environment(\.traxsProPreviewReadOnly, true)
         .onAppear {
             navigationStore.sessionPhase = .authenticated
-            if let viewer = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) }),
-               !TraxsProPreviewSession.shared.isReportsPreviewActive
-            {
-                TraxsProPreviewSession.shared.beginReportsPreview(
-                    production: productionData,
-                    viewer: viewer
-                )
-            }
         }
         .accessibilityIdentifier("traxspro.preview.reports.container")
     }

@@ -33,6 +33,10 @@ import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/useUserProfile"
+import {
+  recordCreatorShares,
+  resolveWebShareTarget,
+} from "@/lib/creatorShareTracking"
 
 export type ShareToConversationsModalProps = {
   open: boolean
@@ -110,7 +114,23 @@ export default function ShareToConversationsModal({
     [feedKind, postId, tradeId]
   )
 
+  const creatorShareTarget = useMemo(
+    () => resolveWebShareTarget({ feedKind, postId }),
+    [feedKind, postId]
+  )
+
   const successLabel = tradeId || postId ? "Shared" : "Sent"
+
+  useEffect(() => {
+    if (!open || !creatorShareTarget) return
+    void recordCreatorShares(supabase, [
+      {
+        ...creatorShareTarget,
+        share_phase: "initiated",
+        platform: "web",
+      },
+    ])
+  }, [open, creatorShareTarget])
 
   useEffect(() => {
     if (!open) {
@@ -197,8 +217,18 @@ export default function ShareToConversationsModal({
 
   const handleCopyLink = useCallback(async () => {
     if (!deepLinkTarget) return false
-    return copyFeedDeepLinkToClipboard(deepLinkTarget)
-  }, [deepLinkTarget])
+    const ok = await copyFeedDeepLinkToClipboard(deepLinkTarget)
+    if (ok && creatorShareTarget) {
+      void recordCreatorShares(supabase, [
+        {
+          ...creatorShareTarget,
+          share_phase: "completed",
+          platform: "web",
+        },
+      ])
+    }
+    return ok
+  }, [creatorShareTarget, deepLinkTarget])
 
   const handleSend = useCallback(async () => {
     if (isExploreWriteBlocked()) {
@@ -271,6 +301,15 @@ export default function ShareToConversationsModal({
         }
       }
 
+      if (creatorShareTarget) {
+        void recordCreatorShares(supabase, [
+          {
+            ...creatorShareTarget,
+            share_phase: "completed",
+            platform: "web",
+          },
+        ])
+      }
       markSuccessAndDismiss()
     } catch {
       reset()
@@ -282,6 +321,7 @@ export default function ShareToConversationsModal({
     markSending,
     markSuccessAndDismiss,
     postId,
+    creatorShareTarget,
     feedKind,
     reset,
     selectedConversations,

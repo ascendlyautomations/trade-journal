@@ -100,20 +100,11 @@ struct FeedHomeView: View {
 
     private var feedHomeLifecycleDecorated: some View {
         feedHomeChromeDecorated
-        .onChange(of: feedTourChromeReady, initial: true) { _, ready in
-            ContextualTourCoordinator.shared.setFeedChromeReady(ready)
-        }
-        .onChange(of: viewModel.phase) { _, _ in
-            ContextualTourCoordinator.shared.setFeedChromeReady(feedTourChromeReady)
-        }
-        .onChange(of: navigationEnvironment.store.paths.feed) { _, _ in
-            ContextualTourCoordinator.shared.setFeedChromeReady(feedTourChromeReady)
-        }
         .task(id: tabIsActive) {
             guard tabIsActive else {
                 FeedImpressionVisibility.feedSurfaceActive = false
+                Task { await viewModel.flushPendingFeedImpressions() }
                 preserveListScrollOffset()
-                ContextualTourCoordinator.shared.setFeedChromeReady(false)
                 syncFeedPlaybackSurfaceActive(reason: "tabChanged")
                 ActiveScreenBootstrapPriorityGate.feed.setScreenActive(false)
                 SocialRealtimeRepairSurfaces.shared.feedViewModel = nil
@@ -126,6 +117,7 @@ struct FeedHomeView: View {
                 return
             }
             FeedImpressionVisibility.feedSurfaceActive = true
+            await viewModel.syncFeedImpressionSession()
             syncFeedPlaybackSurfaceActive(reason: "tabActive")
             ActiveScreenBootstrapPriorityGate.feed.setScreenActive(true)
             defer { ActiveScreenBootstrapPriorityGate.feed.setScreenActive(false) }
@@ -203,12 +195,9 @@ struct FeedHomeView: View {
         .onChange(of: contextualTour.pinsFeedFilterBar, initial: true) { _, pinned in
             filterBarScrollCoordinator.setWalkthroughPinned(pinned)
             if pinned {
-                FeedFilterBarTourLayoutGate.resetForTourStep()
                 guard viewModel.contentFilter != .clips else { return }
                 scrollAnchor.resetToTop()
                 filterBarScrollCoordinator.revealAtTop()
-            } else {
-                FeedFilterBarTourLayoutGate.clear()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tradeTraxsLiveVoiceSessionDidChange)) { _ in
@@ -218,6 +207,7 @@ struct FeedHomeView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active {
+                Task { await viewModel.flushPendingFeedImpressions() }
                 playbackCoordinator.setSurfaceActive(false, reason: "appBackgrounded")
             } else {
                 syncFeedPlaybackSurfaceActive(reason: "appForegrounded")
@@ -290,9 +280,10 @@ struct FeedHomeView: View {
                         navigationEnvironment.coordinator.open(.feed(.rooms))
                     } label: {
                         Image(systemName: "person.3")
+                            .frame(height: IconSizeToken.md.value)
+                            .contextualTourTarget(.feedTradeRooms)
+                            .contextualTourGlobalFrame(.feedTradeRooms)
                     }
-                    .contextualTourTarget(.feedTradeRooms)
-                    .contextualTourGlobalFrame(.feedTradeRooms)
                     .accessibilityLabel("Trade Rooms")
                     .accessibilityIdentifier("feed.rooms")
                 }
@@ -384,6 +375,8 @@ struct FeedHomeView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(colors.primaryBackground)
             .accessibilityIdentifier("feed.header.contentFilter")
+            .contextualTourTarget(.feedContentFilters)
+            .contextualTourGlobalFrame(.feedContentFilters)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { _, height in
                 guard height > 20 else { return }
                 guard abs(filterBarMeasuredHeight - height) > 0.5 else { return }
@@ -391,18 +384,17 @@ struct FeedHomeView: View {
             }
     }
 
-    /// Tour anchor on the chip strip only, not the reserved auto-hide slot or padded chrome frame.
+    /// Chip strip for the pinned tour filter bar (measurement uses the full ``contentFilterBar`` chrome).
     private var feedContentFilterTourAnchor: some View {
         FeedContentToggle(
             filter: viewModel.contentFilter,
             onSelect: { viewModel.userSelectedContentFilter($0) }
         )
-        .contextualTourTarget(.feedContentFilters)
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { _, frame in
             guard contextualTour.pinsFeedFilterBar, frame.height > 1, frame.width > 1 else { return }
-            FeedFilterBarTourLayoutGate.markLaidOut()
+            contextualTour.noteFeedFilterBarLaidOut()
 #if DEBUG
-            ContextualTourDebug.log("feedFilters chip global=\(frame) mayMeasure=\(FeedFilterBarTourLayoutGate.mayMeasure)")
+            ContextualTourDebug.log("feedFilters chip global=\(frame)")
 #endif
         }
     }
@@ -461,7 +453,7 @@ struct FeedHomeView: View {
                     }
 
                     if viewModel.isLoadingMore {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .padding(.vertical, ExperienceSpacing.md)
                     }
                 }
@@ -611,17 +603,6 @@ struct FeedHomeView: View {
         guard let offset = viewModel.retainedListScrollOffset, offset > 0.5 else { return }
         scrollAnchor.applyRetainedOffset(offset)
         scrollAnchor.scheduleLayoutStableRestore()
-    }
-
-    /// Pinned filter chrome is measurable once the feed root has left its initial idle bootstrap.
-    private var feedTourChromeReady: Bool {
-        guard tabIsActive, navigationEnvironment.store.paths.feed.isEmpty else { return false }
-        switch viewModel.phase {
-        case .idle:
-            return false
-        case .loading, .loaded, .failed:
-            return true
-        }
     }
 
     private var isFeedPlaybackSurfaceActive: Bool {

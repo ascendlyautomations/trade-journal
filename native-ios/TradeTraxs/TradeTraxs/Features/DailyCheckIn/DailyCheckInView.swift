@@ -55,7 +55,7 @@ struct DailyCheckInView: View {
                 } label: {
                     Group {
                         if viewModel.isSaving {
-                            ProgressView()
+                            ExperienceIndeterminateProgress()
                                 .tint(colors.onAccent)
                         } else {
                             Text("Save Check-In")

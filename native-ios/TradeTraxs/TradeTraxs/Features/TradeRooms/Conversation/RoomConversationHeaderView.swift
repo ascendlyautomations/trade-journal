@@ -52,7 +52,7 @@ struct RoomConversationHeaderView: View {
                     Button(action: onJoinTap) {
                         Group {
                             if isJoining {
-                                ProgressView()
+                                ExperienceIndeterminateProgress()
                             } else {
                                 Text(joinButtonTitle)
                                     .experienceStyle(

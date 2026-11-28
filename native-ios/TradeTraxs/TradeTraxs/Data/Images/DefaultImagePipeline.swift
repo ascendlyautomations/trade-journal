@@ -220,8 +220,11 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
         cacheKey: String,
         cacheHit: Bool
     ) async throws -> Data {
-        let reference = request.reference
+        var reference = request.reference
         let purpose = request.purpose
+        if purpose == .storyMedia {
+            reference = await StorySignedMediaResolver.shared.resolvedPlaybackReference(reference)
+        }
         let deliveryQuality = request.deliveryQuality
         let identifier = reference.id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !identifier.isEmpty else {

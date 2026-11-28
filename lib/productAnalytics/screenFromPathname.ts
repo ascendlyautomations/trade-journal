@@ -31,6 +31,7 @@ export function screenIdFromPathname(pathname: string): ProductAnalyticsScreenId
   if (path.startsWith("/settings")) return PRODUCT_ANALYTICS_SCREENS.settings
   if (isAppAddTradePath(path)) return PRODUCT_ANALYTICS_SCREENS.addTrade
   if (path.startsWith("/admin")) return PRODUCT_ANALYTICS_SCREENS.admin
+  if (path === "/profile/insights") return PRODUCT_ANALYTICS_SCREENS.settings
   if (path.startsWith("/profile/")) return PRODUCT_ANALYTICS_SCREENS.profileOther
   if (path.startsWith("/onboarding")) return PRODUCT_ANALYTICS_SCREENS.onboarding
   if (path.startsWith("/ai") || path.includes("analyst")) {

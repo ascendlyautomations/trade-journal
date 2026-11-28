@@ -50,11 +50,33 @@ export async function GET(req: Request, context: RouteContext) {
       state = "reconnect_required"
     }
 
+    if (payload.accounts.length === 0) {
+      console.info("[tradovate/connections/accounts] empty_accounts", {
+        connectionId,
+        state,
+        connectionStatus: payload.connectionStatus,
+        forceRefresh,
+        discoveryOk:
+          payload.discovery && typeof payload.discovery.ok === "boolean"
+            ? payload.discovery.ok
+            : null,
+        discoveryReason:
+          payload.discovery && payload.discovery.ok === false
+            ? payload.discovery.reason
+            : null,
+        discoveryAccountCount:
+          payload.discovery && payload.discovery.ok === true
+            ? payload.discovery.accountCount
+            : null,
+      })
+    }
+
     return Response.json({
       connectionId,
       state,
       connectionStatus: payload.connectionStatus,
       discovery: payload.discovery,
+      pendingLink: payload.pendingLink,
       accounts: payload.accounts,
       listener: payload.listener,
     })

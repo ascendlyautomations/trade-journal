@@ -444,6 +444,7 @@ export async function disconnectBrokerIntegrationById(
       credentials_ciphertext: null,
       access_token_expires_at: null,
       refresh_token_expires_at: null,
+      pending_tradetraxs_account_id: null,
       disconnected_at: now,
       updated_at: now,
     })

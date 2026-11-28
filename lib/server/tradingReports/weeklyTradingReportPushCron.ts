@@ -6,7 +6,7 @@ import { isWeeklyTradingReportPushWindow } from "@/lib/server/tradingReports/wee
 import { shouldSkipWeeklyTradingReportServerPushForUser } from "@/lib/server/tradingReports/weeklyTradingReportPushIosProSkip"
 import { loadTraxProEntitlementSnapshot } from "@/lib/traxProEntitlement"
 
-const WEEKLY_TITLE = "Your Weekly Trading Report is Ready"
+const WEEKLY_TITLE = "Weekly Report"
 
 export { isWeeklyTradingReportPushWindow }
 

@@ -55,7 +55,6 @@ struct CommentComposerView: View {
                 .onChange(of: focused) { _, isFocused in
                     viewModel.maintainKeyboardScrollAnchor = isFocused
                 }
-                .experienceKeyboardExcludesDoneToolbarWhenFocused(focused)
                 .accessibilityIdentifier("interaction.comment.composer")
                 .experienceTextInputProbe(
                     screen: "comments",
@@ -69,7 +68,7 @@ struct CommentComposerView: View {
                 } label: {
                     Group {
                         if viewModel.isPosting {
-                            ProgressView()
+                            ExperienceIndeterminateProgress()
                         } else {
                             Image(systemName: "arrow.up.circle.fill")
                                 .font(.system(size: 28))

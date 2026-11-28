@@ -34,8 +34,6 @@ struct TradingRulesRuleImpactHighlightStrip: View {
 
     @Environment(\.themeColors) private var colors
 
-    private let previewCount = 3
-
     var body: some View {
         if !highlights.isEmpty {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -46,7 +44,7 @@ struct TradingRulesRuleImpactHighlightStrip: View {
                 }
                 Text("Correlation only, not proof that following or violating caused the outcome. Requires 5+ priced trades per side.")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
-                ForEach(Array(highlights.prefix(previewCount))) { item in
+                ForEach(highlights) { item in
                     Button {
                         onOpenRule?(item.ruleID)
                     } label: {

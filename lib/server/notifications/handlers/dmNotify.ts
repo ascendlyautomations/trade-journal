@@ -172,6 +172,7 @@ export async function notifyDmMessage(
     preview,
     isGroup,
     groupName: isGroup ? groupName || "Group" : null,
+    messageType,
     preferenceKey,
   }))
 

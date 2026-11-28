@@ -11,6 +11,7 @@ import {
   defaultRithmicSslCaPath,
   verifyRithmicRuntimeAssets,
 } from "@/lib/integrations/rithmic/rithmicPaths"
+import { isRithmicDevelopmentIntegrationEnabled } from "@/lib/integrations/rithmic/rithmicDevIntegration"
 import { runRithmicPhase1Discovery } from "@/lib/integrations/rithmic/runRithmicPhase1Discovery"
 
 export const runtime = "nodejs"
@@ -32,6 +33,10 @@ function jsonError(code: RithmicPhase1ApiErrorCode, status: number, extra?: Reco
 /** Server-side Rithmic Test discovery (Phase 1). Uses RITHMIC_* env credentials only. */
 export async function POST(req: Request) {
   if (!isRithmicPhase1ApiEnabled()) {
+    return jsonError("rithmic_phase1_disabled", 403)
+  }
+
+  if (!isRithmicDevelopmentIntegrationEnabled()) {
     return jsonError("rithmic_phase1_disabled", 403)
   }
 

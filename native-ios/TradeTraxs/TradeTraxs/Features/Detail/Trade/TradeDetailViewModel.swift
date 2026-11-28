@@ -186,6 +186,15 @@ final class TradeDetailViewModel {
         cache.copyTradePublicModeSummary(for: tradeID)
     }
 
+    /// Feed-parity author subline (`@username · 1d`), publication not execution time.
+    var socialFeedPostPublishedAt: Date? {
+        guard experience == .social else { return nil }
+        if let seeded = cache.feedPostPublishedAt(forTrade: tradeID) {
+            return seeded
+        }
+        return trade?.firstPublishedAt
+    }
+
     /// Share caption (`public_description`), never private journal notes.
     var displayPublicCaption: String? {
         guard experience == .social else { return nil }

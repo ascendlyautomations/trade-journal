@@ -73,7 +73,6 @@ import { fetchAchievementsForAccounts } from "@/lib/fetchAccountAchievements"
 import type { Achievement } from "@/lib/achievements"
 import CreateAccountModal from "@/app/components/CreateAccountModal"
 import PropFirmEvalContinuanceModal from "@/app/components/propfirm/PropFirmEvalContinuanceModal"
-import PropFirmFundedRulesChoiceModal from "@/app/components/propfirm/PropFirmFundedRulesChoiceModal"
 import PayoutSetupModal, {
   type PayoutSetupValues,
 } from "@/app/components/PayoutSetupModal"
@@ -110,15 +109,14 @@ import {
   SELECT_MENU_CLASS,
 } from "@/lib/accountDropdownStyles"
 import {
-  buildConvertEvalToFundedFormInitial,
   buildCreateFundedAccountFormInitial,
   buildPropFirmMilestoneAchievementInitials,
-  convertEvalAccountToFundedWithRules,
+  graduatePropFirmEvalToFunded,
   propFirmMilestoneUploadConfig,
   type PropFirmMilestoneKind,
 } from "@/lib/propfirmMilestones"
 import {
-  insertTradingAccount,
+  mapTradingAccountRow,
   type CreateTradingAccountPayload,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
@@ -464,10 +462,7 @@ export default function PropFirmPage() {
   const [evalContinuanceAccount, setEvalContinuanceAccount] =
     useState<PropfirmAccount | null>(null)
   const [evalContinuanceBusy, setEvalContinuanceBusy] = useState(false)
-  const [evalRulesChoiceOpen, setEvalRulesChoiceOpen] = useState(false)
-  const [convertRulesEditorOpen, setConvertRulesEditorOpen] = useState(false)
-  const [convertRulesSameAsEval, setConvertRulesSameAsEval] = useState(false)
-  const [createFundedAccountOpen, setCreateFundedAccountOpen] = useState(false)
+  const [graduateFundedEditorOpen, setGraduateFundedEditorOpen] = useState(false)
   const propFirmV2Enabled = isBackendV2Enabled("propFirm")
   const [propFirmUseLegacy, setPropFirmUseLegacy] = useState(false)
   const propFirmV2Active = propFirmV2Enabled && !propFirmUseLegacy
@@ -1077,25 +1072,16 @@ export default function PropFirmPage() {
   function closeEvalMilestoneFlow() {
     if (evalContinuanceBusy) return
     setEvalContinuanceOpen(false)
-    setEvalRulesChoiceOpen(false)
-    setConvertRulesEditorOpen(false)
-    setCreateFundedAccountOpen(false)
+    setGraduateFundedEditorOpen(false)
     setEvalContinuanceAccount(null)
-    setConvertRulesSameAsEval(false)
   }
 
-  function handleConvertEvalToFunded() {
+  function handleOpenGraduateFundedSetup() {
     setEvalContinuanceOpen(false)
-    setEvalRulesChoiceOpen(true)
+    setGraduateFundedEditorOpen(true)
   }
 
-  function openConvertRulesEditor(sameAsEval: boolean) {
-    setConvertRulesSameAsEval(sameAsEval)
-    setEvalRulesChoiceOpen(false)
-    setConvertRulesEditorOpen(true)
-  }
-
-  async function handleConvertRulesSave(account: CreateTradingAccountPayload) {
+  async function handleGraduateFundedSave(account: CreateTradingAccountPayload) {
     if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
@@ -1104,7 +1090,11 @@ export default function PropFirmPage() {
 
     setEvalContinuanceBusy(true)
     try {
-      const { account: updated, error } = await convertEvalAccountToFundedWithRules(
+      const {
+        account: funded,
+        error,
+        purchaseExpenseWarning,
+      } = await graduatePropFirmEvalToFunded(
         supabase,
         user.id,
         evalContinuanceAccount,
@@ -1119,78 +1109,41 @@ export default function PropFirmPage() {
           purchaseDate: account.purchaseDate,
         }
       )
-      if (error || !updated) {
-        console.error(error ?? "Failed to convert account")
+      if (error || !funded) {
+        console.error(error ?? "Failed to graduate account")
         showPopup({
           type: "error",
-          message: "Couldn't convert account. Please try again.",
+          message: "Couldn't set up funded account. Please try again.",
         })
         return
       }
 
-      const accountId = String(evalContinuanceAccount.id)
-      setAccounts((previous) =>
-        previous.map((row) =>
-          String(row.id) === accountId
-            ? tradingListItemToPropfirmAccount(updated, row)
+      const evalId = String(evalContinuanceAccount.id)
+      const { data: evalRow } = await supabase
+        .from("accounts")
+        .select("*")
+        .eq("id", evalId)
+        .maybeSingle()
+      setAccounts((previous) => {
+        const next = previous.map((row) =>
+          String(row.id) === evalId && evalRow
+            ? tradingListItemToPropfirmAccount(
+                mapTradingAccountRow(evalRow as Record<string, unknown>),
+                row
+              )
             : row
         )
-      )
-      setAccountFilter(accountId)
+        return [...next, tradingListItemToPropfirmAccount(funded)]
+      })
+      setAccountFilter(String(funded.id))
       invalidateAccountsCache(user.id)
       invalidatePropFirmBootstrap(user.id)
       propFirmBootstrapRef.current = null
       closeEvalMilestoneFlow()
-      showPopup({ type: "success", message: "Account converted to funded" })
-    } finally {
-      setEvalContinuanceBusy(false)
-    }
-  }
-
-  function handleOpenCreateFundedAccount() {
-    setEvalContinuanceOpen(false)
-    setCreateFundedAccountOpen(true)
-  }
-
-  async function handleCreateFundedAccountSave(account: CreateTradingAccountPayload) {
-    if (isExploreWriteBlocked()) {
-      requestDemoSignup("save")
-      return
-    }
-    if (!user?.id || !evalContinuanceAccount) return
-
-    setEvalContinuanceBusy(true)
-    try {
-      const { account: created, error } = await insertTradingAccount(
-        supabase,
-        user.id,
-        {
-          name: account.name,
-          size: account.size,
-          id: account.id,
-          category: "Prop Firm",
-          mode: resolveAccountModeForSave("Prop Firm", "Funded"),
-          rules: account.rules,
-          purchaseCost: account.purchaseCost,
-          purchaseDate: account.purchaseDate,
-        }
-      )
-      if (error || !created) {
-        console.error(error ?? "Failed to create funded account")
-        showPopup({
-          type: "error",
-          message: "Couldn't create funded account. Please try again.",
-        })
-        return
-      }
-
-      setAccounts((previous) => [...previous, created as PropfirmAccount])
-      setAccountFilter(String(created.id))
-      invalidateAccountsCache(user.id)
-      invalidatePropFirmBootstrap(user.id)
-      propFirmBootstrapRef.current = null
-      closeEvalMilestoneFlow()
-      showPopup({ type: "success", message: "Funded account created" })
+      showPopup({
+        type: purchaseExpenseWarning ? "error" : "success",
+        message: purchaseExpenseWarning ?? "Funded account created",
+      })
     } finally {
       setEvalContinuanceBusy(false)
     }
@@ -1624,48 +1577,14 @@ export default function PropFirmPage() {
           account={evalContinuanceAccount}
           busy={evalContinuanceBusy}
           onClose={closeEvalMilestoneFlow}
-          onConvertToFunded={handleConvertEvalToFunded}
-          onCreateNewFundedAccount={handleOpenCreateFundedAccount}
-        />
-
-        <PropFirmFundedRulesChoiceModal
-          open={evalRulesChoiceOpen}
-          busy={evalContinuanceBusy}
-          onClose={closeEvalMilestoneFlow}
-          onKeepSameRules={() => openConvertRulesEditor(true)}
-          onReviewRules={() => openConvertRulesEditor(false)}
+          onSetUpFundedAccount={handleOpenGraduateFundedSetup}
         />
 
         <CreateAccountModal
-          open={convertRulesEditorOpen}
+          open={graduateFundedEditorOpen}
           onClose={() => {
             if (!evalContinuanceBusy) {
-              setConvertRulesEditorOpen(false)
-              setEvalRulesChoiceOpen(true)
-            }
-          }}
-          initialAccount={
-            evalContinuanceAccount
-              ? buildConvertEvalToFundedFormInitial(evalContinuanceAccount)
-              : null
-          }
-          onSave={handleConvertRulesSave}
-          dialogTitle="Funded Account Rules"
-          dialogSubtitle={
-            convertRulesSameAsEval
-              ? "Your evaluation rules are pre-filled below. Press Continue if nothing changed."
-              : "Review and update your funded account rules before continuing."
-          }
-          saveLabel="Continue"
-          lockCategory="Prop Firm"
-          lockMode="Funded"
-        />
-
-        <CreateAccountModal
-          open={createFundedAccountOpen}
-          onClose={() => {
-            if (!evalContinuanceBusy) {
-              setCreateFundedAccountOpen(false)
+              setGraduateFundedEditorOpen(false)
               setEvalContinuanceOpen(true)
             }
           }}
@@ -1674,9 +1593,10 @@ export default function PropFirmPage() {
               ? buildCreateFundedAccountFormInitial(evalContinuanceAccount)
               : null
           }
-          onSave={handleCreateFundedAccountSave}
-          dialogTitle="Create Funded Account"
-          dialogSubtitle="Your prop firm issued a new funded account. Rules are copied from your evaluation and can be edited before saving."
+          onSave={handleGraduateFundedSave}
+          dialogTitle="Set Up Funded Account"
+          dialogSubtitle="Evaluation history stays on your eval account. Configure your funded account and rules below."
+          saveLabel="Create Funded Account"
           lockCategory="Prop Firm"
           lockMode="Funded"
         />

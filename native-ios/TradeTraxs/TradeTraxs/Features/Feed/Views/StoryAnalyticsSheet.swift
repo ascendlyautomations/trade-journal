@@ -35,7 +35,7 @@ struct StoryAnalyticsSheet: View {
             Group {
                 switch viewModel.phase {
                 case .loading:
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .failed(let message):
                     ExperienceErrorState(title: "Couldn't load analytics", message: message) {

@@ -20,13 +20,13 @@ enum LiveBroadcastDeepLinkHandler {
                 if let roomQuery, !roomQuery.isEmpty {
                     let roomID = RoomID(roomQuery)
                     let title = coordinator.watchSession?.roomTitle ?? "Trade Room"
-                    if coordinator.isWatchingRoom(roomID) {
+                    if coordinator.isWatchingRoomConnected(roomID) {
                         coordinator.presentViewer()
                     } else {
-                        await coordinator.watch(roomID: roomID, roomTitle: title)
-                        if coordinator.canPresentViewer(for: roomID) {
-                            coordinator.presentViewer()
-                        }
+                        _ = await coordinator.openLiveWatchFromNavigation(
+                            roomID: roomID,
+                            roomTitle: title
+                        )
                     }
                 } else if coordinator.isWatching {
                     coordinator.presentViewer()

@@ -17,6 +17,7 @@ nonisolated enum ActivityNotificationFormatting {
 
     static func engagementTargetLabel(for notification: ActivityNotification) -> String {
         if notification.commentID != nil { return "comment" }
+        if notification.storyID != nil { return "story" }
         if notification.reelID != nil { return "clip" }
         if notification.achievementPostID != nil { return "achievement" }
         if notification.postID != nil || notification.profilePostID != nil { return "post" }
@@ -30,40 +31,42 @@ nonisolated enum ActivityNotificationFormatting {
     ) -> String {
         switch notification.kind {
         case .like:
-            return "\(actorName) liked your \(engagementTargetLabel(for: notification))"
+            return "\(actorName) liked your \(engagementTargetLabel(for: notification))."
         case .comment:
             let preview = notification.body.trimmingCharacters(in: .whitespacesAndNewlines)
             if preview.isEmpty {
-                return "\(actorName) commented on your \(engagementTargetLabel(for: notification))"
+                return "\(actorName) commented on your \(engagementTargetLabel(for: notification))."
             }
             let clipped = preview.count > 80 ? String(preview.prefix(77)) + "…" : preview
+            if notification.isReply {
+                return "\(actorName) replied to your comment: \"\(clipped)\""
+            }
+            if notification.isMention {
+                return "\(actorName) mentioned you: \"\(clipped)\""
+            }
             return "\(actorName) commented: \"\(clipped)\""
         case .follow:
-            return "\(actorName) started following you"
+            return "\(actorName) started following you."
         case .followRequest:
-            return "\(actorName) requested to follow you"
+            return "\(actorName) requested to follow you."
         case .followRequestAccepted:
-            return "\(actorName) accepted your follow request"
+            return "\(actorName) accepted your follow request."
         case .roomJoin:
-            if let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines), !room.isEmpty {
-                return "\(actorName) joined \(room)"
-            }
-            return "\(actorName) joined your room"
+            let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let roomLabel = room.isEmpty ? "a Trade Room" : room
+            return "\(actorName) joined \(roomLabel)."
         case .tradeRoomJoinRequest:
-            if let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines), !room.isEmpty {
-                return "\(actorName) requested to join \(room)"
-            }
-            return "\(actorName) requested to join a Trade Room"
+            let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let roomLabel = room.isEmpty ? "a Trade Room" : room
+            return "\(actorName) requested to join \(roomLabel)."
         case .tradeRoomJoinAccepted:
-            if let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines), !room.isEmpty {
-                return "Your request to join \(room) was accepted"
-            }
-            return "Your join request was accepted"
+            let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let roomLabel = room.isEmpty ? "the Trade Room" : room
+            return "Your request to join \(roomLabel) was accepted."
         case .tradeRoomJoinDeclined:
-            if let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines), !room.isEmpty {
-                return "Your request to join \(room) was declined"
-            }
-            return "Your join request was declined"
+            let room = notification.roomName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let roomLabel = room.isEmpty ? "the Trade Room" : room
+            return "Your request to join \(roomLabel) was declined."
         case .roomMention:
             let roomLabel = roomChannelTitle(
                 roomName: notification.roomName,
@@ -80,17 +83,20 @@ nonisolated enum ActivityNotificationFormatting {
             if !notification.title.isEmpty, notification.title != notification.kind.rawValue {
                 return notification.title
             }
-            return "New affiliate referral"
+            return "New Referral"
         case .affiliateCommissionEarned:
             if !notification.title.isEmpty, notification.title != notification.kind.rawValue {
                 return notification.title
             }
-            return "Affiliate commission earned"
+            return "Commission Earned"
         case .tradingReport:
             if !notification.title.isEmpty, notification.title != notification.kind.rawValue {
                 return notification.title
             }
-            return "Your trading report is ready"
+            if let reportID = notification.reportID?.rawValue, reportID.hasPrefix("month:") {
+                return "Monthly Report"
+            }
+            return "Weekly Report"
         case .message, .system:
             if !notification.title.isEmpty {
                 return notification.title
@@ -106,7 +112,14 @@ nonisolated enum ActivityNotificationFormatting {
             return room.isEmpty ? nil : room
         case .affiliateReferral, .affiliateCommissionEarned, .tradingReport:
             let body = notification.body.trimmingCharacters(in: .whitespacesAndNewlines)
-            return body.isEmpty ? nil : body
+            if !body.isEmpty { return body }
+            if notification.kind == .tradingReport {
+                if let reportID = notification.reportID?.rawValue, reportID.hasPrefix("month:") {
+                    return "Your monthly performance report is ready."
+                }
+                return "Your weekly performance report is ready."
+            }
+            return nil
         default:
             return nil
         }

@@ -44,8 +44,7 @@ struct RoomInfoView: View {
         Group {
             switch viewModel.phase {
             case .idle, .loading:
-                ExperienceLoadingSpinner(label: "Loading room info")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading room info")
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn't load room info",

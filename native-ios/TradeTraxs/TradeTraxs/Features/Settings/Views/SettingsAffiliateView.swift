@@ -80,7 +80,7 @@ struct SettingsAffiliateView: View {
         .experienceNavigationTitle("Referrals")
         .overlay {
             if viewModel.isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .onAppear { viewModel.loadIfNeeded() }

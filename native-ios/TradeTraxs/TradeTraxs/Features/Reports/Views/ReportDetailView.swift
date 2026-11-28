@@ -94,7 +94,7 @@ struct ReportDetailView: View {
 
     private var loadingContent: some View {
         VStack(spacing: ExperienceSpacing.lg) {
-            ProgressView("Generating report…")
+            ExperienceLoadingSpinner(message: "Generating report…")
                 .tint(colors.accent)
                 .padding(.top, ExperienceSpacing.xxl)
             ExperienceSkeleton(height: 110, cornerRadius: ExperienceRadius.card)

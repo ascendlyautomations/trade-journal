@@ -23,12 +23,17 @@ enum FeedRotatingSessionStore {
         return head.range(of: #"^-?\d+(\.\d+)?$"#, options: .regularExpression) != nil
     }
 
+  /// Starts or resumes a rank session. Pass `forceNew: true` on pull-to-refresh so impressions + order reset.
     static func begin(
         viewerID: ProfileID,
         scope: FeedScope,
-        filter: FeedContentFilter
+        filter: FeedContentFilter,
+        forceNew: Bool = false
     ) -> Session {
         let key = cacheKey(viewerID: viewerID, scope: scope, filter: filter)
+        if !forceNew, let existing = sessions[key], existing.usesV2 {
+            return existing
+        }
         let session = Session(
             sessionID: UUID().uuidString,
             rankFrozenAt: Date(),
@@ -36,6 +41,11 @@ enum FeedRotatingSessionStore {
             usesV2: true
         )
         sessions[key] = session
+        FeedRotatingRankProbe.rankSessionBegan(
+            scope: scope.rawValue,
+            filter: filter.rpcValue,
+            sessionID: session.sessionID
+        )
         return session
     }
 
@@ -73,9 +83,13 @@ enum FeedRotatingSessionStore {
         sessions = sessions.filter { !$0.key.hasPrefix(prefix) }
     }
 
+    static func resetAll() {
+        sessions = [:]
+    }
+
     #if DEBUG
     static func resetAllForTesting() {
-        sessions = [:]
+        resetAll()
     }
     #endif
 }

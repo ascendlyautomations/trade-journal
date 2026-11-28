@@ -175,7 +175,7 @@ struct ProUpgradeGateSheet: View {
                 HStack {
                     Spacer()
                     if viewModel.actionState == .purchasing || viewModel.actionState == .synchronizing {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .padding(.trailing, ExperienceSpacing.xs)
                     }
                     Text(viewModel.upgradePrimaryButtonTitle)
@@ -254,7 +254,7 @@ struct ProUpgradeGateSheet: View {
     private var plansBlock: some View {
         switch viewModel.productsState {
         case .idle, .loading:
-            ProgressView("Loading plans…")
+            ExperienceLoadingSpinner(message: "Loading plans…")
         case .failed:
             SettingsInlineError(message: "Couldn't load App Store plans right now.") {
                 viewModel.retryLoadProducts()

@@ -7,7 +7,6 @@ struct ProfileOnboardingView: View {
     @State private var cropSourceImage: UIImage?
     @State private var photoPickerLoadID = UUID()
     @FocusState private var usernameFieldFocused: Bool
-    @State private var bioEditorActive = false
     @Environment(\.themeColors) private var colors
     let imagePipeline: any ImagePipeline
     let onSignOut: () -> Void
@@ -49,6 +48,14 @@ struct ProfileOnboardingView: View {
                     }
                     .padding(.top, ExperienceSpacing.xs)
 
+                    if viewModel.showsMissingRequiredFieldsMessage {
+                        Text("You are missing required field(s).")
+                            .experienceStyle(.caption, color: colors.error)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityIdentifier("onboarding.missingRequiredFields")
+                    }
+
                     if viewModel.canContinueWithoutPhoto {
                         Button {
                             Task { await viewModel.continueWithoutPhoto() }
@@ -83,18 +90,12 @@ struct ProfileOnboardingView: View {
         .experienceScreenBackground()
         .experienceProtectedFormDismiss()
         .experienceFormKeyboard(isFocused: $usernameFieldFocused)
-        .experienceKeyboardRequiresDoneToolbarWhenFocused(bioEditorActive)
         .onAppear {
             viewModel.applySignupNamePrefillIfBlank()
         }
         .onChange(of: viewModel.usernameError) { _, error in
             if error != nil {
                 usernameFieldFocused = true
-            }
-        }
-        .onChange(of: usernameFieldFocused) { _, focused in
-            if focused {
-                bioEditorActive = false
             }
         }
         .onChange(of: photoItem) { _, item in
@@ -252,8 +253,7 @@ struct ProfileOnboardingView: View {
 
     private var nameRow: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text("Name")
-                .experienceStyle(.caption, color: colors.secondaryText)
+            onboardingRequiredFieldLabel("Name")
 
             TextField("Your name", text: $viewModel.displayName)
                 .textInputAutocapitalization(.words)
@@ -272,8 +272,7 @@ struct ProfileOnboardingView: View {
 
     private var usernameRow: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text("Username")
-                .experienceStyle(.caption, color: colors.secondaryText)
+            onboardingRequiredFieldLabel("Username")
 
             HStack(spacing: ExperienceSpacing.xxs) {
                 Text("@")
@@ -326,10 +325,6 @@ struct ProfileOnboardingView: View {
                 maxHeight: 88,
                 onEditingBegan: {
                     usernameFieldFocused = false
-                    bioEditorActive = true
-                },
-                onEditingEnded: {
-                    bioEditorActive = false
                 }
             )
             .padding(.vertical, ExperienceSpacing.xxs)
@@ -358,8 +353,7 @@ struct ProfileOnboardingView: View {
 
     private var traderTypeRow: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("Trader Type")
-                .experienceStyle(.caption, color: colors.secondaryText)
+            onboardingRequiredFieldLabel("Trader Type")
 
             HStack(spacing: ExperienceSpacing.xxs) {
                 ForEach(TraderType.profileSelectableCases, id: \.self) { type in
@@ -380,8 +374,7 @@ struct ProfileOnboardingView: View {
 
     private var tradingStyleRow: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(ProfileTradingStyleField.label)
-                .experienceStyle(.caption, color: colors.secondaryText)
+            onboardingRequiredFieldLabel(ProfileTradingStyleField.label)
 
             TextField(ProfileTradingStyleField.placeholder, text: $viewModel.tradingStyle)
                 .textInputAutocapitalization(.words)
@@ -406,8 +399,7 @@ struct ProfileOnboardingView: View {
 
     private var startedTradingRow: some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            Text("Started Trading")
-                .experienceStyle(.body, color: colors.primaryText)
+            onboardingRequiredFieldLabel("Started Trading", usesBodyStyle: true)
 
             Spacer(minLength: ExperienceSpacing.sm)
 
@@ -432,6 +424,25 @@ struct ProfileOnboardingView: View {
             .textCase(.uppercase)
             .tracking(0.35)
             .accessibilityAddTraits(.isHeader)
+    }
+
+    private func onboardingRequiredFieldLabel(_ title: String, usesBodyStyle: Bool = false) -> some View {
+        HStack(spacing: 0) {
+            Group {
+                if usesBodyStyle {
+                    Text(title)
+                        .experienceStyle(.body, color: colors.primaryText)
+                } else {
+                    Text(title)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                }
+            }
+            Text(" *")
+                .font(usesBodyStyle ? ExperienceTypography.body : .caption)
+                .foregroundStyle(colors.error)
+                .accessibilityHidden(true)
+        }
+        .accessibilityLabel("\(title), required")
     }
 
     private var startedTradingBinding: Binding<Date> {

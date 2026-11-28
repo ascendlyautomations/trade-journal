@@ -335,9 +335,8 @@ final class DashboardViewModel {
     ) async {
         guard let profileID else { return }
         if loadsTraxsProPreviewSampleOnly {
-            RulesPreviewDebugLog.log(
-                "ensureTradingRulesComplianceForPresentation called during preview (production hydration path)"
-            )
+            recomputeTradingRulesCompliance()
+            return
         }
         let publishBaseline = baseline ?? TradingRulesComplianceRecomputeCoordinator.currentGeneration
         let deps = dependencies ?? TradingRulesComplianceLoadDependencies(
@@ -382,13 +381,8 @@ final class DashboardViewModel {
             RulesPreviewDebugLog.log("ensureTradingRulesComplianceForPresentation skip overwrite configured rules")
             return
         }
-        if loadsTraxsProPreviewSampleOnly {
-            RulesPreviewDebugLog.log(
-                "ensureTradingRulesComplianceForPresentation committing to preview store \(RulesPreviewDebugLog.describe(output: output))"
-            )
-        }
         let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
-        let committed = rulesPresentationStore.commit(
+        _ = rulesPresentationStore.commit(
             output: output,
             profileID: profileID,
             scope: scope,
@@ -397,11 +391,6 @@ final class DashboardViewModel {
             generation: token,
             preferencesUnavailable: preferencesUnavailable
         )
-        if loadsTraxsProPreviewSampleOnly {
-            RulesPreviewDebugLog.log(
-                "ensureTradingRulesComplianceForPresentation commit returned \(committed) store=\(RulesPreviewDebugLog.describe(session: rulesPresentationStore))"
-            )
-        }
         if preferenceContext == nil, let context = output.preferencesContext {
             preferenceContext = context
             TradingRulesCompliancePreferencesCache.store(context, for: profileID)
@@ -2809,88 +2798,8 @@ final class DashboardViewModel {
         )
         reconcileDashboardAccountFilterIfNeeded()
         recomputePsychology()
-        RulesPreviewDebugLog.log(
-            "applyTraxsProPreviewCanonicalSample complete summary=\(summary != nil) tradeInputs=\(tradeInputs.count) rulesStore=\(RulesPreviewDebugLog.storeID(rulesPresentationStore)) \(RulesPreviewDebugLog.describeConfiguredRules(context: preferenceContext)) env=\(RulesPreviewDebugLog.describe(TraxsProPreviewSession.shared.activePreviewEnvironment))"
-        )
-        publishTraxsProPreviewTradingRulesIfNeeded()
-    }
-
-    private func publishTraxsProPreviewTradingRulesIfNeeded() {
-        RulesPreviewDebugLog.log(
-            "publishTraxsProPreviewTradingRulesIfNeeded enter loadsPreview=\(loadsTraxsProPreviewSampleOnly) profileID=\(profileID?.rawValue ?? "nil") summary=\(summary != nil) tradeInputs=\(tradeInputs.count) rulesStore=\(RulesPreviewDebugLog.storeID(rulesPresentationStore))"
-        )
-        guard loadsTraxsProPreviewSampleOnly else {
-            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: loadsTraxsProPreviewSampleOnly=false")
-            return
-        }
-        guard let profileID else {
-            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: profileID=nil")
-            return
-        }
-        guard summary != nil else {
-            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: summary=nil")
-            return
-        }
-        guard !tradeInputs.isEmpty else {
-            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: tradeInputs empty")
-            return
-        }
-        guard let preview = TraxsProPreviewSession.shared.activePreviewEnvironment else {
-            RulesPreviewDebugLog.log("publishTraxsProPreviewTradingRulesIfNeeded guard fail: activePreviewEnvironment=nil")
-            return
-        }
-        guard preview.viewer == profileID else {
-            RulesPreviewDebugLog.log(
-                "publishTraxsProPreviewTradingRulesIfNeeded guard fail: viewer mismatch preview=\(preview.viewer.rawValue) dashboard=\(profileID.rawValue)"
-            )
-            return
-        }
-        let generation = preview.generation
-        let preferenceContext = preview.preferenceContext
-        let scopeFilter = clientScopeFilter()
-        RulesPreviewDebugLog.log(
-            "publishTraxsProPreviewTradingRulesIfNeeded scheduling sequence task generation=\(generation) \(RulesPreviewDebugLog.describe(scopeFilter: scopeFilter)) \(RulesPreviewDebugLog.describeConfiguredRules(context: preferenceContext))"
-        )
-        let deps = TradingRulesComplianceLoadDependencies(
-            detailCache: detailCache,
-            tradesRepository: trades,
-            tradingPreferences: tradingPreferences
-        )
-        tradingRulesRecomputeSequence &+= 1
-        let sequence = tradingRulesRecomputeSequence
-        tradingRulesRecomputeTask?.cancel()
-        tradingRulesRecomputeTask = Task { @MainActor [weak self] in
-            guard let self, !Task.isCancelled, sequence == self.tradingRulesRecomputeSequence else {
-                RulesPreviewDebugLog.log(
-                    "publishTraxsProPreviewTradingRulesIfNeeded task aborted cancelled=\(Task.isCancelled) sequence=\(sequence)"
-                )
-                return
-            }
-            guard TraxsProPreviewSession.shared.activePreviewEnvironment?.isCurrentGeneration(generation) == true
-            else {
-                RulesPreviewDebugLog.log(
-                    "publishTraxsProPreviewTradingRulesIfNeeded task aborted stale generation=\(generation)"
-                )
-                return
-            }
-            let published = await TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshot(
-                profileID: profileID,
-                dependencies: deps,
-                preferenceContext: preferenceContext,
-                dashboardScopeFilter: scopeFilter
-            )
-            RulesPreviewDebugLog.log(
-                "publishTraxsProPreviewTradingRulesIfNeeded publishBundledSampleSnapshot returned \(published) store=\(RulesPreviewDebugLog.describe(session: self.rulesPresentationStore))"
-            )
-            guard TraxsProPreviewSession.shared.activePreviewEnvironment?.isCurrentGeneration(generation) == true
-            else {
-                RulesPreviewDebugLog.log(
-                    "publishTraxsProPreviewTradingRulesIfNeeded task end aborted stale generation=\(generation) after publish"
-                )
-                return
-            }
-            self.refreshDashboardReadinessProbes()
-        }
+        recomputeTradingRulesCompliance()
+        refreshDashboardReadinessProbes()
     }
 
     private func clearIneligibleRemoteAccountChartState() {
@@ -4593,8 +4502,8 @@ final class DashboardViewModel {
 
     private func scheduleTradingRulesComplianceRecompute() {
         if loadsTraxsProPreviewSampleOnly {
-            RulesPreviewDebugLog.log("scheduleTradingRulesComplianceRecompute preview path")
-            publishTraxsProPreviewTradingRulesIfNeeded()
+            recomputeTradingRulesCompliance()
+            refreshDashboardReadinessProbes()
             return
         }
         tradingRulesRecomputeSequence &+= 1
@@ -5274,8 +5183,7 @@ final class DashboardViewModel {
     func restoreTradingRulesPresentationIfNeeded() {
         guard let profileID else { return }
         if loadsTraxsProPreviewSampleOnly {
-            RulesPreviewDebugLog.log("restoreTradingRulesPresentationIfNeeded preview shortcut")
-            publishTraxsProPreviewTradingRulesIfNeeded()
+            recomputeTradingRulesCompliance()
             return
         }
         rulesPresentationStore.clearIfProfileMismatch(profileID)
@@ -5311,22 +5219,22 @@ final class DashboardViewModel {
     }
 
     func recomputeTradingRulesCompliance() {
-        if loadsTraxsProPreviewSampleOnly {
-            publishTraxsProPreviewTradingRulesIfNeeded()
-            return
-        }
-        let ready = !isScopeFilteredMetricsLoading && profileID != nil
+        let ready = loadsTraxsProPreviewSampleOnly
+            ? (profileID != nil)
+            : (!isScopeFilteredMetricsLoading && profileID != nil)
 
         guard let profileID else {
             TradingRulesComplianceRecomputeCoordinator.resetForSessionBoundary()
             return
         }
 
-        guard ProMonetizationPolicy.shouldComputeTradingRulesCompliance(
-            demoModeActive: ExploreModeSupport.isActive,
-            profileID: profileID
-        ) else {
-            return
+        if !loadsTraxsProPreviewSampleOnly {
+            guard ProMonetizationPolicy.shouldComputeTradingRulesCompliance(
+                demoModeActive: ExploreModeSupport.isActive,
+                profileID: profileID
+            ) else {
+                return
+            }
         }
 
         adoptCachedTradingRulesPreferencesIfNeeded()
@@ -5339,18 +5247,23 @@ final class DashboardViewModel {
 
         let scopedTrades = complianceScopedTradesForRules()
 
-        let isFreeRulesTier = ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
-            demoModeActive: ExploreModeSupport.isActive,
-            profileID: profileID
-        )
+        let isFreeRulesTier = loadsTraxsProPreviewSampleOnly
+            ? false
+            : ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
+                demoModeActive: ExploreModeSupport.isActive,
+                profileID: profileID
+            )
         let hasRulesConfigured = TradingRulesPlanTier.hasConfiguredRules(
             context: preferenceContext,
             isFreeTier: isFreeRulesTier
         )
-        let complianceRuleFilter = ProMonetizationPolicy.tradingRulesComplianceRuleFilter(
-            demoModeActive: ExploreModeSupport.isActive,
-            profileID: profileID
-        )
+        let complianceRuleFilter: Set<TradingRulesComplianceAnalytics.RuleID>? =
+            loadsTraxsProPreviewSampleOnly
+                ? nil
+                : ProMonetizationPolicy.tradingRulesComplianceRuleFilter(
+                    demoModeActive: ExploreModeSupport.isActive,
+                    profileID: profileID
+                )
         let preferencesUnavailable = preferenceContext == nil
         if preferencesUnavailable, !hasRulesConfigured {
             if rulesPresentationStore.retainsConfiguredRules(for: profileID) {
@@ -5482,6 +5395,23 @@ final class DashboardViewModel {
         let tradesForCompute = scopedTrades
         let discipline = prepared.discipline
         let ownerCount = prepared.ownerTradeCount
+
+        if loadsTraxsProPreviewSampleOnly {
+            let rulesPreferences = preferenceContext
+                ?? DemoCanonicalDataset.previewPreferenceContext(for: profileID)
+            let generation = TraxsProPreviewSession.shared.activePreviewEnvironment?.generation ?? 0
+            _ = TradingRulesAnalyticsPreviewSupport.publishBundledSampleSnapshotSynchronously(
+                profileID: profileID,
+                presentationStore: rulesPresentationStore,
+                preferenceContext: rulesPreferences,
+                accounts: accounts,
+                ownerTrades: ownerTrades.filter { $0.mode != .backtest },
+                generation: generation,
+                dashboardScopeFilter: clientScopeFilter()
+            )
+            refreshDashboardReadinessProbes()
+            return
+        }
 
         TradingRulesComplianceRecomputeCoordinator.request(
             profileID: profileID,

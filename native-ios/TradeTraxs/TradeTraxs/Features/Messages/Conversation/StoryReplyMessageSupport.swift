@@ -119,18 +119,4 @@ nonisolated enum StoryReplyMessageSupport {
         return false
     }
 
-    /// Ephemeral seed for story viewer navigation when feed cache misses the row.
-    static func provisionalStory(from payload: Payload) -> Story {
-        let mediaID = payload.storyImageURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let kind: MediaKind = isVideoMediaURL(mediaID) ? .video : .image
-        return Story(
-            id: StoryID(payload.storyID),
-            authorProfileID: ProfileID(payload.storyOwnerID),
-            media: MediaReference(id: mediaID, kind: kind, altText: nil),
-            expiresAt: Date().addingTimeInterval(ActiveStorySemantics.window),
-            createdAt: Date(),
-            viewerHasSeen: true
-        )
-    }
-
 }

@@ -56,8 +56,8 @@ final class PostOnboardingWelcomeCoordinator {
         PostAuthOnboardingWelcomeStore.record(profileID: profileID, choice: .tour)
         isPresented = false
         NotificationCenter.default.post(name: .postOnboardingWelcomeDidDismiss, object: nil)
-        prepareDashboardIfNeeded(navigationCoordinator: navigationCoordinator)
-        ContextualTourCoordinator.shared.notePostOnboardingWalkthroughShouldPresent(userID: userID)
+        ContextualTourDebug.logTourTrace("take-tour button action received")
+        ContextualTourCoordinator.shared.beginWelcomeTakeTour()
     }
 
     func maybeLater() {

@@ -340,14 +340,13 @@ struct RoomBroadcastChatComposer: View {
                 colors.fillSecondary,
                 in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
             )
-            .experienceKeyboardExcludesDoneToolbarWhenFocused(composerFocus)
     }
 
     private var sendButton: some View {
         Button(action: sendChat) {
             Group {
                 if isSendingChat {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .frame(width: 28, height: 28)
                 } else {
                     Image(systemName: "arrow.up.circle.fill")

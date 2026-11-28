@@ -89,6 +89,11 @@ export async function loadTradovateConnectionAccounts(
   discovery: TradovateAccountDiscoveryResult | null
   accounts: Awaited<ReturnType<typeof listSafeBrokerIntegrationAccounts>>
   listener: TradovateListenerSnapshot | null
+  pendingLink: Awaited<
+    ReturnType<
+      typeof import("@/lib/integrations/brokerConnectionPendingLink").loadBrokerConnectionPendingLink
+    >
+  >
 }> {
   const owned = await loadOwnedBrokerConnection(supabase, {
     userId,
@@ -104,11 +109,19 @@ export async function loadTradovateConnectionAccounts(
       provider: "tradovate",
       connectionId,
     })
+    const { loadBrokerConnectionPendingLink } = await import(
+      "@/lib/integrations/brokerConnectionPendingLink"
+    )
+    const pendingLink = await loadBrokerConnectionPendingLink(supabase, {
+      userId,
+      connectionId,
+    })
     return {
       connectionStatus,
       discovery: null,
       accounts,
       listener: null,
+      pendingLink,
     }
   }
 
@@ -118,6 +131,7 @@ export async function loadTradovateConnectionAccounts(
       discovery: null,
       accounts: [],
       listener: null,
+      pendingLink: null,
     }
   }
 
@@ -152,5 +166,13 @@ export async function loadTradovateConnectionAccounts(
     userId
   )
 
-  return { connectionStatus, discovery, accounts: accountsWithSync, listener }
+  const { loadBrokerConnectionPendingLink } = await import(
+    "@/lib/integrations/brokerConnectionPendingLink"
+  )
+  const pendingLink = await loadBrokerConnectionPendingLink(supabase, {
+    userId,
+    connectionId,
+  })
+
+  return { connectionStatus, discovery, accounts: accountsWithSync, listener, pendingLink }
 }

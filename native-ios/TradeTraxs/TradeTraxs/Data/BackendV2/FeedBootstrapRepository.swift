@@ -306,6 +306,7 @@ enum FeedBootstrapLoader {
                                 )
                             } catch {
                                 rotatingFallbackFlag.boolValue = true
+                                FeedRotatingRankProbe.v2Fallback(reason: String(describing: error))
                                 let v1 = FeedRpcBootstrapRepository(rpc: rpc)
                                 value = try await v1.loadFeedBootstrap(
                                     scope: rpcScope,
@@ -391,12 +392,19 @@ enum FeedBootstrapLoader {
         #endif
 
         let feedItemOrder = applied.items.filter { $0.kind != .story }.map(\.id)
-        var entries = FeedSupport.sortDescending(
-            FeedBootstrap.buildEntriesFromSeededItems(applied.items, detailCache: detailCache)
-        )
+        let usedRotatingRank = BackendV2FeatureFlags.isEnabled(.feedRotatingRank)
+            && rankSession != nil
+            && !guestPublicMode
+            && !rotatingFallbackFlag.boolValue
+        var entries = FeedBootstrap.buildEntriesFromSeededItems(applied.items, detailCache: detailCache)
         entries = CopyTradeFeedDedupe.dedupeTimeline(entries)
         if !guestPublicMode {
             entries = FeedViewerOwnershipFilter.filterEntries(entries, viewerID: viewerID)
+        }
+        if usedRotatingRank {
+            entries = FeedBootstrap.entriesInBootstrapOrder(entries, feedItemOrder: feedItemOrder)
+        } else {
+            entries = FeedSupport.sortDescending(entries)
         }
 
         #if DEBUG
@@ -404,8 +412,17 @@ enum FeedBootstrapLoader {
         #endif
 
         let builtIDs = Set(entries.map(\.id))
-        let pendingHydrationItems = applied.items.filter {
+        var pendingHydrationItems = applied.items.filter {
             $0.kind != .story && !builtIDs.contains($0.id)
+        }
+        for item in applied.items where item.kind == .achievement {
+            guard let entry = entries.first(where: { $0.id == item.id }),
+                  case .achievement(_, let achievement) = entry,
+                  AchievementHydrationSupport.needsFeedRowHydration(achievement)
+            else { continue }
+            if !pendingHydrationItems.contains(where: { $0.id == item.id }) {
+                pendingHydrationItems.append(item)
+            }
         }
 
         if cursor == nil {

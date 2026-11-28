@@ -14,6 +14,7 @@ enum TradovateBrokerOAuthSession {
             let status = items["status"]?.lowercased()
             BrokerOAuthDebugLog.callbackStatus(status)
             if status == "success" {
+                TradovateBrokerOAuthNotificationPayload.post(from: callbackURL)
                 return .success
             }
             return .error(reason: items["reason"])

@@ -5,7 +5,7 @@
  */
 
 export const ACCOUNTS_SELECT =
-  "id,account_number,name,account_size,mode,category,is_active,can_add_trades,show_in_account_dropdowns,note,consistency,max_drawdown,drawdown_type,daily_drawdown,profit_target,winning_days,winning_day_threshold"
+  "id,account_number,name,account_size,mode,category,is_active,can_add_trades,show_in_account_dropdowns,note,consistency,max_drawdown,drawdown_type,daily_drawdown,profit_target,winning_days,winning_day_threshold,account_lifecycle_id,graduated_to_account_id,graduated_from_account_id"
 
 export const SESSION_PROFILE_SELECT =
   "id,name,username,onboarding_completed,is_pro,avatar_url"

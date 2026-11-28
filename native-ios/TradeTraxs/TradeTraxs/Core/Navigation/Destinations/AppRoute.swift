@@ -144,6 +144,7 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case affiliate
     case help
     case otherProfile(ProfileID)
+    case profileInsights
     case trade(TradeID)
     case post(PostID)
     case reel(ReelID)
@@ -195,6 +196,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case privacyMessageAudience = "privacy-message-audience"
     case affiliate
     case vault
+    case storyArchive = "story-archive"
     case support
     case productFeedback = "product-feedback"
     case supportContact = "support-contact"
@@ -236,6 +238,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .privacyMessageAudience: return "Who Can Message Me"
         case .affiliate: return "Referrals"
         case .vault: return "Vault"
+        case .storyArchive: return "Story Archive"
         case .support: return "Help & Support"
         case .productFeedback: return "Product Feedback"
         case .supportContact: return "Contact Support"

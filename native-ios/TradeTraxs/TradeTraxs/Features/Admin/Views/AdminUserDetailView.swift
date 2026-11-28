@@ -123,7 +123,7 @@ struct AdminUserDetailView: View {
             if viewModel.isLoadingActivity {
                 HStack {
                     Spacer()
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                     Spacer()
                 }
             } else if let activity = viewModel.activity {
@@ -194,7 +194,7 @@ struct AdminUserDetailView: View {
             if viewModel.isLoadingDeletePreview {
                 HStack {
                     Spacer()
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                     Spacer()
                 }
             } else if let preview = viewModel.deletePreview {

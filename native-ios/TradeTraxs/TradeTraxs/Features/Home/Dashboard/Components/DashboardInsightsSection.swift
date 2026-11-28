@@ -109,7 +109,7 @@ struct DashboardInsightsSection: View {
 
     private var loadingState: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            ProgressView()
+            ExperienceIndeterminateProgress()
             Text("Loading insights…")
                 .experienceStyle(.footnote, color: colors.secondaryText)
         }

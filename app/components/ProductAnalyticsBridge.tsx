@@ -18,6 +18,7 @@ import {
   screenIdFromPathname,
 } from "@/lib/productAnalytics/screenFromPathname"
 import { PRODUCT_ANALYTICS_SCREENS } from "@/lib/productAnalytics/constants"
+import { isProfileUuidSegment } from "@/lib/profileRoutes"
 
 /** Authenticated product analytics — fire-and-forget, never blocks UI. */
 export default function ProductAnalyticsBridge() {
@@ -59,12 +60,12 @@ export default function ProductAnalyticsBridge() {
     if (profile?.username && profileSegment.toLowerCase() === profile.username.toLowerCase()) {
       return
     }
-    const uuidLike = /^[0-9a-f-]{36}$/i.test(profileSegment)
-    if (!uuidLike) return
     const cacheKey = `${profileSegment}:${pathname}`
     if (lastProfileRef.current === cacheKey) return
-    lastProfileRef.current = cacheKey
-    productAnalyticsProfileViewed(profileSegment)
+    if (isProfileUuidSegment(profileSegment)) {
+      lastProfileRef.current = cacheKey
+      productAnalyticsProfileViewed(profileSegment)
+    }
   }, [pathname, profile?.username, userId])
 
   useEffect(() => {

@@ -118,7 +118,7 @@ struct PostOnboardingPlanSelectionView: View {
             switch viewModel.productsState {
             case .idle, .loading:
                 HStack(spacing: ExperienceSpacing.sm) {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                     Text("Loading App Store plans…")
                         .experienceStyle(.footnote, color: colors.secondaryText)
                 }

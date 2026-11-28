@@ -16,6 +16,15 @@ nonisolated enum MediaURLResolver {
             return url
         }
 
+        // Stories bucket is private: raw object paths must use signed URLs or authenticated download.
+        if bucket == .stories {
+            StoryDebug.log(
+                "mediaURL.storiesPrivatePath",
+                "path=\(identifier)"
+            )
+            return nil
+        }
+
         return storage.publicURL(bucket: bucket.rawValue, path: identifier)
     }
 }

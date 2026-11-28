@@ -144,7 +144,7 @@ struct PsychologyCoachView: View {
     private var contentBlock: some View {
         switch viewModel.phase {
         case .loading where viewModel.aiReply == nil && viewModel.messages.isEmpty:
-            ProgressView("Loading coach…")
+            ExperienceLoadingSpinner(message: "Loading coach…")
         case .failed:
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 Text("Coach unavailable")

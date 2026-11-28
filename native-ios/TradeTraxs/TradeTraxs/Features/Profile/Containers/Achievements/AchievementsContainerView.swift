@@ -23,7 +23,7 @@ struct AchievementsContainerView: View {
     var body: some View {
         ProfileSectionContainerChrome(
             section: .achievements,
-            state: viewModel.state,
+            state: viewModel.sectionChromeState,
             emptyMessage: viewModel.isOwner ? nil : ProfileSection.achievements.emptyMessage,
             emptyActionTitle: viewModel.isOwner ? "Add Achievement" : nil,
             emptyAction: viewModel.isOwner ? { viewModel.addAchievement() } : nil,

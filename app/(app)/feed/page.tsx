@@ -87,7 +87,11 @@ import {
   type ActiveStoryRow,
   type StoryBarProfile,
   deleteStoryById,
+  feedStoryPreviewsToActiveRows,
   groupActiveStoriesByUser,
+  markStoryViewedInStoriesByUser,
+  preferredStoryEntryIndex,
+  recordStoryView,
   removeStoryFromStoriesByUser,
   userHasActiveStory,
 } from "@/lib/activeStories"
@@ -838,10 +842,14 @@ function FeedPageContent() {
     runUpload,
   ])
 
-  const openStory = useCallback((userId: string) => {
-    setActiveStoryUser(userId)
-    setCurrentStoryIndex(0)
-  }, [])
+  const openStory = useCallback(
+    (userId: string) => {
+      const list = storiesByUser[userId] ?? []
+      setActiveStoryUser(userId)
+      setCurrentStoryIndex(preferredStoryEntryIndex(list))
+    },
+    [storiesByUser]
+  )
 
   const handleCloseStoryViewer = useCallback(() => {
     setActiveStoryUser(null)
@@ -899,10 +907,12 @@ function FeedPageContent() {
       : -1
 
     if (currentUserIndex >= 0 && currentUserIndex < userIds.length - 1) {
-      setActiveStoryUser(userIds[currentUserIndex + 1])
-      setCurrentStoryIndex(0)
+      const nextUserId = userIds[currentUserIndex + 1]
+      const list = storiesByUser[nextUserId] ?? []
+      setActiveStoryUser(nextUserId)
+      setCurrentStoryIndex(preferredStoryEntryIndex(list))
     }
-  }, [activeStoryUser, users])
+  }, [activeStoryUser, storiesByUser, users])
 
   const prevUser = useCallback(() => {
     const userIds = users.map((u) => u.id)
@@ -914,7 +924,7 @@ function FeedPageContent() {
       const prevUserId = userIds[currentUserIndex - 1]
       const prevUserStories = storiesByUser[prevUserId] ?? []
       setActiveStoryUser(prevUserId)
-      setCurrentStoryIndex(Math.max(0, prevUserStories.length - 1))
+      setCurrentStoryIndex(preferredStoryEntryIndex(prevUserStories))
     }
   }, [activeStoryUser, storiesByUser, users])
 
@@ -965,6 +975,33 @@ function FeedPageContent() {
 
     return () => clearTimeout(timer)
   }, [activeStoryUser, currentStoryIndex, storiesByUser, nextSlide])
+
+  useEffect(() => {
+    if (!activeStoryUser || !currentStory?.id || !user?.id) return
+    const ownerId = String(activeStoryUser)
+    if (ownerId !== String(user.id)) {
+      void recordStoryView(supabase, currentStory.id)
+    }
+    setStoriesByUser((current) => {
+      const next = markStoryViewedInStoriesByUser(
+        current,
+        ownerId,
+        currentStory.id
+      )
+      if (next === current) return current
+      const storyKey = [...new Set([...followingStoryUserIds, user.id])]
+        .sort()
+        .join(",")
+      writeStoriesSession(storyKey, next)
+      return next
+    })
+  }, [
+    activeStoryUser,
+    currentStory?.id,
+    followingStoryUserIds,
+    setStoriesByUser,
+    user?.id,
+  ])
 
   useEffect(() => {
     if (!activeStoryUser) return
@@ -1383,7 +1420,7 @@ function FeedPageContent() {
             writeStoriesSession(
               storyKey,
               groupActiveStoriesByUser(
-                bootstrap.data.stories as ActiveStoryRow[]
+                feedStoryPreviewsToActiveRows(bootstrap.data.stories)
               )
             )
           }

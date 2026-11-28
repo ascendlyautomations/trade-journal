@@ -13,6 +13,7 @@ import {
 import {
   analyzeTradeFailureFromError,
   getOpenAiClient,
+  openAiAnalystModel,
   openAiApiKey,
   openAiErrorMetaForLog,
   openAiRetryDelayMs,
@@ -90,7 +91,7 @@ async function createTradeAnalysisCompletion(
 
   const run = (withImage: boolean) =>
     openai.chat.completions.create({
-      model: "gpt-4o",
+      model: openAiAnalystModel(),
       messages: buildOpenAiMessages(
         prompt,
         withImage ? imageUrl : null,

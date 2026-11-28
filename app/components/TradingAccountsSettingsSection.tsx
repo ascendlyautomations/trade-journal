@@ -15,6 +15,13 @@ import {
   subscribeAppDataCache,
 } from "@/lib/appDataCache"
 import {
+  buildTradingAccountManagementRows,
+  canUpgradeEvaluationToFunded,
+  countDistinctAccountSlots,
+  graduateEvalToFunded,
+  milestoneAccountFromListItem,
+} from "@/lib/accountLifecycle"
+import {
   assertCanCreateTradingAccount,
   formatTradingAccountMode,
   FREE_PLAN_ACCOUNT_LIMIT,
@@ -29,6 +36,8 @@ import {
   matchesTradingAccountSearch,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
+import { buildCreateFundedAccountFormInitial } from "@/lib/propfirmMilestones"
+import { resolveAccountModeForSave } from "@/lib/createAccountForm"
 import { useFreePlanAccountSlotSelection } from "@/app/components/FreePlanAccountSlotShell"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useProGate } from "@/lib/useProGate"
@@ -84,11 +93,31 @@ export default function TradingAccountsSettingsSection({
   const [noteEditingAccount, setNoteEditingAccount] =
     useState<TradingAccountListItem | null>(null)
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
+  const [graduateEvalAccount, setGraduateEvalAccount] =
+    useState<TradingAccountListItem | null>(null)
+  const [graduating, setGraduating] = useState(false)
+
+  const logicalSlotCount = useMemo(
+    () => countDistinctAccountSlots(accounts),
+    [accounts]
+  )
+
+  const graduateFormValues = useMemo(() => {
+    if (!graduateEvalAccount) return null
+    const initial = buildCreateFundedAccountFormInitial(
+      milestoneAccountFromListItem(graduateEvalAccount)
+    )
+    return {
+      ...initial,
+      purchaseCost: "",
+      purchaseDate: "",
+    }
+  }, [graduateEvalAccount])
 
   const canCreateMore =
     isPro ||
     !enforceFreeLimits ||
-    accounts.length < FREE_PLAN_ACCOUNT_LIMIT
+    logicalSlotCount < FREE_PLAN_ACCOUNT_LIMIT
 
   const editFormValues = useMemo(
     () =>
@@ -131,15 +160,27 @@ export default function TradingAccountsSettingsSection({
     return sorted.filter((account) => matchesTradingAccountSearch(account, q))
   }, [accounts, searchQuery])
 
-  const pageCount = Math.max(1, Math.ceil(filteredAccounts.length / ACCOUNTS_PAGE_SIZE))
+  const filteredManagementRows = useMemo(
+    () => buildTradingAccountManagementRows(filteredAccounts),
+    [filteredAccounts]
+  )
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredManagementRows.length / ACCOUNTS_PAGE_SIZE)
+  )
   const safePage = Math.min(page, pageCount - 1)
   const pageStart = safePage * ACCOUNTS_PAGE_SIZE
-  const paginatedAccounts = filteredAccounts.slice(
+  const paginatedRows = filteredManagementRows.slice(
     pageStart,
     pageStart + ACCOUNTS_PAGE_SIZE
   )
-  const rangeStart = filteredAccounts.length === 0 ? 0 : pageStart + 1
-  const rangeEnd = Math.min(pageStart + ACCOUNTS_PAGE_SIZE, filteredAccounts.length)
+  const rangeStart =
+    filteredManagementRows.length === 0 ? 0 : pageStart + 1
+  const rangeEnd = Math.min(
+    pageStart + ACCOUNTS_PAGE_SIZE,
+    filteredManagementRows.length
+  )
 
   useEffect(() => {
     setPage(0)
@@ -357,6 +398,196 @@ export default function TradingAccountsSettingsSection({
     void refreshAccounts({ force: true })
   }
 
+  async function handleGraduateSave(newAccount: CreateAccountSavePayload) {
+    if (!userId || !graduateEvalAccount || graduating) return
+    setGraduating(true)
+    const { fundedAccount, error, purchaseExpenseWarning } =
+      await graduateEvalToFunded(supabase, userId, graduateEvalAccount.id, {
+        name: newAccount.name,
+        size: newAccount.size,
+        id: newAccount.id,
+        category: "Prop Firm",
+        mode: resolveAccountModeForSave("Prop Firm", "Funded"),
+        rules: newAccount.rules,
+        purchaseCost: newAccount.purchaseCost,
+        purchaseDate: newAccount.purchaseDate,
+      })
+    setGraduating(false)
+    if (error || !fundedAccount) {
+      console.error(error)
+      showPopup({
+        type: "error",
+        message: handleSupabaseError(error ?? new Error("Graduation failed")),
+      })
+      return
+    }
+    setGraduateEvalAccount(null)
+    showPopup({
+      type: purchaseExpenseWarning ? "error" : "success",
+      message: purchaseExpenseWarning ?? "Funded account created",
+    })
+    invalidateAccountCaches()
+    await refreshAccounts({ force: true })
+  }
+
+  function renderAccountCard(
+    account: TradingAccountListItem,
+    options?: { nested?: boolean }
+  ) {
+    const modeLabel = formatTradingAccountMode(account.mode)
+    const visibleInFilters = account.show_in_account_dropdowns
+    const confirmedFree = freePlanSlots?.viewerIsConfirmedFree === true
+    const tradeEnabled = account.can_add_trades
+    const statusLabel = !visibleInFilters
+      ? "Hidden"
+      : confirmedFree
+        ? tradeEnabled
+          ? "Active"
+          : "View Only"
+        : "Active"
+    const busy = togglingId === account.id
+    const isEditingNote = noteEditingAccount?.id === account.id
+    const noteText = account.note?.trim() ?? ""
+    const savingNote = savingNoteId === account.id
+    const nested = options?.nested === true
+
+    return (
+      <div
+        key={account.id}
+        className={`rounded-xl border border-white/10 bg-black/20 p-4 ${
+          nested ? "ml-4 border-white/5 bg-black/10" : ""
+        }`}
+      >
+        <p className="flex flex-wrap items-baseline gap-x-1 font-medium text-white">
+          <span>{tradingAccountDisplayTitle(account)}</span>
+          {account.account_number?.trim() ? (
+            <span className="text-sm font-normal text-gray-400">
+              · ID: {account.account_number.trim()}
+            </span>
+          ) : null}
+        </p>
+        {nested ? (
+          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+            Completed evaluation
+          </p>
+        ) : null}
+        <dl className="mt-2 space-y-1 text-sm text-gray-400">
+          <div className="flex gap-2">
+            <dt className="shrink-0 text-gray-400">Category:</dt>
+            <dd>{account.category || "Personal"}</dd>
+          </div>
+          {modeLabel ? (
+            <div className="flex gap-2">
+              <dt className="shrink-0 text-gray-400">Mode:</dt>
+              <dd>{modeLabel}</dd>
+            </div>
+          ) : null}
+          <div className="flex gap-2">
+            <dt className="shrink-0 text-gray-400">Status:</dt>
+            <dd
+              className={
+                statusLabel === "Active"
+                  ? "text-emerald-300"
+                  : statusLabel === "View Only"
+                    ? "text-amber-200/90"
+                    : "text-red-300/90"
+              }
+            >
+              {statusLabel}
+            </dd>
+          </div>
+        </dl>
+
+        {isEditingNote ? (
+          <div className="mt-3 space-y-2 rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <input
+              value={noteEditingAccount.note ?? ""}
+              onChange={(e) =>
+                setNoteEditingAccount({
+                  ...noteEditingAccount,
+                  note: e.target.value,
+                })
+              }
+              placeholder="Note (e.g. blown, passed...)"
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white placeholder:text-gray-400"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={savingNote}
+                onClick={() => void saveNote(noteEditingAccount)}
+                className="text-sm font-medium text-blue-400 hover:text-blue-300 disabled:opacity-50"
+              >
+                {savingNote ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                disabled={savingNote}
+                onClick={() => setNoteEditingAccount(null)}
+                className="text-sm text-gray-400 hover:text-gray-300 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {noteText ? (
+              <div className="mt-3 text-sm text-gray-400">
+                <span className="text-gray-400">Note:</span>
+                <p className="mt-1 whitespace-pre-wrap text-gray-300">
+                  {noteText}
+                </p>
+              </div>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {!nested && canUpgradeEvaluationToFunded(account) ? (
+                <button
+                  type="button"
+                  onClick={() => setGraduateEvalAccount(account)}
+                  className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/20"
+                >
+                  Upgrade to Funded
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setEditModalAccount(account)}
+                disabled={Boolean(account.graduated_to_account_id)}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => openNoteEditor(account)}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-blue-300 transition hover:bg-white/10"
+              >
+                {noteText ? "Edit Note" : "Add Note"}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleToggleFilterVisibility(account)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                  visibleInFilters
+                    ? "bg-red-500/15 text-red-200 hover:bg-red-500/25"
+                    : "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                }`}
+              >
+                {busy
+                  ? "Updating…"
+                  : visibleInFilters
+                    ? "Hide from filters"
+                    : "Show in filters"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
       <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
@@ -364,10 +595,24 @@ export default function TradingAccountsSettingsSection({
           Trading Accounts
         </h3>
         <p className="mt-1 text-sm text-gray-400">
-          Choose up to 3 active accounts for new trades on Free. View-only
-          accounts keep full history; use show/hide to control dashboard and
-          filter visibility without changing active slots.
+          Choose up to 3 active accounts for new trades on Free. An evaluation
+          plus its funded successor share one account slot. View-only accounts
+          keep full history; use show/hide per account for filter visibility.
         </p>
+        {!isPro && enforceFreeLimits && accounts.length > 0 ? (
+          <p className="mt-2 text-sm text-gray-300">
+            Account slots used:{" "}
+            <span className="font-medium text-white">
+              {logicalSlotCount}/{FREE_PLAN_ACCOUNT_LIMIT}
+            </span>
+            {accounts.length > logicalSlotCount ? (
+              <span className="text-gray-400">
+                {" "}
+                ({accounts.length} records including completed evaluations)
+              </span>
+            ) : null}
+          </p>
+        ) : null}
 
         {freePlanSlots?.canReconfigureActiveAccounts ? (
           <button
@@ -402,152 +647,25 @@ export default function TradingAccountsSettingsSection({
               </p>
             ) : (
               <>
-                <ul className="mt-4 space-y-3">
-                  {paginatedAccounts.map((account) => {
-                    const modeLabel = formatTradingAccountMode(account.mode)
-                    const visibleInFilters = account.show_in_account_dropdowns
-                    const confirmedFree =
-                      freePlanSlots?.viewerIsConfirmedFree === true
-                    const tradeEnabled = account.can_add_trades
-                    const statusLabel = !visibleInFilters
-                      ? "Hidden"
-                      : confirmedFree
-                        ? tradeEnabled
-                          ? "Active"
-                          : "View Only"
-                        : "Active"
-                    const busy = togglingId === account.id
-                    const isEditingNote =
-                      noteEditingAccount?.id === account.id
-                    const noteText = account.note?.trim() ?? ""
-                    const savingNote = savingNoteId === account.id
-
+                <div className="mt-4 space-y-3">
+                  {paginatedRows.map((row) => {
+                    if (row.kind === "standalone") {
+                      return renderAccountCard(row.account)
+                    }
                     return (
-                      <li
-                        key={account.id}
-                        className="rounded-xl border border-white/10 bg-black/20 p-4"
-                      >
-                        <p className="flex flex-wrap items-baseline gap-x-1 font-medium text-white">
-                          <span>{tradingAccountDisplayTitle(account)}</span>
-                          {account.account_number?.trim() ? (
-                            <span className="text-sm font-normal text-gray-400">
-                              · ID: {account.account_number.trim()}
-                            </span>
-                          ) : null}
-                        </p>
-                        <dl className="mt-2 space-y-1 text-sm text-gray-400">
-                          <div className="flex gap-2">
-                            <dt className="shrink-0 text-gray-400">Category:</dt>
-                            <dd>{account.category || "Personal"}</dd>
-                          </div>
-                          {modeLabel ? (
-                            <div className="flex gap-2">
-                              <dt className="shrink-0 text-gray-400">Mode:</dt>
-                              <dd>{modeLabel}</dd>
-                            </div>
-                          ) : null}
-                          <div className="flex gap-2">
-                            <dt className="shrink-0 text-gray-400">Status:</dt>
-                            <dd
-                              className={
-                                statusLabel === "Active"
-                                  ? "text-emerald-300"
-                                  : statusLabel === "View Only"
-                                    ? "text-amber-200/90"
-                                    : "text-red-300/90"
-                              }
-                            >
-                              {statusLabel}
-                            </dd>
-                          </div>
-                        </dl>
-
-                        {isEditingNote ? (
-                          <div className="mt-3 space-y-2 rounded-lg border border-white/10 bg-white/[0.04] p-3">
-                            <input
-                              value={noteEditingAccount.note ?? ""}
-                              onChange={(e) =>
-                                setNoteEditingAccount({
-                                  ...noteEditingAccount,
-                                  note: e.target.value,
-                                })
-                              }
-                              placeholder="Note (e.g. blown, passed...)"
-                              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white placeholder:text-gray-400"
-                            />
-                            <div className="flex flex-wrap items-center gap-3">
-                              <button
-                                type="button"
-                                disabled={savingNote}
-                                onClick={() => void saveNote(noteEditingAccount)}
-                                className="text-sm font-medium text-blue-400 hover:text-blue-300 disabled:opacity-50"
-                              >
-                                {savingNote ? "Saving…" : "Save"}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={savingNote}
-                                onClick={() => setNoteEditingAccount(null)}
-                                className="text-sm text-gray-400 hover:text-gray-300 disabled:opacity-50"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            {noteText ? (
-                              <div className="mt-3 text-sm text-gray-400">
-                                <span className="text-gray-400">Note:</span>
-                                <p className="mt-1 whitespace-pre-wrap text-gray-300">
-                                  {noteText}
-                                </p>
-                              </div>
-                            ) : null}
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setEditModalAccount(account)}
-                                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-white/10"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openNoteEditor(account)}
-                                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-blue-300 transition hover:bg-white/10"
-                              >
-                                {noteText ? "Edit Note" : "Add Note"}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  void handleToggleFilterVisibility(account)
-                                }
-                                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-                                  visibleInFilters
-                                    ? "bg-red-500/15 text-red-200 hover:bg-red-500/25"
-                                    : "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
-                                }`}
-                              >
-                                {busy
-                                  ? "Updating…"
-                                  : visibleInFilters
-                                    ? "Hide from filters"
-                                    : "Show in filters"}
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </li>
+                      <div key={row.funded.id} className="space-y-2">
+                        {renderAccountCard(row.funded)}
+                        {row.evaluation
+                          ? renderAccountCard(row.evaluation, { nested: true })
+                          : null}
+                      </div>
                     )
                   })}
-                </ul>
+                </div>
 
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-gray-400">
-                    Showing {rangeStart}–{rangeEnd} of {filteredAccounts.length}
+                    Showing {rangeStart}–{rangeEnd} of {filteredManagementRows.length}
                     <span className="text-gray-400">
                       {" "}
                       · Page {safePage + 1} of {pageCount}
@@ -607,6 +725,17 @@ export default function TradingAccountsSettingsSection({
         initialAccount={editFormValues}
         onClose={() => setEditModalAccount(null)}
         onSave={(acc) => void handleEditAccountSave(acc)}
+      />
+      <CreateAccountModal
+        open={graduateEvalAccount != null}
+        initialAccount={graduateFormValues}
+        onClose={() => setGraduateEvalAccount(null)}
+        onSave={(acc) => void handleGraduateSave(acc)}
+        dialogTitle="Upgrade to Funded"
+        dialogSubtitle="Your evaluation stays read-only with full history. Configure your new funded account below—it uses the same plan slot."
+        saveLabel={graduating ? "Creating…" : "Create Funded Account"}
+        lockCategory="Prop Firm"
+        lockMode="Funded"
       />
       <FeedbackModal {...feedbackModalProps} />
     </>

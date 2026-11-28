@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { loadOwnedBrokerConnection } from "@/lib/integrations/brokerConnectionAccess"
 import { loadRithmicConnectionAccounts } from "@/lib/integrations/rithmic/loadRithmicConnectionAccounts"
+import {
+  isRithmicDevelopmentIntegrationEnabled,
+  rithmicDevelopmentIntegrationDisabledResponse,
+} from "@/lib/integrations/rithmic/rithmicDevIntegration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,6 +18,10 @@ export async function GET(req: Request, context: RouteContext) {
   const user = await getRouteUser(req)
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!isRithmicDevelopmentIntegrationEnabled()) {
+    return rithmicDevelopmentIntegrationDisabledResponse()
   }
 
   const { connectionId } = await context.params

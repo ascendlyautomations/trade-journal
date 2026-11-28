@@ -52,6 +52,8 @@ enum FullScreenDestination: Hashable, Identifiable, Codable, Sendable {
                 return "storyViewer.\(id.rawValue).profile.\(authorID.rawValue)"
             case .dmReferencedStory:
                 return "storyViewer.\(id.rawValue).dm"
+            case .storyArchive:
+                return "storyViewer.\(id.rawValue).archive"
             }
         }
     }

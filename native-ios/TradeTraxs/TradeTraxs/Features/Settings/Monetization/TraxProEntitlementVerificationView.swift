@@ -10,7 +10,7 @@ struct TraxProEntitlementVerificationView: View {
 
     var body: some View {
         VStack(spacing: ExperienceSpacing.md) {
-            ProgressView()
+            ExperienceIndeterminateProgress()
                 .controlSize(.large)
             Text("Verifying your plan…")
                 .experienceStyle(.headline, color: colors.primaryText)

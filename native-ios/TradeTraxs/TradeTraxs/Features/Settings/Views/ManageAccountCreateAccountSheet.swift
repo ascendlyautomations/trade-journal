@@ -29,6 +29,7 @@ struct ManageAccountCreateAccountSheet: View {
                 navigationCoordinator: navigationCoordinator
             )
         }
+        .experienceSheetChrome()
         .experienceProtectedFormDismiss()
         .onAppear { viewModel.loadIfNeeded() }
     }

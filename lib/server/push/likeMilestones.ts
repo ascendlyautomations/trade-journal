@@ -15,7 +15,7 @@ function nounForKind(kind: LikeMilestoneEntity["kind"]): string {
     case "trade":
       return "trade"
     case "reel":
-      return "reel"
+      return "clip"
     case "achievement_post":
       return "achievement"
     case "post":
@@ -188,8 +188,8 @@ export async function maybeNotifyLikeMilestone(params: {
     milestone,
     entity_kind: entity.kind,
     entity_id: entity.id,
-    title: `Your ${noun} reached ${milestone.toLocaleString("en-US")} likes`,
-    body: `More traders are engaging with your ${noun}.`,
+    title: "Engagement Milestone",
+    body: `Your ${noun} reached ${milestone.toLocaleString("en-US")} likes.`,
     href: deepLinkForEntity(entity),
   })
 

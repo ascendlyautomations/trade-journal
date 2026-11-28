@@ -4,11 +4,17 @@ import Observation
 
 enum ContextualTourPhase: Equatable {
     case idle
-    case measuring
+    case preparing
     case presenting
 }
 
-/// Decides when the app walkthrough may appear. Screens only mark targets.
+private enum WalkthroughActivation: Equatable {
+    case automatic
+    case welcomeTakeTour
+    case settingsReplay
+}
+
+/// Orchestrates the app walkthrough: idle → preparing (non-blocking) → presenting (blocking overlay).
 @MainActor
 @Observable
 final class ContextualTourCoordinator {
@@ -21,38 +27,34 @@ final class ContextualTourCoordinator {
 
     private(set) var phase: ContextualTourPhase = .idle
     private(set) var stepIndex: Int = 0
+    private(set) var stepRevision: UInt64 = 0
     private(set) var spotlightFrame: CGRect = .zero
     private(set) var scrollTarget: ContextualTourTargetID?
-    /// Bumps on every autoscroll request so list screens re-run `scrollTo` even for the same target.
     private(set) var scrollGeneration: UInt64 = 0
-    /// Set when the next spotlight lives on another screen. The shell performs the navigation.
-    private(set) var navigationRequest: ContextualTourSurface?
-    /// Shown after Exit. Nil while the walkthrough is running.
+  private(set) var navigationRequest: ContextualTourSurface?
     private(set) var exitNotice: String?
     private(set) var shouldOpenTradingRulesAfterCompletion = false
+    private(set) var presentedStepRevision: UInt64 = 0
+
+    private var sessionID: UInt64 = 0
+    private var activation: WalkthroughActivation?
+    private var pendingAutomaticArm = false
+    private var persistDismissalOnAcknowledge = true
+    private var navigationSatisfiedForStepIndex: Int?
+    private var scrollIssuedForStepIndex: Int?
+    private var profileIdentityHeaderHydrated = false
+    private var stabilityCandidateFrame: CGRect?
+    private var presentingStabilityFrame: CGRect?
+    private var lastViewport: CGRect?
+    private var lastTopInset: CGFloat = 0
+    private var lastBottomInset: CGFloat = 0
 
     private var userID: String?
     private var createdAt: Date?
     private var gates = ContextualTourGates()
-    private var analyticsReady = false
-    private var feedChromeReady = false
-    private var replayArmed = false
-    /// Stops an exhausted pass from immediately re-arming until the user leaves Dashboard.
-    private var suppressedUntilGatesDrop = false
-    /// Arms the one-time post-plan walkthrough without requiring dashboard analytics.
-    private var postPlanWalkthroughArmed = false
-    private var resolveStartedAt: Date?
-    private var previousFrame: CGRect?
-    private var scrollIssuedForStep: Int?
-    private var scrollRetryCountForStep: Int = 0
-    private var lastViewport: CGRect?
-    private var lastTopInset: CGFloat = 0
-    private var lastBottomInset: CGFloat = 0
-    private var measurementToken: UInt64 = 0
-    private var timeoutTask: Task<Void, Never>?
-    private var confirmationTask: Task<Void, Never>?
-    private var hasPresentedStep = false
-    private var displayedStepIndex = 0
+    private var preparationTimeoutGeneration: UInt64 = 0
+    /// Prevents automatic re-arm after a cancelled or timed-out session until explicit user activation.
+    private var blocksAutomaticRestart = false
 
     init(
         progress: ContextualTourProgressStore? = nil,
@@ -68,9 +70,18 @@ final class ContextualTourCoordinator {
 
     var isPresenting: Bool { phase == .presenting }
 
-    /// True from the first resolved step until Skip or Got It. Stays true while the next target is measured.
     var showsOverlay: Bool {
-        phase == .presenting || (phase == .measuring && hasPresentedStep)
+        phase == .presenting && canShowBlockingChrome
+    }
+
+    var showsExplanationCard: Bool {
+        guard phase == .presenting, let step = visibleStep else { return false }
+        switch step.role {
+        case .spotlight, .narration, .finish, .tradingRulesPrompt:
+            return true
+        case .sectionContinue:
+            return false
+        }
     }
 
     var currentStep: ContextualTourStep? {
@@ -78,8 +89,12 @@ final class ContextualTourCoordinator {
         return definition.steps[stepIndex]
     }
 
+    var visibleStep: ContextualTourStep? { currentStep }
+
+    var visibleStepIndex: Int { stepIndex }
+
     var progressLabel: String {
-        guard let position = progressPosition(for: visibleStepIndex) else { return "" }
+        guard let position = progressPosition(for: stepIndex) else { return "" }
         return "\(position.index + 1) of \(position.total)"
     }
 
@@ -92,26 +107,6 @@ final class ContextualTourCoordinator {
         }
     }
 
-    /// Full explanation card during presenting; spotlight steps also explain while measuring once a hole exists.
-    var showsExplanationCard: Bool {
-        guard currentStep?.role.countsTowardProgress ?? false else { return false }
-        switch phase {
-        case .presenting:
-            return true
-        case .measuring:
-            return currentStep?.role == .spotlight
-        case .idle:
-            return false
-        }
-    }
-
-    /// Step the card should explain. The next step's copy waits until its anchor is ready.
-    var visibleStep: ContextualTourStep? {
-        guard definition.steps.indices.contains(visibleStepIndex) else { return nil }
-        return definition.steps[visibleStepIndex]
-    }
-
-    /// Anchor the overlay should measure. Prompts have no hole.
     var spotlightTarget: ContextualTourTargetID? {
         guard let step = currentStep else { return nil }
         switch step.role {
@@ -122,99 +117,202 @@ final class ContextualTourCoordinator {
         }
     }
 
-    var visibleStepIndex: Int {
-        switch phase {
-        case .presenting, .measuring:
-            return stepIndex
-        case .idle:
-            return displayedStepIndex
-        }
-    }
-
-    /// Feed filters step, keep the horizontal filter strip visible and sized intrinsically for measurement.
     var pinsFeedFilterBar: Bool {
-        guard phase == .measuring || phase == .presenting else { return false }
+        guard phase == .preparing || phase == .presenting else { return false }
         return currentStep?.target == .feedContentFilters
     }
 
-    /// Geometry stays dormant unless this target is the step being measured or shown.
+    var walkthroughSessionID: UInt64 { sessionID }
+
     func measures(_ target: ContextualTourTargetID) -> Bool {
-        guard phase == .measuring || phase == .presenting else { return false }
+        guard phase == .preparing || phase == .presenting else { return false }
         return spotlightTarget == target
     }
 
-    func setDashboardAnalyticsReady(_ ready: Bool) {
-        guard analyticsReady != ready else { return }
-        analyticsReady = ready
-        reevaluate()
+    func acceptsGlobalMeasurement(for target: ContextualTourTargetID) -> Bool {
+        guard measures(target), let step = currentStep else {
+            if target == .mainTabHome {
+                ContextualTourDebug.logTourTrace("acceptsGlobalMeasurement(mainTabHome)=false measures/step failed")
+            }
+            return false
+        }
+        let ready = isSurfaceReady(step)
+        if target == .mainTabHome {
+            ContextualTourDebug.logTourTrace(
+                "acceptsGlobalMeasurement(mainTabHome)=\(ready) surface=\(step.surface) homeRoot=\(gates.homeRootActive)"
+            )
+        }
+        return ready
     }
 
-    func setFeedChromeReady(_ ready: Bool) {
-        guard feedChromeReady != ready else { return }
-        feedChromeReady = ready
-        reevaluate()
-    }
+    // MARK: - Shell sync
 
     func syncShell(userID: String?, createdAt: Date?, gates: ContextualTourGates) {
+        ContextualTourDebug.logTourTrace(
+            "syncShell phase=\(phase) session=\(sessionID) homeRoot=\(gates.homeRootActive) scene=\(gates.sceneActive) unobstructed=\(gates.unobstructed)"
+        )
         if userID != self.userID {
-            clearMemory()
-            postPlanWalkthroughArmed = false
+            terminateSession(reason: "user-changed")
+            self.userID = userID
+            activation = nil
+            pendingAutomaticArm = false
+        } else {
+            self.userID = userID
         }
-        self.userID = userID
         if let createdAt, ContextualTourEligibility.isAuthoritativeCreatedAt(createdAt) {
             self.createdAt = createdAt
         } else if createdAt == nil {
             self.createdAt = nil
         }
         self.gates = gates
-        reevaluate()
+
+        switch phase {
+        case .idle:
+            tryStartAutomaticSessionIfEligible()
+        case .preparing:
+            handlePreparingShellUpdate()
+        case .presenting:
+            handlePresentingShellUpdate()
+        }
     }
 
     func refreshAccountCreatedAt(_ createdAt: Date?) {
         guard let createdAt, ContextualTourEligibility.isAuthoritativeCreatedAt(createdAt) else { return }
         guard self.createdAt != createdAt else { return }
         self.createdAt = createdAt
-        reevaluate()
+        if phase == .idle {
+            tryStartAutomaticSessionIfEligible()
+        }
     }
+
+    // MARK: - Activation (single pipeline)
 
     func notePostOnboardingWalkthroughShouldPresent(userID: String?) {
-        guard let userID, !userID.isEmpty else { return }
-        let profileID = ProfileID(userID)
-        guard PostAuthOnboardingPolicy.shouldPresentAutomaticWalkthrough(profileID: profileID) else {
+        ContextualTourDebug.logTourTrace("notePostOnboardingWalkthroughShouldPresent userID=\(userID ?? "nil")")
+        guard let userID, !userID.isEmpty else {
+            ContextualTourDebug.logTourTrace("post-plan arm rejected missing-user")
             return
         }
-        postPlanWalkthroughArmed = true
-        suppressedUntilGatesDrop = false
-        reevaluate()
-    }
-
-    /// Walkthrough state for the analytics-preferences invitation.
-    func analyticsPreferenceTourGate() -> (eligible: Bool, settled: Bool, blocking: Bool) {
-        let eligible = ContextualTourEligibility.isAccountEligible(createdAt: createdAt, cutoff: cutoff)
-        let settled: Bool
-        if let userID {
-            settled = progress.dismissedVersion(for: definition.id, userID: userID) >= definition.version
-        } else {
-            settled = false
+        let profileID = ProfileID(userID)
+        guard PostAuthOnboardingPolicy.shouldPresentAutomaticWalkthrough(profileID: profileID) else {
+            ContextualTourDebug.logTourTrace("post-plan arm rejected policy")
+            return
         }
-        return (eligible, settled, phase != .idle)
+        pendingAutomaticArm = true
+        blocksAutomaticRestart = false
+        tryStartAutomaticSessionIfEligible()
     }
 
-    /// In-memory replay. Does not lower or rewrite a stored dismissed version.
+    func beginWelcomeTakeTour() {
+        ContextualTourDebug.logTourTrace("coordinator beginWelcomeTakeTour invoked")
+        startSession(activation: .welcomeTakeTour)
+    }
+
     func beginReplay() {
+        ContextualTourDebug.logTourTrace("coordinator beginReplay invoked", force: true)
+        startSession(activation: .settingsReplay, persistDismissal: false)
+    }
+
+    private func startSession(activation: WalkthroughActivation, persistDismissal: Bool = true) {
+        ContextualTourDebug.logTourTrace(
+            "startSession activation=\(activation) persistDismissal=\(persistDismissal) priorPhase=\(phase)",
+            force: true
+        )
         exitNotice = nil
-        replayArmed = true
-        suppressedUntilGatesDrop = false
+        pendingAutomaticArm = false
+        blocksAutomaticRestart = false
+        cancelPreparationTimeout()
+        ContextualTourGlobalFrameStore.shared.reset()
+        phase = .idle
+        spotlightFrame = .zero
+        scrollTarget = nil
+        stabilityCandidateFrame = nil
+        presentingStabilityFrame = nil
+        navigationSatisfiedForStepIndex = nil
+        scrollIssuedForStepIndex = nil
+        profileIdentityHeaderHydrated = false
+        navigationRequest = nil
+        presentedStepRevision = 0
+        stepRevision = 0
+        self.activation = activation
+        persistDismissalOnAcknowledge = persistDismissal
+        sessionID &+= 1
         stepIndex = 0
-        hideWithoutDismiss(resetStep: true)
-        reevaluate()
+        beginPreparing()
+        if activation == .settingsReplay || activation == .welcomeTakeTour {
+            navigationSatisfiedForStepIndex = nil
+            navigationRequest = .dashboard
+            ContextualTourDebug.logTourTrace(
+                "explicit walkthrough start navigation-request=dashboard session=\(sessionID)",
+                force: true
+            )
+        }
+        ContextualTourDebug.logTourTrace(
+            "session activated id=\(sessionID) activation=\(activation) phase=\(phase) stepRevision=\(stepRevision)",
+            force: true
+        )
     }
 
-    func skip() {
-        acknowledge()
+    private func tryStartAutomaticSessionIfEligible() {
+        guard phase == .idle, activation == nil else {
+            ContextualTourDebug.logTourTrace(
+                "automatic start rejected phase=\(phase) activation=\(String(describing: activation))"
+            )
+            return
+        }
+        guard !blocksAutomaticRestart else {
+            ContextualTourDebug.logTourTrace("automatic start rejected blocksAutomaticRestart=true")
+            return
+        }
+        guard let userID, !userID.isEmpty else {
+            ContextualTourDebug.logTourTrace("automatic start rejected missing-user")
+            return
+        }
+        guard gates.sceneActive, gates.unobstructed else {
+            ContextualTourDebug.logTourTrace(
+                "automatic start rejected shell gates scene=\(gates.sceneActive) unobstructed=\(gates.unobstructed)"
+            )
+            return
+        }
+
+        let policyAutomatic = PostAuthOnboardingPolicy.shouldPresentAutomaticWalkthrough(
+            profileID: ProfileID(userID)
+        )
+        guard pendingAutomaticArm || policyAutomatic else {
+            ContextualTourDebug.logTourTrace(
+                "automatic start rejected policy pending=\(pendingAutomaticArm) policyAutomatic=\(policyAutomatic)"
+            )
+            return
+        }
+
+        let dismissed = PostAuthOnboardingPolicy.effectiveTourDismissedVersion(userID: userID)
+        guard dismissed < definition.version else {
+            pendingAutomaticArm = false
+            ContextualTourDebug.logTourTrace("automatic start rejected dismissed=\(dismissed) tour=\(definition.version)")
+            return
+        }
+
+        if !ContextualTourEligibility.isAccountEligible(createdAt: createdAt, cutoff: cutoff) {
+            ContextualTourDebug.logTourTrace(
+                "automatic start rejected ineligible-created-at=\(String(describing: createdAt))"
+            )
+            return
+        }
+
+        activation = .automatic
+        persistDismissalOnAcknowledge = true
+        pendingAutomaticArm = false
+        stepIndex = 0
+        sessionID &+= 1
+        ContextualTourDebug.logTourTrace("automatic session eligible sessionID=\(sessionID)")
+        ContextualTourDebug.logAppTour("eligible")
+        beginPreparing()
     }
 
-    /// Leaves the walkthrough from any step and tells the user how to start it again.
+    // MARK: - User actions
+
+    func skip() { acknowledge() }
+
     func exitTour() {
         exitNotice = "You can restart the App Walkthrough anytime from Settings."
         acknowledge()
@@ -225,16 +323,27 @@ final class ContextualTourCoordinator {
     }
 
     func advance() {
-        guard phase == .presenting else { return }
+        guard phase == .presenting else {
+            ContextualTourDebug.logTourTrace("advance rejected phase=\(phase)")
+            return
+        }
         if stepIndex >= definition.steps.count - 1 {
             acknowledge()
         } else {
             stepIndex += 1
-            beginMeasuring()
+            beginPreparing()
         }
     }
 
-    /// Ends the tour and optionally opens Trading Rules after the overlay dismisses.
+    /// Presents the Getting Started explanation without a spotlight when the checklist is not on the Dashboard.
+    func commitGettingStartedExplanationOnlyIfNeeded() {
+        guard phase == .preparing, let step = currentStep else { return }
+        guard step.target == .dashboardGettingStarted, step.presentsIfUnmeasured else { return }
+        guard isSurfaceReady(step) else { return }
+        ContextualTourDebug.logTourTrace("getting started explanation-only step=\(stepIndex)")
+        tryCommitPresentation(frame: .zero, revision: stepRevision)
+    }
+
     func completeTour(configureTradingRules: Bool) {
         shouldOpenTradingRulesAfterCompletion = configureTradingRules
         acknowledge()
@@ -246,42 +355,96 @@ final class ContextualTourCoordinator {
         return open
     }
 
+    func analyticsPreferenceTourGate() -> (eligible: Bool, settled: Bool, blocking: Bool) {
+        let eligible = ContextualTourEligibility.isAccountEligible(createdAt: createdAt, cutoff: cutoff)
+        let settled: Bool
+        if let userID {
+            settled = progress.dismissedVersion(for: definition.id, userID: userID) >= definition.version
+        } else {
+            settled = false
+        }
+        return (eligible, settled, showsOverlay)
+    }
+
+    func resetForSessionBoundary() {
+        terminateSession(reason: "session-boundary")
+        userID = nil
+        createdAt = nil
+        gates = ContextualTourGates()
+        exitNotice = nil
+        shouldOpenTradingRulesAfterCompletion = false
+        pendingAutomaticArm = false
+        blocksAutomaticRestart = false
+    }
+
     #if DEBUG
-    /// Clears this user's stored dismissal and arms the tour again on the next eligible Dashboard.
     func resetStoredTourForDebug() {
         if let userID, !userID.isEmpty {
             progress.clearDismissals(userID: userID)
         }
-        replayArmed = false
-        suppressedUntilGatesDrop = false
-        hideWithoutDismiss(resetStep: true)
-        reevaluate()
+        terminateSession(reason: "debug-reset")
     }
     #endif
 
-    /// Logout and account switches drop in-memory tour state only.
-    func resetForSessionBoundary() {
-        clearMemory()
-        userID = nil
-        createdAt = nil
-        gates = ContextualTourGates()
-        analyticsReady = false
-        feedChromeReady = false
-        exitNotice = nil
-        shouldOpenTradingRulesAfterCompletion = false
-        postPlanWalkthroughArmed = false
+    // MARK: - Navigation & scroll (once per step)
+
+    func noteWalkthroughNavigationApplied(to surface: ContextualTourSurface) {
+        guard phase == .preparing, let step = currentStep, step.surface == surface else {
+            ContextualTourDebug.logTourTrace(
+                "destination arrival ignored phase=\(phase) surface=\(surface) stepSurface=\(currentStep?.surface.rawValue ?? "nil")"
+            )
+            return
+        }
+        ContextualTourDebug.logTourTrace(
+            "destination arrived surface=\(surface) step=\(stepIndex) target=\(step.target?.debugLabel ?? "none")"
+        )
+        navigationRequest = nil
+        issueScrollIfNeeded()
     }
+
+    func noteFeedFilterBarLaidOut() {}
+
+    func noteSettingsHomeLaidOut() {}
+
+    /// Step 15: loaded profile header is in the tree (natural layout, optional bio).
+    func noteProfileIdentityHeaderHydrated() {
+        guard phase == .preparing, spotlightTarget == .profileIdentity else { return }
+        profileIdentityHeaderHydrated = true
+    }
+
+    func noteScrollTargetLayoutChanged() {
+        guard phase == .preparing else { return }
+        stabilityCandidateFrame = nil
+    }
+
+    // MARK: - Geometry pipeline
 
     func noteMeasuredFrame(
         _ frame: CGRect?,
         viewport: CGRect,
         topInset: CGFloat,
         bottomInset: CGFloat,
-        now: Date = Date()
+        revision: UInt64
     ) {
-        guard phase == .measuring || phase == .presenting, currentStep != nil else { return }
-
-        if phase == .presenting {
+        ContextualTourDebug.logTourTrace(
+            "noteMeasuredFrame received revision=\(revision) phase=\(phase) frame=\(frame?.debugDescription ?? "nil")"
+        )
+        guard revision == stepRevision else {
+            let reason = "revision-mismatch expected=\(stepRevision) got=\(revision)"
+            ContextualTourDebug.logMeasureReject(reason)
+            ContextualTourDebug.logTourTrace("measurement rejected \(reason)")
+            return
+        }
+        guard phase == .preparing, let step = currentStep else {
+            let reason = "phase-or-step phase=\(phase) step=\(stepIndex)"
+            ContextualTourDebug.logMeasureReject(reason)
+            ContextualTourDebug.logTourTrace("measurement rejected \(reason)")
+            return
+        }
+        guard isSurfaceReady(step) else {
+            let reason = "surface-not-ready step=\(stepIndex) target=\(step.target?.debugLabel ?? "none") homeRoot=\(gates.homeRootActive)"
+            ContextualTourDebug.logMeasureReject(reason)
+            ContextualTourDebug.logTourTrace("measurement rejected \(reason)")
             return
         }
 
@@ -289,244 +452,318 @@ final class ContextualTourCoordinator {
         lastTopInset = topInset
         lastBottomInset = bottomInset
 
-        if let frame,
-           ContextualTourGeometry.isUsable(frame),
-           let target = spotlightTarget,
-           !ContextualTourGeometry.skipsTourAutoscroll(for: target),
-           ContextualTourGeometry.needsScroll(
-            frame: frame,
-            viewport: viewport,
-            topInset: topInset,
-            bottomInset: bottomInset
-           ) {
-            if scrollIssuedForStep != stepIndex {
-                issueScroll(now: now)
-            } else if scrollRetryCountForStep < settingsListScrollRetries(for: target) {
-                scrollRetryCountForStep += 1
-                issueScroll(now: now)
-            }
+        if step.role == .tradingRulesPrompt || step.role == .finish {
+            tryCommitPresentation(frame: .zero, revision: revision)
             return
         }
 
         guard let frame, ContextualTourGeometry.isUsable(frame) else {
+            let reason = "missing-or-unusable-frame target=\(spotlightTarget?.debugLabel ?? "none")"
+            ContextualTourDebug.logMeasureReject(reason)
+            ContextualTourDebug.logTourTrace("measurement rejected \(reason)")
             return
         }
 
-        if spotlightTarget == .feedContentFilters,
-           ContextualTourGeometry.isMeasurableTarget(frame, in: viewport),
-           FeedFilterBarTourLayoutGate.mayMeasure
+        let visible = ContextualTourGeometry.spotlightMeasurementVisibleRect(
+            viewport: viewport,
+            topInset: topInset,
+            bottomInset: bottomInset,
+            target: spotlightTarget
+        )
+
+        if let target = spotlightTarget,
+           !ContextualTourGeometry.skipsTourAutoscroll(for: target),
+           ContextualTourGeometry.needsScroll(frame: frame, viewport: viewport, topInset: topInset, bottomInset: bottomInset)
         {
-#if DEBUG
-            ContextualTourDebug.log(
-                "feedFilters measure viewport=\(viewport) frame=\(frame) retained=\(spotlightFrame)"
-            )
-#endif
-            presentResolvedStep(frame: frame)
+            if scrollIssuedForStepIndex != stepIndex {
+                let reason = "needs-scroll target=\(target.debugLabel)"
+                ContextualTourDebug.logMeasureReject(reason)
+                ContextualTourDebug.logTourTrace("measurement rejected \(reason)")
+                issueScroll()
+            }
             return
         }
 
-        let elapsed = now.timeIntervalSince(resolveStartedAt ?? now)
-        switch ContextualTourGeometry.resolve(frame: frame, previous: previousFrame, elapsed: elapsed) {
-        case .ready(let stable):
-            let visible = ContextualTourGeometry.measurementVisibleRect(
-                viewport: viewport,
-                topInset: topInset,
-                bottomInset: bottomInset
-            )
-            if ContextualTourGeometry.isRenderableSpotlight(stable, in: visible) {
-                presentResolvedStep(frame: stable)
-            } else {
-                previousFrame = stable
-            }
-        case .waiting:
-            let needsConfirmation = previousFrame == nil
-            previousFrame = frame
-            if needsConfirmation {
-                scheduleConfirmation(of: frame, viewport: viewport, topInset: topInset, bottomInset: bottomInset)
-            }
-        case .skip:
-            previousFrame = frame
+        guard ContextualTourGeometry.isRenderableSpotlight(frame, in: visible) else {
+            let reason = "not-renderable target=\(spotlightTarget?.debugLabel ?? "none") visible=\(visible)"
+            ContextualTourDebug.logMeasureReject(reason)
+            ContextualTourDebug.logTourTrace("measurement rejected \(reason)")
+            return
         }
-    }
 
-    /// Scrolls once when the anchor is missing, then skips only that step if it never appears.
-    /// Cross-screen steps wait until the destination surface exists instead of skipping on a timer.
-    func forceTimeout(now: Date = Date()) {
-        guard phase == .measuring else { return }
-        if let step = currentStep, !isSurfaceReady(step) {
-            navigationRequest = step.surface
-            if schedulesAsyncResolution {
-                scheduleTimeout()
+        if spotlightTarget == .profileIdentity {
+            guard profileIdentityHeaderHydrated else {
+                let reason = "profile-identity-header-not-hydrated"
+                ContextualTourDebug.logMeasureReject(reason)
+                ContextualTourDebug.logTourTrace("measurement rejected \(reason)")
+                return
+            }
+            if let previous = stabilityCandidateFrame,
+               ContextualTourGeometry.isStable(previous, frame)
+            {
+                stabilityCandidateFrame = nil
+            } else {
+                stabilityCandidateFrame = frame
+                let reason = "profile-identity-awaiting-stable-frame"
+                ContextualTourDebug.logMeasureReject(reason)
+                ContextualTourDebug.logTourTrace("measurement rejected \(reason)")
                 return
             }
         }
-        if scrollIssuedForStep != stepIndex {
-            issueScroll(now: now)
-            return
-        }
-        let elapsed = now.timeIntervalSince(resolveStartedAt ?? now)
-        guard elapsed >= ContextualTourGeometry.resolveTimeout(for: spotlightTarget) else { return }
-        let maxScrollRetries = settingsListScrollRetries(for: spotlightTarget)
-        if scrollIssuedForStep == stepIndex,
-           scrollRetryCountForStep < maxScrollRetries
-        {
-            scrollRetryCountForStep += 1
-            issueScroll(now: now)
-            return
-        }
-        skipUnresolvedStep()
+
+        ContextualTourDebug.logTourTrace(
+            "measurement commit target=\(spotlightTarget?.debugLabel ?? "none")",
+            force: true
+        )
+        tryCommitPresentation(frame: frame, revision: revision)
     }
 
-    /// Dashboard sections (e.g. Getting Started) resized during measurement — re-scroll and re-stabilize.
-    func noteScrollTargetLayoutChanged() {
-        guard phase == .measuring else { return }
-        guard let target = spotlightTarget else { return }
-        guard !ContextualTourGeometry.skipsTourAutoscroll(for: target) else { return }
-        previousFrame = nil
-        resolveStartedAt = Date()
-        if scrollIssuedForStep == stepIndex {
-            let maxRetries = settingsListScrollRetries(for: target)
-            guard scrollRetryCountForStep < maxRetries else { return }
-            scrollRetryCountForStep += 1
-            issueScroll(now: Date())
+    func notePresentingLayoutFrame(
+        _ frame: CGRect?,
+        viewport: CGRect,
+        topInset: CGFloat,
+        bottomInset: CGFloat,
+        revision: UInt64
+    ) {
+        guard revision == presentedStepRevision, revision == stepRevision else {
+            ContextualTourDebug.logTourTrace("notePresentingLayoutFrame rejected revision mismatch")
+            return
+        }
+        guard phase == .presenting, let step = currentStep, step.role == .spotlight else {
+            ContextualTourDebug.logTourTrace("notePresentingLayoutFrame rejected phase/role")
+            return
+        }
+        guard let frame, ContextualTourGeometry.isUsable(frame) else {
+            ContextualTourDebug.logTourTrace("notePresentingLayoutFrame rejected unusable frame")
+            return
+        }
+
+        let visible = ContextualTourGeometry.measurementVisibleRect(
+            viewport: viewport,
+            topInset: topInset,
+            bottomInset: bottomInset
+        )
+        guard ContextualTourGeometry.isRenderableSpotlight(frame, in: visible) else { return }
+        guard ContextualTourGeometry.isStable(spotlightFrame, frame) == false else { return }
+
+        var candidate = presentingStabilityFrame
+        if ContextualTourGeometry.recordStabilityCandidate(frame, previous: &candidate) {
+            spotlightFrame = frame
+            presentingStabilityFrame = nil
+        } else {
+            presentingStabilityFrame = candidate
         }
     }
 
-    private func presentResolvedStep(frame: CGRect) {
-        guard let step = currentStep else { return }
+    // MARK: - Private
+
+    private var canShowBlockingChrome: Bool {
+        guard phase == .presenting, let step = currentStep else { return false }
+        switch step.role {
+        case .spotlight, .narration:
+            if step.presentsIfUnmeasured, !ContextualTourGeometry.isUsable(spotlightFrame) {
+                return true
+            }
+            guard ContextualTourGeometry.isUsable(spotlightFrame), let viewport = lastViewport else { return false }
+            let visible = ContextualTourGeometry.spotlightMeasurementVisibleRect(
+                viewport: viewport,
+                topInset: lastTopInset,
+                bottomInset: lastBottomInset,
+                target: step.target
+            )
+            return ContextualTourGeometry.isRenderableSpotlight(spotlightFrame, in: visible)
+        case .finish, .tradingRulesPrompt:
+            return true
+        case .sectionContinue:
+            return false
+        }
+    }
+
+    private func beginPreparing() {
+        guard let step = currentStep else {
+            ContextualTourDebug.logTourTrace("beginPreparing rejected no-step")
+            terminateSession(reason: "no-step")
+            return
+        }
+
+        let previousPhase = phase
+        stepRevision &+= 1
+        presentedStepRevision = 0
+        phase = .preparing
+        spotlightFrame = .zero
+        scrollTarget = nil
+        stabilityCandidateFrame = nil
+        presentingStabilityFrame = nil
+        navigationSatisfiedForStepIndex = nil
+        scrollIssuedForStepIndex = nil
+        profileIdentityHeaderHydrated = false
+        navigationRequest = nil
+
+        if stepIndex == 0 {
+            ContextualTourCardPlacement.mainTabHomeRenderedCardBottom = nil
+        }
+        ContextualTourGlobalFrameStore.shared.reset()
+        ContextualTourDebug.logPhaseTransition("\(previousPhase)", "preparing", "step=\(stepIndex) target=\(step.target?.debugLabel ?? "none")")
+        ContextualTourDebug.logTourTrace(
+            "phase transition \(previousPhase) -> preparing session=\(sessionID) stepRevision=\(stepRevision) surfaceReady=\(isSurfaceReady(step))"
+        )
+
+        schedulePreparationTimeout()
+        issueNavigationOnceIfNeeded()
+        issueScrollIfNeeded()
+
+        if step.role == .tradingRulesPrompt, isSurfaceReady(step) {
+            tryCommitPresentation(frame: .zero, revision: stepRevision)
+        }
+    }
+
+    private func tryCommitPresentation(frame: CGRect, revision: UInt64) {
+        ContextualTourDebug.logTourTrace(
+            "tryCommitPresentation frame=\(frame) revision=\(revision) stepRevision=\(stepRevision) phase=\(phase) target=\(spotlightTarget?.debugLabel ?? "none") viewport=\(lastViewport?.debugDescription ?? "nil")"
+        )
+        guard revision == stepRevision, phase == .preparing, let step = currentStep else {
+            ContextualTourDebug.logTourTrace(
+                "tryCommitPresentation rejected revision=\(revision) stepRevision=\(stepRevision) phase=\(phase) hasStep=\(currentStep != nil)"
+            )
+            return
+        }
+
         switch step.role {
         case .spotlight:
-            guard let viewport = lastViewport,
-                  ContextualTourGeometry.isRenderableSpotlight(
-                    frame,
-                    in: ContextualTourGeometry.measurementVisibleRect(
-                        viewport: viewport,
-                        topInset: lastTopInset,
-                        bottomInset: lastBottomInset
-                    )
-                  )
-            else {
-                return
+            if !(step.presentsIfUnmeasured && frame == .zero) {
+                guard let viewport = lastViewport,
+                      ContextualTourGeometry.isRenderableSpotlight(
+                        frame,
+                        in: ContextualTourGeometry.spotlightMeasurementVisibleRect(
+                            viewport: viewport,
+                            topInset: lastTopInset,
+                            bottomInset: lastBottomInset,
+                            target: step.target
+                        )
+                      )
+                else {
+                    ContextualTourDebug.logTourTrace("tryCommitPresentation rejected spotlight-not-renderable")
+                    return
+                }
             }
         case .narration:
             guard ContextualTourGeometry.isUsable(frame),
                   let viewport = lastViewport,
                   ContextualTourGeometry.isRenderableSpotlight(frame, in: viewport)
             else {
+                ContextualTourDebug.logTourTrace("tryCommitPresentation rejected narration-not-renderable")
                 return
             }
-        case .sectionContinue, .finish, .tradingRulesPrompt:
+        case .finish, .tradingRulesPrompt, .sectionContinue:
             break
         }
 
-        confirmationTask?.cancel()
-        timeoutTask?.cancel()
+        guard canPresent(step: step, frame: frame) else {
+            let reason = "commit-blocked step=\(stepIndex)"
+            ContextualTourDebug.logMeasureReject(reason)
+            ContextualTourDebug.logTourTrace("tryCommitPresentation rejected \(reason)")
+            return
+        }
+
         spotlightFrame = frame
         scrollTarget = nil
-        displayedStepIndex = stepIndex
-        hasPresentedStep = true
+        presentedStepRevision = revision
+        cancelPreparationTimeout()
+        navigationRequest = nil
         phase = .presenting
+        ContextualTourDebug.logPhaseTransition("preparing", "presenting", "step=\(stepIndex) target=\(step.target?.debugLabel ?? "none")")
+        ContextualTourDebug.logTourTrace(
+            "phase transition preparing -> presenting session=\(sessionID) showsOverlay=\(showsOverlay) canShowBlockingChrome=\(canShowBlockingChrome)",
+            force: true
+        )
         ContextualTourDebug.logAppTour("presenting")
     }
 
-    private func reevaluate() {
-        guard let userID, !userID.isEmpty else {
-            logDecision("blocked.no-user")
-            ContextualTourDebug.logAppTour("suppressed reason=no-user")
-            hideWithoutDismiss(resetStep: true)
-            return
-        }
-
-        let shellReady = shellReadyForCurrentStep()
-        if !shellReady {
-            if isWaitingForRequestedSurface() {
-                logDecision("waiting.surface")
-                ContextualTourDebug.logAppTour("waiting surface=\(currentStep?.surface.rawValue ?? "none")")
-                return
+    private func canPresent(step: ContextualTourStep, frame: CGRect) -> Bool {
+        switch step.role {
+        case .spotlight, .narration:
+            if step.presentsIfUnmeasured, frame == .zero {
+                return true
             }
-            if hasPresentedStep,
-               phase == .measuring || phase == .presenting,
-               currentStep?.surface == .profile {
-                logDecision("waiting.profile-shell")
-                ContextualTourDebug.logAppTour("waiting profile-shell")
-                return
-            }
-            if gates.sceneActive && gates.unobstructed,
-               let step = currentStep,
-               navigationRequest == step.surface,
-               phase == .idle {
-                logDecision("waiting.navigation")
-                return
-            }
-            suppressedUntilGatesDrop = false
-            let reason = gates.sceneActive && gates.unobstructed ? "surface-not-ready" : "shell"
-            logDecision("blocked.\(reason)")
-            ContextualTourDebug.logAppTour("suppressed reason=\(reason)")
-            hideWithoutDismiss(resetStep: false)
-            return
-        }
-        if navigationRequest != nil {
-            navigationRequest = nil
-        }
-        if suppressedUntilGatesDrop {
-            logDecision("blocked.suppressed-until-dashboard-left")
-            ContextualTourDebug.logAppTour("suppressed reason=left-dashboard")
-            return
-        }
-
-        let dismissed = PostAuthOnboardingPolicy.effectiveTourDismissedVersion(userID: userID)
-        let policyAutomatic = PostAuthOnboardingPolicy.shouldPresentAutomaticWalkthrough(
-            profileID: ProfileID(userID)
-        )
-        guard replayArmed || postPlanWalkthroughArmed || policyAutomatic else {
-            let epoch = createdAt == Date(timeIntervalSince1970: 0)
-            let reason: String
-            if epoch {
-                reason = "created-at-missing"
-                logDecision("blocked.created-at-epoch-fallback")
-            } else if dismissed >= definition.version {
-                reason = "completed"
-                logDecision("blocked.dismissed")
-            } else {
-                reason = "before-cutoff"
-                logDecision("blocked.before-cutoff")
-            }
-            ContextualTourDebug.logAppTour("suppressed reason=\(reason)")
-            hideWithoutDismiss(resetStep: true)
-            return
-        }
-
-        switch phase {
-        case .measuring, .presenting:
-            logDecision("armed.\(phase)")
-            return
-        case .idle:
-            logDecision(replayArmed ? "arm.replay" : "arm.automatic")
-            if !replayArmed {
-                ContextualTourDebug.logAppTour("eligible")
-            }
-            beginMeasuring()
+            return ContextualTourGeometry.isUsable(frame)
+        case .finish, .tradingRulesPrompt:
+            return true
+        case .sectionContinue:
+            return false
         }
     }
 
-    private func logDecision(_ reason: String) {
-        let created = createdAt.map { ISO8601.string(from: $0) } ?? "nil"
-        let dismissed = userID.map { progress.dismissedVersion(for: definition.id, userID: $0) } ?? -1
-        ContextualTourDebug.log(
-            "\(reason) createdAt=\(created) cutoff=\(ISO8601.string(from: cutoff)) dismissed=\(dismissed) tour=\(definition.version) homeRoot=\(gates.homeRootActive) scene=\(gates.sceneActive) unobstructed=\(gates.unobstructed) analytics=\(analyticsReady) phase=\(phase)"
-        )
+    private func handlePreparingShellUpdate() {
+        guard let step = currentStep else {
+            ContextualTourDebug.logTourTrace("handlePreparingShellUpdate no-step -> cancel")
+            cancelSession()
+            return
+        }
+        if !isSurfaceReady(step) {
+            ContextualTourDebug.logPhaseTransition("preparing", "idle", "user-left-destination")
+            ContextualTourDebug.logTourTrace("session cancel reason=user-left-destination-during-preparing")
+            cancelSession()
+            return
+        }
+        issueNavigationOnceIfNeeded()
+        issueScrollIfNeeded()
+    }
+
+    private func handlePresentingShellUpdate() {
+        guard let step = currentStep else {
+            ContextualTourDebug.logTourTrace("presenting shell update rejected no-step -> cancel")
+            cancelSession()
+            return
+        }
+        if !isSurfaceReady(step) {
+            ContextualTourDebug.logPhaseTransition("presenting", "idle", "user-left-destination")
+            ContextualTourDebug.logTourTrace("session cancel reason=user-left-destination-during-presenting")
+            cancelSession()
+        }
+    }
+
+    private func issueNavigationOnceIfNeeded() {
+        guard phase == .preparing, let step = currentStep else {
+            ContextualTourDebug.logTourTrace("issueNavigation rejected phase=\(phase)")
+            return
+        }
+        if isSurfaceReady(step) {
+            ContextualTourDebug.logTourTrace("issueNavigation skipped surface already ready step=\(stepIndex)")
+            navigationRequest = nil
+            navigationSatisfiedForStepIndex = stepIndex
+            return
+        }
+        if navigationSatisfiedForStepIndex == stepIndex {
+            ContextualTourDebug.logTourTrace("issueNavigation skipped already-issued step=\(stepIndex)")
+            return
+        }
+        guard navigationRequest == nil else {
+            ContextualTourDebug.logTourTrace("issueNavigation skipped request-in-flight \(navigationRequest?.rawValue ?? "")")
+            return
+        }
+        navigationRequest = step.surface
+        navigationSatisfiedForStepIndex = stepIndex
+        ContextualTourDebug.logTourTrace("navigation-request issued-once surface=\(step.surface) step=\(stepIndex)")
+        ContextualTourDebug.logAppTour("nav-once surface=\(step.surface)")
+    }
+
+    private func issueScrollIfNeeded() {
+        // Autoscroll is driven from `noteMeasuredFrame` when the resolved target is not yet renderable.
+    }
+
+    private func issueScroll() {
+        scrollIssuedForStepIndex = stepIndex
+        scrollGeneration &+= 1
+        scrollTarget = spotlightTarget
     }
 
     private func isSurfaceReady(_ step: ContextualTourStep) -> Bool {
         guard gates.sceneActive, gates.unobstructed else { return false }
         switch step.surface {
         case .dashboard:
-            if postPlanWalkthroughArmed || replayArmed {
-                return gates.homeRootActive
-            }
-            return gates.homeRootActive && analyticsReady
+            return gates.homeRootActive
         case .feed:
-            return gates.feedRootActive && feedChromeReady
+            return gates.feedRootActive
         case .messages:
             return gates.messagesRootActive
         case .profile:
@@ -542,132 +779,10 @@ final class ContextualTourCoordinator {
         }
     }
 
-    /// Idle step 0 is the Dashboard auto-start. A paused later step resumes on its own surface.
-    private func shellReadyForCurrentStep() -> Bool {
-        if phase == .idle && stepIndex == 0 {
-            return isSurfaceReady(
-                ContextualTourStep(
-                    title: "",
-                    message: "",
-                    surface: .dashboard
-                )
-            )
-        }
-        guard let step = currentStep else { return false }
-        return isSurfaceReady(step)
-    }
-
-    private func isWaitingForRequestedSurface() -> Bool {
-        guard let step = currentStep, navigationRequest == step.surface else { return false }
-        guard gates.sceneActive, gates.unobstructed else { return false }
-        return phase == .measuring || phase == .presenting
-    }
-
-    private func beginMeasuring() {
-        skipSectionContinueSteps()
-        guard let step = currentStep else {
-            finishWithoutDismiss()
-            return
-        }
-        measurementToken &+= 1
-        timeoutTask?.cancel()
-        confirmationTask?.cancel()
-        previousFrame = nil
-        scrollIssuedForStep = nil
-        scrollRetryCountForStep = 0
-        scrollTarget = nil
-        spotlightFrame = .zero
-        lastViewport = nil
-        ContextualTourGlobalFrameStore.shared.reset()
-        resolveStartedAt = Date()
-        if step.target == .feedContentFilters {
-            FeedFilterBarTourLayoutGate.resetForTourStep()
-        } else {
-            FeedFilterBarTourLayoutGate.clear()
-        }
-        navigationRequest = isSurfaceReady(step) ? nil : step.surface
-        if step.role != .spotlight {
-            presentResolvedStep(frame: .zero)
-            return
-        }
-        phase = .measuring
-        if let target = step.target,
-           step.role == .spotlight,
-           !ContextualTourGeometry.skipsTourAutoscroll(for: target)
-        {
-            issueScroll(now: Date())
-        }
-        scheduleTimeout()
-    }
-
-    private func issueScroll(now: Date) {
-        scrollIssuedForStep = stepIndex
-        if let target = spotlightTarget, ContextualTourGeometry.skipsTourAutoscroll(for: target) {
-            previousFrame = nil
-            resolveStartedAt = now
-            scheduleTimeout()
-            return
-        }
-        scrollGeneration &+= 1
-        scrollTarget = spotlightTarget
-        previousFrame = nil
-        resolveStartedAt = now
-        scheduleTimeout()
-    }
-
-    private func scheduleTimeout() {
-        guard schedulesAsyncResolution else { return }
-        timeoutTask?.cancel()
-        let token = measurementToken
-        timeoutTask = Task { @MainActor in
-            let timeout = ContextualTourGeometry.resolveTimeout(for: spotlightTarget)
-            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-            guard !Task.isCancelled, token == measurementToken, phase == .measuring else { return }
-            forceTimeout()
-        }
-    }
-
-    private func scheduleConfirmation(
-        of frame: CGRect,
-        viewport: CGRect,
-        topInset: CGFloat,
-        bottomInset: CGFloat
-    ) {
-        guard schedulesAsyncResolution else { return }
-        confirmationTask?.cancel()
-        let token = measurementToken
-        confirmationTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            guard !Task.isCancelled, token == measurementToken, phase == .measuring else { return }
-            noteMeasuredFrame(
-                frame,
-                viewport: viewport,
-                topInset: topInset,
-                bottomInset: bottomInset
-            )
-        }
-    }
-
-    private func skipUnresolvedStep() {
-        timeoutTask?.cancel()
-        confirmationTask?.cancel()
-        let next = stepIndex + 1
-        if next >= definition.steps.count {
-            finishWithoutDismiss()
-            return
-        }
-        if definition.steps[next].role == .tradingRulesPrompt {
-            finishWithoutDismiss()
-            return
-        }
-        stepIndex = next
-        beginMeasuring()
-    }
-
     private func acknowledge() {
-        let persistDismissal = !replayArmed
-        let completedUserID = persistDismissal ? userID : nil
-        if let userID, persistDismissal {
+        let persist = persistDismissalOnAcknowledge
+        let completedUserID = persist ? userID : nil
+        if let userID, persist {
             progress.dismiss(definition.id, version: definition.version, userID: userID)
             ContextualTourDebug.logAppTour("completed")
             PostAuthOnboardingProgress.markWalkthroughFinished(for: ProfileID(userID))
@@ -677,10 +792,7 @@ final class ContextualTourCoordinator {
                 rpc: NativeIosOnboardingServices.rpc
             )
         }
-        replayArmed = false
-        postPlanWalkthroughArmed = false
-        suppressedUntilGatesDrop = true
-        hideWithoutDismiss(resetStep: true)
+        terminateSession(reason: "acknowledge")
         if let completedUserID {
             NotificationCenter.default.post(
                 name: .contextualTourDidComplete,
@@ -689,65 +801,68 @@ final class ContextualTourCoordinator {
         }
     }
 
-    private func finishWithoutDismiss() {
-        if hasPresentedStep {
-            suppressedUntilGatesDrop = true
-        } else {
-            suppressedUntilGatesDrop = false
-        }
-        replayArmed = false
-        hideWithoutDismiss(resetStep: true)
-        if postPlanWalkthroughArmed {
-            reevaluate()
-        }
+    private func cancelSession() {
+        ContextualTourDebug.logTourTrace("cancelSession invoked phase=\(phase) step=\(stepIndex)")
+        blocksAutomaticRestart = true
+        terminateSession(reason: "cancelled")
     }
 
-    private func hideWithoutDismiss(resetStep: Bool) {
-        timeoutTask?.cancel()
-        confirmationTask?.cancel()
-        measurementToken &+= 1
+    private func terminateSession(reason: String, resetStep: Bool = true) {
+        cancelPreparationTimeout()
+        let previous = phase
+        if previous != .idle {
+            ContextualTourDebug.logPhaseTransition("\(previous)", "idle", reason)
+            ContextualTourDebug.logTourTrace("session terminated reason=\(reason) from=\(previous) resetStep=\(resetStep)")
+        }
         phase = .idle
-        scrollTarget = nil
+        activation = nil
+        navigationRequest = nil
         spotlightFrame = .zero
-        previousFrame = nil
+        scrollTarget = nil
+        stabilityCandidateFrame = nil
+        presentingStabilityFrame = nil
+        navigationSatisfiedForStepIndex = nil
+        scrollIssuedForStepIndex = nil
+        profileIdentityHeaderHydrated = false
+        stepRevision &+= 1
+        presentedStepRevision = 0
         ContextualTourGlobalFrameStore.shared.reset()
-        hasPresentedStep = false
-        displayedStepIndex = 0
         if resetStep {
             stepIndex = 0
-            navigationRequest = nil
         }
     }
 
-    private func clearMemory() {
-        hideWithoutDismiss(resetStep: true)
-        replayArmed = false
-        suppressedUntilGatesDrop = false
-    }
-
-    private func skipSectionContinueSteps() {
-        while let step = currentStep, step.role == .sectionContinue {
-            let nextIndex = stepIndex + 1
-            guard nextIndex < definition.steps.count else {
-                stepIndex = nextIndex
+    private func schedulePreparationTimeout() {
+        guard schedulesAsyncResolution else { return }
+        preparationTimeoutGeneration &+= 1
+        let generation = preparationTimeoutGeneration
+        let sid = sessionID
+        let stepAtStart = stepIndex
+        let target = spotlightTarget
+        let timeout = ContextualTourGeometry.resolveTimeout(for: target) + 0.25
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            guard generation == preparationTimeoutGeneration else { return }
+            guard phase == .preparing, sessionID == sid, stepIndex == stepAtStart else {
+                ContextualTourDebug.logTourTrace("preparation-timeout fired but obsolete gen=\(generation) phase=\(phase)")
                 return
             }
-            navigationRequest = definition.steps[nextIndex].surface
-            stepIndex = nextIndex
+            ContextualTourDebug.logTourTrace("preparation-timeout step=\(stepIndex) session=\(sid) target=\(target?.debugLabel ?? "none")")
+            ContextualTourDebug.logAppTour("preparation-timeout step=\(stepIndex)")
+            if let step = currentStep,
+               step.target == .settingsTradingRules,
+               step.presentsIfUnmeasured
+            {
+                tryCommitPresentation(frame: .zero, revision: stepRevision)
+                return
+            }
+            blocksAutomaticRestart = true
+            terminateSession(reason: "preparation-timeout")
         }
     }
 
-    private func settingsListScrollRetries(for target: ContextualTourTargetID?) -> Int {
-        switch target {
-        case .settingsAppearance, .settingsTradingRules:
-            return 3
-        case .dashboardPerformance:
-            return 3
-        case .dashboardAccountAndDates:
-            return 4
-        default:
-            return 2
-        }
+    private func cancelPreparationTimeout() {
+        preparationTimeoutGeneration &+= 1
     }
 
     private func progressPosition(for stepIndex: Int) -> (index: Int, total: Int)? {

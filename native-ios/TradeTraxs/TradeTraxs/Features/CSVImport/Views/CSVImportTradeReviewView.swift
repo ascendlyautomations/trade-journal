@@ -109,7 +109,7 @@ struct CSVImportTradeReviewView: View {
     private var pnlRow: some View {
         TradeReviewFormRow(label: "P&L") {
             TextField("P&L", text: $pnlText.numericInput(.signedPnL))
-                .keyboardType(.decimalPad)
+                .keyboardType(.numbersAndPunctuation)
                 .focused($isPnlFocused)
                 .tradeReviewTrailingControlStyle()
                 .foregroundStyle(colors.primaryText)

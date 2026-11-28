@@ -102,88 +102,17 @@ struct ProfileAchievementCard: View {
         .accessibilityIdentifier("profile.achievements.card.\(achievement.id.rawValue)")
     }
 
-    private var payoutAmountColor: Color {
-        if let value = achievement.value {
-            return theme.metricColor(
-                for: NSDecimalNumber(decimal: value.amount).doubleValue
-            )
-        }
-        return colors.primaryText
-    }
-
     private var achievementCardMetadata: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            if achievement.isFeatured {
-                ExperienceTag(title: "Featured", tone: .success)
-            }
-            if ProfilePayoutTotals.isPayout(achievement.kind),
-               let payoutText = ProfilePayoutTotals.payoutDisplayText(for: achievement)
-            {
-                Text(payoutText)
-                    .font(ExperienceTypography.headline.monospacedDigit())
-                    .foregroundStyle(payoutAmountColor)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("profile.achievement.payoutAmount")
-            }
-
-            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
-                HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
-                    Text(achievement.title)
-                        .experienceStyle(.headline, color: colors.primaryText)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    if isPinnedToProfile {
-                        ProfileContentPinIndicator()
-                    }
-                }
-                .layoutPriority(1)
-
-                Spacer(minLength: ExperienceSpacing.xxs)
-
-                if let accessory = AchievementDetailPresentation.titleTrailingAccessory(for: achievement) {
-                    Text(accessory)
-                        .font(
-                            AchievementDetailPresentation.trailingAccessoryUsesMetricColor(for: achievement)
-                                ? ExperienceTypography.metric
-                                : ExperienceTypography.caption
-                        )
-                        .foregroundStyle(trailingAccessoryColor)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                }
-            }
-
-            if let description = achievement.description?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               !description.isEmpty
-            {
-                ExperienceExpandableText(
-                    text: description,
-                    typography: .footnote,
-                    textColor: colors.secondaryText
-                )
-            }
-
-            if let context = AchievementDetailPresentation.contextCaption(for: achievement) {
-                Text(context)
-                    .experienceStyle(.caption, color: colors.tertiaryText)
-                    .lineLimit(2)
-            }
+            PublicAchievementContentStack(
+                achievement: achievement,
+                showsFeaturedTag: achievement.isFeatured,
+                showsPinnedIndicator: isPinnedToProfile
+            )
 
             Text(TradeDisplay.dateText(achievement.achievedAt))
                 .experienceStyle(.caption, color: colors.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-
-    private var trailingAccessoryColor: Color {
-        if AchievementDetailPresentation.trailingAccessoryUsesMetricColor(for: achievement),
-           let value = achievement.value
-        {
-            return theme.metricColor(
-                for: NSDecimalNumber(decimal: value.amount).doubleValue
-            )
-        }
-        return colors.secondaryText
     }
 }

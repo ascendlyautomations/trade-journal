@@ -203,6 +203,8 @@ export type FeedStoryPreviewV1 = {
   user_id: string
   image_url: string
   created_at: string
+  /** Durable per-viewer flag from `story_views` (optional on older servers). */
+  viewer_has_seen?: boolean
 }
 
 export type FeedPageMetaV1 = {

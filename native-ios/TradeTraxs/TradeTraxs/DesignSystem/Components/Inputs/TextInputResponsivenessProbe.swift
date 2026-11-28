@@ -23,6 +23,7 @@ enum TextInputFocusGuard {
     }
 
     static func textInputIsFirstResponder() -> Bool {
+        if ExperienceKeyboardNativeIsolation.isEnabled { return false }
         guard let responder = UIResponder.tradeTraxsCurrentFirstResponder as? UIView else { return false }
         return isEditableInput(responder)
     }

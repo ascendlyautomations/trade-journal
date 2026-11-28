@@ -55,8 +55,7 @@ Recommended phased cutover:
 ## Owner activity retention
 
 - **0–24h:** public story window (non-owner visibility + engagement).
-- **24h–30d after expiry:** story row retained for `rpc_v1_story_insights`; media removed by cron.
-- **After 30d:** row deleted; likes/views cascade; like notifications keep `content` snapshot.
+- **After 24h:** stories leave public surfaces; owners retain indefinite **Story Archive** (metadata, media, insights) until explicit delete. See `docs/STORY_ARCHIVE_STORAGE_MIGRATION.md` and migration `20261127183000_story_archive_private_storage.sql`.
 
 ## Verification checklist (staging)
 

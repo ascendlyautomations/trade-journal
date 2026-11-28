@@ -30,6 +30,24 @@ final class FeedStoriesCatalogStore {
         catalog.removeAll { $0.id == id }
     }
 
+    func markStoryViewed(_ storyID: StoryID, viewerID: ProfileID) {
+        self.viewerID = viewerID
+        catalog = catalog.map { story in
+            guard story.id == storyID else { return story }
+            var copy = story
+            copy.viewerHasSeen = true
+            return copy
+        }
+    }
+
+    /// Inserts or replaces one active story (e.g. right after publish) without discarding the full catalog.
+    func upsertStory(_ story: Story, viewerID: ProfileID) {
+        guard ActiveStorySemantics.isActive(createdAt: story.createdAt) else { return }
+        self.viewerID = viewerID
+        catalog.removeAll { $0.id == story.id }
+        catalog.append(story)
+    }
+
     func invalidate() {
         catalog = []
         viewerID = nil

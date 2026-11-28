@@ -17,6 +17,7 @@ final class StoryPlaybackController {
 
     var onAdvance: (() -> Void)?
     var onVideoPixelSize: ((CGSize) -> Void)?
+    var onMediaUnavailable: (() -> Void)?
 
     private let storage: any ObjectStorageProviding
 
@@ -50,12 +51,18 @@ final class StoryPlaybackController {
 
         if isVideo {
             guard let url = MediaURLResolver.url(for: story.media, bucket: .stories, storage: storage) else {
-                scheduleVideoFallback(generation: token, duration: Self.videoFallbackDuration)
+                StoryDebug.log(
+                    "playback.video.noURL",
+                    "story=\(story.id.rawValue) media=\(String(story.media.id.prefix(80)))"
+                )
+                onMediaUnavailable?()
                 return
             }
+            StoryDebug.log("playback.video.bind", "story=\(story.id.rawValue) urlHost=\(url.host ?? "?")")
             startVideo(url: url, storyID: story.id, generation: token)
         } else {
             player = nil
+            StoryDebug.log("playback.image.timer", "story=\(story.id.rawValue)")
             startImageTimer(generation: token)
         }
     }
@@ -166,6 +173,14 @@ final class StoryPlaybackController {
         Task {
             await waitForPlayableItem(item)
             guard generation == self.generation, storyID == self.activeStoryID else { return }
+            if item.status == .failed {
+                StoryDebug.log(
+                    "playback.video.failed",
+                    "story=\(storyID.rawValue) error=\(item.error?.localizedDescription ?? "unknown")"
+                )
+                onMediaUnavailable?()
+                return
+            }
             let size = item.presentationSize
             if size.width > 1, size.height > 1 {
                 onVideoPixelSize?(size)

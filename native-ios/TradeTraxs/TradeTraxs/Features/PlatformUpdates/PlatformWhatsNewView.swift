@@ -12,7 +12,7 @@ struct PlatformWhatsNewView: View {
     var body: some View {
         Group {
             if isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let errorMessage {
                 ExperienceErrorState(

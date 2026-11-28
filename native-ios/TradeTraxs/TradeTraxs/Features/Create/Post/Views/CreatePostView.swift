@@ -45,8 +45,7 @@ struct CreatePostView: View {
         Group {
             switch viewModel.phase {
             case .idle:
-                ProgressView("Loading…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay()
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn't open New Post",

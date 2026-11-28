@@ -15,8 +15,10 @@ nonisolated enum BackendV2FeatureFlag: String, CaseIterable, Sendable {
     case session
     case dashboard
     case feed
-    /// Rotating rank (`rpc_v2_feed_bootstrap`), Release default OFF.
+    /// Rotating rank (`rpc_v2_feed_bootstrap`); v1 fallback on RPC failure. Guest explore stays on v1.
     case feedRotatingRank
+    /// Owner Profile Insights bootstrap + creator view/share rollups (Release default ON with feed).
+    case profileInsights
     case profile
     case messages
     case messageThreads
@@ -86,6 +88,8 @@ nonisolated enum BackendV2FeatureFlags {
         .session,
         .dashboard,
         .feed,
+        .feedRotatingRank,
+        .profileInsights,
         .messages,
         .messageThreads,
         .rooms,

@@ -16,6 +16,8 @@ struct TradingRulesComplianceDetailView: View {
     let loadDependencies: TradingRulesComplianceLoadDependencies
     var presentation: AnalyticsPresentation = .fullAnalytics
     let onRetry: () -> Void
+    /// When set (TraxsPro preview), scope edits recompute local bundled analytics instead of production loaders.
+    var onScopeRecompute: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.stackNavigation) private var stackNavigation
@@ -26,10 +28,13 @@ struct TradingRulesComplianceDetailView: View {
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
         loadDependencies: TradingRulesComplianceLoadDependencies,
+        sessionStore: TradingRulesComplianceSessionStore? = nil,
         presentation: AnalyticsPresentation = .fullAnalytics,
-        onRetry: @escaping () -> Void
+        onRetry: @escaping () -> Void,
+        onScopeRecompute: (() -> Void)? = nil
     ) {
-        _session = Bindable(TradingRulesCompliancePresentationStores.store(detailCache: detailCache))
+        let resolved = sessionStore ?? TradingRulesCompliancePresentationStores.store(detailCache: detailCache)
+        _session = Bindable(resolved)
         _scopeController = Bindable(scopeController)
         self.scrollAnchor = scrollAnchor
         self.navigationCoordinator = navigationCoordinator
@@ -37,6 +42,7 @@ struct TradingRulesComplianceDetailView: View {
         self.loadDependencies = loadDependencies
         self.presentation = presentation
         self.onRetry = onRetry
+        self.onScopeRecompute = onScopeRecompute
     }
 
     private var allowsInteractiveDrillDown: Bool {
@@ -44,6 +50,7 @@ struct TradingRulesComplianceDetailView: View {
     }
 
     var body: some View {
+        let renderBranch = RulesPreviewDebugLog.detailViewBranch(session: session)
         Group {
             if let error = session.loadError {
                 ExperienceErrorState(
@@ -52,7 +59,7 @@ struct TradingRulesComplianceDetailView: View {
                     onRetry: onRetry
                 )
             } else if !session.ready {
-                ProgressView("Loading trading rules analytics…")
+                ExperienceLoadingSpinner(message: "Loading trading rules analytics…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if !session.hasConfiguredRules {
                 noRulesConfiguredState
@@ -67,7 +74,7 @@ struct TradingRulesComplianceDetailView: View {
                     message: "Widen the date range or account filter to see rule compliance for this scope."
                 )
             } else {
-                ProgressView("Loading trading rules analytics…")
+                ExperienceLoadingSpinner(message: "Loading trading rules analytics…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -84,6 +91,17 @@ struct TradingRulesComplianceDetailView: View {
             }
         }
         .accessibilityIdentifier("tradingRulesAnalytics.detail")
+        .onAppear {
+            RulesPreviewDebugLog.log(
+                "TradingRulesComplianceDetailView render branch=\(renderBranch) presentation=\(presentation) store=\(RulesPreviewDebugLog.storeID(session)) \(RulesPreviewDebugLog.describe(session: session))"
+            )
+        }
+        .onChange(of: session.contentRevision) { _, _ in
+            let branch = RulesPreviewDebugLog.detailViewBranch(session: session)
+            RulesPreviewDebugLog.log(
+                "TradingRulesComplianceDetailView contentRevision branch=\(branch) \(RulesPreviewDebugLog.describe(session: session))"
+            )
+        }
         .sheet(isPresented: $scopeController.showsTimePeriodSheet) {
             TradingRulesAnalyticsTimePeriodSheet(scope: scopeController)
         }
@@ -92,7 +110,11 @@ struct TradingRulesComplianceDetailView: View {
                 .onAppear { scopeController.prepareDraftScopeFilters() }
         }
         .onChange(of: scopeClientScopeToken) { _, _ in
-            scopeController.scheduleRecompute(dependencies: loadDependencies)
+            if let onScopeRecompute {
+                onScopeRecompute()
+            } else {
+                scopeController.scheduleRecompute(dependencies: loadDependencies)
+            }
         }
     }
 

@@ -20,9 +20,11 @@ struct ReportsHomeRouteView: View {
         )
     }
 
+    /// Paywall gating only — same stable restriction semantics as ``PropFirmExpensesHomeRouteView``
+    /// (preview session does not flip this to unrestricted).
     private var restrictsTradingReportsCatalog: Bool {
         _ = entitlementGateRevision
-        return ProMonetizationPolicy.shouldRestrictTradingReportsCatalog(
+        return TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
             demoModeActive: ExploreModeSupport.isActive,
             profileID: reportsViewerProfileID
         )

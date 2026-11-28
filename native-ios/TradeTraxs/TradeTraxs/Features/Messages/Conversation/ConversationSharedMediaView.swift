@@ -4,6 +4,7 @@ struct ConversationSharedMediaView: View {
     @Bindable var viewModel: ConversationSharedMediaViewModel
     let imagePipeline: any ImagePipeline
     var onViewInChat: (MessageID) -> Void
+    var onOpenSharedTrade: (TradeID, Trade?) -> Void = { _, _ in }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
@@ -13,11 +14,9 @@ struct ConversationSharedMediaView: View {
             Group {
                 switch viewModel.phase {
                 case .idle:
-                    ExperienceLoadingSpinner(label: "Loading shared media")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceLoadingOverlay(label: "Loading shared media")
                 case .loading where viewModel.items.isEmpty:
-                    ExperienceLoadingSpinner(label: "Loading shared media")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceLoadingOverlay(label: "Loading shared media")
                 case .failed(let message):
                     ExperienceErrorState(
                         title: "Couldn't load shared media",
@@ -70,13 +69,18 @@ struct ConversationSharedMediaView: View {
                     ConversationSharedMediaCell(
                         item: item,
                         imagePipeline: imagePipeline,
+                        previewTrade: viewModel.previewTrade(for: item),
                         showsPlaceholder: viewModel.isThumbnailFailed(item),
                         onFailed: { viewModel.markThumbnailFailed(item) }
                     )
                     .contentShape(Rectangle())
                     .onTapGesture {
                         ExperienceHaptics.play(.selection)
-                        viewModel.selectedItem = item
+                        if item.isSharedTrade, let tradeID = item.tradeID {
+                            onOpenSharedTrade(tradeID, viewModel.previewTrade(for: item))
+                        } else {
+                            viewModel.selectedItem = item
+                        }
                     }
                     .onAppear {
                         guard item.id == viewModel.visibleItems.last?.id else { return }
@@ -86,7 +90,7 @@ struct ConversationSharedMediaView: View {
             }
             .padding(.horizontal, ConversationSharedMediaGalleryLayout.interItemSpacing)
             if viewModel.isLoadingMore {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, ExperienceSpacing.md)
             }
@@ -97,11 +101,13 @@ struct ConversationSharedMediaView: View {
 private struct ConversationSharedMediaCell: View {
     let item: ConversationSharedMediaItem
     let imagePipeline: any ImagePipeline
+    var previewTrade: Trade?
     var showsPlaceholder: Bool
     var onFailed: () -> Void
 
     @Environment(\.displayScale) private var displayScale
     @Environment(\.themeColors) private var colors
+    @Environment(\.experienceTheme) private var theme
     @State private var image: UIImage?
 
     var body: some View {
@@ -110,9 +116,22 @@ private struct ConversationSharedMediaCell: View {
             .overlay { cellContent }
             .clipped()
             .accessibilityAddTraits(.isImage)
+            .accessibilityLabel(accessibilityLabel)
             .task(id: loadTaskID) {
                 await loadThumbnail()
             }
+    }
+
+    private var accessibilityLabel: String {
+        if item.isSharedTrade {
+            let pnl = displayPnL.map { TradeDisplay.pnlText($0) } ?? "P and L"
+            return "Shared trade, \(pnl)"
+        }
+        return "Shared photo"
+    }
+
+    private var displayPnL: Money? {
+        item.tradeTotalPnL ?? previewTrade?.realizedPnL
     }
 
     @ViewBuilder
@@ -126,10 +145,15 @@ private struct ConversationSharedMediaCell: View {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
+                .overlay(alignment: .bottomLeading) {
+                    if item.isSharedTrade, let displayPnL {
+                        ConversationSharedMediaTradePnLBadge(pnl: displayPnL)
+                    }
+                }
         } else {
             ZStack {
                 colors.fillPrimary
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
     }
@@ -162,6 +186,27 @@ private struct ConversationSharedMediaCell: View {
         } else {
             onFailed()
         }
+    }
+}
+
+private struct ConversationSharedMediaTradePnLBadge: View {
+    let pnl: Money
+
+    @Environment(\.experienceTheme) private var theme
+
+    var body: some View {
+        Text(TradeDisplay.pnlText(pnl))
+            .font(.caption2.weight(.semibold).monospacedDigit())
+            .foregroundStyle(pnlColor)
+            .shadow(color: .black.opacity(0.55), radius: 2, x: 0, y: 1)
+            .padding(6)
+            .accessibilityHidden(true)
+    }
+
+    private var pnlColor: Color {
+        theme.metricColor(
+            for: NSDecimalNumber(decimal: pnl.amount).doubleValue
+        )
     }
 }
 

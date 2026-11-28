@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Full-screen TraxsPro Trading Rules Analytics preview, sample trades and preferences, no persistence.
+/// Full-screen TraxsPro Trading Rules Analytics preview — bundled sample data, shared presentation stores.
 struct TradingRulesPreviewContainerView: View {
     let productionData: DataEnvironment
     let onDismiss: () -> Void
@@ -33,7 +33,8 @@ struct TradingRulesPreviewContainerView: View {
         NavigationStack(path: homePath) {
             TradingRulesComplianceHomeRouteView(
                 navigationCoordinator: navigationCoordinator,
-                data: previewData
+                data: previewData,
+                embeddedInTraxsProPreview: true
             )
             .environment(\.tabIsActive, true)
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -75,6 +76,12 @@ struct TradingRulesPreviewContainerView: View {
     @ViewBuilder
     private func previewDestination(for route: HomeRoute) -> some View {
         switch route {
+        case .tradingRulesAnalytics:
+            TradingRulesComplianceHomeRouteView(
+                navigationCoordinator: navigationCoordinator,
+                data: previewData,
+                embeddedInTraxsProPreview: true
+            )
         case .tradeDetail(let tradeID):
             if TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: tradeID) {
                 JournalTradeDetailView(
@@ -89,24 +96,34 @@ struct TradingRulesPreviewContainerView: View {
             TradingRulesRuleDetailView(
                 ruleIDRaw: ruleIDRaw,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: previewData.detailCache
+                detailCache: previewData.detailCache,
+                sessionStore: previewRulesPresentationStore
             )
         case .tradingRulesDayDetail(let dayKey):
             TradingRulesDayDetailView(
                 dayKey: dayKey,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: previewData.detailCache
+                detailCache: previewData.detailCache,
+                sessionStore: previewRulesPresentationStore
             )
         case .tradingRulesTrends:
-            TradingRulesComplianceTrendsView(detailCache: previewData.detailCache)
+            TradingRulesComplianceTrendsView(
+                detailCache: previewData.detailCache,
+                sessionStore: previewRulesPresentationStore
+            )
         case .tradingRulesViolationHistory:
             TradingRulesViolationHistoryGroupsView(
                 navigationCoordinator: navigationCoordinator,
-                detailCache: previewData.detailCache
+                detailCache: previewData.detailCache,
+                sessionStore: previewRulesPresentationStore
             )
         default:
             previewUnavailable(message: "Exit preview to use other parts of the app.")
         }
+    }
+
+    private var previewRulesPresentationStore: TradingRulesComplianceSessionStore {
+        TradingRulesCompliancePresentationStores.store(for: previewData)
     }
 
     private func previewUnavailable(message: String) -> some View {

@@ -192,6 +192,7 @@ final class TraxsProPreviewSession {
         activePreviewEnvironment = environment
         TradingRulesCompliancePresentationStores.bindPreview(environment.rulesPresentationStore)
         TradingScorecardPresentationStores.bindPreview(environment.scorecardPresentationStore)
+        TradingRulesAnalyticsPreviewSupport.seedActivePreviewEnvironmentRulesPresentation()
         RulesPreviewDebugLog.log(
             "finishActivatingPreview \(RulesPreviewDebugLog.describe(environment))"
         )
@@ -230,6 +231,25 @@ enum TraxsProPreviewSupport {
 
     static var isBacktestLabPreviewActive: Bool {
         TraxsProPreviewSession.shared.isBacktestLabPreviewActive
+    }
+
+    /// Bundled journal inputs for the isolated Reports preview (never session owner stores).
+    struct ReportsJournalBundle: Sendable {
+        let trades: [Trade]
+        let accounts: [TradingAccount]
+        let checkIns: [TraderDailyCheckIn]
+    }
+
+    static func reportsJournalBundle(for profileID: ProfileID) -> ReportsJournalBundle? {
+        guard isReportsPreviewActive,
+              let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
+              preview.viewer == profileID
+        else { return nil }
+        return ReportsJournalBundle(
+            trades: preview.trades,
+            accounts: preview.accounts,
+            checkIns: preview.checkIns
+        )
     }
 
     static func allowsJournalTradeNavigation(tradeID: TradeID) -> Bool {

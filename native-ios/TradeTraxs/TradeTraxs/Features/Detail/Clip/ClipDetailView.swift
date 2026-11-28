@@ -38,8 +38,7 @@ struct ClipDetailView: View {
         Group {
             switch viewModel.phase {
             case .loading where viewModel.reel == nil:
-                ExperienceLoadingSpinner(label: "Loading clip")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading clip")
             case .failed(let failure) where viewModel.reel == nil:
                 ExperienceErrorState(
                     title: failure.title,
@@ -51,6 +50,11 @@ struct ClipDetailView: View {
             }
         }
         .experienceScreenBackground()
+        .creatorContentImpressionTracked(
+            contentKind: "reel",
+            contentID: viewModel.reelID.rawValue,
+            surface: "detail"
+        )
         .experienceNavigationTitle("Clip")
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -155,7 +159,7 @@ struct ClipDetailView: View {
         }
         .overlay {
             if viewModel.isDeleting {
-                ProgressView("Deleting…")
+                ExperienceLoadingSpinner(message: "Deleting…")
                     .padding(ExperienceSpacing.lg)
                     .experienceFloatingPanelBackground(
                         in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
@@ -317,6 +321,12 @@ struct ClipDetailView: View {
                     }
                 )
                 .accessibilityIdentifier("detail.clip.player")
+
+                ClipVideoBufferingOverlay(
+                    player: player,
+                    suppressWhenUserPaused: false,
+                    suppressWhenReachedEnd: viewModel.didReachEnd
+                )
             } else if viewModel.reel != nil {
                 ExperienceLoadingSpinner(label: "Preparing video")
             }

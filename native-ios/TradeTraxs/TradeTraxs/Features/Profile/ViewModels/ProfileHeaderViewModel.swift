@@ -227,7 +227,9 @@ final class ProfileHeaderViewModel {
     func openViewerStory(_ story: Story) {
         guard ActiveStorySemantics.isActive(createdAt: story.createdAt) else { return }
         ExperienceHaptics.play(.selection)
-        detailCache.seed(story)
+        if let viewerID = FeedStoriesCatalogStore.shared.viewerID {
+            StoryViewerViewRecords.shared.rebindIfNeeded(viewerID: viewerID)
+        }
         if let profile = store.profile {
             detailCache.seed(profile)
         }
@@ -241,8 +243,20 @@ final class ProfileHeaderViewModel {
             viewerID: catalogViewer,
             isFullCatalog: false
         )
+        let slides = ActiveStorySemantics.chronologicallyOrderedActive(
+            store.activeStories.filter { $0.authorProfileID == authorID }
+        )
+        let entryID = ActiveStorySemantics.preferredEntryStoryID(
+            in: slides.isEmpty ? [story] : slides,
+            hasViewed: { StoryViewerViewRecords.shared.hasViewed($0) }
+        ) ?? story.id
+        if let entry = slides.first(where: { $0.id == entryID }) ?? slides.first {
+            detailCache.seed(entry)
+        } else {
+            detailCache.seed(story)
+        }
         navigationCoordinator.present(
-            fullScreen: .storyViewer(story.id, .profile(authorID: authorID))
+            fullScreen: .storyViewer(entryID, .profile(authorID: authorID))
         )
     }
 

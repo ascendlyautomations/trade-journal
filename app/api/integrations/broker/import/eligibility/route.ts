@@ -5,6 +5,7 @@ import {
   listLinkedBrokerAccountMappingsForUser,
 } from "@/lib/integrations/brokerIntegrationAccounts"
 import { listSafeBrokerConnections } from "@/lib/integrations/brokerIntegrationConnection"
+import { isRithmicDevelopmentIntegrationEnabled } from "@/lib/integrations/rithmic/rithmicDevIntegration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,7 +24,8 @@ export async function GET(req: Request) {
     .eq("id", user.id)
     .maybeSingle()
 
-  const [importTargets, linkedMappings, tradovateConnections, rithmicConnections] =
+  const rithmicDevEnabled = isRithmicDevelopmentIntegrationEnabled()
+  const [importTargets, linkedMappings, tradovateConnections, rithmicConnectionsRaw] =
     await Promise.all([
       listLinkedBrokerImportTargets(integrationDb, user.id),
       listLinkedBrokerAccountMappingsForUser(integrationDb, user.id),
@@ -31,11 +33,21 @@ export async function GET(req: Request) {
         userId: user.id,
         provider: "tradovate",
       }),
-      listSafeBrokerConnections(integrationDb, {
-        userId: user.id,
-        provider: "rithmic",
-      }),
+      rithmicDevEnabled
+        ? listSafeBrokerConnections(integrationDb, {
+            userId: user.id,
+            provider: "rithmic",
+          })
+        : Promise.resolve([]),
     ])
+
+  const rithmicConnections = rithmicDevEnabled ? rithmicConnectionsRaw : []
+  const filteredImportTargets = rithmicDevEnabled
+    ? importTargets
+    : importTargets.filter((t) => t.provider !== "rithmic")
+  const filteredLinkedMappings = rithmicDevEnabled
+    ? linkedMappings
+    : linkedMappings.filter((m) => m.provider !== "rithmic")
 
   const connectionCount = tradovateConnections.length + rithmicConnections.length
   /** Matches iOS ``TradovateConnectionSummary/isActiveForBrokerUI`` — not OAuth `connected` alone. */
@@ -46,7 +58,7 @@ export async function GET(req: Request) {
   const hasSupportedConnection =
     tradovateConnections.some((c) => isActiveForBrokerUI(c.status)) ||
     rithmicConnections.some((c) => isActiveForBrokerUI(c.status))
-  const hasLinkedAccount = importTargets.length > 0
+  const hasLinkedAccount = filteredImportTargets.length > 0
   const canImportImmediately = hasLinkedAccount
   const needsAccountLinking = hasSupportedConnection && !hasLinkedAccount
   const onboardingComplete = profile?.onboarding_completed === true
@@ -58,7 +70,7 @@ export async function GET(req: Request) {
       onboardingComplete && !optOut && canImportImmediately,
     optOut,
     connectionCount,
-    linkedAccountCount: linkedMappings.length,
+    linkedAccountCount: filteredLinkedMappings.length,
     hasSupportedConnection,
     hasLinkedAccount,
     canImportImmediately,
@@ -67,7 +79,7 @@ export async function GET(req: Request) {
       tradovate: tradovateConnections.some((c) => isActiveForBrokerUI(c.status)),
       rithmic: rithmicConnections.some((c) => isActiveForBrokerUI(c.status)),
     },
-    linkedAccounts: linkedMappings.map((t) => ({
+    linkedAccounts: filteredLinkedMappings.map((t) => ({
       provider: t.provider,
       mappingId: t.mappingId,
       connectionId: t.connectionId,

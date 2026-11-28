@@ -38,7 +38,7 @@ struct SetNewPasswordView: View {
 
     private var verifying: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            ProgressView()
+            ExperienceIndeterminateProgress()
             Text("Verifying password reset link…")
                 .experienceStyle(.body, color: colors.secondaryText)
         }

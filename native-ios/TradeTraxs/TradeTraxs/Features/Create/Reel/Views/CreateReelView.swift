@@ -44,8 +44,7 @@ struct CreateReelView: View {
         Group {
             switch viewModel.phase {
             case .idle:
-                ProgressView("Loading…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay()
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn't open New Clip",
@@ -176,7 +175,7 @@ struct CreateReelView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             if viewModel.isPreparingVideo {
                 HStack(spacing: ExperienceSpacing.sm) {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                     Text("Importing video…")
                         .experienceStyle(.body, color: colors.secondaryText)
                 }
@@ -296,7 +295,7 @@ struct CreateReelView: View {
                 if viewModel.isFullVideoImportInProgress || viewModel.isBackgroundPreparing {
                     RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
                         .fill(.black.opacity(thumb == nil ? 0.08 : 0.22))
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .tint(thumb == nil ? colors.accent : .white)
                 }
             }

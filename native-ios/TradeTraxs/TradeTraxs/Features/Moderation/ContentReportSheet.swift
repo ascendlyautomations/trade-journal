@@ -106,7 +106,7 @@ struct ContentReportSheet: View {
                     HStack {
                         Spacer()
                         if viewModel.phase == .submitting {
-                            ProgressView()
+                            ExperienceIndeterminateProgress()
                         } else {
                             Text("Submit Report")
                                 .fontWeight(.semibold)

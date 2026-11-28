@@ -68,7 +68,6 @@ struct MessageComposerBar: View {
             Text("Turn on microphone access in Settings to send voice messages.")
         }
         .experienceFormFocusSync($focused)
-        .experienceKeyboardExcludesDoneToolbarWhenFocused(focused)
     }
 
     private var composerBar: some View {
@@ -198,7 +197,7 @@ struct MessageComposerBar: View {
         Button(action: onSend) {
             Group {
                 if isSending {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .frame(width: 28, height: 28)
                 } else {
                     Image(systemName: "arrow.up.circle.fill")

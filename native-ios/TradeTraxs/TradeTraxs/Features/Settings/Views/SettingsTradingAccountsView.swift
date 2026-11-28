@@ -16,11 +16,13 @@ struct SettingsTradingAccountsView: View {
     private enum EditorPresentation: Identifiable {
         case create
         case edit(TradingAccount)
+        case graduate(TradingAccount)
 
         var id: String {
             switch self {
             case .create: return "create"
-            case .edit(let account): return account.id.rawValue
+            case .edit(let account): return "edit.\(account.id.rawValue)"
+            case .graduate(let account): return "graduate.\(account.id.rawValue)"
             }
         }
     }
@@ -48,7 +50,7 @@ struct SettingsTradingAccountsView: View {
         guard !TradeEntryEntitlementGate.viewerHasTraxProAccess(profileID: profileID) else {
             return false
         }
-        return viewModel.accounts.count > FreeTierPolicy.maxTradeEntryAccounts
+        return viewModel.distinctAccountSlotCount > FreeTierPolicy.maxTradeEntryAccounts
     }
 
     /// Free viewers only. Pro keeps the single "Your Accounts" list.
@@ -155,8 +157,17 @@ struct SettingsTradingAccountsView: View {
                 freePlanGroupedAccountSections
             } else {
                 Section {
-                    ForEach(viewModel.filteredAccounts) { account in
-                        accountRow(account, tradeEntryBadge: nil)
+                    ForEach(viewModel.managementRows) { row in
+                        switch row {
+                        case .standalone(let account):
+                            accountRow(account, tradeEntryBadge: nil)
+                        case .lifecycle(let funded, let evaluation):
+                            accountRow(funded, tradeEntryBadge: nil)
+                            if let evaluation {
+                                accountRow(evaluation, tradeEntryBadge: .readOnly)
+                                    .padding(.leading, ExperienceSpacing.md)
+                            }
+                        }
                     }
                 } header: {
                     yourAccountsSectionHeader
@@ -222,7 +233,7 @@ struct SettingsTradingAccountsView: View {
         }
         .overlay {
             if viewModel.isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .sheet(item: $editorPresentation) { presentation in
@@ -244,8 +255,17 @@ struct SettingsTradingAccountsView: View {
                         data: data,
                         navigationCoordinator: navigationCoordinator
                     )
+                case .graduate(let account):
+                    ManageAccountEditorView(
+                        viewModel: viewModel,
+                        mode: .graduate(account),
+                        draft: viewModel.fundedUpgradeDraft(from: account),
+                        data: data,
+                        navigationCoordinator: navigationCoordinator
+                    )
                 }
             }
+            .experienceSheetChrome()
             .experienceProtectedFormDismiss()
         }
         .onAppear { viewModel.loadIfNeeded() }
@@ -361,8 +381,20 @@ struct SettingsTradingAccountsView: View {
                 )
             )
 
+            if TradingAccountLifecyclePolicy.canUpgradeToFunded(account) {
+                Button {
+                    guard !AppLaunchController.shared.isDemoExperienceActive else { return }
+                    editorPresentation = .graduate(account)
+                } label: {
+                    Text("Upgrade to Funded")
+                        .experienceStyle(.footnote, color: colors.success)
+                }
+                .accessibilityIdentifier("manageAccounts.upgradeToFunded.\(account.id.rawValue)")
+            }
+
             Button {
                 guard !AppLaunchController.shared.isDemoExperienceActive else { return }
+                if TradingAccountLifecyclePolicy.isCompletedEvaluation(account) { return }
                 editorPresentation = .edit(account)
             } label: {
                 HStack(alignment: .center, spacing: ExperienceSpacing.sm) {

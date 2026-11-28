@@ -171,7 +171,7 @@ struct ActivityHomeView: View {
     private var activityLoadingMoreSection: some View {
         if viewModel.isLoadingMore {
             Section {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)

@@ -256,7 +256,9 @@ enum FeedBootstrap: ScreenBootstrap {
 
         case .achievement:
             guard let achievementID = item.achievementID else { return nil }
-            if let cached = detailCache.achievement(id: achievementID) {
+            if let cached = detailCache.achievement(id: achievementID),
+               !AchievementHydrationSupport.needsFeedRowHydration(cached)
+            {
                 return .achievement(item, cached)
             }
             if item.caption != nil || item.mediaURL != nil {
@@ -285,7 +287,7 @@ enum FeedBootstrap: ScreenBootstrap {
                     sortOrder: 0,
                     achievedAt: item.createdAt
                 )
-                detailCache.seed(achievement, achievementPostID: PostID(item.id))
+                // Do not seed cache: background hydration fetches full achievement rows (value_numeric).
                 return .achievement(item, achievement)
             }
             return nil
@@ -316,6 +318,16 @@ enum FeedBootstrap: ScreenBootstrap {
             }
         }
         return ordered
+    }
+
+    /// Preserves server bootstrap row order (v2 rank pages).
+    static func entriesInBootstrapOrder(
+        _ entries: [FeedTimelineEntry],
+        feedItemOrder: [String]
+    ) -> [FeedTimelineEntry] {
+        guard !feedItemOrder.isEmpty else { return FeedSupport.sortDescending(entries) }
+        let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        return feedItemOrder.compactMap { byID[$0] }
     }
 
     static func hydrate(
@@ -474,8 +486,14 @@ enum FeedBootstrap: ScreenBootstrap {
 
         case .achievement:
             guard let achievementID = item.achievementID else { return nil }
-            if let cached = detailCache.achievement(id: achievementID) {
+            if let cached = detailCache.achievement(id: achievementID),
+               !AchievementHydrationSupport.needsFeedRowHydration(cached)
+            {
                 return .achievement(item, cached)
+            }
+            if let achievement = try? await achievements.achievement(id: achievementID) {
+                detailCache.seed(achievement, achievementPostID: PostID(item.id))
+                return .achievement(item, achievement)
             }
             if item.caption != nil || item.mediaURL != nil {
                 let image: MediaReference? = {
@@ -503,11 +521,6 @@ enum FeedBootstrap: ScreenBootstrap {
                     sortOrder: 0,
                     achievedAt: item.createdAt
                 )
-                detailCache.seed(achievement, achievementPostID: PostID(item.id))
-                return .achievement(item, achievement)
-            }
-            if let achievement = try? await achievements.achievement(id: achievementID) {
-                detailCache.seed(achievement, achievementPostID: PostID(item.id))
                 return .achievement(item, achievement)
             }
             return nil

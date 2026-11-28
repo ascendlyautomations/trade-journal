@@ -22,27 +22,38 @@ struct BrokerIntegrationConnectionCoordinator: View {
     let data: DataEnvironment
     @Binding var linkTarget: BrokerIntegrationLinkTarget?
     @Binding var createLinkTarget: BrokerIntegrationCreateLinkTarget?
+    @Binding var pendingLinkSetupTarget: BrokerTradovatePendingLinkSetupTarget?
+    @Binding var pendingLinkCreateTarget: BrokerTradovatePendingLinkSetupTarget?
+    @Binding var pendingConfirmTarget: BrokerPendingTradovateLinkConfirmTarget?
     var linkPromptGate: BrokerIntegrationLinkPromptGate? = nil
     var showsImportedTradesReview: Bool
 
+    init(
+        viewModel: BrokerIntegrationsViewModel,
+        manageAccountsViewModel: ManageAccountsViewModel,
+        data: DataEnvironment,
+        linkTarget: Binding<BrokerIntegrationLinkTarget?>,
+        createLinkTarget: Binding<BrokerIntegrationCreateLinkTarget?>,
+        pendingLinkSetupTarget: Binding<BrokerTradovatePendingLinkSetupTarget?> = .constant(nil),
+        pendingLinkCreateTarget: Binding<BrokerTradovatePendingLinkSetupTarget?> = .constant(nil),
+        pendingConfirmTarget: Binding<BrokerPendingTradovateLinkConfirmTarget?> = .constant(nil),
+        linkPromptGate: BrokerIntegrationLinkPromptGate? = nil,
+        showsImportedTradesReview: Bool
+    ) {
+        self.viewModel = viewModel
+        self.manageAccountsViewModel = manageAccountsViewModel
+        self.data = data
+        _linkTarget = linkTarget
+        _createLinkTarget = createLinkTarget
+        _pendingLinkSetupTarget = pendingLinkSetupTarget
+        _pendingLinkCreateTarget = pendingLinkCreateTarget
+        _pendingConfirmTarget = pendingConfirmTarget
+        self.linkPromptGate = linkPromptGate
+        self.showsImportedTradesReview = showsImportedTradesReview
+    }
+
     var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .overlay {
-                if viewModel.isConnecting {
-                    ProgressView("Opening Tradovate…")
-                        .padding(ExperienceSpacing.lg)
-                        .experienceFloatingPanelBackground(
-                            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                        )
-                } else if viewModel.isConnectingRithmic, !viewModel.showsRithmicConnectSheet {
-                    ProgressView("Connecting Rithmic…")
-                        .padding(ExperienceSpacing.lg)
-                        .experienceFloatingPanelBackground(
-                            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                        )
-                }
-            }
+        connectMutationLoadingOverlay
             .onReceive(NotificationCenter.default.publisher(for: .tradovateBrokerOAuthCompleted)) { note in
                 let status = note.userInfo?[TradovateBrokerOAuthNotificationPayload.statusKey] as? String
                 let reason = note.userInfo?[TradovateBrokerOAuthNotificationPayload.reasonKey] as? String
@@ -51,6 +62,7 @@ struct BrokerIntegrationConnectionCoordinator: View {
             .sheet(item: $linkTarget, onDismiss: {
                 guard let linkPromptGate else { return }
                 linkPromptGate.handleLinkSheetDismissed(viewModel: viewModel)
+                continueAutoLinkSequenceIfNeeded()
             }) { target in
                 BrokerLinkExistingAccountSheet(
                     viewModel: viewModel,
@@ -58,6 +70,7 @@ struct BrokerIntegrationConnectionCoordinator: View {
                     provider: target.provider,
                     connectionId: target.connectionId,
                     brokerAccount: target.account,
+                    linkPromptGate: linkPromptGate,
                     onCreateNew: {
                         linkTarget = nil
                         createLinkTarget = BrokerIntegrationCreateLinkTarget(
@@ -70,7 +83,55 @@ struct BrokerIntegrationConnectionCoordinator: View {
                 )
                 .experienceSheetChrome()
             }
-            .sheet(item: $createLinkTarget) { target in
+            .sheet(item: $pendingLinkSetupTarget) { target in
+                BrokerTradovatePendingLinkSetupSheet(
+                    viewModel: viewModel,
+                    manageAccountsViewModel: manageAccountsViewModel,
+                    connectionId: target.connectionId,
+                    onCreateNew: {
+                        pendingLinkSetupTarget = nil
+                        pendingLinkCreateTarget = target
+                    }
+                )
+                .experienceSheetChrome()
+            }
+            .sheet(item: $pendingLinkCreateTarget) { target in
+                NavigationStack {
+                    ManageAccountEditorView(
+                        viewModel: manageAccountsViewModel,
+                        mode: .create,
+                        draft: manageAccountsViewModel.emptyDraft(),
+                        data: data,
+                        onCreateSubmit: { draft, liveDrawdown in
+                            let saved = await viewModel.createTradovatePendingLink(
+                                connectionId: target.connectionId,
+                                draft: draft,
+                                livePersonalDrawdown: liveDrawdown
+                            )
+                            if saved {
+                                pendingLinkCreateTarget = nil
+                            }
+                            return saved
+                        }
+                    )
+                }
+                .experienceProtectedFormDismiss()
+            }
+            .sheet(item: $pendingConfirmTarget, onDismiss: {
+                guard let linkPromptGate else { return }
+                linkPromptGate.handleLinkSheetDismissed(viewModel: viewModel)
+                continueAutoLinkSequenceIfNeeded()
+            }) { target in
+                BrokerPendingTradovateLinkConfirmSheet(
+                    viewModel: viewModel,
+                    target: target,
+                    linkPromptGate: linkPromptGate
+                )
+                .experienceSheetChrome()
+            }
+            .sheet(item: $createLinkTarget, onDismiss: {
+                continueAutoLinkSequenceIfNeeded()
+            }) { target in
                 NavigationStack {
                     ManageAccountEditorView(
                         viewModel: manageAccountsViewModel,
@@ -82,13 +143,17 @@ struct BrokerIntegrationConnectionCoordinator: View {
                             account: target.account
                         ),
                         onCreateSubmit: { draft, liveDrawdown in
-                            await viewModel.createAndLink(
+                            let linked = await viewModel.createAndLink(
                                 provider: target.provider,
                                 connectionId: target.connectionId,
                                 brokerAccount: target.account,
                                 draft: draft,
                                 livePersonalDrawdown: liveDrawdown
                             )
+                            if linked {
+                                linkPromptGate?.noteSuccessfulLink(mappingID: target.account.id)
+                            }
+                            return linked
                         }
                     )
                 }
@@ -156,10 +221,47 @@ struct BrokerIntegrationConnectionCoordinator: View {
             }
     }
 
+    @ViewBuilder
+    private var connectMutationLoadingOverlay: some View {
+        if viewModel.isConnecting {
+            brokerConnectLoadingPanel(
+                label: "Opening Tradovate",
+                message: "Opening Tradovate…"
+            )
+        } else if viewModel.isConnectingRithmic, !viewModel.showsRithmicConnectSheet {
+            brokerConnectLoadingPanel(
+                label: "Connecting Rithmic",
+                message: "Connecting Rithmic…"
+            )
+        }
+    }
+
+    private func brokerConnectLoadingPanel(label: String, message: String) -> some View {
+        ZStack {
+            ExperienceLoadingSpinner(label: label, message: message)
+                .padding(ExperienceSpacing.lg)
+                .experienceFloatingPanelBackground(
+                    in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("brokerIntegrations.connectMutationLoading")
+    }
+
     private var showsImportedTradesReviewBinding: Binding<Bool> {
         Binding(
             get: { showsImportedTradesReview && viewModel.showsReviewImportedTrades },
             set: { viewModel.showsReviewImportedTrades = $0 }
+        )
+    }
+
+    private func continueAutoLinkSequenceIfNeeded() {
+        guard let linkPromptGate, linkPromptGate.autoLinkSequenceActive else { return }
+        BrokerIntegrationAutoLinkPrompt.schedule(
+            viewModel: viewModel,
+            gate: linkPromptGate,
+            linkTarget: $linkTarget,
+            createLinkTarget: $createLinkTarget
         )
     }
 }
@@ -172,6 +274,7 @@ struct BrokerLinkExistingAccountSheet: View {
     let provider: BrokerIntegrationProvider
     let connectionId: String
     let brokerAccount: BrokerIntegrationAccount
+    var linkPromptGate: BrokerIntegrationLinkPromptGate? = nil
     let onCreateNew: () -> Void
 
     @State private var selectedAccountID: TradingAccountID?
@@ -257,6 +360,7 @@ struct BrokerLinkExistingAccountSheet: View {
                                 brokerAccount: brokerAccount,
                                 tradetraxsAccountId: id
                             ) {
+                                linkPromptGate?.noteSuccessfulLink(mappingID: brokerAccount.id)
                                 dismiss()
                             }
                         }

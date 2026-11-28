@@ -38,11 +38,11 @@ export function useActiveStories(
     return readStoriesSession(userIdsKey) ?? {}
   })
 
-  const loadStories = useCallback(async () => {
+  const loadStories = useCallback(async (): Promise<StoriesByUserMap> => {
     const ids = normalizeUserIds(userIdsRef.current)
     if (ids.length === 0) {
       setStoriesByUser({})
-      return
+      return {}
     }
 
     const { storiesByUser: next, error } = await fetchActiveStoriesForUserIds(
@@ -52,11 +52,12 @@ export function useActiveStories(
 
     if (error) {
       console.error("[useActiveStories] fetch failed:", error)
-      return
+      return {}
     }
 
     setStoriesByUser(next)
     writeStoriesSession(userIdsKey, next)
+    return next
   }, [userIdsKey])
 
   const userIdsRef = useRef(userIds)

@@ -230,7 +230,9 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         }
 
         let loaded: [Trade]
-        if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
+        if let bundle = await MainActor.run(body: { TraxsProPreviewSupport.reportsJournalBundle(for: profileID) }) {
+            loaded = bundle.trades
+        } else if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
             loaded = DemoCanonicalDataset.trades()
         } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             loaded = ProfileTradeFixtures.samples(owner: profileID)
@@ -256,6 +258,9 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             demoExperienceActive: demoActive
         ) else {
             return []
+        }
+        if let bundle = await MainActor.run(body: { TraxsProPreviewSupport.reportsJournalBundle(for: profileID) }) {
+            return bundle.accounts
         }
         if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
             return DemoCanonicalDataset.accounts()

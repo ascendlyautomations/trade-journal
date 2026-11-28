@@ -244,7 +244,7 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         watchRoomLive(roomID: roomID, accessToken: accessToken, presenceTrack: nil).messages
     }
 
-    /// Web `subscribeCommunityRoomLiveChannel`, messages, reactions, optional presence track.
+    /// Web `subscribeCommunityRoomLiveChannel`, messages, reactions, livestream rows, optional presence track.
     func watchRoomLive(
         roomID: RoomID,
         accessToken: String?,

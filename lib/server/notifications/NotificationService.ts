@@ -70,14 +70,20 @@ export type NotifyInput =
       entity: import("@/lib/server/push/likeMilestones").LikeMilestoneEntity
     }
 
-async function loadReferredUsername(referredUserId: string): Promise<string | null> {
+async function loadReferredDisplayName(referredUserId: string): Promise<string> {
   const { data } = await supabaseServiceRole
     .from("profiles")
-    .select("username")
+    .select("username, name")
     .eq("id", referredUserId)
     .maybeSingle()
+  const name = data?.name != null ? String(data.name).trim() : ""
+  if (name) return name
   const username = data?.username != null ? String(data.username).trim() : ""
-  return username || null
+  if (username) {
+    const normalized = normalizeProfileUsername(username)
+    return normalized ? `@${normalized}` : username
+  }
+  return "Someone"
 }
 
 /**
@@ -332,7 +338,7 @@ async function notifyTradingReport(input: {
   const kind = input.kind === "monthly" ? "monthly" : "weekly"
   const title =
     input.title?.trim() ||
-    (kind === "weekly" ? "Weekly trading report" : "Monthly trading report")
+    (kind === "weekly" ? "Weekly Report" : "Monthly Report")
   const href =
     input.href?.trim() ||
     `/dashboard?report=${encodeURIComponent(periodId || periodKey || "weekly_last")}`
@@ -353,8 +359,8 @@ async function notifyTradingReport(input: {
     title,
     body:
       kind === "weekly"
-        ? "Your Weekly Trading Report is Ready"
-        : "Your monthly trading summary is ready to review.",
+        ? "Your weekly performance report is ready."
+        : "Your monthly performance report is ready.",
     href,
     periodKey,
     periodId,
@@ -475,13 +481,10 @@ async function notifyAffiliateReferral(input: {
     return { ok: true, skipped: true }
   }
 
-  const username = await loadReferredUsername(referredUserId)
-  const normalized = username ? normalizeProfileUsername(username) : ""
+  const referredName = await loadReferredDisplayName(referredUserId)
   const content = JSON.stringify({
-    title: "New referral",
-    body: normalized
-      ? `@${normalized} signed up using your referral code.`
-      : "A new user signed up using your referral code.",
+    title: "New Referral",
+    body: `${referredName} signed up using your referral code.`,
     href: "/affiliate/dashboard",
   })
 
@@ -521,14 +524,11 @@ async function notifyAffiliateCommission(input: {
     return { ok: true, skipped: true }
   }
 
-  const username = await loadReferredUsername(referredUserId)
-  const normalized = username ? normalizeProfileUsername(username) : ""
+  const referredName = await loadReferredDisplayName(referredUserId)
   const amountStr = commissionAmount.toFixed(2)
   const content = JSON.stringify({
-    title: "Commission earned",
-    body: normalized
-      ? `@${normalized} became a paying TraxPro subscriber. You earned $${amountStr}.`
-      : `A referred user became a paying TraxPro subscriber. You earned $${amountStr}.`,
+    title: "Commission Earned",
+    body: `You earned $${amountStr} from ${referredName}'s subscription.`,
     href: "/affiliate/dashboard",
   })
 

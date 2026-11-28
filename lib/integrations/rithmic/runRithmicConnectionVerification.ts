@@ -11,6 +11,7 @@ import {
 import { verifyRithmicRuntimeAssets } from "@/lib/integrations/rithmic/rithmicPaths"
 import { RithmicProtoEncodeError } from "@/lib/integrations/rithmic/rithmicProtoLoader"
 import { logRithmicDiagnostic } from "@/lib/integrations/rithmic/rithmicSyncLogger"
+import { logRithmicConnectDebug } from "@/lib/integrations/rithmic/rithmicConnectDebug"
 import { markRithmicConnectPhase } from "@/lib/integrations/rithmic/rithmicConnectTiming"
 
 export type RithmicConnectionVerificationResult = {
@@ -80,6 +81,17 @@ export async function runRithmicConnectionVerification(params: {
   const requestedSystem =
     params.systemName?.trim() || config.systemNameOverride?.trim() || null
 
+  logRithmicConnectDebug("verification_start", {
+    apiEnvironment: config.apiEnvironment,
+    wssUrl: config.wssUrl,
+    appName: config.appName,
+    appVersion: config.appVersion,
+    systemDiscovery: requestedSystem ? "skipped" : "performed",
+    clientSystemName: params.systemName?.trim() || null,
+    envSystemNameOverride: config.systemNameOverride,
+    resolvedSystemForLogin: requestedSystem,
+  })
+
   let systemNames: string[] = []
 
   if (!requestedSystem) {
@@ -91,6 +103,11 @@ export async function runRithmicConnectionVerification(params: {
       const info = await probe.requestSystemInfo()
       markRithmicConnectPhase("system_discovery_complete")
       if (info.rpCode[0] !== "0") {
+        logRithmicConnectDebug("system_discovery_failed", {
+          systemDiscovery: "performed",
+          loginRpCode: info.rpCode,
+          systemNamesReturned: info.systemNames,
+        })
         return {
           ok: false,
           code: "system_discovery_failed",
@@ -140,6 +157,10 @@ export async function runRithmicConnectionVerification(params: {
   } else {
     systemNames = [requestedSystem]
     markRithmicConnectPhase("system_discovery_skipped")
+    logRithmicConnectDebug("system_discovery_skipped", {
+      systemDiscovery: "skipped",
+      resolvedSystemForLogin: requestedSystem,
+    })
   }
 
   if (systemNames.length === 0 && !config.systemNameOverride && !params.systemName?.trim()) {
@@ -163,6 +184,11 @@ export async function runRithmicConnectionVerification(params: {
     params.systemName
   )
   if (needsSelection) {
+    logRithmicConnectDebug("system_selection_required", {
+      systemDiscovery: "performed",
+      discoveredSystemCount: systemNames.length,
+      systemNames,
+    })
     return {
       ok: false,
       code: "system_selection_required",
@@ -176,6 +202,12 @@ export async function runRithmicConnectionVerification(params: {
       accountCount: 0,
     }
   }
+
+  logRithmicConnectDebug("system_selected", {
+    systemDiscovery: requestedSystem ? "skipped" : "performed",
+    selectedSystemName: selected,
+    discoveredSystemCount: systemNames.length,
+  })
 
   if (!selected) {
     return {
@@ -200,6 +232,14 @@ export async function runRithmicConnectionVerification(params: {
     const login = await session.loginOrderPlant(selected)
     markRithmicConnectPhase("login_response_received")
     if (!isLoginSuccess(login.rpCode)) {
+      logRithmicConnectDebug("login_rejected", {
+        code: login.agreementLikely ? "agreement_required" : "login_failed",
+        selectedSystemName: selected,
+        systemDiscovery: requestedSystem ? "skipped" : "performed",
+        loginRpCode: login.rpCode,
+        apiEnvironment: config.apiEnvironment,
+        wssUrl: config.wssUrl,
+      })
       if (login.agreementLikely) {
         return {
           ok: false,
@@ -233,6 +273,13 @@ export async function runRithmicConnectionVerification(params: {
     const loginInfo = await session.requestLoginInfo()
     markRithmicConnectPhase("login_info_received")
     if (!isLoginSuccess(loginInfo.rpCode)) {
+      logRithmicConnectDebug("login_info_rejected", {
+        code: "login_failed",
+        selectedSystemName: selected,
+        loginRpCode: loginInfo.rpCode,
+        apiEnvironment: config.apiEnvironment,
+        wssUrl: config.wssUrl,
+      })
       return {
         ok: false,
         code: "login_failed",
@@ -295,6 +342,15 @@ export async function runRithmicConnectionVerification(params: {
         accountCount: 0,
       }
     }
+
+    logRithmicConnectDebug("login_success", {
+      code: "success",
+      selectedSystemName: selected,
+      loginRpCode: login.rpCode,
+      accountCount: normalized.length,
+      apiEnvironment: config.apiEnvironment,
+      wssUrl: config.wssUrl,
+    })
 
     return {
       ok: true,

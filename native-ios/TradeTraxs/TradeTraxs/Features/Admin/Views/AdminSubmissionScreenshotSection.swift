@@ -20,7 +20,7 @@ struct AdminSubmissionScreenshotSection: View {
                         case .empty:
                             HStack {
                                 Spacer()
-                                ProgressView()
+                                ExperienceIndeterminateProgress()
                                 Spacer()
                             }
                             .frame(height: 160)
@@ -67,7 +67,7 @@ private struct AdminSubmissionScreenshotFullScreenView: View {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .success(let image):
                     ScrollView {

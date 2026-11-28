@@ -59,6 +59,18 @@ final class GettingStartedStore {
         )
     }
 
+    /// Walkthrough can decide skip vs spotlight after Getting Started signals resolve (or immediately when feature-off).
+    var isWalkthroughResolutionReady: Bool {
+        guard BackendV2FeatureFlags.isEnabled(.gettingStarted) else { return true }
+        return signalsReady
+    }
+
+    var isAvailableForAppWalkthrough: Bool {
+        guard BackendV2FeatureFlags.isEnabled(.gettingStarted) else { return false }
+        guard signalsReady else { return false }
+        return shouldShowDashboardCard
+    }
+
     func loadIfNeeded() {
         guard BackendV2FeatureFlags.isEnabled(.gettingStarted) else { return }
         guard !signalsReady else { return }
@@ -185,7 +197,7 @@ final class GettingStartedStore {
             apply(signals: loaded, generation: generation)
         } catch GettingStartedLoader.LoaderError.flagOff,
                 GettingStartedLoader.LoaderError.rpcUnavailable {
-            // Hide checklist quietly when RPC is unavailable.
+            signalsReady = true
         } catch is CancellationError {
             // Preserve last known progress.
         } catch {

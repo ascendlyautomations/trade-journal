@@ -94,7 +94,7 @@ struct PsychologyInsightsSection: View {
 
     private var loadingState: some View {
         HStack(spacing: ExperienceSpacing.sm) {
-            ProgressView()
+            ExperienceIndeterminateProgress()
             Text("Loading psychology insights…")
                 .experienceStyle(.footnote, color: colors.secondaryText)
         }

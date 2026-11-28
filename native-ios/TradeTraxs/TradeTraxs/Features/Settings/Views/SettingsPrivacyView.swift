@@ -80,7 +80,7 @@ struct SettingsPrivacyView: View {
         .experienceNavigationTitle("Privacy")
         .overlay {
             if viewModel.isProfileLoading || viewModel.isLoadingLists {
-                ProgressView()
+                ExperienceIndeterminateProgress()
             }
         }
         .onAppear {

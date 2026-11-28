@@ -205,6 +205,46 @@ final class ConversationViewModel {
 
     var conversationSharedMediaRPC: (any RPCClient)? { rpc }
 
+    func makeSharedMediaViewModel() -> ConversationSharedMediaViewModel {
+        let gallery = ConversationSharedMediaViewModel(
+            conversationID: conversationID,
+            rpc: rpc,
+            messagesRepo: messagesRepo
+        )
+        gallery.tradeBridge = ConversationSharedMediaTradeBridge(
+            messageForID: { [weak self] messageID in
+                self?.messages.first { $0.id == messageID }
+            },
+            tradeForMessage: { [weak self] message in
+                self?.sharedTrade(for: message)
+            },
+            tradeForID: { [weak self] tradeID in
+                self?.sharedTrades[tradeID]
+            },
+            hydrateMessageIDs: { [weak self] messageIDs in
+                await self?.hydrateSharedMediaTradeMessages(messageIDs)
+            }
+        )
+        return gallery
+    }
+
+    private func hydrateSharedMediaTradeMessages(_ messageIDs: [MessageID]) async {
+        guard !messageIDs.isEmpty else { return }
+        var batch: [Message] = []
+        for messageID in messageIDs {
+            if let local = messages.first(where: { $0.id == messageID }) {
+                batch.append(local)
+            } else if let remote = try? await messagesRepo.message(id: messageID, in: conversationID) {
+                batch.append(remote)
+            }
+        }
+        guard !batch.isEmpty else { return }
+        enqueueSharedContentNetworkHydration(messages: batch)
+        if let task = sharedContentHydrationTask {
+            await task.value
+        }
+    }
+
     func clearPendingScroll() {
         pendingScrollMessageID = nil
     }

@@ -14,6 +14,7 @@ struct StorySlideProgressStrip: View {
                     .frame(height: 2)
             }
         }
+        .storyViewerHeaderContrastShadow()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Story \(activeIndex + 1) of \(slideCount)")
         .accessibilityIdentifier("feed.story.progress")

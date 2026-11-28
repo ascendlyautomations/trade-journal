@@ -1,24 +1,6 @@
 import Foundation
 import Observation
 
-/// Blocks feed filter tour measurement until the pinned bar has a real post-layout frame.
-@MainActor
-enum FeedFilterBarTourLayoutGate {
-    private(set) static var mayMeasure = false
-
-    static func resetForTourStep() {
-        mayMeasure = false
-    }
-
-    static func markLaidOut() {
-        mayMeasure = true
-    }
-
-    static func clear() {
-        mayMeasure = false
-    }
-}
-
 /// Auto-hide state for the feed horizontal content-filter strip (All / Trades / …).
 ///
 /// Driven by ``FeedHomeView`` scroll geometry, not used in Clips pager mode.

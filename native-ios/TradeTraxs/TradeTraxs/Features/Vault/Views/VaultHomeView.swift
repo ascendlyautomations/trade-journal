@@ -250,7 +250,7 @@ struct VaultHomeView: View {
 
         switch viewModel.phase {
         case .idle where viewModel.items.isEmpty, .loading where viewModel.items.isEmpty:
-            ProgressView()
+            ExperienceIndeterminateProgress()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, ExperienceSpacing.lg)
         case .failed(let message):
@@ -277,7 +277,7 @@ struct VaultHomeView: View {
                         }
                     }
                     if viewModel.isLoadingMore {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .padding(.vertical, ExperienceSpacing.sm)
                     }
                 }

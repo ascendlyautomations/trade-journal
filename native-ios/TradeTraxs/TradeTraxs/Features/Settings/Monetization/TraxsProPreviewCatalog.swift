@@ -15,6 +15,7 @@ nonisolated enum TraxsProPreviewEntryPoint: String, Sendable {
     case dashboardUpsell = "dashboard_upsell"
     case expenseTrackerGate = "expense_tracker_gate"
     case tradingRulesGate = "trading_rules_gate"
+    case tradingRulesSettingsGate = "trading_rules_settings_gate"
     case backtestLabGate = "backtest_lab_gate"
     case proUpgradeSheet = "pro_upgrade_sheet"
     case featurePreviewCard = "feature_preview_card"

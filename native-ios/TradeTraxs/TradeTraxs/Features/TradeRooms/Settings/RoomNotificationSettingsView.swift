@@ -79,7 +79,7 @@ struct RoomNotificationSettingsView: View {
             }
             .overlay {
                 if viewModel.phase == .loading && viewModel.channelPrefs.isEmpty {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                 }
             }
         }

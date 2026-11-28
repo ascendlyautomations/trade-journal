@@ -73,7 +73,7 @@ struct AddTradeView: View {
         Group {
             switch viewModel.phase {
             case .idle, .loadingAccounts:
-                ProgressView("Loading accounts…")
+                ExperienceLoadingSpinner(message: "Loading accounts…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
                 ExperienceErrorState(
@@ -1487,7 +1487,7 @@ struct AddTradeNewClipComposerView: View {
         Form {
             Section {
                 if isPreparing {
-                    ProgressView("Preparing video…")
+                    ExperienceLoadingSpinner(message: "Preparing video…")
                 } else if let draft, let thumb = draft.thumbnailPreview {
                     Button(action: onPreview) {
                         HStack(spacing: ExperienceSpacing.sm) {

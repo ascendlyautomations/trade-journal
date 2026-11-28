@@ -164,6 +164,8 @@ struct SettingsDestinationView: View {
                 }
             case .vault:
                 VaultHomeView(data: data, navigationCoordinator: navigationCoordinator)
+            case .storyArchive:
+                StoryArchiveView(data: data, navigationCoordinator: navigationCoordinator)
             case .support, .supportContact:
                 ContactSupportFormView(repository: data.userSubmissions)
             case .productFeedback, .supportFeedback:

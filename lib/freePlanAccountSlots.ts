@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { countDistinctAccountSlots } from "./accountLifecycle.ts"
 import { isProActive, isProActiveForTradeSlots } from "./subscription.ts"
 
 export type FreePlanTradeSlotsEpoch = {
@@ -55,11 +56,14 @@ export function countTradeEntryEnabledAccounts(
   return accounts.filter((row) => accountCanAddTrades(row)).length
 }
 
-/** Every user-created row in `accounts` consumes a Free creation slot. */
+/** Distinct lifecycle slots on Free (eval + funded successor share one). */
 export function countTotalTradingAccounts(
-  accounts: readonly { id?: string | null }[]
+  accounts: readonly {
+    id?: string | null
+    account_lifecycle_id?: string | null
+  }[]
 ): number {
-  return accounts.length
+  return countDistinctAccountSlots(accounts)
 }
 
 /**

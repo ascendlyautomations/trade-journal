@@ -65,7 +65,7 @@ struct TradingRulesPremiumLockedSection: View {
         MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
             feature: .premiumAnalytics,
             previewFeature: .tradingRules,
-            previewEntryPoint: .tradingRulesGate,
+            previewEntryPoint: .tradingRulesSettingsGate,
             previewAccessibilityIdentifier: "settings.tradingRules.preview",
             unlockAccessibilityIdentifier: "settings.tradingRules.exploreTraxsPro"
         )

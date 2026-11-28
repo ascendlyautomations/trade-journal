@@ -411,6 +411,9 @@ final class ExploreViewModel {
 
     func watchLiveTrader(_ item: ExploreLiveTraderNow) {
         ExperienceHaptics.play(.selection)
+        if let slug = item.roomSlug?.trimmingCharacters(in: .whitespacesAndNewlines), !slug.isEmpty {
+            RoomNavigationFocusStore.shared.registerRoomAlias([item.roomID, RoomID(slug)])
+        }
         RoomNavigationFocusStore.shared.seed(
             roomID: item.roomID,
             sectionID: nil,

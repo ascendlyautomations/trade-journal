@@ -94,26 +94,33 @@ struct DashboardPreviewContainerView: View {
         case .tradingRulesAnalytics:
             TradingRulesComplianceHomeRouteView(
                 navigationCoordinator: navigationCoordinator,
-                data: previewData
+                data: previewData,
+                embeddedInTraxsProPreview: true
             )
         case .tradingRulesRuleDetail(let ruleIDRaw):
             TradingRulesRuleDetailView(
                 ruleIDRaw: ruleIDRaw,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: previewData.detailCache
+                detailCache: previewData.detailCache,
+                sessionStore: previewRulesPresentationStore
             )
         case .tradingRulesDayDetail(let dayKey):
             TradingRulesDayDetailView(
                 dayKey: dayKey,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: previewData.detailCache
+                detailCache: previewData.detailCache,
+                sessionStore: previewRulesPresentationStore
             )
         case .tradingRulesTrends:
-            TradingRulesComplianceTrendsView(detailCache: previewData.detailCache)
+            TradingRulesComplianceTrendsView(
+                detailCache: previewData.detailCache,
+                sessionStore: previewRulesPresentationStore
+            )
         case .tradingRulesViolationHistory:
             TradingRulesViolationHistoryGroupsView(
                 navigationCoordinator: navigationCoordinator,
-                detailCache: previewData.detailCache
+                detailCache: previewData.detailCache,
+                sessionStore: previewRulesPresentationStore
             )
         case .tradingScorecard:
             TradingScorecardDetailView(
@@ -133,6 +140,10 @@ struct DashboardPreviewContainerView: View {
         default:
             previewUnavailable(message: "Exit preview to use other parts of the app.")
         }
+    }
+
+    private var previewRulesPresentationStore: TradingRulesComplianceSessionStore {
+        TradingRulesCompliancePresentationStores.store(for: previewData)
     }
 
     private func previewUnavailable(message: String) -> some View {

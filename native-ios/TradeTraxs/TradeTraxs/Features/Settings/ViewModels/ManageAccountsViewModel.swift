@@ -193,6 +193,42 @@ final class ManageAccountsViewModel {
         )
     }
 
+    func fundedUpgradeDraft(from evaluation: TradingAccount) -> TradingAccountDraft {
+        var draft = draft(from: evaluation)
+        draft.category = .propFirm
+        draft.mode = .funded
+        if !draft.name.lowercased().contains("funded") {
+            draft.name = "\(draft.name) Funded"
+        }
+        return draft
+    }
+
+    var distinctAccountSlotCount: Int {
+        TradingAccountLifecyclePolicy.countDistinctAccountSlots(accounts)
+    }
+
+    var managementRows: [TradingAccountLifecyclePolicy.ManagementRow] {
+        TradingAccountLifecyclePolicy.managementRows(from: filteredAccounts)
+    }
+
+    func graduateEvaluationToFunded(
+        evaluation: TradingAccount,
+        draft: TradingAccountDraft
+    ) async -> Bool {
+        await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            let funded = try await trades.graduateEvalToFunded(
+                evalAccountID: evaluation.id,
+                ownerID: viewerID,
+                draft: draft
+            )
+            await loadAccounts(forceNetwork: true)
+            SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
+            AccountMutationStore.shared.noteAccountCreated(funded, allAccounts: accounts)
+            ExperienceHaptics.play(.success)
+        }
+    }
+
     func create(
         _ draft: TradingAccountDraft,
         livePersonalDrawdown: LivePersonalDrawdownConfig? = nil
@@ -287,6 +323,11 @@ final class ManageAccountsViewModel {
         await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
             let previous = accounts.first(where: { $0.id == id })
+            if let previous, TradingAccountLifecyclePolicy.isCompletedEvaluation(previous) {
+                throw AppError.unknown(
+                    message: "This evaluation is locked after upgrading to funded."
+                )
+            }
             if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnSave(
                 draft,
                 drawdownConfiguredOnAccount: previous

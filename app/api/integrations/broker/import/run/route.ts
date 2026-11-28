@@ -4,6 +4,7 @@ import {
   listLinkedBrokerImportTargets,
   runBrokerManualImportBatch,
 } from "@/lib/brokerImport/brokerManualImport"
+import { isRithmicDevelopmentIntegrationEnabled } from "@/lib/integrations/rithmic/rithmicDevIntegration"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -30,7 +31,10 @@ export async function POST(req: Request) {
     body = {}
   }
 
-  const allTargets = await listLinkedBrokerImportTargets(integrationDb, user.id)
+  const allTargetsRaw = await listLinkedBrokerImportTargets(integrationDb, user.id)
+  const allTargets = isRithmicDevelopmentIntegrationEnabled()
+    ? allTargetsRaw
+    : allTargetsRaw.filter((t) => t.provider !== "rithmic")
   if (allTargets.length === 0) {
     return Response.json({ error: "No linked broker accounts." }, { status: 400 })
   }
@@ -48,7 +52,9 @@ export async function POST(req: Request) {
   }
 
   const rithmicPassword =
-    typeof body.rithmicPassword === "string" && body.rithmicPassword
+    isRithmicDevelopmentIntegrationEnabled() &&
+    typeof body.rithmicPassword === "string" &&
+    body.rithmicPassword
       ? body.rithmicPassword
       : null
 

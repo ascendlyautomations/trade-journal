@@ -264,6 +264,7 @@ struct ProfileTradeRoomDestinationRow: View {
     let action: () -> Void
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button {
@@ -286,19 +287,34 @@ struct ProfileTradeRoomDestinationRow: View {
             .padding(.vertical, ExperienceSpacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-            .background(
-                colors.fillSecondary,
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
-                    .stroke(colors.border.opacity(ExperienceOpacity.subtle), lineWidth: ExperienceBorder.hairline)
-            }
+            .background { tradeRoomRowBackground }
+            .overlay { tradeRoomRowBorder }
             .contentShape(Rectangle())
         }
         .buttonStyle(.experiencePlain)
         .accessibilityLabel(title)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    /// Light mode: match Edit Profile outline chip (`ProfileActionChip` `.outline`). Dark mode unchanged.
+    @ViewBuilder
+    private var tradeRoomRowBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
+        if colorScheme == .light {
+            shape.fill(Color.clear)
+        } else {
+            shape.fill(colors.fillSecondary)
+        }
+    }
+
+    @ViewBuilder
+    private var tradeRoomRowBorder: some View {
+        let shape = RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
+        if colorScheme == .light {
+            shape.stroke(colors.border, lineWidth: ExperienceBorder.thin)
+        } else {
+            shape.stroke(colors.border.opacity(ExperienceOpacity.subtle), lineWidth: ExperienceBorder.hairline)
+        }
     }
 }

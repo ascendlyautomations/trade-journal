@@ -29,10 +29,9 @@ export default function RithmicIntegrationSettingsSection({
     void (async () => {
       try {
         const headers = await supabaseBearerHeaders()
-        const [capabilitiesRes, connectionsRes] = await Promise.all([
-          fetch("/api/integrations/rithmic/connect", { headers }),
-          fetch("/api/integrations/rithmic/connections", { headers }),
-        ])
+        const capabilitiesRes = await fetch("/api/integrations/rithmic/connect", {
+          headers,
+        })
 
         let shouldShow = false
         if (capabilitiesRes.ok) {
@@ -42,14 +41,6 @@ export default function RithmicIntegrationSettingsSection({
           }
           shouldShow = capabilities.showConnectUi === true
           setTestEnvironment(capabilities.apiEnvironment === "test")
-        }
-        if (connectionsRes.ok) {
-          const body = (await connectionsRes.json()) as {
-            connections?: unknown[]
-          }
-          if ((body.connections?.length ?? 0) > 0) {
-            shouldShow = true
-          }
         }
         setVisible(shouldShow)
       } catch {

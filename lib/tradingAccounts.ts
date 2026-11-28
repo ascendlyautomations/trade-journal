@@ -44,7 +44,12 @@ export type TradingAccountListItem = {
   show_in_account_dropdowns: boolean
   note: string
   rules: TradingAccountPropFirmRules | null
+  account_lifecycle_id: string | null
+  graduated_to_account_id: string | null
+  graduated_from_account_id: string | null
 }
+
+export { graduateEvalToFunded } from "@/lib/accountLifecycle"
 
 export type AccountFormInitialValues = {
   name: string
@@ -75,7 +80,7 @@ export type CreateTradingAccountPayload = {
 export const FREE_PLAN_ACCOUNT_LIMIT = 3
 
 export const FREE_PLAN_ACCOUNT_LIMIT_MESSAGE =
-  "Free plan allows up to 3 trading accounts total. Upgrade to TraxPro for unlimited accounts."
+  "Free plan allows up to 3 account slots. Upgrade to TraxPro for unlimited accounts."
 
 export function formatTradingAccountSize(size: unknown): string {
   return formatAccountBalanceForDisplay(size)
@@ -137,6 +142,18 @@ function mapAccountRow(acc: Record<string, unknown>): TradingAccountListItem {
     show_in_account_dropdowns: acc.show_in_account_dropdowns !== false,
     note: acc.note != null ? String(acc.note) : "",
     rules: category === "Prop Firm" ? mapPropFirmRules(acc) : null,
+    account_lifecycle_id:
+      acc.account_lifecycle_id != null
+        ? String(acc.account_lifecycle_id)
+        : String(acc.id ?? "") || null,
+    graduated_to_account_id:
+      acc.graduated_to_account_id != null
+        ? String(acc.graduated_to_account_id)
+        : null,
+    graduated_from_account_id:
+      acc.graduated_from_account_id != null
+        ? String(acc.graduated_from_account_id)
+        : null,
   }
 }
 
@@ -210,7 +227,7 @@ export async function assertCanCreateTradingAccount(
 
   const { data: existingAccounts, error: countErr } = await client
     .from("accounts")
-    .select("id")
+    .select("id, account_lifecycle_id")
     .eq("user_id", userId)
 
   if (countErr) {
@@ -355,6 +372,15 @@ export async function updateTradingAccount(
   const name = payload.name.trim()
   if (!name) {
     return { account: null, error: new Error("Account name is required") }
+  }
+
+  if (String(previous.graduated_to_account_id ?? "").trim()) {
+    return {
+      account: null,
+      error: new Error(
+        "This evaluation is locked after upgrading to funded. Edit the funded account instead."
+      ),
+    }
   }
 
   const accountSize = payload.size.trim() ? payload.size : previous.size

@@ -5,6 +5,12 @@ import Observation
 @MainActor
 final class AchievementsContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
+
+    var sectionChromeState: ProfileSectionLoadState {
+        let settled = hasLoaded || !items.isEmpty
+        return state.preservingSettledContent(hasSettledLoad: settled, itemCount: items.count)
+    }
+
     private(set) var items: [Achievement] = []
     private(set) var nextCursor: String?
     var pendingDelete: Achievement?
@@ -131,7 +137,7 @@ final class AchievementsContainerViewModel {
     func loadIfNeeded() {
         guard !hasLoaded, loadTask == nil else { return }
         if awaitingScreenBootstrap {
-            if items.isEmpty {
+            if items.isEmpty, !state.hasSettledPresentation {
                 state = .loading
             }
             return
@@ -270,7 +276,9 @@ final class AchievementsContainerViewModel {
             return
         }
 
-        state = items.isEmpty ? .loading : state
+        if items.isEmpty, !state.hasSettledPresentation {
+            state = .loading
+        }
         initialLoadFailureGrace.cancel()
         do {
             let pageItems: [Achievement]

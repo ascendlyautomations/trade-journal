@@ -56,6 +56,7 @@ struct TradingAnalyticsPreferencesView: View {
         preferencesScroll
             .scrollDismissesKeyboard(.interactively)
             .experienceScreenBackground()
+            .experienceKeyboardDoneToolbar()
             .experienceFormKeyboard(focus: $focusedField)
             .experienceNavigationTitle("Trading Rules")
             .toolbar {
@@ -95,7 +96,7 @@ struct TradingAnalyticsPreferencesView: View {
             }
             .overlay {
                 if viewModel.isLoading {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                 }
             }
             .task {
@@ -131,7 +132,8 @@ struct TradingAnalyticsPreferencesView: View {
     private var restrictsPremiumRulesEditing: Bool {
         if embeddedInTraxsProRulesPreview { return false }
         let profileID = viewModel.preferences.userID.rawValue.isEmpty ? nil : viewModel.preferences.userID
-        return ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
+        // Stable while TraxsPro preview is active elsewhere — avoids flipping the editor under the cover.
+        return TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
             demoModeActive: ExploreModeSupport.isActive,
             profileID: profileID
         )

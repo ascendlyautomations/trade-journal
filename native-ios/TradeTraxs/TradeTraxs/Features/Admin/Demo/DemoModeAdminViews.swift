@@ -378,8 +378,7 @@ struct DemoAdminEditorView: View {
         DemoAdminGate {
             Group {
                 if loading {
-                    ProgressView("Loading…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceLoadingOverlay()
                 } else if !ready {
                     ContentUnavailableView("Missing Demo item", systemImage: "exclamationmark.triangle", description: Text(error ?? "This item is no longer in the Demo dataset."))
                 } else {
@@ -1149,7 +1148,7 @@ private struct DemoAdminMediaField: View {
                 AsyncImage(url: imageURL) { image in
                     image.resizable().scaledToFit()
                 } placeholder: {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                 }
                 .frame(maxHeight: 160)
             } else if !url.isEmpty {
@@ -1158,7 +1157,7 @@ private struct DemoAdminMediaField: View {
                     .foregroundStyle(.secondary)
             }
             if uploading {
-                ProgressView("Uploading…")
+                ExperienceLoadingSpinner(message: "Uploading…")
             }
             if let error {
                 Text(error).font(.footnote).foregroundStyle(.red)

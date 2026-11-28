@@ -120,6 +120,7 @@ import { useContextualTourOptional } from "@/lib/contextualTour/ContextualTourPr
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import SettingsPrivacySection from "@/app/components/settings/SettingsPrivacySection"
 import VaultHome from "../components/vault/VaultHome"
+import StoryArchiveHome from "../components/story/StoryArchiveHome"
 import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
@@ -141,6 +142,7 @@ type TabId =
   | "trading-analytics"
   | "appearance"
   | "vault"
+  | "story-archive"
 
 function resolveSettingsTabFromHash(hash: string): TabId | null {
   const requested = hash.replace("#", "").toLowerCase().trim()
@@ -153,7 +155,8 @@ function resolveSettingsTabFromHash(hash: string): TabId | null {
     requested === "notifications" ||
     requested === "trading-analytics" ||
     requested === "appearance" ||
-    requested === "vault"
+    requested === "vault" ||
+    requested === "story-archive"
   ) {
     return requested
   }
@@ -323,7 +326,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
         kind: "panel",
         id: "broker-integrations",
         label: "Broker Integrations",
-        description: "Connect Tradovate and Rithmic to import trades",
+        description: "Connect Tradovate to import trades",
       },
       {
         kind: "link",
@@ -355,6 +358,12 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
         id: "vault",
         label: "Vault",
         description: "Saved trades, posts, clips, and achievements",
+      },
+      {
+        kind: "panel",
+        id: "story-archive",
+        label: "Story Archive",
+        description: "Your expired stories (private to you)",
       },
       {
         kind: "panel",
@@ -1559,6 +1568,12 @@ export default function SettingsPage() {
             {activeTab === "vault" && (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                 <VaultHome />
+              </div>
+            )}
+
+            {activeTab === "story-archive" && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                <StoryArchiveHome />
               </div>
             )}
 

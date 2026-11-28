@@ -27,6 +27,13 @@ struct BroadcastWatchSession: Hashable, Sendable {
     var voiceMode: String?
 }
 
+/// Result of opening a live watch from navigation (Explore, push, universal links).
+enum LiveWatchNavigationOutcome: Equatable, Sendable {
+    case presented
+    case streamEnded
+    case pending
+}
+
 struct ObsHostBarSession: Hashable, Sendable {
     var roomID: RoomID
     var roomTitle: String
@@ -406,14 +413,14 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private var broadcastSyncTask: Task<Void, Never>?
     private var broadcastRealtimeTask: Task<Void, Never>?
     private var broadcastRefreshDebounceTask: Task<Void, Never>?
+    private var passiveBroadcastDiscoveryDebounceTask: Task<Void, Never>?
     private var broadcastRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var broadcastRealtimeSessionID: String?
     private var broadcastRealtimeLastSignalAt: Date?
     private var interactivePollRoomID: RoomID?
     private var realtimeHub: RealtimeHub?
     private var accessTokenProvider: (@Sendable () async -> String?)?
-    /// Dedupes concurrent GET /api/livekit/broadcast/status (foreground + room open, etc.).
-    private var isStatusFetchInFlight = false
+    private var statusRefreshTasks: [RoomID: Task<Bool, Never>] = [:]
     private var interactiveViewerProfileID: ProfileID?
     private var dismissedSpeakInviteSessionIds: Set<String> = []
     private var presentedSpeakInviteKeys: Set<String> = []
@@ -461,6 +468,41 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     func canPresentViewer(for roomID: RoomID) -> Bool {
         isWatchingRoom(roomID) || viewerSessionAccessDenied?.roomID == roomID
+    }
+
+    /// Shared navigation entry for Explore Watch, push, and universal links — matches in-room Join Stream.
+    func openLiveWatchFromNavigation(roomID: RoomID, roomTitle: String) async -> LiveWatchNavigationOutcome {
+        ensureDiscoveryPollTargetsRoom(roomID, roomTitle: roomTitle)
+        let statusReady = await refreshStatus(roomID: roomID)
+        guard statusReady, statusPollRoomID == roomID else {
+            return .pending
+        }
+        guard isStreamLive(for: roomID) else {
+            return .streamEnded
+        }
+        if isWatchingRoomConnected(roomID) {
+            presentViewer()
+            return .presented
+        }
+        if isBusy || LiveRealtimeSessionSwitchGate.shared.isSwitching {
+            return .pending
+        }
+        guard await LiveRealtimeSessionSwitchGate.shared.awaitProceed(for: .streamViewer(roomID: roomID)) else {
+            return .pending
+        }
+        await watch(roomID: roomID, roomTitle: roomTitle)
+        guard isWatchingRoom(roomID), canPresentViewer(for: roomID) else {
+            return .pending
+        }
+        presentViewer()
+        return .presented
+    }
+
+    private func ensureDiscoveryPollTargetsRoom(_ roomID: RoomID, roomTitle: String?) {
+        pollRoomID = roomID
+        if let roomTitle, !roomTitle.isEmpty {
+            pollRoomTitle = roomTitle
+        }
     }
 
     func acknowledgeStreamConnectionLostNotice() {
@@ -889,7 +931,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         isWatchingRoom(roomID) && connectionState == .connected
     }
 
-    /// One-shot: fetch stream status when opening a Trade Room (no background polling).
+    /// Authoritative status on room open; passive updates arrive on the room Realtime channel.
     func startPolling(roomID: RoomID, roomTitle: String? = nil) {
         pollRoomID = roomID
         if let roomTitle, !roomTitle.isEmpty {
@@ -907,6 +949,8 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     func stopPolling() {
         roomDiscoveryRefreshTask?.cancel()
         roomDiscoveryRefreshTask = nil
+        passiveBroadcastDiscoveryDebounceTask?.cancel()
+        passiveBroadcastDiscoveryDebounceTask = nil
         pollRoomID = nil
         pollRoomTitle = nil
 
@@ -920,16 +964,75 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         statusPollRoomID = nil
     }
 
-    func refreshStatus(roomID: RoomID, lite: Bool = false) async {
+    /// ``RoomConversationViewModel`` forwards `room_live_broadcasts` rows from the shared room channel.
+    func handleRoomLiveBroadcastDiscoverySignal(roomID: RoomID, signal: MessageRealtimeSignal) {
+        guard pollRoomID == roomID else { return }
+        switch signal.kind {
+        case .insert, .delete:
+            schedulePassiveBroadcastDiscoveryRefresh(roomID: roomID, reason: signal.kind.rawValue)
+        case .update:
+            guard passiveDiscoveryShouldRefresh(for: signal) else { return }
+            schedulePassiveBroadcastDiscoveryRefresh(roomID: roomID, reason: "update")
+        }
+    }
+
+    private func passiveDiscoveryShouldRefresh(for signal: MessageRealtimeSignal) -> Bool {
+        guard let payload = signal.recordPayload,
+              let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any]
+        else {
+            return true
+        }
+        if let ended = object["ended_at"] as? String, !ended.isEmpty { return true }
+        if object["visibility"] != nil { return true }
+        if object["host_connected"] != nil { return true }
+        if object["primary_media_publisher_connected"] != nil { return true }
+        return false
+    }
+
+    func refreshPassiveDiscoveryStatusIfNeeded(roomID: RoomID) async {
+        guard pollRoomID == roomID else { return }
+        await refreshStatus(roomID: roomID)
+    }
+
+    private func schedulePassiveBroadcastDiscoveryRefresh(roomID: RoomID, reason: String) {
+        passiveBroadcastDiscoveryDebounceTask?.cancel()
+        passiveBroadcastDiscoveryDebounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: BroadcastSessionSyncPolicy.realtimeEventDebounceNanoseconds)
+            guard !Task.isCancelled else { return }
+            guard let self, self.pollRoomID == roomID else { return }
+            #if DEBUG
+            print(
+                """
+                [TradeTraxs Broadcast] room discovery realtime refresh \
+                room=\(roomID.rawValue) reason=\(reason)
+                """
+            )
+            #endif
+            await self.refreshStatus(roomID: roomID)
+        }
+    }
+
+    @discardableResult
+    func refreshStatus(roomID: RoomID, lite: Bool = false) async -> Bool {
+        if let inFlight = statusRefreshTasks[roomID] {
+            return await inFlight.value
+        }
+        let task = Task<Bool, Never> { [weak self] in
+            guard let self else { return false }
+            return await self.performStatusRefresh(roomID: roomID, lite: lite)
+        }
+        statusRefreshTasks[roomID] = task
+        defer { statusRefreshTasks.removeValue(forKey: roomID) }
+        return await task.value
+    }
+
+    private func performStatusRefresh(roomID: RoomID, lite: Bool) async -> Bool {
         guard let client else {
             #if DEBUG
             print("[TradeTraxs Broadcast] status skipped, LiveKitBroadcastClient not configured")
             #endif
-            return
+            return false
         }
-        guard !isStatusFetchInFlight else { return }
-        isStatusFetchInFlight = true
-        defer { isStatusFetchInFlight = false }
         do {
             let res = try await client.fetchStatus(roomID: roomID, lite: lite)
             let vis = res.visibility?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -1026,6 +1129,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                     await handleRemoteStreamEnded()
                 }
             }
+            return true
         } catch {
             if pollRoomID == roomID {
                 statusPollError = UserFacingError.message(for: error)
@@ -1038,14 +1142,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 )
                 #endif
             }
+            return false
         }
     }
 
     func watch(roomID: RoomID, roomTitle: String) async {
-        guard let client, !isBusy else { return }
-        if RoomLiveVoiceCoordinator.shared.isEngagedInVoice(for: roomID) {
-            await RoomLiveVoiceCoordinator.shared.leave(reason: .replaced, clearError: true)
-        }
+        let switchGate = LiveRealtimeSessionSwitchGate.shared
+        guard let client, !isBusy, !switchGate.isSwitching, !switchGate.showsPrompt else { return }
         streamRemovalNotice = nil
         viewerSessionAccessDenied = nil
         if isWatching, watchSession?.roomID == roomID, connectionState == .connected {
@@ -1053,8 +1156,8 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             return
         }
 
-        if isWatching, watchSession?.roomID != roomID {
-            await leaveWatch()
+        guard await switchGate.awaitProceed(for: .streamViewer(roomID: roomID)) else {
+            return
         }
 
         if polledStatus.broadcastSessionId == nil || pollRoomID != roomID {
@@ -1194,9 +1297,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     func joinConversation() async {
         guard isOpenVoiceStream, let roomID = watchSession?.roomID, let client, !isBusy else { return }
-        if RoomLiveVoiceCoordinator.shared.isSessionActive {
-            lastError = "Leave General Voice before speaking on the stream."
+        if LiveRealtimeSessionSwitchGate.shared.isSwitching || LiveRealtimeSessionSwitchGate.shared.showsPrompt {
             return
+        }
+        if RoomLiveVoiceCoordinator.shared.isSessionActive {
+            guard await LiveRealtimeSessionSwitchGate.shared.awaitProceed(for: .streamViewer(roomID: roomID)) else {
+                return
+            }
         }
         isBusy = true
         lastError = nil

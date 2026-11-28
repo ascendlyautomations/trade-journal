@@ -644,7 +644,7 @@ struct PropFirmExpensesView: View {
             }
             .padding(.horizontal, ExperienceSpacing.md)
             if viewModel.isLoading && viewModel.expenses.isEmpty {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity)
             } else if yearScopedFilteredExpenses.isEmpty {
                 ExperienceEmptyState(

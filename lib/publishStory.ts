@@ -88,22 +88,12 @@ export async function publishStory(
     }
   }
 
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) {
-    console.error("[publishStory] NEXT_PUBLIC_SUPABASE_URL is not set")
-    return {
-      ok: false,
-      message: "Story couldn't be published. Please try again.",
-    }
-  }
-
-  const publicUrl = `${base}/storage/v1/object/public/stories/${fileName}`
-
   report({ percent: 85, stage: "Publishing story…" })
 
   const { error: insertError } = await supabase.from("stories").insert({
     user_id: userId,
-    image_url: publicUrl,
+    image_url: fileName,
+    storage_path: fileName,
   })
 
   if (insertError) {

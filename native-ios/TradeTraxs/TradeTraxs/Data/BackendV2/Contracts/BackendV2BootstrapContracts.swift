@@ -193,6 +193,10 @@ nonisolated struct FeedStoryPreviewV1: Codable, Sendable, Equatable {
     var user_id: String
     var image_url: String
     var created_at: String
+    /// Hydration / carousel RPC only (feed bootstrap uses image_url).
+    var storage_path: String?
+    /// Server `story_views` + session `StoryViewerViewRecords` (optional on older payloads).
+    var viewer_has_seen: Bool?
 }
 
 nonisolated struct FeedPageMetaV1: Codable, Sendable, Equatable {

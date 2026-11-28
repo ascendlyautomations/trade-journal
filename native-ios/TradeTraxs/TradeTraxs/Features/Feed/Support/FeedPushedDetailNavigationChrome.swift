@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Feed stack detail pushes, chevron-only back (no previous-screen "Feed" title).
-struct FeedPushedDetailNavigationChrome: ViewModifier {
+/// Chevron-only back (no previous-screen title text). Same arrow styling and swipe-back as ``ExperienceArrowBackButton``.
+struct ExperienceChevronOnlyBackNavigationChrome: ViewModifier {
     @Environment(\.dismiss) private var dismiss
 
     func body(content: Content) -> some View {
@@ -13,7 +13,21 @@ struct FeedPushedDetailNavigationChrome: ViewModifier {
 }
 
 extension View {
+    func experienceChevronOnlyBackNavigationChrome() -> some View {
+        modifier(ExperienceChevronOnlyBackNavigationChrome())
+    }
+
+    /// Feed stack detail pushes, chevron-only back (no previous-screen "Feed" title).
     func feedPushedDetailNavigationChrome() -> some View {
-        modifier(FeedPushedDetailNavigationChrome())
+        experienceChevronOnlyBackNavigationChrome()
+    }
+
+    @ViewBuilder
+    func experienceChevronOnlyBackNavigationChrome(when enabled: Bool) -> some View {
+        if enabled {
+            experienceChevronOnlyBackNavigationChrome()
+        } else {
+            self
+        }
     }
 }

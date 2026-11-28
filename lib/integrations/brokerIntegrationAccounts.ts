@@ -276,7 +276,7 @@ export async function linkBrokerIntegrationAccount(
 ): Promise<void> {
   const { data: mapping, error: mappingError } = await supabase
     .from("broker_integration_accounts")
-    .select("id, user_id, provider")
+    .select("id, user_id, provider, connection_id")
     .eq("id", params.brokerAccountRowId)
     .eq("user_id", params.userId)
     .eq("provider", params.provider)
@@ -310,6 +310,16 @@ export async function linkBrokerIntegrationAccount(
 
   if (error) {
     throw new Error("broker_account_link_failed")
+  }
+
+  if (mapping.connection_id) {
+    const { clearBrokerConnectionPendingLink } = await import(
+      "./brokerConnectionPendingLink"
+    )
+    await clearBrokerConnectionPendingLink(supabase, {
+      userId: params.userId,
+      connectionId: String(mapping.connection_id),
+    })
   }
 }
 

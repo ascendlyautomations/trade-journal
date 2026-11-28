@@ -86,6 +86,10 @@ final class TradingRulesAnalyticsScopeController {
         importScope(from: dashboard.clientScopeFilter())
     }
 
+    func applyDashboardScopeFilter(_ filter: DashboardClientScopeFilter) {
+        importScope(from: filter)
+    }
+
     var accountMenuTitle: String {
         OwnerAccountFilterMenuSupport.menuTitle(
             filter: accountFilter,

@@ -268,6 +268,12 @@ final class TradeRoomObsBroadcastController {
 
     /// Waits for in-flight ensure started by ``startPrivateObsSessionEnsureIfNeeded`` (safe across sheet transitions).
     func ensurePrivateObsSession(roomID: RoomID) async {
+        if LiveRealtimeSessionSwitchGate.shared.isSwitching || LiveRealtimeSessionSwitchGate.shared.showsPrompt {
+            return
+        }
+        guard await LiveRealtimeSessionSwitchGate.shared.awaitProceed(for: .streamHost(roomID: roomID)) else {
+            return
+        }
         startPrivateObsSessionEnsureIfNeeded(roomID: roomID)
         await ensurePrivateObsSessionTask?.value
     }

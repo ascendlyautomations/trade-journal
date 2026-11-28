@@ -325,10 +325,146 @@ nonisolated enum JSONBrokerValue: Codable, Sendable, Hashable {
     }
 }
 
+/// BFF discovery summary on GET .../connections/{id}/accounts (not a provider error by itself).
+/// TradeTraxs account reserved for the next Tradovate broker mapping on this connection.
+nonisolated struct BrokerConnectionPendingLinkPreference: Codable, Sendable, Hashable {
+    var tradetraxsAccountId: String
+    var tradetraxsAccountName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case tradetraxsAccountId
+        case tradetraxs_account_id
+        case tradetraxsAccountName
+        case tradetraxs_account_name
+    }
+
+    init(tradetraxsAccountId: String, tradetraxsAccountName: String? = nil) {
+        self.tradetraxsAccountId = tradetraxsAccountId
+        self.tradetraxsAccountName = tradetraxsAccountName
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tradetraxsAccountId = try Self.decodeRequiredAccountId(from: container)
+        tradetraxsAccountName = Self.decodeOptionalString(
+            from: container,
+            camel: CodingKeys.tradetraxsAccountName,
+            snake: CodingKeys.tradetraxs_account_name
+        )
+    }
+
+    private static func decodeRequiredAccountId(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> String {
+        if let camel = decodeOptionalString(
+            from: container,
+            camel: CodingKeys.tradetraxsAccountId,
+            snake: nil
+        ),
+           !camel.isEmpty
+        {
+            return camel
+        }
+        if let snake = decodeOptionalString(
+            from: container,
+            camel: nil,
+            snake: CodingKeys.tradetraxs_account_id
+        ),
+           !snake.isEmpty
+        {
+            return snake
+        }
+        throw DecodingError.keyNotFound(
+            CodingKeys.tradetraxsAccountId,
+            .init(
+                codingPath: container.codingPath,
+                debugDescription: "Missing tradetraxsAccountId on pending link."
+            )
+        )
+    }
+
+    private static func decodeOptionalString(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        camel: CodingKeys?,
+        snake: CodingKeys?
+    ) -> String? {
+        if let camel,
+           let value = try? container.decode(String.self, forKey: camel)
+        {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if let snake,
+           let value = try? container.decode(String.self, forKey: snake)
+        {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return nil
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(tradetraxsAccountId, forKey: CodingKeys.tradetraxsAccountId)
+        try container.encodeIfPresent(tradetraxsAccountName, forKey: CodingKeys.tradetraxsAccountName)
+    }
+}
+
+nonisolated struct TradovateAccountDiscoverySummary: Codable, Sendable, Hashable {
+    var ok: Bool
+    var accountCount: Int?
+    var reason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case accountCount
+        case reason
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decode(Bool.self, forKey: .ok)
+        accountCount = try container.decodeIfPresent(Int.self, forKey: .accountCount)
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(ok, forKey: .ok)
+        try container.encodeIfPresent(accountCount, forKey: .accountCount)
+        try container.encodeIfPresent(reason, forKey: .reason)
+    }
+}
+
+/// POST `/pending-link` success body from the BFF.
+nonisolated struct TradovatePendingLinkMutationResponse: Decodable, Sendable {
+    var ok: Bool
+    var connectionId: String?
+    var pendingLink: BrokerConnectionPendingLinkPreference
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case connectionId
+        case connection_id
+        case pendingLink
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decodeIfPresent(Bool.self, forKey: .ok) ?? true
+        connectionId =
+            try container.decodeIfPresent(String.self, forKey: .connectionId)
+            ?? container.decodeIfPresent(String.self, forKey: .connection_id)
+        pendingLink = try container.decode(BrokerConnectionPendingLinkPreference.self, forKey: .pendingLink)
+    }
+}
+
 nonisolated struct TradovateConnectionAccountsResponse: Codable, Sendable {
     var connectionId: String
     var state: String
     var connectionStatus: String?
+    var discovery: TradovateAccountDiscoverySummary?
+    var pendingLink: BrokerConnectionPendingLinkPreference?
     var accounts: [BrokerIntegrationAccount]
 
     enum CodingKeys: String, CodingKey {
@@ -337,6 +473,8 @@ nonisolated struct TradovateConnectionAccountsResponse: Codable, Sendable {
         case state
         case connectionStatus
         case connection_status
+        case discovery
+        case pendingLink
         case accounts
     }
 
@@ -349,6 +487,11 @@ nonisolated struct TradovateConnectionAccountsResponse: Codable, Sendable {
         connectionStatus =
             try container.decodeIfPresent(String.self, forKey: .connectionStatus)
             ?? container.decodeIfPresent(String.self, forKey: .connection_status)
+        discovery = try container.decodeIfPresent(TradovateAccountDiscoverySummary.self, forKey: .discovery)
+        pendingLink = try container.decodeIfPresent(
+            BrokerConnectionPendingLinkPreference.self,
+            forKey: .pendingLink
+        )
         accounts = try container.decodeIfPresent([BrokerIntegrationAccount].self, forKey: .accounts) ?? []
     }
 
@@ -357,7 +500,14 @@ nonisolated struct TradovateConnectionAccountsResponse: Codable, Sendable {
         try container.encode(connectionId, forKey: .connectionId)
         try container.encode(state, forKey: .state)
         try container.encodeIfPresent(connectionStatus, forKey: .connectionStatus)
+        try container.encodeIfPresent(discovery, forKey: .discovery)
+        try container.encodeIfPresent(pendingLink, forKey: .pendingLink)
         try container.encode(accounts, forKey: .accounts)
+    }
+
+    var isConnectedWithNoBrokerAccounts: Bool {
+        accounts.isEmpty
+            && (connectionStatus == "connected" || state == "connected_no_accounts")
     }
 }
 
@@ -783,6 +933,7 @@ nonisolated struct RithmicConnectCapabilitiesResponse: Codable, Sendable {
     var productionUserAuthConfirmed: Bool
     var apiEnvironment: String
     var showConnectUi: Bool
+    var developmentIntegrationEnabled: Bool?
     var credentialModelStatus: String
 }
 
@@ -791,6 +942,7 @@ nonisolated struct RithmicConnectResponse: Codable, Sendable {
     var code: String?
     var userMessage: String?
     var systemNames: [String]?
+    var loginRpCode: [String]?
     var connectionId: String?
     var systemName: String?
     var accountCount: Int?

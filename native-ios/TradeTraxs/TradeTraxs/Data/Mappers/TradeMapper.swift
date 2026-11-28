@@ -111,6 +111,7 @@ nonisolated enum TradeMapper: DTOMapper {
             ),
             publicAccountBadge: publicBadge,
             copyTrade: mapCopyTradeJournalMetadata(dto, executionMode: mode),
+            firstPublishedAt: ISO8601.date(from: dto.first_published_at),
             createdAt: createdAt,
             updatedAt: createdAt
         )
@@ -820,6 +821,9 @@ nonisolated enum TradingAccountMapper {
         }()
         let number = dto.account_number?.trimmingCharacters(in: .whitespacesAndNewlines)
         let note = dto.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lifecycleRaw = dto.account_lifecycle_id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let graduatedToRaw = dto.graduated_to_account_id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let graduatedFromRaw = dto.graduated_from_account_id?.trimmingCharacters(in: .whitespacesAndNewlines)
         var account = TradingAccount(
             id: TradingAccountID(id),
             ownerProfileID: ProfileID(owner),
@@ -834,7 +838,16 @@ nonisolated enum TradingAccountMapper {
             accountNumber: (number?.isEmpty == false) ? number : nil,
             note: (note?.isEmpty == false) ? note : nil,
             propFirmRules: rules,
-            livePersonalDrawdown: nil
+            livePersonalDrawdown: nil,
+            accountLifecycleID: (lifecycleRaw?.isEmpty == false)
+                ? TradingAccountID(lifecycleRaw!)
+                : TradingAccountID(id),
+            graduatedToAccountID: (graduatedToRaw?.isEmpty == false)
+                ? TradingAccountID(graduatedToRaw!)
+                : nil,
+            graduatedFromAccountID: (graduatedFromRaw?.isEmpty == false)
+                ? TradingAccountID(graduatedFromRaw!)
+                : nil
         )
         if PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) {
             account.livePersonalDrawdown = LivePersonalDrawdownEngine.stored(

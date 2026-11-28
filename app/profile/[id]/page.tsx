@@ -114,6 +114,7 @@ import { invalidateFollowListCache } from "@/lib/followListPage"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
+import { productAnalyticsProfileViewed } from "@/lib/productAnalytics/tracker"
 import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { PlatformProfileHeader } from "../../components/platform"
@@ -186,6 +187,9 @@ import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import {
   deleteStoryById,
   getActiveStoriesForUser,
+  markStoryViewedInStoriesByUser,
+  preferredStoryEntryIndex,
+  recordStoryView,
   removeStoryFromStoriesByUser,
 } from "@/lib/activeStories"
 import { useActiveStories } from "@/lib/useActiveStories"
@@ -404,6 +408,7 @@ function ProfilePageContent() {
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const profileViewTrackedRef = useRef<string | null>(null)
   const { profile: viewerContextProfile, user: viewerUser } = useUserProfile()
   const { fromError } = useProGate(viewerContextProfile)
   const viewerShareProfile =
@@ -655,8 +660,9 @@ function ProfilePageContent() {
   const handleOpenProfileStory = useCallback(async () => {
     if (!profile?.id) return
     setProfileStoriesLoadRequested(true)
-    await loadProfileStories()
-    setProfileStoryIndex(0)
+    const loaded = await loadProfileStories()
+    const list = getActiveStoriesForUser(loaded, profile.id)
+    setProfileStoryIndex(preferredStoryEntryIndex(list))
     setProfileStoryOpen(true)
   }, [loadProfileStories, profile?.id])
 
@@ -760,6 +766,30 @@ function ProfilePageContent() {
 
     return () => window.clearTimeout(timer)
   }, [profileStoryOpen, profileStoryIndex, profileStorySlides.length])
+
+  useEffect(() => {
+    if (!profileStoryOpen || !profileCurrentStory?.id || !profile?.id) return
+    if (
+      currentUserId &&
+      String(currentUserId) !== String(profile.id) &&
+      !isExploreWriteBlocked(currentUserId)
+    ) {
+      void recordStoryView(supabase, profileCurrentStory.id)
+    }
+    setProfileStoriesByUser((current) =>
+      markStoryViewedInStoriesByUser(
+        current,
+        String(profile.id),
+        profileCurrentStory.id
+      )
+    )
+  }, [
+    currentUserId,
+    profile?.id,
+    profileCurrentStory?.id,
+    profileStoryOpen,
+    setProfileStoriesByUser,
+  ])
 
   const closeStoryCompose = useCallback(() => {
     revokeStoryPreviewUrl(pendingStoryPreviewUrl)
@@ -1215,6 +1245,16 @@ function ProfilePageContent() {
       fetchAbort.abort()
     }
   }, [profileId, applyBootstrapLoadResult, viewerUser?.id])
+
+  useEffect(() => {
+    const viewedId = profile?.id ? String(profile.id) : null
+    if (!viewedId || !currentUserId) return
+    if (String(currentUserId) === viewedId) return
+    const key = `${viewedId}:${currentUserId}`
+    if (profileViewTrackedRef.current === key) return
+    profileViewTrackedRef.current = key
+    productAnalyticsProfileViewed(viewedId)
+  }, [profile?.id, currentUserId])
 
   useEffect(() => {
     if (

@@ -58,6 +58,7 @@ import {
   groupedCardNotificationIds,
   NOTIFICATION_TIME_SECTION_LABELS,
   NOTIFICATION_TIME_SECTION_ORDER,
+  parseRoomJoinContent,
   senderDisplayName,
   type GroupedNotificationCard,
   type NotificationCenterTab,
@@ -199,7 +200,8 @@ function GroupedNotificationCardView({
       card.profile_post_id,
       card.achievement_post_id,
       card.reel_id,
-      card.comment_id
+      card.comment_id,
+      card.story_id
     )
   } else if (card.kind === "comment_group") {
     expandable = true
@@ -321,7 +323,11 @@ function GroupedNotificationCardView({
     const sender = card.notification.sender_id
       ? sendersById[card.notification.sender_id]
       : undefined
-    title = formatRoomJoinMessage(senderDisplayName(sender))
+    const joinMeta = parseRoomJoinContent(card.notification.content)
+    title = formatRoomJoinMessage(
+      senderDisplayName(sender),
+      joinMeta.room_name
+    )
     avatarUrl = sender?.avatar_url
   } else if (card.kind === "trade_room_join_request") {
     const sender = card.notification.sender_id

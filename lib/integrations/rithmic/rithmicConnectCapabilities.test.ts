@@ -19,12 +19,14 @@ describe("resolveRithmicConnectCapabilities", () => {
   }
 
   it("showConnectUi when user connect enabled and test protocol env loads", () => {
+    setEnv("NODE_ENV", "development")
     setEnv("RITHMIC_USER_CONNECT_ENABLED", "1")
     setEnv("RITHMIC_API_ENV", "test")
     setEnv("RITHMIC_WSS_URL", "wss://rituz00100.rithmic.com:443")
 
     const caps = resolveRithmicConnectCapabilities()
     assert.equal(caps.userConnectEnabled, true)
+    assert.equal(caps.developmentIntegrationEnabled, true)
     assert.equal(caps.apiEnvironment, "test")
     assert.equal(caps.showConnectUi, true)
   })
@@ -50,11 +52,36 @@ describe("resolveRithmicConnectCapabilities", () => {
   })
 
   it("does not require protocolEnv object truthiness when env label is test", () => {
+    setEnv("NODE_ENV", "development")
     setEnv("RITHMIC_USER_CONNECT_ENABLED", "1")
     setEnv("RITHMIC_API_ENV", undefined)
     setEnv("RITHMIC_WSS_URL", "wss://rituz00100.rithmic.com:443")
 
     const caps = resolveRithmicConnectCapabilities()
+    assert.equal(caps.showConnectUi, true)
+  })
+
+  it("showConnectUi false in production without dev override", () => {
+    setEnv("NODE_ENV", "production")
+    setEnv("RITHMIC_DEV_INTEGRATION_ENABLED", undefined)
+    setEnv("RITHMIC_USER_CONNECT_ENABLED", "1")
+    setEnv("RITHMIC_API_ENV", "test")
+    setEnv("RITHMIC_WSS_URL", "wss://rituz00100.rithmic.com:443")
+
+    const caps = resolveRithmicConnectCapabilities()
+    assert.equal(caps.developmentIntegrationEnabled, false)
+    assert.equal(caps.showConnectUi, false)
+  })
+
+  it("showConnectUi when internal debug override is enabled", () => {
+    setEnv("NODE_ENV", "production")
+    setEnv("RITHMIC_DEV_INTEGRATION_ENABLED", "1")
+    setEnv("RITHMIC_USER_CONNECT_ENABLED", "1")
+    setEnv("RITHMIC_API_ENV", "test")
+    setEnv("RITHMIC_WSS_URL", "wss://rituz00100.rithmic.com:443")
+
+    const caps = resolveRithmicConnectCapabilities()
+    assert.equal(caps.developmentIntegrationEnabled, true)
     assert.equal(caps.showConnectUi, true)
   })
 })

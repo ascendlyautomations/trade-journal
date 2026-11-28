@@ -33,6 +33,7 @@ import {
 } from "@/app/components/ui/detailModalEngagement"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import type { FeedLikeMeta } from "./FeedPostCard"
+import { queueCreatorContentView } from "@/lib/creatorContentViews"
 
 type FeedProfilePostDetailModalProps = {
   post: any
@@ -75,6 +76,18 @@ export default function FeedProfilePostDetailModal({
   onSharePost,
 }: FeedProfilePostDetailModalProps) {
   const pid = String(post.id)
+  const contentKind = isAchievementFeedPost(post)
+    ? "achievement_post"
+    : post.feed_kind === "reel" || post.reel_id
+      ? "reel"
+      : "profile_post"
+  useEffect(() => {
+    queueCreatorContentView({
+      content_kind: contentKind,
+      content_id: pid,
+      surface: "detail",
+    })
+  }, [contentKind, pid])
   const commentsScrollRef = useRef<HTMLDivElement>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [commentsFocused, setCommentsFocused] = useState(

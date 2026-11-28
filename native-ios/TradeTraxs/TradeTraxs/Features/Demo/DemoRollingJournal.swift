@@ -249,6 +249,7 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
                 let exitPrice = entryPrice + (side == .long ? points : -points)
                 let rr = Decimal(string: String(format: "%.1f", 1.0 + Double(rng.int(15)) * 0.15)) ?? 1.2
                 let maxRr = demoMaxRrReached(targetRr: rr, rng: &rng, winning: pnl > 0)
+                let dollarRisk = demoDollarRisk(rng: &rng)
 
                 let win = pnl > 0
                 let followedPlan = win ? rng.int(10) < 7 : rng.int(10) < 5
@@ -288,6 +289,7 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
                         exitAt: exit,
                         realizedPnL: Money(amount: pnl),
                         riskReward: rr,
+                        dollarRisk: dollarRisk,
                         maxRrReached: maxRr,
                         earlyExit: earlyExit,
                         points: abs(points),
@@ -459,6 +461,7 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
         let exitPrice = entryPrice + (side == .long ? points : -points)
         let rr = Decimal(string: String(format: "%.1f", 1.1 + Double(rng.int(8)) * 0.2)) ?? 1.2
         let maxRr = demoMaxRrReached(targetRr: rr, rng: &rng, winning: pnl > 0)
+        let dollarRisk = demoDollarRisk(rng: &rng)
         let win = pnl > 0
         let earlyExit = !win
         let mode: TradeMode = account == DemoCanonicalDataset.liveAccountID ? .live : .sim
@@ -477,6 +480,7 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
                 exitAt: exit,
                 realizedPnL: Money(amount: pnl),
                 riskReward: rr,
+                dollarRisk: dollarRisk,
                 maxRrReached: maxRr,
                 earlyExit: earlyExit,
                 points: abs(points),
@@ -494,6 +498,17 @@ nonisolated final class DemoRollingJournal: @unchecked Sendable {
                 updatedAt: exit
             )
         )
+    }
+
+    /// Matches prop-firm preview cap ($150) with occasional over-risk for compliance demos.
+    private static func demoDollarRisk(rng: inout SeededRNG) -> Decimal {
+        let amount: Double
+        if rng.int(10) < 3 {
+            amount = 155 + Double(rng.int(90))
+        } else {
+            amount = 45 + Double(rng.int(105))
+        }
+        return Decimal(string: String(format: "%.2f", amount)) ?? 100
     }
 
     private static func demoMaxRrReached(

@@ -107,6 +107,7 @@ nonisolated enum SocialEntityPresentationMerge {
         merged.publicAccountBadge = preferNonEmpty(incoming.publicAccountBadge, existing.publicAccountBadge)
         merged.sessionLabel = preferNonEmpty(incoming.sessionLabel, existing.sessionLabel)
         merged.copyTrade = mergeCopyTradeMetadata(incoming: incoming.copyTrade, existing: existing.copyTrade)
+        merged.firstPublishedAt = incoming.firstPublishedAt ?? existing.firstPublishedAt
         merged.imageDisplayMode = incoming.imageDisplayMode
         return merged
     }

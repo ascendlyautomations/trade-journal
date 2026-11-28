@@ -152,9 +152,9 @@ nonisolated enum ProfileStatisticsMetrics {
         from trade: Trade,
         accountModes: [TradingAccountID: TradingAccountMode]
     ) -> TradeInput {
-        TradeInput(
+        return TradeInput(
             pnl: trade.realizedPnL?.amount,
-            createdAt: trade.entryAt,
+            createdAt: DashboardScopeFilterSupport.dashboardTradeFilterDate(for: trade),
             isLong: trade.side == .long,
             session: trade.sessionLabel,
             accountMode: resolveAccountMode(trade: trade, accountModes: accountModes),
@@ -210,10 +210,18 @@ nonisolated enum ProfileStatisticsMetrics {
         selectedTimeframe: Timeframe = .allTime,
         now: Date = Date()
     ) -> Result {
-        let filtered = trades.filter {
-            matchesTimeframe($0, selectedTimeframe, now: now) && matchesMode($0, selectedMode)
-        }
+        let afterTimeframe = trades.filter { matchesTimeframe($0, selectedTimeframe, now: now) }
+        let filtered = afterTimeframe.filter { matchesMode($0, selectedMode) }
         let analytics = selectedMode == .backtest ? filtered : excludingBacktest(filtered)
+
+#if DEBUG
+        let sessionTaggedRaw = trades.filter {
+            TradingSessionLabel.canonicalLabel(fromStored: $0.session) != nil
+        }.count
+        let sessionTaggedAnalytics = analytics.filter {
+            TradingSessionLabel.canonicalLabel(fromStored: $0.session) != nil
+        }.count
+#endif
 
         let totalTrades = analytics.count
         let priced = analytics.compactMap(\.pnl)
@@ -254,6 +262,21 @@ nonisolated enum ProfileStatisticsMetrics {
 
         let streaks = maxStreaks(analytics)
         let sessions = sessionBreakdown(analytics)
+
+#if DEBUG
+        ProfileStatsTrace.computePipeline(
+            mode: selectedMode.rawValue,
+            timeframe: selectedTimeframe.rawValue,
+            rawInputs: trades.count,
+            sessionTaggedRaw: sessionTaggedRaw,
+            afterTimeframe: afterTimeframe.count,
+            afterMode: filtered.count,
+            afterBacktestExclusion: analytics.count,
+            sessionTaggedAnalytics: sessionTaggedAnalytics,
+            sessionTotal: sessions.total,
+            sessionRowCount: sessions.rows.count
+        )
+#endif
 
         return Result(
             filteredTradeCount: totalTrades,

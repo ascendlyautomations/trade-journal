@@ -30,7 +30,8 @@ enum TradingRulesComplianceSnapshotBuilder {
         accounts: [TradingAccount],
         dependencies: TradingRulesComplianceLoadDependencies,
         injectedPreferences: PreferenceRuleContext? = nil,
-        dashboardInsights: DashboardInsightsPresentation? = nil
+        dashboardInsights: DashboardInsightsPresentation? = nil,
+        bundledOwnerTrades: [Trade]? = nil
     ) async -> Output {
         let previewChromeActive = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
         if previewChromeActive {
@@ -61,7 +62,10 @@ enum TradingRulesComplianceSnapshotBuilder {
         var tradesError: String?
         var historyComplete: Bool
 
-        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+        if let bundledOwnerTrades {
+            ownerTrades = bundledOwnerTrades
+            historyComplete = true
+        } else if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
             if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
                preview.viewer == profileID
             {
@@ -117,11 +121,14 @@ enum TradingRulesComplianceSnapshotBuilder {
             scope: scope.filter
         )
 
-        let allowedRuleIDs = ProMonetizationPolicy.tradingRulesComplianceRuleFilter(
-            demoModeActive: ExploreModeSupport.isActive,
-            profileID: profileID
-        )
-        let isFreeTier = allowedRuleIDs != nil
+        let unrestrictedPreview = TradingRulesAnalyticsPreviewSupport.usesUnrestrictedPreviewRuleFamilies
+        let allowedRuleIDs: Set<TradingRulesComplianceAnalytics.RuleID>? = unrestrictedPreview
+            ? nil
+            : ProMonetizationPolicy.tradingRulesComplianceRuleFilter(
+                demoModeActive: ExploreModeSupport.isActive,
+                profileID: profileID
+            )
+        let isFreeTier = unrestrictedPreview ? false : (allowedRuleIDs != nil)
         let hasRules = TradingRulesPlanTier.hasConfiguredRules(
             context: preferences,
             isFreeTier: isFreeTier

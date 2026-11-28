@@ -14,8 +14,7 @@ struct SharedContentShareRoomChannelPickerView: View {
         NavigationStack {
             Group {
                 if isLoadingChannels, channels.isEmpty {
-                    ExperienceLoadingSpinner(label: "Loading sub-rooms")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ExperienceLoadingOverlay(label: "Loading sub-rooms")
                 } else if channels.isEmpty {
                     ExperienceEmptyState(
                         icon: .rooms,

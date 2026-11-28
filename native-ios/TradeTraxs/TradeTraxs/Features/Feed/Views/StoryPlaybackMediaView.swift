@@ -9,6 +9,7 @@ struct StoryPlaybackMediaView: View {
     let player: AVPlayer?
     let isVideo: Bool
     var accessibilityIdentifier: String = "feed.story.media"
+    var onMediaLoadFailed: (() -> Void)?
 
     @State private var isDisplayingVideoFrame = false
 
@@ -41,7 +42,8 @@ struct StoryPlaybackMediaView: View {
                 StoryAspectFillMediaView(
                     reference: reference,
                     imagePipeline: imagePipeline,
-                    accessibilityIdentifier: accessibilityIdentifier
+                    accessibilityIdentifier: accessibilityIdentifier,
+                    onLoadFailed: onMediaLoadFailed
                 )
             }
         }

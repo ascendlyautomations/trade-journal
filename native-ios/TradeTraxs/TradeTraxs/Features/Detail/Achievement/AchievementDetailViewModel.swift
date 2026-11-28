@@ -95,7 +95,9 @@ final class AchievementDetailViewModel {
     }
 
     private func performLoad(forceNetwork: Bool = false) async {
-        if !forceNetwork, let seed = cache.achievement(id: achievementID) {
+        if !forceNetwork, let seed = cache.achievement(id: achievementID),
+           !AchievementHydrationSupport.needsFeedRowHydration(seed)
+        {
             achievement = seed
             phase = .loaded
             await loadAuthor(for: seed.ownerProfileID)

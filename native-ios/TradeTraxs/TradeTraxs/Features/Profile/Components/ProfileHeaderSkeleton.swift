@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ProfileHeaderSkeleton: View {
+    var showsOwnerTradeRoomTourTarget = false
+
     @Environment(\.themeColors) private var colors
 
     var body: some View {
@@ -41,8 +43,34 @@ struct ProfileHeaderSkeleton: View {
                 Spacer(minLength: 0)
             }
             .frame(minHeight: ExperienceAccessibility.minTouchTarget, alignment: .center)
+
+            if showsOwnerTradeRoomTourTarget {
+                ProfileTradeRoomTourSkeletonRow()
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading profile")
+    }
+}
+
+/// Matches loaded Trade Room row placement for the walkthrough before profile data arrives.
+private struct ProfileTradeRoomTourSkeletonRow: View {
+    var body: some View {
+        ProfileOwnerTradeRoomTourAnchor {
+            ExperienceSkeleton(height: 44, cornerRadius: ExperienceRadius.button)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("profile.tour.tradeRoom.placeholder")
+        }
+        .padding(.top, ExperienceSpacing.sm)
+    }
+}
+
+/// Shared walkthrough anchor for owner Trade Room row (skeleton and loaded).
+struct ProfileOwnerTradeRoomTourAnchor<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content.contextualTourTarget(.profileTradeRoom)
     }
 }

@@ -24,6 +24,7 @@ export const BackendV2FlagKeys = [
   "dashboard",
   "feed",
   "feedRotatingRank",
+  "profileInsights",
   "profile",
   "messages",
   "messageThreads",
@@ -46,6 +47,7 @@ export const BackendV2FlagNames: Record<BackendV2FlagKey, string> = {
   dashboard: "backendV2.dashboard",
   feed: "backendV2.feed",
   feedRotatingRank: "backendV2.feedRotatingRank",
+  profileInsights: "backendV2.profileInsights",
   profile: "backendV2.profile",
   messages: "backendV2.messages",
   messageThreads: "backendV2.messageThreads",
@@ -65,6 +67,7 @@ const DEFAULTS: Record<BackendV2FlagKey, boolean> = {
   dashboard: false,
   feed: true,
   feedRotatingRank: false,
+  profileInsights: false,
   profile: false,
   messages: true,
   messageThreads: false,
@@ -93,6 +96,8 @@ function envRaw(flag: BackendV2FlagKey): string | undefined {
       return process.env.NEXT_PUBLIC_BACKEND_V2_FEED
     case "feedRotatingRank":
       return process.env.NEXT_PUBLIC_BACKEND_V2_FEED_ROTATING_RANK
+    case "profileInsights":
+      return process.env.NEXT_PUBLIC_BACKEND_V2_PROFILE_INSIGHTS
     case "profile":
       return process.env.NEXT_PUBLIC_BACKEND_V2_PROFILE
     case "messages":

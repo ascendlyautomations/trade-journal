@@ -14,6 +14,7 @@ import {
 import {
   ACTIVE_STORIES_SELECT,
   activeStoryCreatedAfterISO,
+  fetchViewerActiveStoriesFromRpc,
   filterActiveStories,
   type ActiveStoryRow,
 } from "@/lib/activeStories"
@@ -340,18 +341,27 @@ export class FeedRestBootstrapRepository implements FeedBootstrapProviding {
     let story_authors: FeedBootstrapV1["data"]["story_authors"] = {}
     if (scope === "following") {
       const storyUserIds = [...new Set([...followingIds, uid])]
-      const { data: storyRows } = await this.client
-        .from("stories")
-        .select(ACTIVE_STORIES_SELECT)
-        .in("user_id", storyUserIds)
-        .gt("created_at", activeStoryCreatedAfterISO())
-        .order("created_at", { ascending: false })
-      const active = filterActiveStories((storyRows ?? []) as ActiveStoryRow[])
+      const idSet = new Set(storyUserIds.map(String))
+      const { stories: rpcStories, error: rpcStoriesError } =
+        await fetchViewerActiveStoriesFromRpc(this.client)
+      let active: ActiveStoryRow[]
+      if (!rpcStoriesError) {
+        active = rpcStories.filter((s) => idSet.has(String(s.user_id)))
+      } else {
+        const { data: storyRows } = await this.client
+          .from("stories")
+          .select(ACTIVE_STORIES_SELECT)
+          .in("user_id", storyUserIds)
+          .gt("created_at", activeStoryCreatedAfterISO())
+          .order("created_at", { ascending: false })
+        active = filterActiveStories((storyRows ?? []) as ActiveStoryRow[])
+      }
       stories = active.map((s) => ({
         id: String(s.id),
         user_id: String(s.user_id),
         image_url: String(s.image_url),
         created_at: String(s.created_at),
+        viewer_has_seen: s.viewer_has_seen === true,
       }))
       const storyAuthorIds = [...new Set(stories.map((s) => s.user_id))]
       if (storyAuthorIds.length) {

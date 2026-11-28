@@ -89,7 +89,7 @@ struct WithdrawalDetailView: View {
                 if account != nil || fromAchievement {
                     detailContent(item: item, account: account)
                 } else if !didFinishHydrate {
-                    ProgressView("Loading withdrawal…")
+                    ExperienceLoadingSpinner(message: "Loading withdrawal…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ExperienceEmptyState(
@@ -99,7 +99,7 @@ struct WithdrawalDetailView: View {
                     )
                 }
             } else if !didFinishHydrate {
-                ProgressView("Loading withdrawal…")
+                ExperienceLoadingSpinner(message: "Loading withdrawal…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ExperienceEmptyState(
@@ -545,7 +545,7 @@ struct WithdrawalDetailView: View {
                     Text("Picture unavailable")
                         .experienceStyle(.footnote, color: colors.tertiaryText)
                 default:
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                 }
             }
             .frame(maxWidth: .infinity)

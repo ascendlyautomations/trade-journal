@@ -172,7 +172,10 @@ nonisolated enum DemoCanonicalDataset {
     }
 
     /// Trading-rule preferences for interactive TraxsPro Preview (not persisted).
-    static func previewPreferenceContext(for userID: ProfileID) -> PreferenceRuleContext {
+    static func previewPreferenceContext(
+        for userID: ProfileID,
+        now: Date = Date()
+    ) -> PreferenceRuleContext {
         var global = TradingRuleTemplates.suggestedGlobal(for: .propFirm) ?? .empty(userID: userID)
         if let dayTrader = TradingRuleTemplates.suggestedGlobal(for: .dayTrader) {
             global.preferredSessions = dayTrader.preferredSessions
@@ -188,8 +191,69 @@ nonisolated enum DemoCanonicalDataset {
         global.applyRulesToPastTrades = true
         global.personalComplianceTargetPercent = 82
         global.primaryInstruments = ["MES", "MNQ"]
-        global.updatedAt = Date()
-        return PreferenceRuleContext(revisions: [], global: global, overrides: [])
+
+        let effectiveFrom = previewRulesFirstEffectiveAt(now: now)
+        global.updatedAt = effectiveFrom
+
+        let initialRevision = globalRevisionSnapshot(
+            id: "demo-canonical-trading-rules-initial",
+            global: global,
+            effectiveFrom: effectiveFrom
+        )
+        return PreferenceRuleContext(revisions: [initialRevision], global: global, overrides: [])
+    }
+
+    /// Aligns sample rule history with ``DemoRollingJournal`` so production compliance can resolve rules at trade entry.
+    private static func previewRulesFirstEffectiveAt(now: Date) -> Date {
+        let calendar = TradingReportPeriods.eastern
+        let todayStart = calendar.startOfDay(for: now)
+        guard let historyStart = calendar.date(
+            byAdding: .month,
+            value: -rollingJournalHistoryMonths,
+            to: todayStart
+        ) else {
+            return now.addingTimeInterval(-Double(rollingJournalHistoryMonths) * 30 * 24 * 3_600)
+        }
+        return calendar.date(byAdding: .day, value: -7, to: historyStart) ?? historyStart
+    }
+
+    private static func globalRevisionSnapshot(
+        id: String,
+        global: TradingPreferenceGlobal,
+        effectiveFrom: Date
+    ) -> TradingPreferenceRevision {
+        TradingPreferenceRevision(
+            id: id,
+            userID: global.userID,
+            accountID: nil,
+            effectiveFrom: effectiveFrom,
+            tradingStyle: global.tradingStyle,
+            preferredSessions: TradingPreferenceRules.normalizeSessions(global.preferredSessions),
+            primaryInstruments: TradingPreferenceRules.normalizeInstruments(global.primaryInstruments),
+            targetRr: global.targetRr,
+            maxTradesPerDay: global.maxTradesPerDay,
+            dailyLossLimit: global.dailyLossLimit,
+            consecutiveLossPause: global.consecutiveLossPause,
+            breakevenTolerance: global.breakevenTolerance,
+            dailyProfitTarget: global.dailyProfitTarget,
+            maxDrawdownGoal: global.maxDrawdownGoal,
+            plannedStartMinute: global.plannedStartMinute,
+            plannedEndMinute: global.plannedEndMinute,
+            waitAfterLossMinutes: global.waitAfterLossMinutes,
+            maxRiskPerTrade: global.maxRiskPerTrade,
+            minAcceptableRr: global.minAcceptableRr,
+            allowedTradingDays: global.allowedTradingDays,
+            maxContractsPerTrade: global.maxContractsPerTrade,
+            maxWeeklyLoss: global.maxWeeklyLoss,
+            stopAfterDailyProfitTarget: global.stopAfterDailyProfitTarget,
+            maxTradesPerDayScope: global.maxTradesPerDayScope,
+            dailyLossLimitScope: global.dailyLossLimitScope,
+            dailyProfitRulesScope: global.dailyProfitRulesScope,
+            maxWeeklyLossScope: global.maxWeeklyLossScope,
+            overridesDailyLoss: false,
+            overridesDailyProfitTarget: false,
+            overridesMaxDrawdownGoal: false
+        )
     }
 
 }

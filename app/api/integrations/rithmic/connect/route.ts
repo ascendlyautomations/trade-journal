@@ -8,9 +8,11 @@ import {
   sanitizeConnectRequestBody,
 } from "@/lib/integrations/rithmic/rithmicConnectSafeResponse"
 import { resolveRithmicConnectCapabilities } from "@/lib/integrations/rithmic/rithmicConnectCapabilities"
+import { isRithmicDevelopmentIntegrationEnabled } from "@/lib/integrations/rithmic/rithmicDevIntegration"
 import { isRithmicUserConnectEnabled } from "@/lib/integrations/rithmic/rithmicProtocolEnv"
 import { safeRpCodeForClient } from "@/lib/integrations/rithmic/rithmicSafeRpCode"
 import { toSafeRithmicDiscoveredAccountView } from "@/lib/integrations/rithmic/rithmicAccountModels"
+import { logRithmicConnectDebug } from "@/lib/integrations/rithmic/rithmicConnectDebug"
 import {
   flushRithmicConnectTiming,
   logRithmicConnectTiming,
@@ -55,6 +57,18 @@ export async function POST(req: Request): Promise<Response> {
   const user = await getRouteUser(req)
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!isRithmicDevelopmentIntegrationEnabled()) {
+    return Response.json(
+      {
+        ok: false,
+        code: "development_only",
+        userMessage:
+          "Rithmic broker integration is only available in development environments.",
+      } satisfies ConnectResponse,
+      { status: 403 }
+    )
   }
 
   if (!isRithmicUserConnectEnabled()) {
@@ -105,6 +119,15 @@ export async function POST(req: Request): Promise<Response> {
     systemName,
   })
 
+  logRithmicConnectDebug("api_request", {
+    clientSystemName: systemName?.trim() || null,
+    reconnect: Boolean(reconnectConnectionId),
+    apiEnvironment: config.apiEnvironment,
+    wssUrl: config.wssUrl,
+    appName: config.appName,
+    appVersion: config.appVersion,
+  })
+
   markRithmicConnectPhase("config_built")
   const verification = await runRithmicConnectionVerification({
     config,
@@ -129,6 +152,16 @@ export async function POST(req: Request): Promise<Response> {
     assertRithmicConnectResponseSafe(failBody)
     const status =
       verification.code === "system_selection_required" ? 409 : 400
+    logRithmicConnectDebug("api_response_failure", {
+      httpStatus: status,
+      code: verification.code,
+      selectedSystemName: verification.selectedSystemName,
+      loginRpCode: verification.loginRpCode,
+      systemDiscovery:
+        systemName?.trim() || config.systemNameOverride ? "skipped" : "performed",
+      apiEnvironment: config.apiEnvironment,
+      wssUrl: config.wssUrl,
+    })
     return Response.json(failBody, { status })
   }
 
@@ -168,6 +201,15 @@ export async function POST(req: Request): Promise<Response> {
     markRithmicConnectPhase("persist_complete")
     logRithmicConnectTiming("success")
     flushRithmicConnectTiming()
+    logRithmicConnectDebug("api_response_success", {
+      httpStatus: 200,
+      code: "success",
+      selectedSystemName: verification.selectedSystemName,
+      loginRpCode: verification.loginRpCode,
+      accountCount: verification.accountCount,
+      apiEnvironment: config.apiEnvironment,
+      wssUrl: config.wssUrl,
+    })
     return Response.json({
       ...successBody,
       accounts: verification.accounts.map(toSafeRithmicDiscoveredAccountView),

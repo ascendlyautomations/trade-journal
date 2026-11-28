@@ -57,8 +57,7 @@ struct ManageRoomView: View {
         Group {
             switch viewModel.phase {
             case .idle, .loading:
-                ExperienceLoadingSpinner(label: "Loading manage room")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading manage room")
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn't open Manage Room",
@@ -724,7 +723,7 @@ private struct EditRoomDetailsImageSection: View {
                 } else if savedReference != nil {
                     placeholder
                         .overlay {
-                            ProgressView()
+                            ExperienceIndeterminateProgress()
                         }
                 } else {
                     placeholder

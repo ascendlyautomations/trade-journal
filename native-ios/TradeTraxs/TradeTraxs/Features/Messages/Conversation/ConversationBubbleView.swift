@@ -5,6 +5,8 @@ struct ConversationBubbleView: View {
     let item: ConversationBubbleItem
     let peerProfile: Profile?
     let imagePipeline: any ImagePipeline
+    var feed: (any FeedRepository)? = nil
+    var objectStorage: (any ObjectStorageProviding)? = nil
     var viewerProfileID: ProfileID? = nil
     var sharedTrade: Trade? = nil
     var sharedPost: Post? = nil
@@ -416,17 +418,22 @@ struct ConversationBubbleView: View {
         .accessibilityIdentifier("conversation.bubble.storyReply")
     }
 
+    @ViewBuilder
     private func storyReplyBubbleContent(
         payload: StoryReplyMessageSupport.Payload,
         onStoryPreviewTap: (() -> Void)? = nil
     ) -> some View {
-        StoryReplyMessageBubbleView(
-            payload: payload,
-            viewerProfileID: viewerProfileID,
-            isOutgoing: item.isOutgoing,
-            imagePipeline: imagePipeline,
-            onStoryPreviewTap: onStoryPreviewTap
-        )
+        if let feed, let objectStorage {
+            StoryReplyMessageBubbleView(
+                payload: payload,
+                viewerProfileID: viewerProfileID,
+                isOutgoing: item.isOutgoing,
+                imagePipeline: imagePipeline,
+                storage: objectStorage,
+                feed: feed,
+                onStoryPreviewTap: onStoryPreviewTap
+            )
+        }
     }
 
     private func storyShareBubble(payload: StoryShareMessageSupport.Payload) -> some View {
@@ -450,7 +457,9 @@ struct ConversationBubbleView: View {
         StoryShareMessageBubbleView(
             payload: payload,
             isOutgoing: item.isOutgoing,
-            imagePipeline: imagePipeline
+            imagePipeline: imagePipeline,
+            feed: feed,
+            storage: objectStorage
         )
     }
 

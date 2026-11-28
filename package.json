@@ -38,6 +38,7 @@
     "generate:showcase-demo": "node scripts/generate-showcase-demo-seed.mjs",
     "export:marketing-ads": "node scripts/export-marketing-ads.mjs",
     "rithmic:phase1-discovery": "tsx scripts/rithmic-phase1-discovery.ts",
+    "rithmic:phase1-auth-diagnostic": "bash scripts/rithmic-phase1-auth-diagnostic.sh",
     "tradovate:entity-trace": "tsx scripts/tradovate-missing-fill-entity-trace.ts"
   },
   "dependencies": {

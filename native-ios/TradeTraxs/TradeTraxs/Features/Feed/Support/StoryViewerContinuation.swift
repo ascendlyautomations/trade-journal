@@ -11,10 +11,18 @@ nonisolated struct StoryViewerContinuation: Equatable, Sendable {
         case dismiss
     }
 
-    mutating func install(catalog: [Story], viewerID: ProfileID, now: Date = Date()) {
-        let active = ActiveStorySemantics.filterActive(catalog, now: now)
-        slidesByAuthor = ActiveStorySemantics.groupByAuthor(active)
-        authorOrder = ActiveStorySemantics.authorOrder(from: active, viewerID: viewerID)
+    /// When `retainExpiredStories` is true (archive / DM replay), every catalog row is kept for playback.
+    mutating func install(
+        catalog: [Story],
+        viewerID: ProfileID,
+        now: Date = Date(),
+        retainExpiredStories: Bool = false
+    ) {
+        let slides = retainExpiredStories
+            ? catalog
+            : ActiveStorySemantics.filterActive(catalog, now: now)
+        slidesByAuthor = ActiveStorySemantics.groupByAuthor(slides)
+        authorOrder = ActiveStorySemantics.authorOrder(from: slides, viewerID: viewerID)
             .filter { !(slidesByAuthor[$0] ?? []).isEmpty }
     }
 

@@ -93,6 +93,31 @@ enum RulesPreviewDebugLog {
             return "emptyCard"
         }
     }
+
+    static func detailViewBranch(session: TradingRulesComplianceSessionStore) -> String {
+        if session.loadError != nil { return "errorState" }
+        if !session.ready { return "loadingSpinner" }
+        if !session.hasConfiguredRules { return "noRulesConfigured" }
+        if session.insufficientScope { return "insufficientScope" }
+        if session.result != nil { return "scrollContent" }
+        if session.scopedTradeCount == 0 { return "emptyNoTradesInScope" }
+        return "loadingAwaitingResult"
+    }
+
+    static func homeRouteBranch(
+        embeddedInTraxsProPreview: Bool,
+        showsEntitlementVerification: Bool,
+        canShowDetail: Bool,
+        isRefreshing: Bool,
+        loadOutcome: TradingRulesComplianceLoadOutcome,
+        store: TradingRulesComplianceSessionStore
+    ) -> String {
+        if showsEntitlementVerification { return "entitlementVerification" }
+        if canShowDetail { return "detailView(\(detailViewBranch(session: store)))" }
+        if isRefreshing { return "loadingSpinner(refreshing)" }
+        if case .failed = loadOutcome { return "errorState" }
+        return "loadingSpinner(waitingSnapshot)"
+    }
 }
 #else
 enum RulesPreviewDebugLog {
@@ -107,6 +132,15 @@ enum RulesPreviewDebugLog {
     static func dashboardSectionBranch(
         compliancePresentation: ProPremiumFeaturePresentation,
         session: TradingRulesComplianceSessionStore
+    ) -> String { "" }
+    static func detailViewBranch(session: TradingRulesComplianceSessionStore) -> String { "" }
+    static func homeRouteBranch(
+        embeddedInTraxsProPreview: Bool,
+        showsEntitlementVerification: Bool,
+        canShowDetail: Bool,
+        isRefreshing: Bool,
+        loadOutcome: TradingRulesComplianceLoadOutcome,
+        store: TradingRulesComplianceSessionStore
     ) -> String { "" }
 }
 #endif

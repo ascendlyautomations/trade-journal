@@ -10,6 +10,9 @@ import ProfileCreateMenu from "./ProfileCreateMenu"
 import ProfileTradeRoomSection from "./ProfileTradeRoomSection"
 import ProfileVisitorModerationMenu from "./ProfileVisitorModerationMenu"
 import type { ProfileHeaderData } from "./profileTypes"
+import Link from "next/link"
+import { BarChart3 } from "lucide-react"
+import { isBackendV2Enabled } from "@/lib/backendV2/flags"
 
 export type { ProfileHeaderData } from "./profileTypes"
 
@@ -181,6 +184,17 @@ export default function ProfileHeader({
 
                   {isOwnProfile ? (
                     <div className="hidden items-center gap-2 sm:flex">
+                      {isBackendV2Enabled("profileInsights") ? (
+                        <Link
+                          href="/profile/insights"
+                          prefetch={false}
+                          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/10 px-2 py-1 text-xs text-gray-100 hover:bg-white/20"
+                          aria-label="Insights"
+                        >
+                          <BarChart3 className="h-3.5 w-3.5" aria-hidden />
+                          Insights
+                        </Link>
+                      ) : null}
                       <button
                         type="button"
                         onClick={onEditProfile}

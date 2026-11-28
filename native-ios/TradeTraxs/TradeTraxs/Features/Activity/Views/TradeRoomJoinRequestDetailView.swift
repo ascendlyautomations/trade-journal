@@ -29,8 +29,7 @@ struct TradeRoomJoinRequestDetailView: View {
         Group {
             switch viewModel.phase {
             case .idle, .loading:
-                ExperienceLoadingSpinner(label: "Loading join request")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading join request")
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn't load join request",

@@ -210,17 +210,17 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         if isJoining || isLeaving {
             return
         }
+        let switchGate = LiveRealtimeSessionSwitchGate.shared
+        if switchGate.isSwitching || switchGate.showsPrompt {
+            return
+        }
 
         if session?.roomID == roomID, connectionState == .connected {
             return
         }
 
-        if RoomBroadcastCoordinator.shared.isWatchingRoom(roomID) {
-            await RoomBroadcastCoordinator.shared.leaveWatch()
-        }
-
-        if session != nil {
-            await leave(reason: .replaced, clearError: true)
+        guard await switchGate.awaitProceed(for: .voice(roomID: roomID)) else {
+            return
         }
 
         guard let tokenClient else {

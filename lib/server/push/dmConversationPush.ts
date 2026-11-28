@@ -11,6 +11,7 @@ export type ScheduleDmConversationPushParams = {
   preview: string
   isGroup: boolean
   groupName: string | null
+  messageType?: string | null
   preferenceKey?: MessagingPushPreferenceKey
 }
 
@@ -36,10 +37,12 @@ export async function scheduleDmConversationPush(
 
   const threadId = dmPushThreadId(conversationId)
 
+  const messageType = params.messageType?.trim() || ""
   const content = JSON.stringify({
     conversation_id: conversationId,
     message_id: params.messageId,
     message_preview: params.preview,
+    message_type: messageType || null,
     is_group: params.isGroup,
     group_name: params.isGroup ? params.groupName || "Group" : null,
     thread_id: threadId,

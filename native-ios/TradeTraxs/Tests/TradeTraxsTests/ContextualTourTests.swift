@@ -54,9 +54,6 @@ final class ContextualTourTests: XCTestCase {
             presentCurrentStep(coordinator)
             coordinator.advance()
             if let surface = coordinator.navigationRequest {
-                if surface == .feed {
-                    coordinator.setFeedChromeReady(true)
-                }
                 coordinator.syncShell(
                     userID: "user-a",
                     createdAt: afterCutoff,
@@ -113,14 +110,14 @@ final class ContextualTourTests: XCTestCase {
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
     }
 
-    func testZeroTradesDoesNotStartTheDashboardTour() {
+    func testZeroTradesStartsTourWhenHomeShellIsReady() {
         let coordinator = makeCoordinator()
         coordinator.syncShell(
             userID: "user-a",
             createdAt: afterCutoff,
             gates: ContextualTourGates(homeRootActive: true, sceneActive: true, unobstructed: true)
         )
-        XCTAssertEqual(coordinator.phase, .idle)
+        XCTAssertEqual(coordinator.phase, .preparing)
         XCTAssertFalse(coordinator.showsOverlay)
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
     }
@@ -158,17 +155,14 @@ final class ContextualTourTests: XCTestCase {
 
         for index in informational.indices {
             let step = informational[index]
-            if coordinator.phase == .measuring {
+            if coordinator.phase == .preparing {
                 let surface = coordinator.navigationRequest ?? step.surface
-                if surface == .feed {
-                    coordinator.setFeedChromeReady(true)
-                }
                 coordinator.syncShell(
                     userID: "user-a",
                     createdAt: afterCutoff,
                     gates: gates(for: surface)
                 )
-                if coordinator.phase == .measuring {
+                if coordinator.phase == .preparing {
                     presentCurrentStep(coordinator)
                 }
             }
@@ -189,7 +183,7 @@ final class ContextualTourTests: XCTestCase {
             } else {
                 coordinator.advance()
                 XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
-                XCTAssertTrue(coordinator.showsOverlay)
+                XCTAssertFalse(coordinator.showsOverlay)
             }
         }
     }
@@ -209,7 +203,7 @@ final class ContextualTourTests: XCTestCase {
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 1)
 
         coordinator.beginReplay()
-        XCTAssertEqual(coordinator.phase, .measuring)
+        XCTAssertEqual(coordinator.phase, .preparing)
         XCTAssertEqual(coordinator.currentStep?.title, "Home tab — Your Dashboard")
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 1)
     }
@@ -221,26 +215,26 @@ final class ContextualTourTests: XCTestCase {
         coordinator.advance()
         presentCurrentStep(coordinator)
         coordinator.advance()
-        XCTAssertEqual(coordinator.phase, .measuring)
-        XCTAssertTrue(coordinator.showsOverlay)
+        XCTAssertEqual(coordinator.phase, .preparing)
+        XCTAssertFalse(coordinator.showsOverlay)
         XCTAssertEqual(coordinator.visibleStep?.title, "Trading Performance")
 
         let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
         let hidden = CGRect(x: 16, y: 1200, width: 350, height: 220)
-        coordinator.noteMeasuredFrame(hidden, viewport: viewport, topInset: 59, bottomInset: 83)
+        let revision = coordinator.stepRevision
+        coordinator.noteMeasuredFrame(hidden, viewport: viewport, topInset: 59, bottomInset: 83, revision: revision)
         XCTAssertEqual(coordinator.scrollTarget, .dashboardPerformance)
-        XCTAssertEqual(coordinator.phase, .measuring)
+        XCTAssertEqual(coordinator.phase, .preparing)
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
 
         let visible = CGRect(x: 16, y: 180, width: 350, height: 220)
-        let now = Date()
-        coordinator.noteMeasuredFrame(visible, viewport: viewport, topInset: 59, bottomInset: 83, now: now)
+        coordinator.noteMeasuredFrame(visible, viewport: viewport, topInset: 59, bottomInset: 83, revision: revision)
         coordinator.noteMeasuredFrame(
             visible,
             viewport: viewport,
             topInset: 59,
             bottomInset: 83,
-            now: now.addingTimeInterval(0.05)
+            revision: revision
         )
         XCTAssertTrue(coordinator.isPresenting)
         XCTAssertEqual(coordinator.currentStep?.title, "Trading Performance")
@@ -248,23 +242,17 @@ final class ContextualTourTests: XCTestCase {
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
     }
 
-    func testMissingTargetScrollsThenSkipsWithoutDismissingTheTour() {
+    func testMissingTargetScrollsAndStaysMeasuringWithoutSkipping() {
         let coordinator = makeCoordinator()
         arm(coordinator, createdAt: afterCutoff)
         presentCurrentStep(coordinator)
         coordinator.advance()
         XCTAssertEqual(coordinator.currentStep?.target, .dashboardPerformance)
-
-        let started = Date()
-        coordinator.forceTimeout(now: started)
-        XCTAssertEqual(coordinator.phase, .measuring)
+        XCTAssertEqual(coordinator.phase, .preparing)
         XCTAssertEqual(coordinator.scrollTarget, .dashboardPerformance)
-        XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
-
-        coordinator.forceTimeout(now: started.addingTimeInterval(ContextualTourGeometry.resolveTimeout))
-        XCTAssertEqual(coordinator.phase, .measuring)
-        XCTAssertEqual(coordinator.currentStep?.target, .dashboardTrades)
-        XCTAssertTrue(coordinator.showsOverlay)
+        XCTAssertEqual(coordinator.stepIndex, 2)
+        XCTAssertFalse(coordinator.showsOverlay)
+        XCTAssertFalse(coordinator.isPresenting)
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
     }
 
@@ -282,7 +270,7 @@ final class ContextualTourTests: XCTestCase {
         )
         let coordinator = makeCoordinator()
         arm(coordinator, createdAt: afterCutoff)
-        XCTAssertEqual(coordinator.phase, .measuring)
+        XCTAssertEqual(coordinator.phase, .preparing)
     }
 
     func testMissingCreatedAtMapsToEpochAndIsNotEligible() throws {
@@ -339,38 +327,16 @@ final class ContextualTourTests: XCTestCase {
         )
     }
 
-    func testUnavailableTargetSkipsWithoutDismissing() {
+    func testUnavailableTargetStaysMeasuringWithoutAutoSkip() {
         XCTAssertEqual(
             ContextualTourGeometry.resolve(frame: nil, previous: nil, elapsed: 2),
             .skip
         )
         let coordinator = makeCoordinator()
         arm(coordinator, createdAt: afterCutoff)
-        var hops = 0
-        while coordinator.phase != .idle && hops < 40 {
-            hops += 1
-            if coordinator.phase == .presenting {
-                if coordinator.isFinalStep { break }
-                coordinator.advance()
-            } else {
-                let started = Date()
-                coordinator.forceTimeout(now: started)
-                coordinator.forceTimeout(now: started.addingTimeInterval(ContextualTourGeometry.resolveTimeout))
-            }
-            if let surface = coordinator.navigationRequest {
-                if surface == .feed {
-                    coordinator.setFeedChromeReady(true)
-                }
-                coordinator.syncShell(
-                    userID: "user-a",
-                    createdAt: afterCutoff,
-                    gates: gates(for: surface)
-                )
-            }
-        }
-        XCTAssertLessThan(hops, 40)
-        XCTAssertEqual(coordinator.phase, .presenting)
-        XCTAssertTrue(coordinator.isFinalStep)
+        XCTAssertEqual(coordinator.phase, .preparing)
+        XCTAssertEqual(coordinator.stepIndex, 0)
+        XCTAssertFalse(coordinator.isPresenting)
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
     }
 
@@ -382,7 +348,8 @@ final class ContextualTourTests: XCTestCase {
             hidden,
             viewport: CGRect(x: 0, y: 0, width: 390, height: 844),
             topInset: 100,
-            bottomInset: 83
+            bottomInset: 83,
+            revision: coordinator.stepRevision
         )
         XCTAssertEqual(coordinator.scrollTarget, .dashboardAccountAndDates)
         XCTAssertFalse(coordinator.isPresenting)
@@ -401,10 +368,11 @@ final class ContextualTourTests: XCTestCase {
             gates: ContextualTourGates(homeRootActive: false, sceneActive: true, unobstructed: true)
         )
         XCTAssertFalse(coordinator.isPresenting)
+        XCTAssertEqual(coordinator.phase, .idle)
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
 
-        arm(coordinator, createdAt: afterCutoff)
-        XCTAssertEqual(coordinator.phase, .measuring)
+        coordinator.beginReplay()
+        XCTAssertEqual(coordinator.phase, .preparing)
     }
 
     func testVersionIncrementMakesOnlyThatTourEligibleAgain() {
@@ -437,7 +405,7 @@ final class ContextualTourTests: XCTestCase {
         arm(coordinator, createdAt: beforeCutoff)
         XCTAssertEqual(coordinator.phase, .idle)
         coordinator.beginReplay()
-        XCTAssertEqual(coordinator.phase, .measuring)
+        XCTAssertEqual(coordinator.phase, .preparing)
         presentCurrentStep(coordinator)
         coordinator.skip()
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 1)
@@ -564,7 +532,6 @@ final class ContextualTourTests: XCTestCase {
             createdAt: afterCutoff,
             gates: gates(for: .feed)
         )
-        coordinator.setFeedChromeReady(true)
         let feedFiltersIndex = ContextualTourCatalog.dashboard.steps.firstIndex {
             $0.target == .feedContentFilters
         }
@@ -573,9 +540,6 @@ final class ContextualTourTests: XCTestCase {
             presentCurrentStep(coordinator)
             coordinator.advance()
             if let surface = coordinator.navigationRequest {
-                if surface == .feed {
-                    coordinator.setFeedChromeReady(true)
-                }
                 coordinator.syncShell(
                     userID: "user-a",
                     createdAt: afterCutoff,
@@ -583,13 +547,11 @@ final class ContextualTourTests: XCTestCase {
                 )
             }
         }
-        FeedFilterBarTourLayoutGate.markLaidOut()
         presentCurrentStep(coordinator)
         XCTAssertEqual(coordinator.currentStep?.target, .feedContentFilters)
         XCTAssertTrue(coordinator.pinsFeedFilterBar)
 
         coordinator.advance()
-        FeedFilterBarTourLayoutGate.clear()
         XCTAssertFalse(coordinator.pinsFeedFilterBar)
     }
 
@@ -637,7 +599,6 @@ final class ContextualTourTests: XCTestCase {
     }
 
     private func arm(_ coordinator: ContextualTourCoordinator, createdAt: Date) {
-        coordinator.setDashboardAnalyticsReady(true)
         coordinator.syncShell(
             userID: "user-a",
             createdAt: createdAt,
@@ -645,16 +606,30 @@ final class ContextualTourTests: XCTestCase {
         )
     }
 
-    private func presentCurrentStep(_ coordinator: ContextualTourCoordinator, now: Date = Date()) {
+    private func presentCurrentStep(_ coordinator: ContextualTourCoordinator) {
+        if let step = coordinator.currentStep {
+            if step.target == .feedContentFilters {
+                coordinator.noteFeedFilterBarLaidOut()
+            }
+            if step.surface == .settings {
+                coordinator.noteSettingsHomeLaidOut()
+            }
+            coordinator.syncShell(
+                userID: "user-a",
+                createdAt: afterCutoff,
+                gates: gates(for: step.surface)
+            )
+        }
         let frame = CGRect(x: 24, y: 80, width: 120, height: 44)
         let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
-        coordinator.noteMeasuredFrame(frame, viewport: viewport, topInset: 0, bottomInset: 0, now: now)
+        let revision = coordinator.stepRevision
+        coordinator.noteMeasuredFrame(frame, viewport: viewport, topInset: 0, bottomInset: 0, revision: revision)
         coordinator.noteMeasuredFrame(
             frame,
             viewport: viewport,
             topInset: 0,
             bottomInset: 0,
-            now: now.addingTimeInterval(0.05)
+            revision: revision
         )
     }
 

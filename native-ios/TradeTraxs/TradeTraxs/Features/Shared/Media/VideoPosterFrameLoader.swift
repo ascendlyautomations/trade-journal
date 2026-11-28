@@ -115,7 +115,10 @@ enum VideoPosterFrameLoader {
         storage: any ObjectStorageProviding,
         bucket: StorageBucket
     ) async -> UIImage? {
-        guard let url = MediaURLResolver.url(for: video, bucket: bucket, storage: storage) else {
+        let playback = bucket == .stories
+            ? await StorySignedMediaResolver.shared.resolvedPlaybackReference(video)
+            : video
+        guard let url = MediaURLResolver.url(for: playback, bucket: bucket, storage: storage) else {
             return nil
         }
         let asset = AVURLAsset(url: url)

@@ -7,22 +7,30 @@ struct GettingStartedCard: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var displaysCollapsed: Bool {
+        if ContextualTourCoordinator.shared.measures(.dashboardGettingStarted) {
+            return false
+        }
+        return store.isCollapsed
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             header
-            if !store.isCollapsed {
+            if !displaysCollapsed {
                 progressBar
                 taskList
             }
         }
         .padding(ExperienceSpacing.md)
         .experienceDashboardCard(cornerRadius: ExperienceRadius.card)
+        .contextualTourTarget(.dashboardGettingStarted)
         .accessibilityIdentifier("gettingStarted.card")
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            if store.isCollapsed {
+            if displaysCollapsed {
                 Button {
                     ExperienceMotion.withAnimation(ExperienceMotion.selection, reduceMotion: reduceMotion) {
                         store.toggleCollapsed()

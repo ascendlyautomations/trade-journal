@@ -56,8 +56,7 @@ struct CreateAchievementView: View {
         Group {
             switch viewModel.phase {
             case .idle:
-                ProgressView("Loading…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay()
             case .failed(let message):
                 ExperienceErrorState(
                     title: "Couldn't open Add Achievement",
@@ -268,7 +267,7 @@ struct CreateAchievementView: View {
     private var accountField: some View {
         if viewModel.isLoadingAccounts && viewModel.accounts.isEmpty {
             HStack(spacing: ExperienceSpacing.sm) {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                 Text("Loading accounts…")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }

@@ -37,7 +37,11 @@ enum ProfileSectionInitialLoad {
 
         var nextState: ProfileSectionLoadState?
         if (snapshot.phase == .loading || snapshot.didBootstrap), itemsEmpty {
-            nextState = .loading
+            if currentState.hasSettledPresentation {
+                nextState = nil
+            } else {
+                nextState = .loading
+            }
         } else if itemsEmpty, case .idle = currentState {
             nextState = .loading
         }

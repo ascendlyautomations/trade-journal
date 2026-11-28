@@ -36,8 +36,7 @@ struct AchievementDetailView: View {
         Group {
             switch viewModel.phase {
             case .loading where viewModel.achievement == nil:
-                ExperienceLoadingSpinner(label: "Loading achievement")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ExperienceLoadingOverlay(label: "Loading achievement")
             case .failed(let failure) where viewModel.achievement == nil:
                 ExperienceErrorState(
                     title: failure.title,
@@ -49,6 +48,10 @@ struct AchievementDetailView: View {
             }
         }
         .experienceScreenBackground()
+        .onAppear {
+            engagementTarget(forRouteID: viewModel.achievementID)
+                .recordCreatorImpression(surface: "detail")
+        }
         .experienceNavigationTitle(viewModel.achievement?.title ?? "Achievement")
         .liveVoiceTopSessionChrome()
         .toolbar(.hidden, for: .tabBar)

@@ -79,12 +79,10 @@ final class StoryReplyMessageSupportTests: XCTestCase {
         )
     }
 
-    func testProvisionalStoryMarksVideoFromURL() {
+    func testVideoMediaURLDetection() {
         let payload = StoryReplyMessageSupport.decode(
             from: samplePayloadJSON(imageURL: "https://cdn.example/story.mp4")
         )!
-        let story = StoryReplyMessageSupport.provisionalStory(from: payload)
-        XCTAssertEqual(story.media.kind, .video)
         XCTAssertTrue(StoryReplyMessageSupport.isVideoMediaURL(payload.storyImageURL))
     }
 

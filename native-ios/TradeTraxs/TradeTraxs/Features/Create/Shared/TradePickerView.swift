@@ -16,7 +16,7 @@ struct TradePickerView: View {
     var body: some View {
         Group {
             if isLoading {
-                ProgressView("Loading trades…")
+                ExperienceLoadingSpinner(message: "Loading trades…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if trades.isEmpty {
                 ExperienceEmptyState(

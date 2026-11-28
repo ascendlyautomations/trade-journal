@@ -24,7 +24,7 @@ struct ClipsContainerView: View {
     var body: some View {
         ProfileSectionContainerChrome(
             section: .clips,
-            state: viewModel.state,
+            state: viewModel.sectionChromeState,
             emptyMessage: viewModel.isOwner ? nil : ProfileSection.clips.emptyMessage,
             emptyActionTitle: viewModel.isOwner ? "Add Clip" : nil,
             emptyAction: viewModel.isOwner ? { viewModel.addClip() } : nil,

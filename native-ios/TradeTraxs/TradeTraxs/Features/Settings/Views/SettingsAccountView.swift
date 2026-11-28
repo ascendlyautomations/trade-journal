@@ -85,7 +85,7 @@ struct SettingsAccountView: View {
                         )
                         .overlay(alignment: .trailing) {
                             if viewModel.isExportingAccountData {
-                                ProgressView()
+                                ExperienceIndeterminateProgress()
                                     .accessibilityIdentifier("settings.account.downloading")
                             }
                         }
@@ -137,10 +137,12 @@ struct SettingsAccountView: View {
         .experienceNavigationTitle("Account")
         .overlay {
             if viewModel.isLoading || viewModel.isDeletingAccount {
-                ProgressView(viewModel.isDeletingAccount ? "Deleting account…" : "")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(colors.groupedBackground.opacity(viewModel.isDeletingAccount ? 0.92 : 0))
-                    .accessibilityIdentifier("settings.account.deleting")
+                ExperienceLoadingOverlay(
+                    message: viewModel.isDeletingAccount ? "Deleting account…" : nil
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(colors.groupedBackground.opacity(viewModel.isDeletingAccount ? 0.92 : 0))
+                .accessibilityIdentifier("settings.account.deleting")
             }
         }
         .onAppear { viewModel.loadIfNeeded() }
@@ -337,7 +339,7 @@ private struct HoldToPermanentlyDeleteControl: View {
 
             Group {
                 if isProcessing {
-                    ProgressView()
+                    ExperienceIndeterminateProgress()
                         .tint(colors.textInverse)
                 } else {
                     Text("Hold 5 Seconds to Delete")

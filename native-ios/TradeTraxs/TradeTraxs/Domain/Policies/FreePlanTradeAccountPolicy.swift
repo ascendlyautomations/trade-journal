@@ -14,7 +14,7 @@ nonisolated enum FreePlanTradeAccountPolicy {
     }
 
     static func countTotalAccounts(_ accounts: [TradingAccount]) -> Int {
-        accounts.count
+        TradingAccountLifecyclePolicy.countDistinctAccountSlots(accounts)
     }
 
     static func needsSlotSelection(

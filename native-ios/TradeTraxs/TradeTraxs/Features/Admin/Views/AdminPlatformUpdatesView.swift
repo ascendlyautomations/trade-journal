@@ -108,7 +108,7 @@ struct AdminPlatformUpdatesView: View {
         }
         .overlay {
             if isLoadingInitial && rows.isEmpty {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }

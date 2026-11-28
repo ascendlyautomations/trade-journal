@@ -39,7 +39,7 @@ struct FeedRoomShareCard: View {
             } label: {
                 Group {
                     if isBusy {
-                        ProgressView()
+                        ExperienceIndeterminateProgress()
                             .frame(maxWidth: .infinity)
                     } else {
                         Text(actionTitle)

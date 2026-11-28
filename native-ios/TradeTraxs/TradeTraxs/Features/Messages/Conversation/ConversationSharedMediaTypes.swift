@@ -35,6 +35,14 @@ nonisolated struct ConversationSharedMediaItem: Identifiable, Equatable, Sendabl
     var senderID: ProfileID?
     var imageURL: String
     var createdAt: String
+    var kind: ConversationSharedMediaItemKind = .image
+    var tradeID: TradeID?
+    /// Populated from the hydrated shared ``Trade`` — uses ``Trade/realizedPnL`` (Total P&L).
+    var tradeTotalPnL: Money?
+
+    var isSharedTrade: Bool {
+        kind == .sharedTrade && tradeID != nil
+    }
 
     var mediaReference: MediaReference {
         MediaReference(id: imageURL, kind: .image, altText: nil)

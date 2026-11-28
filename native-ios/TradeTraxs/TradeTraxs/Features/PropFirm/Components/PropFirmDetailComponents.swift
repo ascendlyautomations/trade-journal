@@ -513,7 +513,7 @@ struct PropFirmAccountPayoutsView: View {
                     .padding(.vertical, ExperienceSpacing.md)
                 }
             } else if viewModel.isLoading {
-                ProgressView()
+                ExperienceIndeterminateProgress()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ExperienceEmptyState(

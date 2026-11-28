@@ -477,6 +477,12 @@ final class ProfileScreenViewModel {
         headerViewModel.openSettings()
     }
 
+    func openProfileInsights() {
+        guard contentStore.isOwner else { return }
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.pushProfile(.profileInsights)
+    }
+
     func isPinned(contentType: ProfilePinnedContentType, contentID: String) -> Bool {
         state.pinnedContent.contains {
             $0.contentType == contentType && $0.contentID == contentID
@@ -872,10 +878,7 @@ final class ProfileScreenViewModel {
     private func reapplyOptimisticOverlaysToSections() {
         guard isOwnerTarget else { return }
         var next = OwnerProfileOptimisticStore.shared.merging(into: state)
-        guard next != state else {
-            shellViewModel?.apply(state: state)
-            return
-        }
+        guard next != state else { return }
         next.lastUpdated = Date()
         next.isRefreshing = state.isRefreshing
         state = next
@@ -1267,9 +1270,7 @@ final class ProfileScreenViewModel {
         )
         guard !Task.isCancelled else { return }
         if force, !isReconcilingFromDisk {
-            // Recreate section VMs so Stage 2 reloads once per tab after refresh.
-            // Drop the previous lists so a web post or trade is not kept in place of the server page.
-            shellViewModel = nil
+            // Keep section VMs mounted so tabs stay visible while the authoritative refresh lands.
             acceptServerSectionLists = true
         }
 
