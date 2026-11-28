@@ -32,6 +32,19 @@ nonisolated enum ActiveStorySemantics {
         return ordered.first(where: { !hasViewed($0) })?.id ?? first.id
     }
 
+    /// Carousel ring stays highlighted until every active story from the author is viewed.
+    static func authorHasUnviewedStories(
+        authorID: ProfileID,
+        catalog: [Story],
+        hasViewed: (Story) -> Bool,
+        now: Date = Date()
+    ) -> Bool {
+        chronologicallyOrderedActive(
+            catalog.filter { $0.authorProfileID == authorID },
+            now: now
+        ).contains { !hasViewed($0) }
+    }
+
     /// Groups active stories by author, oldest first within each author (Instagram slide order).
     static func groupByAuthor(_ active: [Story]) -> [ProfileID: [Story]] {
         var grouped: [ProfileID: [Story]] = [:]

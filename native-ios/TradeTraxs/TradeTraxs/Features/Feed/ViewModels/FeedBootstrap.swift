@@ -154,11 +154,11 @@ enum FeedBootstrap: ScreenBootstrap {
                 detailCache: context.detailCache
             )
             FeedStoriesCatalogStore.shared.replace(catalog: loaded, viewerID: viewer, isFullCatalog: true)
-            let strip = ActiveStorySemantics.stripStories(from: loaded, viewerID: viewer)
             #if DEBUG
-            StoriesLoadProbe.record(stage: "ui", detail: "assigned stories=\(strip.count) catalog=\(loaded.count)")
+            let strip = ActiveStorySemantics.stripStories(from: loaded, viewerID: viewer)
+            StoriesLoadProbe.record(stage: "ui", detail: "assigned strip=\(strip.count) catalog=\(loaded.count)")
             #endif
-            return strip
+            return loaded
         } catch {
             #if DEBUG
             StoriesLoadProbe.record(stage: "error", detail: String(describing: error))

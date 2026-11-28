@@ -31,6 +31,9 @@ nonisolated protocol AIRepository: Sendable {
     /// Inbox rows for Messages Trade AI section.
     func loadConversationInbox(limit: Int) async throws -> [TradeAIConversationInboxItem]
 
+    /// Updates conversation title (`PATCH /api/ai/conversations/:id`).
+    func renameAICoachConversation(id: AIConversationID, title: String) async throws
+
     /// Legacy direct PostgREST insert (deprecated — server persist preferred).
     func persistMessages(_ messages: [TradeAIMessage], tradeID: TradeID) async throws
 

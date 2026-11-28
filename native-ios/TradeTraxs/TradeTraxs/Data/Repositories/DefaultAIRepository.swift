@@ -155,47 +155,32 @@ nonisolated struct DefaultAIRepository: AIRepository {
             cachedReply: request.cachedReply
         )
         let data = try transport.encodeJSON(body)
+        #if DEBUG
+        PsychologyCoachTrace.requestStarted(
+            mode: request.mode.rawValue,
+            persistCachedOnly: request.persistCachedOnly,
+            bodyBytes: data.count,
+            hasConversationID: request.conversationID != nil
+        )
+        #endif
         let response = try await transport.send(
             host: .bff,
             path: "/api/psychology-coach",
             method: .post,
             body: data,
-            requiresAuthentication: true
+            requiresAuthentication: true,
+            acceptsNonSuccessStatusCodes: true
         )
-
-        let decoded = try? JSONDecoder().decode(PsychologyCoachBFFResponse.self, from: response.data)
-        let reply = decoded?.reply?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        switch response.statusCode {
-        case 200 ... 299:
-            guard let reply, !reply.isEmpty else {
-                throw AppError.unknown(message: "No response generated")
-            }
-            let conversationID = decoded?.conversationId.flatMap { AIConversationID($0) }
-            return PsychologyCoachAIResponse(
-                reply: AIGeneratedTextNormalizer.normalize(reply),
-                conversationID: conversationID,
-                assistantMessageID: decoded?.assistantMessageId
-            )
-        case 401:
-            throw AppError.domain(.permission(.notAuthenticated))
-        case 403:
-            throw AppError.unknown(
-                message: ProEntitlementResponseSanitizer.message(
-                    statusCode: 403,
-                    error: decoded?.error,
-                    reply: reply
-                )
-            )
-        case 429:
-            throw AppError.unknown(message: decoded?.error ?? "Slow down, try again in a moment.")
-        default:
-            throw AppError.unknown(
-                message: ProEntitlementResponseSanitizer.sanitizedOrNeutral(
-                    decoded?.error ?? "Psychology coach unavailable. Your analytics still work offline."
-                )
-            )
-        }
+        #if DEBUG
+        let contentType = (response.headers["Content-Type"] as? String)
+            ?? (response.headers["content-type"] as? String)
+        PsychologyCoachTrace.responseReceived(
+            status: response.statusCode,
+            byteCount: response.data.count,
+            contentType: contentType
+        )
+        #endif
+        return try PsychologyCoachHTTPMapping.map(statusCode: response.statusCode, data: response.data)
     }
 
     func analyzeGeneralTrading(_ request: GeneralTradeAIRequest) async throws -> GeneralTradeAIResponse {
@@ -326,13 +311,6 @@ private nonisolated struct PsychologyCoachBFFUserMessage: Encodable {
 private nonisolated struct PsychologyCoachBFFMessage: Encodable {
     var role: String
     var content: String
-}
-
-private nonisolated struct PsychologyCoachBFFResponse: Decodable {
-    var reply: String?
-    var error: String?
-    var conversationId: String?
-    var assistantMessageId: String?
 }
 
 private nonisolated struct GeneralTradeCoachBFFBody: Encodable {

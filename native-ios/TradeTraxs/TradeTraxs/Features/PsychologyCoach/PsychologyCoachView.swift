@@ -14,8 +14,10 @@ final class PsychologyCoachViewModel {
     private(set) var messages: [AICoachConversationMessage] = []
     private(set) var conversationID: AIConversationID?
     private(set) var facts: PsychologyCoachFacts
+    private(set) var bootstrapGeneration = 0
 
     private let ai: any AIRepository
+    private var bootstrapInFlight = false
 
     init(facts: PsychologyCoachFacts, ai: any AIRepository) {
         self.facts = facts
@@ -35,10 +37,18 @@ final class PsychologyCoachViewModel {
         PsychologyCoachSessionStore.shared.clearReopenConversation()
         conversationID = nil
         messages = []
+        bootstrapGeneration += 1
         await bootstrap(forceRefresh: true)
     }
 
     func bootstrap(forceRefresh: Bool = false) async {
+        if bootstrapInFlight {
+            PsychologyCoachTrace.bootstrapSkipped(reason: "in_flight")
+            return
+        }
+        bootstrapInFlight = true
+        defer { bootstrapInFlight = false }
+
         if TraxsProPreviewSession.shared.activePreviewEnvironment != nil
             || ExploreModeSupport.isActive
         {
@@ -124,8 +134,19 @@ final class PsychologyCoachViewModel {
             messages = []
             phase = .idle
         } catch {
-            phase = .failed(UserFacingError.message(for: error))
+            PsychologyCoachTrace.bootstrapFailed(
+                category: String(describing: type(of: error)).prefix(40).description
+            )
+            phase = .failed(Self.userFacingCoachError(error))
         }
+    }
+
+    private static func userFacingCoachError(_ error: Error) -> String {
+        let message = UserFacingError.message(for: error)
+        if message.isEmpty || message.lowercased().contains("cancelled") {
+            return "The coach request did not finish. Pull to refresh or tap Try again."
+        }
+        return message
     }
 
     func sendFollowUp(_ question: String) async {
@@ -253,7 +274,7 @@ struct PsychologyCoachView: View {
                 }
             }
         }
-        .task {
+        .task(id: viewModel.bootstrapGeneration) {
             await viewModel.bootstrap()
         }
         .accessibilityIdentifier("psychologyCoach.view")

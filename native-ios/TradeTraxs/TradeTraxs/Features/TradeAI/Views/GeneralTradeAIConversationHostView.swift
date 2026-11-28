@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Deep link host for a persisted general Trade AI thread (Messages inbox).
+/// Deep link host for a persisted general Trade AI thread.
 struct GeneralTradeAIConversationHostView: View {
     let conversationID: AIConversationID
     let data: DataEnvironment

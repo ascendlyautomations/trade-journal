@@ -57,7 +57,9 @@ final class ViewerActiveStoryStore {
         viewerID: ProfileID,
         now: Date = Date()
     ) -> Story? {
-        guard let story = stories.first(where: { $0.authorProfileID == viewerID }) else { return nil }
-        return ActiveStorySemantics.isActive(createdAt: story.createdAt, now: now) ? story : nil
+        StoryBootstrapMapping.newestActive(
+            stories.filter { $0.authorProfileID == viewerID },
+            now: now
+        )
     }
 }

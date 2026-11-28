@@ -17,6 +17,12 @@ final class GeneralTradeAICoachViewModel {
     var pendingAttachmentMime = "image/jpeg"
     var showsNewConversationSheet = false
     var newConversationTitle = ""
+    var showsConversationSwitcher = false
+    var showsAllConversationsPage = false
+    var showsRenameSheet = false
+    var renameDraft = ""
+    var renameTargetID: AIConversationID?
+    var renameErrorMessage: String?
     var showsTradePicker = false
     var isLoadingTradePicker = false
     var tradePickerTrades: [Trade] = []
@@ -95,12 +101,60 @@ final class GeneralTradeAICoachViewModel {
         }
     }
 
+    var sortedGeneralConversations: [TradeAIConversationInboxItem] {
+        conversations.sorted { ($0.lastMessageAt ?? .distantPast) > ($1.lastMessageAt ?? .distantPast) }
+    }
+
+    var dropdownConversations: [TradeAIConversationInboxItem] {
+        Array(sortedGeneralConversations.prefix(6))
+    }
+
+    var hasMoreConversationsThanDropdown: Bool {
+        sortedGeneralConversations.count > 6
+    }
+
     func refreshConversationList() async {
         do {
             let inbox = try await ai.loadConversationInbox(limit: 100)
-            conversations = inbox.filter { $0.kind == "general_trade" }
+            conversations = inbox
+                .filter { $0.kind == "general_trade" }
+                .sorted { ($0.lastMessageAt ?? .distantPast) > ($1.lastMessageAt ?? .distantPast) }
+            await AICoachInboxStore.shared.refresh(using: ai)
         } catch {
             conversations = []
+        }
+    }
+
+    func presentRename(for item: TradeAIConversationInboxItem) {
+        showsConversationSwitcher = false
+        renameTargetID = item.id
+        renameDraft = item.title ?? ""
+        renameErrorMessage = nil
+        showsRenameSheet = true
+    }
+
+    func submitRename() async {
+        let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let target = renameTargetID else {
+            renameErrorMessage = "Enter a conversation name."
+            return
+        }
+        renameErrorMessage = nil
+        do {
+            try await ai.renameAICoachConversation(id: target, title: trimmed)
+            showsRenameSheet = false
+            renameTargetID = nil
+            if conversationID == target {
+                conversationTitle = trimmed
+            }
+            if let index = conversations.firstIndex(where: { $0.id == target }) {
+                var row = conversations[index]
+                row.title = trimmed
+                conversations[index] = row
+            }
+            await refreshConversationList()
+        } catch {
+            renameErrorMessage = UserFacingError.message(for: error)
         }
     }
 
@@ -189,7 +243,7 @@ final class GeneralTradeAICoachViewModel {
         defer { isLoading = false }
 
         let scope = TradeAIPortfolioScopeMapper.map(scopeController.clientScopeFilter(), accounts: accounts)
-        let apiMessages = TradeAIAPIMessageBuilder.messagesForAPI(from: messages)
+        let apiMessages = GeneralTradeAIAPIMessageBuilder.messagesForAPI(from: messages)
 
         do {
             let turn = try await ai.analyzePortfolioTurn(
@@ -305,85 +359,64 @@ struct GeneralTradeAICoachView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            TradingRulesAnalyticsFilterBar(
-                scope: viewModel.scopeController,
-                onManageAccounts: {
-                    navigationCoordinator.pushHome(.settings(.tradingAccounts))
-                },
-                onFiltersTap: {
-                    viewModel.scopeController.prepareDraftScopeFilters()
-                    viewModel.scopeController.showsFiltersSheet = true
-                }
-            )
-            .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.xs)
-
-            if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
-                ExperienceIndeterminateProgress()
-                    .padding()
-            }
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    ForEach(viewModel.messages) { message in
-                        TradeAIMessageCard(
-                            message: message,
-                            imagePipeline: data.imagePipeline,
-                            tradeForAttachment: { viewModel.tradeForAttachment($0) },
-                            onOpenTrade: { tradeID in
-                                navigationCoordinator.pushHome(.tradeDetail(tradeID))
-                            }
-                        )
-                    }
-                }
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.vertical, ExperienceSpacing.sm)
-            }
-
-            if let error = viewModel.errorMessage {
-                Text(error)
-                    .experienceStyle(.caption, color: colors.error)
-                    .padding(.horizontal, ExperienceSpacing.md)
-            }
-
-            if let persistError = viewModel.persistErrorMessage {
-                HStack {
-                    Text(persistError)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                    Spacer()
-                    Button("Retry Save") {
-                        Task { await viewModel.retryPersistIfNeeded() }
-                    }
-                    .font(.system(.caption, design: .default).weight(.semibold))
-                    .foregroundStyle(colors.accent)
-                }
-                .padding(.horizontal, ExperienceSpacing.md)
-            }
-
-            composer
-        }
-        .experienceScreenBackground()
-        .experienceNavigationTitle(viewModel.conversationTitle)
+        GeneralTradeAIConversationView(
+            viewModel: viewModel,
+            imagePipeline: data.imagePipeline,
+            navigationCoordinator: navigationCoordinator
+        )
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    ForEach(viewModel.conversations) { item in
-                        Button(item.title ?? "General Trade AI") {
-                            Task { await viewModel.selectConversation(item.id) }
-                        }
-                    }
-                    Button("New conversation…") {
-                        viewModel.showsNewConversationSheet = true
-                    }
+            ToolbarItem(placement: .principal) {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    viewModel.showsConversationSwitcher = true
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    HStack(spacing: ExperienceSpacing.xxs) {
+                        Text(viewModel.conversationTitle)
+                            .font(.headline)
+                            .foregroundStyle(colors.primaryText)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(colors.secondaryText)
+                    }
                 }
-                .accessibilityLabel("Conversations")
+                .buttonStyle(.experiencePlain)
+                .accessibilityLabel("Switch conversation")
             }
+        }
+        .navigationDestination(isPresented: $viewModel.showsAllConversationsPage) {
+            GeneralTradeAIConversationsListView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $viewModel.showsConversationSwitcher) {
+            GeneralTradeAIConversationSwitcherSheet(
+                viewModel: viewModel,
+                onSeeMore: { viewModel.showsAllConversationsPage = true }
+            )
         }
         .sheet(isPresented: $viewModel.showsNewConversationSheet) {
-            newConversationSheet
+            AICoachNewConversationSheet(
+                scopeDescription: "Scope uses the account and date filters above.",
+                title: $viewModel.newConversationTitle,
+                isCreateDisabled: viewModel.newConversationTitle
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || viewModel.isLoading,
+                onCancel: { viewModel.showsNewConversationSheet = false },
+                onCreate: { Task { await viewModel.createConversation() } }
+            )
+        }
+        .sheet(isPresented: $viewModel.showsRenameSheet) {
+            AICoachRenameConversationSheet(
+                title: $viewModel.renameDraft,
+                isSaveDisabled: viewModel.renameDraft
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                onCancel: {
+                    viewModel.showsRenameSheet = false
+                    viewModel.renameTargetID = nil
+                    viewModel.renameErrorMessage = nil
+                },
+                onSave: { Task { await viewModel.submitRename() } }
+            )
         }
         .sheet(isPresented: $viewModel.scopeController.showsTimePeriodSheet) {
             TradingRulesAnalyticsTimePeriodSheet(scope: viewModel.scopeController)
@@ -408,48 +441,4 @@ struct GeneralTradeAICoachView: View {
         }
     }
 
-    private var composer: some View {
-        AITradeCoachComposerBar(
-            draft: $viewModel.draft,
-            isLoading: viewModel.isLoading,
-            showsTradeAttach: true,
-            stagedTrade: viewModel.pendingSharedTrade,
-            pendingImageData: viewModel.pendingAttachmentData,
-            imagePipeline: data.imagePipeline,
-            onSend: { Task { await viewModel.send() } },
-            onRemoveTrade: { viewModel.pendingSharedTrade = nil },
-            onRemoveImage: { viewModel.pendingAttachmentData = nil },
-            onAttachTrade: { viewModel.presentTradePicker() },
-            onPickedImage: { data in
-                viewModel.pendingAttachmentData = data
-                viewModel.pendingAttachmentMime = "image/jpeg"
-            }
-        )
-    }
-
-    private var newConversationSheet: some View {
-        NavigationStack {
-            Form {
-                TextField("Title", text: $viewModel.newConversationTitle)
-                Text("Scope uses the account and date filters above.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-            .navigationTitle("New conversation")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { viewModel.showsNewConversationSheet = false }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        Task { await viewModel.createConversation() }
-                    }
-                    .disabled(
-                        viewModel.newConversationTitle
-                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    )
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
 }

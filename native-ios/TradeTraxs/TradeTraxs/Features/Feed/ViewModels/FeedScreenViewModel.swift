@@ -84,8 +84,11 @@ final class FeedScreenViewModel {
 
     var phase: FeedState.Phase { state.phase }
     var entries: [FeedTimelineEntry] { state.entries }
+    /// Strip bubbles for the carousel; ``state.stories`` keeps the full active catalog per author.
     var stories: [Story] {
-        ActiveStorySemantics.filterActive(state.stories)
+        let active = ActiveStorySemantics.filterActive(state.stories)
+        guard let viewerID = state.viewerID else { return active }
+        return ActiveStorySemantics.stripStories(from: active, viewerID: viewerID)
     }
     var isRefreshing: Bool { state.isRefreshing }
     var isLoadingMore: Bool { state.isLoadingMore }
@@ -573,19 +576,9 @@ final class FeedScreenViewModel {
             return
         }
 
-        var catalog = FeedStoriesCatalogStore.shared.catalog
-        catalog.removeAll { $0.id == story.id }
-        catalog.append(story)
-        FeedStoriesCatalogStore.shared.replace(catalog: catalog, viewerID: viewerID)
-
-        if story.authorProfileID == viewerID {
-            let others = state.stories.filter { $0.authorProfileID != viewerID }
-            state.stories = [story] + others
-        } else {
-            var merged = state.stories.filter { $0.id != story.id && $0.authorProfileID != story.authorProfileID }
-            merged.append(story)
-            state.stories = ActiveStorySemantics.stripStories(from: merged, viewerID: viewerID)
-        }
+        state.stories.removeAll { $0.id == story.id }
+        state.stories.append(story)
+        syncStoriesCatalogIfNeeded()
         state.lastUpdated = Date()
         persistFeedFirstPage()
     }
@@ -597,6 +590,10 @@ final class FeedScreenViewModel {
         guard state.scope == .following else { return }
         detailCache.removeStory(id: storyID)
         state.stories.removeAll { $0.id == storyID }
+        if let viewerID = state.viewerID {
+            ViewerActiveStoryStore.shared.sync(viewerID: viewerID, stories: state.stories)
+        }
+        syncStoriesCatalogIfNeeded()
         state.lastUpdated = Date()
         persistFeedFirstPage()
     }
@@ -1556,7 +1553,20 @@ final class FeedScreenViewModel {
     private func syncViewerStoryStoreIfNeeded() {
         reconcileSharedFeedScopeWithState()
         guard state.scope == .following, let viewerID = state.viewerID else { return }
+        syncStoriesCatalogIfNeeded()
         ViewerActiveStoryStore.shared.sync(viewerID: viewerID, stories: state.stories)
+    }
+
+    /// Full per-author catalog for story viewer navigation; carousel uses ``stories`` strip only.
+    private func syncStoriesCatalogIfNeeded() {
+        guard state.scope == .following, let viewerID = state.viewerID else { return }
+        let active = ActiveStorySemantics.filterActive(state.stories)
+        guard !active.isEmpty else {
+            FeedStoriesCatalogStore.shared.replace(catalog: [], viewerID: viewerID, isFullCatalog: true)
+            return
+        }
+        detailCache.seed(stories: active)
+        FeedStoriesCatalogStore.shared.replace(catalog: active, viewerID: viewerID, isFullCatalog: true)
     }
 
     private func upsert(_ entry: FeedTimelineEntry) {

@@ -7,10 +7,11 @@ import {
 import { requireAIFeatureEntitlement } from "@/lib/server/requireAIFeatureEntitlement"
 import { analyzeTradeFailureFromError } from "@/lib/server/openAiRouteSupport"
 import { buildAuthoritativeTradeContext } from "@/lib/server/ai/aiTradeContextBuilder"
+import { buildAuthoritativeTradeAnalysisPrompt } from "@/lib/server/ai/buildTradeAnalysisUserPrompt"
 import {
-  ANALYZE_TRADE_SYSTEM_PROMPT,
-  buildAuthoritativeTradeAnalysisPrompt,
-} from "@/lib/server/ai/buildTradeAnalysisUserPrompt"
+  TRADE_AI_TURN_SYSTEM_PROMPT,
+  buildTradeTurnUserDirective,
+} from "@/lib/tradeAiCoachPrompt"
 import { runTradeAiCompletion, publicImageUrlFromStoragePath } from "@/lib/server/ai/aiOpenAiTurn"
 import {
   appendTurnIdempotent,
@@ -140,15 +141,18 @@ export async function POST(req: Request) {
     url,
   }))
 
-  const userInstruction =
-    userMsg.openaiContent?.trim() || userMsg.displayContent.trim()
+  const userDirective = buildTradeTurnUserDirective({
+    promptKey: userMsg.promptKey,
+    displayContent: userMsg.displayContent.trim(),
+    openaiContent: userMsg.openaiContent,
+  })
 
   const primaryPrompt = `${buildAuthoritativeTradeAnalysisPrompt(context, {
     hasScreenshot: Boolean(imageUrl) || uploadUrls.length > 0,
+    deferOutputFormat: true,
   })}
 
-User question / instruction (untrusted user content):
-${userInstruction}`
+${userDirective}`
 
   const priorMessages = await Promise.all(
     (body.messages ?? [])
@@ -189,7 +193,7 @@ ${userInstruction}`
 
   try {
     const completion = await runTradeAiCompletion({
-      systemPrompt: ANALYZE_TRADE_SYSTEM_PROMPT,
+      systemPrompt: TRADE_AI_TURN_SYSTEM_PROMPT,
       primaryUserPrompt: primaryPrompt,
       primaryImages,
       priorMessages,

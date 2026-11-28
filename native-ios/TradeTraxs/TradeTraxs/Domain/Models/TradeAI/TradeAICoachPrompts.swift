@@ -2,121 +2,157 @@ import Foundation
 
 /// Specialized coaching directives for native Trade AI presets.
 ///
-/// The BFF still owns the OpenAI system prompt; these instructions are sent as the
-/// latest user turn so each preset produces a short, coach-style reply without
-/// changing the `/api/analyze-trade` endpoint.
+/// The BFF uses `TRADE_AI_TURN_SYSTEM_PROMPT`; these instructions are sent as
+/// `openaiContent` on the latest user turn so each preset shapes the reply.
 nonisolated enum TradeAICoachPrompts {
-    /// Shared response contract for every preset analysis.
-    static let structuredFormatInstructions = """
-    For THIS reply only, ignore any prior section names like Summary / Strengths / Areas for Improvement.
+  static func apiContent(for prompt: TradeAISuggestedPrompt) -> String {
+    let focus = focusDirective(for: prompt.id)
+    return """
+    \(responseFormat(for: prompt.id))
 
-    Respond in 100–250 words maximum. No walls of text. No generic ChatGPT filler.
-    Every sentence must be specific to THIS trade.
+    SPECIALIZED FOCUS FOR THIS REQUEST:
+    \(focus)
 
-    Use EXACTLY these markdown headings:
-
-    ## Verdict
-    One sentence. Start with one of: 🟢 / 🟡 / 🔴 then a blunt coach verdict.
-    Examples: "🟢 Strong trade, weak exit." / "🟡 Good idea, poor execution." / "🔴 Low-quality setup."
-
-    ## Biggest Insight
-    1–2 sentences. Highest-impact observation only.
-
-    ## Key Improvements
-    Maximum 3 short bullet points. Specific and actionable.
-
-    ## Next Trade Focus
-    Exactly one sentence, the single highest-priority fix for the next trade.
+    Trader selected: \(prompt.title)
     """
+  }
 
-    static func apiContent(for prompt: TradeAISuggestedPrompt) -> String {
-        let focus = focusDirective(for: prompt.id)
-        return """
-        \(structuredFormatInstructions)
+  static func apiContentForCustomQuestion(_ question: String) -> String {
+    """
+    RESPONSE FORMAT (this reply only):
+    Answer the trader's question directly in natural coach prose.
+    Use short paragraphs or tight bullets as needed (max ~280 words).
+    Do NOT force Verdict / Biggest Insight headings unless they genuinely help readability.
 
-        SPECIALIZED FOCUS FOR THIS REQUEST:
-        \(focus)
+    Trader question:
+    \(question)
+    """
+  }
 
-        Trader selected: \(prompt.title)
-        """
+  private static func responseFormat(for promptID: String) -> String {
+    switch promptID {
+    case "mistakes", "actions":
+      return improvementResponseFormat
+    case "journal":
+      return journalResponseFormat
+    default:
+      return standardCoachResponseFormat
     }
+  }
 
-    static func apiContentForCustomQuestion(_ question: String) -> String {
-        """
-        You are an experienced trading coach reviewing one trade.
+  private static let standardCoachResponseFormat = """
+  RESPONSE FORMAT (this reply only):
+  Ignore any prior templates like Summary / Strengths / Areas for Improvement.
 
-        Answer the trader's question directly.
-        Stay trading-focused, concise, and practical.
-        Maximum 250 words unless a slightly longer answer is truly necessary.
-        Prefer short paragraphs or tight bullets. No filler. No homework tone.
+  Respond in 120–280 words. No walls of text. Do not recap journal statistics unless a number directly supports your point.
 
-        Trader question:
-        \(question)
-        """
+  Use EXACTLY these markdown headings on their own lines with a blank line before each section body:
+
+  ## Verdict
+  One sentence. Start with 🟢 or 🟡 or 🔴 then a blunt coach verdict.
+
+  ## Biggest Insight
+  1–2 sentences. Highest-impact observation only.
+
+  ## Key Improvements
+  Up to 3 bullet lines starting with "- ".
+
+  ## Next Trade Focus
+  Exactly one sentence.
+  """
+
+  private static let improvementResponseFormat = """
+  RESPONSE FORMAT (this reply only):
+  Use EXACTLY these markdown headings (no Verdict section). Blank line between sections.
+
+  ## Biggest Insight
+  1–2 short paragraphs. The single highest-impact improvement theme for THIS trade.
+
+  ## Key Improvements
+  Number exactly 3 items. Each item MUST be one line in this form:
+  1. **Short title** — What to change, why it matters for this trade, and how to apply it next time.
+
+  ## Next Trade Focus
+  One sentence — the #1 habit to practice on the next similar trade.
+
+  When a chart screenshot is attached, anchor at least one numbered improvement in visible entry, stop, target, or structure.
+  """
+
+  private static let journalResponseFormat = """
+  RESPONSE FORMAT (this reply only):
+  Use these headings with blank lines between sections:
+
+  ## Verdict
+  One neutral sentence summarizing outcome quality.
+
+  ## Biggest Insight
+  Factual session summary in 2–3 sentences.
+
+  ## Key Improvements
+  Up to 2 factual process notes (bullets with "- ").
+
+  ## Next Trade Focus
+  One sentence takeaway for the next session.
+  """
+
+  private static func focusDirective(for promptID: String) -> String {
+    switch promptID {
+    case "analyze":
+      return """
+      Give a full coach review of this trade.
+      Lead with the sharpest insight; do not narrate every field.
+      Combine chart evidence (when present), psychology check-in, rules evaluation, and history briefly.
+      """
+    case "winning":
+      return """
+      Compare this trade ONLY against the trader's winning / higher-quality historical patterns
+      (when history is available). Focus on what winners do that this trade did or missed.
+      """
+    case "losing":
+      return """
+      Compare this trade ONLY against the trader's losing / lower-quality historical patterns
+      (when history is available). Call out shared failure modes and how to break them.
+      """
+    case "mistakes":
+      return """
+      Improvement coaching only — what could have been done better on THIS trade.
+      Prioritize execution, management, risk, and plan deviation over repeating P&L or win-rate stats.
+      Explain what to improve, why it matters, and how to apply it next time.
+      Never invent chart details or assume unevaluated trading rules were followed.
+      """
+    case "risk":
+      return """
+      Focus ONLY on risk management: size, RR, stop discipline, asymmetric outcomes, and whether risk matched the setup.
+      """
+    case "execution":
+      return """
+      Rate execution quality.
+      In Verdict, include an explicit score like "Execution 7/10," after the emoji when scoreable from data and/or chart.
+      Cover entry, management, and exit under Biggest Insight / Key Improvements.
+      """
+    case "emotional":
+      return """
+      Focus ONLY on psychology / emotional process inferable from data (impulse entries, early exits, size vs RR).
+      Do not invent feelings not supported by evidence.
+      """
+    case "plan":
+      return """
+      Evaluate plan and rules adherence from strategy, session, RR, notes, and evaluated TRADING RULES data only.
+      Do not assume compliance when rules were not evaluated.
+      """
+    case "journal":
+      return """
+      Write an objective journal summary of what happened, facts first, then a short coach takeaway.
+      """
+    case "actions":
+      return """
+      Give exactly 3 action items for the next similar trade using the numbered Key Improvements format.
+      Biggest Insight should justify why those three matter.
+      """
+    default:
+      return """
+      Provide concise, trade-specific coaching aligned with the trader's question.
+      """
     }
-
-    private static func focusDirective(for promptID: String) -> String {
-        switch promptID {
-        case "analyze":
-            return """
-            Give a full coach review of this trade using the required structure.
-            Lead with the single most valuable insight, do not narrate every field.
-            """
-        case "winning":
-            return """
-            Compare this trade ONLY against the trader's winning / higher-quality historical patterns
-            (when history is available). Focus on what winners do that this trade did or missed.
-            Do not restate the full trade; contrast outcomes, RR, hold time, and session/setup habits.
-            """
-        case "losing":
-            return """
-            Compare this trade ONLY against the trader's losing / lower-quality historical patterns
-            (when history is available). Call out shared failure modes and how to break them.
-            """
-        case "mistakes":
-            return """
-            Focus ONLY on mistakes. Do not pad with praise.
-            Prioritize process mistakes (entry timing, exit management, size, plan deviation) over hindsight price action.
-            Verdict should reflect mistake severity.
-            """
-        case "risk":
-            return """
-            Focus ONLY on risk management: size, RR, stop discipline, asymmetric outcomes, and whether risk matched the setup.
-            Ignore psychology and journaling advice unless they directly change risk.
-            """
-        case "execution":
-            return """
-            Rate execution quality.
-            In Verdict, include an explicit score like "Execution 7/10, …" after the emoji.
-            Explain entry, management, and exit briefly under Biggest Insight / Key Improvements.
-            """
-        case "emotional":
-            return """
-            Focus ONLY on psychology / emotional trading signals inferable from data
-            (impulse entries, early exits, oversized risk vs RR, revenge patterns vs history).
-            Do not invent feelings not supported by evidence.
-            """
-        case "plan":
-            return """
-            Evaluate whether the trader followed a coherent trading plan based on available fields
-            (strategy tag, session, RR, notes). Call out plan adherence vs improvisation.
-            """
-        case "journal":
-            return """
-            Write an objective journal summary of what happened, facts first, then a short coach takeaway.
-            Still use the Verdict / Biggest Insight / Key Improvements / Next Trade Focus structure.
-            Keep the tone like a clean trade journal entry, not a pep talk.
-            """
-        case "actions":
-            return """
-            Give exactly 3 action items for the next similar trade.
-            Put them as the Key Improvements bullets (exactly 3).
-            Verdict + Biggest Insight should justify why those three matter; Next Trade Focus = the #1 action.
-            """
-        default:
-            return """
-            Provide a concise coach review of this trade using the required structure.
-            """
-        }
-    }
+  }
 }

@@ -262,6 +262,11 @@ struct DemoAIRepository: AIRepository {
         return []
     }
 
+    func renameAICoachConversation(id: AIConversationID, title: String) async throws {
+        _ = id
+        _ = title
+    }
+
     func explainPsychologyCoach(_ request: PsychologyCoachAIRequest) async throws -> PsychologyCoachAIResponse {
         _ = request
         return PsychologyCoachAIResponse(

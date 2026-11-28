@@ -228,6 +228,14 @@ enum FeedBootstrapLoader {
             let engagement = guestPublicMode
                 ? [:]
                 : FeedEngagementCacheRestore.engagementMap(from: cachedEntries)
+            if scope == .following, cursor == nil, !cached.stories.isEmpty {
+                detailCache.seed(stories: cached.stories)
+                FeedStoriesCatalogStore.shared.replace(
+                    catalog: cached.stories,
+                    viewerID: viewerID,
+                    isFullCatalog: true
+                )
+            }
             return (cachedEntries, cached.nextCursor, cached.stories, engagement, [], [], false)
         }
 
@@ -358,6 +366,14 @@ enum FeedBootstrapLoader {
                 let engagement = guestPublicMode
                     ? [:]
                     : FeedEngagementCacheRestore.engagementMap(from: cachedEntries)
+                if scope == .following, cursor == nil, !guestPublicMode, !cached.stories.isEmpty {
+                    detailCache.seed(stories: cached.stories)
+                    FeedStoriesCatalogStore.shared.replace(
+                        catalog: cached.stories,
+                        viewerID: viewerID,
+                        isFullCatalog: true
+                    )
+                }
                 return (cachedEntries, cached.nextCursor, cached.stories, engagement, [], [], false)
             }
             if BackendV2RpcCompat.isRpcUnavailable(error, rpcName: rpcName) {
@@ -441,6 +457,15 @@ enum FeedBootstrapLoader {
         }
 
         let engagement = guestPublicMode ? [:] : applied.engagementByTarget
+
+        if scope == .following, cursor == nil, !guestPublicMode, !applied.stories.isEmpty {
+            detailCache.seed(stories: applied.stories)
+            FeedStoriesCatalogStore.shared.replace(
+                catalog: applied.stories,
+                viewerID: viewerID,
+                isFullCatalog: true
+            )
+        }
 
         return (
             entries,

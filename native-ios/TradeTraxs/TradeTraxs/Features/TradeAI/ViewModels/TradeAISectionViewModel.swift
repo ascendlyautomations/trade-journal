@@ -297,7 +297,19 @@ final class TradeAISectionViewModel {
         let focus: String
         switch promptKey {
         case "mistakes":
-            focus = "Exit timing drifted from the plan, that was the costly mistake."
+            focus = "Exit timing drifted from plan, that was the highest-leverage fix."
+            return """
+            ## Biggest Insight
+            \(focus) You asked: \(prompt).
+
+            ## Key Improvements
+            1. **Define exits first** — Pre-write invalidation and target before entry so management is not improvised.
+            2. **Size after RR** — Match contracts to planned stop distance, not how confident you feel after entry.
+            3. **Use the chart** — Mark structure on the screenshot and only move stops when that level actually breaks.
+
+            ## Next Trade Focus
+            Pre-commit the exit and do not change it mid-trade without a written reason tied to structure.
+            """
         case "execution":
             focus = "Execution 6/10, entry was fine; management and exit were soft."
         case "risk":

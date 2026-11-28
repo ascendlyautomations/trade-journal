@@ -211,7 +211,7 @@ final class MessagesHomeViewModel {
             navigationCoordinator.pushHome(.psychologyCoach)
         case "general_trade":
             GeneralTradeCoachSessionStore.shared.noteReopenConversation(id: item.id)
-            navigationCoordinator.pushHome(.generalTradeCoach)
+            navigationCoordinator.pushMessages(.tradeAIConversation(item.id, tradeID: nil))
         case "trade":
             if let tradeID = item.tradeID {
                 navigationCoordinator.pushMessages(

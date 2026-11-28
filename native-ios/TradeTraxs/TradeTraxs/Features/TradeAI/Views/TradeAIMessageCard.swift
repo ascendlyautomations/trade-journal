@@ -71,17 +71,13 @@ struct TradeAIMessageCard: View {
 
     @ViewBuilder
     private func coachBody(_ sections: TradeAICoachSections) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
             if let verdict = sections.verdict {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                     Text("Verdict")
                         .experienceStyle(.caption, color: colors.secondaryText)
                         .textCase(.uppercase)
-                    Text(verdict)
-                        .font(.system(.body, design: .default).weight(.semibold))
-                        .foregroundStyle(colors.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
+                    coachMarkdownText(verdict, emphasis: true)
                 }
                 .accessibilityIdentifier("detail.trade.ai.verdict")
             }
@@ -90,23 +86,30 @@ struct TradeAIMessageCard: View {
                 coachSection(title: "Biggest Insight", body: insight)
             }
 
-            if !sections.keyImprovements.isEmpty {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                    Text("Key Improvements")
+            if !sections.strengths.isEmpty {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    Text("Strengths")
                         .experienceStyle(.caption, color: colors.secondaryText)
                         .textCase(.uppercase)
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                        ForEach(Array(sections.keyImprovements.enumerated()), id: \.offset) { _, item in
-                            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                                Text("•")
-                                    .experienceStyle(.body, color: colors.secondaryText)
-                                    .frame(width: 12, alignment: .leading)
-                                Text(item)
-                                    .experienceStyle(.body, color: colors.primaryText)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+                        ForEach(Array(sections.strengths.enumerated()), id: \.offset) { _, item in
+                            improvementRow(item, bullet: "•")
+                        }
+                    }
+                }
+            }
+
+            if !sections.keyImprovements.isEmpty {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    Text("Key Improvements")
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                        .textCase(.uppercase)
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                        ForEach(Array(sections.keyImprovements.enumerated()), id: \.offset) { index, item in
+                            improvementRow(
+                                displayImprovementText(item),
+                                bullet: numberedBullet(for: item, fallbackIndex: index + 1)
+                            )
                         }
                     }
                 }
@@ -119,35 +122,77 @@ struct TradeAIMessageCard: View {
     }
 
     private func coachSection(title: String, body: String) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text(title)
                 .experienceStyle(.caption, color: colors.secondaryText)
                 .textCase(.uppercase)
-            Text(body)
-                .experienceStyle(.body, color: colors.primaryText)
+            coachMarkdownText(body)
+        }
+    }
+
+    private func improvementRow(_ item: String, bullet: String) -> some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            Text(bullet)
+                .experienceStyle(.body, color: colors.secondaryText)
+                .frame(minWidth: 20, alignment: .leading)
+            coachMarkdownText(item)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func displayImprovementText(_ item: String) -> String {
+        let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.range(of: #"^\d+[\.\)]\s+"#, options: .regularExpression) != nil {
+            return trimmed.replacingOccurrences(
+                of: #"^\d+[\.\)]\s+"#,
+                with: "",
+                options: .regularExpression
+            )
+        }
+        return trimmed
+    }
+
+    private func numberedBullet(for item: String, fallbackIndex: Int) -> String {
+        let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let match = trimmed.range(of: #"^\d+[\.\)]"#, options: .regularExpression) {
+            return String(trimmed[match])
+        }
+        return "\(fallbackIndex)."
+    }
+
+    @ViewBuilder
+    private func coachMarkdownText(
+        _ text: String,
+        emphasis: Bool = false,
+        useFullMarkdown: Bool = false
+    ) -> some View {
+        let source = AIGeneratedTextNormalizer.normalize(text)
+        let syntax: AttributedString.MarkdownParsingOptions.InterpretedSyntax =
+            useFullMarkdown ? .full : .inlineOnlyPreservingWhitespace
+        if let attributed = try? AttributedString(
+            markdown: source,
+            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: syntax)
+        ) {
+            Text(attributed)
+                .font(emphasis ? .body.weight(.semibold) : .body)
+                .foregroundStyle(colors.primaryText)
+                .tint(colors.accent)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
+                .lineSpacing(4)
+        } else {
+            Text(source)
+                .font(emphasis ? .body.weight(.semibold) : .body)
+                .foregroundStyle(colors.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .lineSpacing(4)
         }
     }
 
     @ViewBuilder
     private var markdownBody: some View {
-        if let attributed = try? AttributedString(
-            markdown: message.content,
-            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
-        ) {
-            Text(attributed)
-                .font(.body)
-                .foregroundStyle(colors.primaryText)
-                .tint(colors.accent)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-        } else {
-            Text(message.content)
-                .experienceStyle(.body, color: colors.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-        }
+        coachMarkdownText(message.content, useFullMarkdown: true)
     }
 
     private var shouldOfferCollapse: Bool {

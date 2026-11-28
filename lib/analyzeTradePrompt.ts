@@ -290,7 +290,7 @@ Never ask a checklist. Never criticize missing fields.`
 export function buildTradeAnalysisPrompt(
   trade: TradeLike,
   historyContext: AnalyzeTradeHistoryContext | null,
-  options?: { hasScreenshot?: boolean }
+  options?: { hasScreenshot?: boolean; deferOutputFormat?: boolean }
 ) {
   const tradeData = formatTradeDataSection(trade)
   const historyBlock = historyContext?.summaryText
@@ -312,11 +312,15 @@ ${tradeData}
 
 Coaching priorities:
 1. Lead with analysis of what IS available (results, RR, timing, session, history comparisons).
-2. Reference historical performance when relevant (win rate, avg RR, session/ticker/strategy patterns).
+2. Reference historical performance only when it sharpens the coaching point — not as filler recap.
 3. Give specific, actionable recommendations — not generic trading advice.
-4. Only in "Questions That Could Improve Future Analysis", optionally ask 1–2 conversational questions about missing context that would materially help — never scold or list missing fields.
+${
+  options?.deferOutputFormat
+    ? `4. The latest user message defines RESPONSE FORMAT and the trader's question — follow that format exactly. Do not default to Summary / Strengths / Areas for Improvement templates.`
+    : `4. Only in "Questions That Could Improve Future Analysis", optionally ask 1–2 conversational questions about missing context that would materially help — never scold or list missing fields.
 
 Do NOT use old section names like "WHAT YOU DID WRONG" or "FINAL VERDICT".
-Follow the markdown heading format from your system instructions exactly.
+Follow the markdown heading format from your system instructions exactly.`
+}
 `.trim()
 }

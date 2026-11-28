@@ -54,6 +54,9 @@ export async function POST(req: Request) {
     return entitlement.response
   }
 
+  const traceId = crypto.randomUUID().slice(0, 8)
+  let tracePhase = "start"
+
   try {
     const body = await req.json()
     const facts = body?.facts as PsychologyCoachFactsPayload | undefined
@@ -84,6 +87,7 @@ export async function POST(req: Request) {
       openAiMode === "explain" &&
       body?.createConversation !== false
     ) {
+      tracePhase = "create_conversation"
       const scope = facts.scope ?? {}
       const created = await createPsychologyConversation(supabaseServiceRole, user.id, {
         title: `Psychology Coach · ${scope.label ?? "Analytics"}`,
@@ -97,7 +101,14 @@ export async function POST(req: Request) {
         },
         factsSnapshot: facts as unknown as Record<string, unknown>,
       })
-      if (created.conversationId) conversationId = created.conversationId
+      if (created.conversationId) {
+        conversationId = created.conversationId
+      } else if (created.error) {
+        console.warn("[PsychologyCoachTrace] conversation.create_failed", {
+          traceId,
+          code: created.error.slice(0, 80),
+        })
+      }
     }
 
     const assistantMessageId =
@@ -106,6 +117,7 @@ export async function POST(req: Request) {
         : crypto.randomUUID()
 
     if (persistCachedOnly) {
+      tracePhase = "persist_cached"
       let persistError: string | undefined
       if (conversationId) {
         const persisted = await appendAssistantMessageIdempotent(
@@ -121,6 +133,14 @@ export async function POST(req: Request) {
         )
         persistError = persisted.error
       }
+      console.info("[PsychologyCoachTrace] request.done", {
+        traceId,
+        phase: tracePhase,
+        status: 200,
+        replyLen: cachedReply.length,
+        hasConversation: Boolean(conversationId),
+        persistCachedOnly: true,
+      })
       return NextResponse.json({
         reply: cachedReply,
         usage: null,
@@ -131,6 +151,7 @@ export async function POST(req: Request) {
       })
     }
 
+    tracePhase = "openai"
     const openAiMessages = buildPsychologyCoachOpenAiMessages(facts, openAiMode, messages)
 
     const maxCompletionTokens =
@@ -150,15 +171,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No response generated" }, { status: 500 })
     }
 
-    await logAiUsage(supabaseServiceRole, {
-      userId: user.id,
-      conversationId: conversationId || null,
-      route: "psychology-coach",
-      model: openAiCoachModel(),
-      promptTokens: completion.usage?.prompt_tokens ?? null,
-      completionTokens: completion.usage?.completion_tokens ?? null,
-      totalTokens: completion.usage?.total_tokens ?? null,
-    })
+    tracePhase = "log_usage"
+    try {
+      await logAiUsage(supabaseServiceRole, {
+        userId: user.id,
+        conversationId: conversationId || null,
+        route: "psychology-coach",
+        model: openAiCoachModel(),
+        promptTokens: completion.usage?.prompt_tokens ?? null,
+        completionTokens: completion.usage?.completion_tokens ?? null,
+        totalTokens: completion.usage?.total_tokens ?? null,
+      })
+    } catch (usageError) {
+      console.warn("[PsychologyCoachTrace] usage.log_failed", {
+        traceId,
+        message: usageError instanceof Error ? usageError.message.slice(0, 120) : "unknown",
+      })
+    }
 
     let persistError: string | undefined
     if (conversationId) {
@@ -222,6 +251,15 @@ export async function POST(req: Request) {
       )
     }
 
+    console.info("[PsychologyCoachTrace] request.done", {
+      traceId,
+      phase: tracePhase,
+      status: 200,
+      replyLen: reply.length,
+      hasConversation: Boolean(conversationId),
+      persistCachedOnly: false,
+      persistError: persistError ?? null,
+    })
     return NextResponse.json({
       reply,
       usage: completion.usage ?? null,
@@ -231,6 +269,12 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     const mapped = mapOpenAiErrorToHttp(error)
+    console.warn("[PsychologyCoachTrace] request.error", {
+      traceId,
+      phase: tracePhase,
+      status: mapped.status,
+      code: mapped.body.code ?? null,
+    })
     if (mapped.status >= 500 || mapped.body.code) {
       console.error("[psychology-coach]", error)
     }

@@ -304,6 +304,42 @@ extension DefaultAIRepository {
         }
     }
 
+    func renameAICoachConversation(id: AIConversationID, title: String) async throws {
+        try await ensureThirdPartyAIConsent()
+        guard let transport = supabase.transport else {
+            throw AppError.unknown(message: "Network transport unavailable")
+        }
+
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw AppError.validation(message: "Enter a conversation name.")
+        }
+
+        struct Body: Encodable { var title: String }
+        struct Response: Decodable { var error: String?; var code: String? }
+
+        let data = try transport.encodeJSON(Body(title: trimmed))
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/ai/conversations/\(id.rawValue)",
+            method: .patch,
+            body: data,
+            requiresAuthentication: true,
+            acceptsNonSuccessStatusCodes: true
+        )
+
+        if (200 ... 299).contains(response.statusCode) {
+            return
+        }
+
+        let decoded = try? JSONDecoder().decode(Response.self, from: response.data)
+        let message = decoded?.error ?? "Could not rename this conversation."
+        if response.statusCode == 404 {
+            throw AppError.unknown(message: message)
+        }
+        throw AppError.validation(message: message)
+    }
+
 }
 
 // MARK: - BFF wire types

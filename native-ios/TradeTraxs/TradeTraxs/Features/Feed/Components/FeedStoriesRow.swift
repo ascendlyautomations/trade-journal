@@ -32,6 +32,12 @@ struct FeedStoriesRow: View {
         return stories.first { $0.authorProfileID == viewerID }
     }
 
+    private var storyCatalog: [Story] {
+        let fromStore = FeedStoriesCatalogStore.shared.catalog
+        if !fromStore.isEmpty { return fromStore }
+        return stories
+    }
+
     private var otherStories: [Story] {
         guard let viewerID else { return stories }
         return stories.filter { $0.authorProfileID != viewerID }
@@ -59,7 +65,7 @@ struct FeedStoriesRow: View {
                     ZStack {
                         if hasActiveStory {
                             StoryAvatarRingStroke(
-                                isHighlighted: true,
+                                isHighlighted: authorShowsUnreadRing(viewerID),
                                 diameter: StoryAvatarRingStroke.ringDiameter(avatarSize: 58)
                             )
                         } else {
@@ -141,8 +147,16 @@ struct FeedStoriesRow: View {
     @ViewBuilder
     private func ring(for story: Story) -> some View {
         StoryAvatarRingStroke(
-            isHighlighted: !story.viewerHasSeen,
+            isHighlighted: authorShowsUnreadRing(story.authorProfileID),
             diameter: StoryAvatarRingStroke.ringDiameter(avatarSize: 58)
+        )
+    }
+
+    private func authorShowsUnreadRing(_ authorID: ProfileID) -> Bool {
+        ActiveStorySemantics.authorHasUnviewedStories(
+            authorID: authorID,
+            catalog: storyCatalog,
+            hasViewed: { StoryViewerViewRecords.shared.hasViewed($0) }
         )
     }
 }

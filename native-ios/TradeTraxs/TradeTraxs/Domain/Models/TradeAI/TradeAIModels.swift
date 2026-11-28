@@ -259,12 +259,14 @@ nonisolated struct TradeAIPersistTurnRequest: Sendable {
 nonisolated struct TradeAICoachSections: Hashable, Sendable {
     var verdict: String?
     var biggestInsight: String?
+    var strengths: [String]
     var keyImprovements: [String]
     var nextTradeFocus: String?
 
     var isStructured: Bool {
         verdict != nil
             || biggestInsight != nil
+            || !strengths.isEmpty
             || !keyImprovements.isEmpty
             || nextTradeFocus != nil
     }
@@ -279,6 +281,7 @@ nonisolated enum TradeAICoachResponseParser {
 
         var verdict: String?
         var insight: String?
+        var strengths: [String] = []
         var improvements: [String] = []
         var nextFocus: String?
         var current: SectionKey?
@@ -293,20 +296,23 @@ nonisolated enum TradeAICoachResponseParser {
 
             switch current {
             case .verdict:
-                verdict = append(verdict, line)
+                verdict = appendBlock(verdict, line)
             case .biggestInsight:
-                insight = append(insight, line)
+                insight = appendBlock(insight, line)
+            case .strengths:
+                strengths.append(contentsOf: listLines(from: line))
             case .keyImprovements:
-                improvements.append(contentsOf: bulletLines(from: line))
+                improvements.append(contentsOf: listLines(from: line))
             case .nextTradeFocus:
-                nextFocus = append(nextFocus, line)
+                nextFocus = appendBlock(nextFocus, line)
             }
         }
 
         let sections = TradeAICoachSections(
             verdict: trim(verdict),
             biggestInsight: trim(insight),
-            keyImprovements: Array(improvements.prefix(3)),
+            strengths: Array(strengths.prefix(5)),
+            keyImprovements: Array(improvements.prefix(5)),
             nextTradeFocus: trim(nextFocus)
         )
         return sections.isStructured ? sections : nil
@@ -315,6 +321,7 @@ nonisolated enum TradeAICoachResponseParser {
     private enum SectionKey: String {
         case verdict
         case biggestInsight
+        case strengths
         case keyImprovements
         case nextTradeFocus
 
@@ -328,12 +335,17 @@ nonisolated enum TradeAICoachResponseParser {
                 .lowercased()
 
             switch stripped {
-            case "verdict":
+            case "verdict", "final verdict":
                 return .verdict
-            case "biggest insight", "biggestinsight":
+            case "biggest insight", "biggestinsight", "summary":
                 return .biggestInsight
-            case "key improvements", "keyimprovements", "improvements":
+            case "strengths", "what went well":
+                return .strengths
+            case "key improvements", "keyimprovements", "improvements",
+                 "areas for improvement", "recommendations":
                 return .keyImprovements
+            case "behavior observed":
+                return .biggestInsight
             case "next trade focus", "nexttradefocus", "next focus":
                 return .nextTradeFocus
             default:
@@ -342,17 +354,23 @@ nonisolated enum TradeAICoachResponseParser {
         }
     }
 
-    private static func bulletLines(from line: String) -> [String] {
-        let cleaned = line
+    private static func listLines(from line: String) -> [String] {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        if trimmed.range(of: #"^\d+[\.\)]\s+"#, options: .regularExpression) != nil {
+            return [trimmed]
+        }
+
+        let cleaned = trimmed
             .replacingOccurrences(of: #"^[-*•]\s+"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"^\d+[\.\)]\s+"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? [] : [cleaned]
     }
 
-    private static func append(_ existing: String?, _ line: String) -> String {
+    private static func appendBlock(_ existing: String?, _ line: String) -> String {
         if let existing, !existing.isEmpty {
-            return existing + " " + line
+            return existing + "\n\n" + line
         }
         return line
     }
@@ -361,6 +379,13 @@ nonisolated enum TradeAICoachResponseParser {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+nonisolated enum GeneralTradeAIAPIMessageBuilder {
+    /// Portfolio turns use display text only, not single-trade preset expansion.
+    static func messagesForAPI(from messages: [TradeAIMessage]) -> [TradeAIMessage] {
+        messages
     }
 }
 

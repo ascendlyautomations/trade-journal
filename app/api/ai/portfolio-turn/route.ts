@@ -21,17 +21,13 @@ import {
   resolveOpenAiImageUrls,
   tradeIdsFromAttachments,
 } from "@/lib/server/ai/aiCoachAttachmentResolver"
-import { ANALYZE_TRADE_SYSTEM_PROMPT } from "@/lib/analyzeTradePrompt"
+import {
+  PORTFOLIO_TURN_SYSTEM_PROMPT,
+  buildPortfolioTurnPrimaryPrompt,
+} from "@/lib/generalTradeCoachPrompt"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
-
-const PORTFOLIO_SYSTEM = `${ANALYZE_TRADE_SYSTEM_PROMPT}
-
-Additional scope for portfolio / history coaching:
-- Answer questions about patterns, setups, psychology, and rule adherence across the selected scope only.
-- You may use conversational follow-up formatting when the user asks follow-up questions.
-- Never invent statistics; rely on supplied aggregates, CSV rows, and stated limitations.`
 
 export async function POST(req: Request) {
   const { user } = await getRouteUserAuth(req)
@@ -125,11 +121,6 @@ export async function POST(req: Request) {
     scope
   )
 
-  const limitations =
-    portfolio.limitations.length > 0
-      ? `\nLIMITATIONS:\n${portfolio.limitations.map((l) => `- ${l}`).join("\n")}`
-      : ""
-
   const userAttachments = parseAttachments(userMsg.attachments)
   const attachedTradeIds = tradeIdsFromAttachments(userAttachments)
   const attachedTradesBlock =
@@ -141,21 +132,22 @@ export async function POST(req: Request) {
         )
       : ""
 
-  const primaryPrompt = `Analyze the trader's journal for the selected scope.
+  const priorTurnCount = (body.messages ?? []).filter(
+    (m) => m && (m.role === "user" || m.role === "assistant")
+  ).length
 
-${portfolio.statisticsBlock}
+  const userQuestion =
+    userMsg.openaiContent?.trim() || userMsg.displayContent.trim()
 
-TRADE ROWS (CSV, bounded):
-${portfolio.tradesCsvBlock}
-${limitations}
-${
-  attachedTradesBlock
-    ? `\nEXPLICITLY ATTACHED TRADES (full context — screenshots only when supplied for these trades, not for the full history CSV):\n${attachedTradesBlock}`
-    : ""
-}
-
-User question / instruction (untrusted user content):
-${userMsg.openaiContent?.trim() || userMsg.displayContent.trim()}`
+  const primaryPrompt = buildPortfolioTurnPrimaryPrompt({
+    scopeLabel: portfolio.scopeLabel,
+    statisticsBlock: portfolio.statisticsBlock,
+    tradesCsvBlock: portfolio.tradesCsvBlock,
+    limitations: portfolio.limitations,
+    attachedTradesBlock: attachedTradesBlock || undefined,
+    userQuestion,
+    hasPriorTurns: priorTurnCount > 0,
+  })
 
   const attachmentUrls = await resolveOpenAiImageUrls(
     supabaseServiceRole,
@@ -205,7 +197,7 @@ ${userMsg.openaiContent?.trim() || userMsg.displayContent.trim()}`
 
   try {
     const completion = await runTradeAiCompletion({
-      systemPrompt: PORTFOLIO_SYSTEM,
+      systemPrompt: PORTFOLIO_TURN_SYSTEM_PROMPT,
       primaryUserPrompt: primaryPrompt,
       primaryImages,
       priorMessages,

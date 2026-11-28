@@ -73,7 +73,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .tradingScorecard: return "tradingScorecard"
         case .psychologyCoach: return "psychologyCoach"
         case .generalTradeCoach: return "generalTradeCoach"
-        case .tradeAIConversation: return "tradeAIConversation"
+        case .tradeAIConversation(_, _): return "tradeAIConversation"
         case .tradeAIHub: return "tradeAIHub"
         case .checkInHistory: return "checkInHistory"
         case .checkInDay: return "checkInDay"
@@ -124,7 +124,7 @@ nonisolated enum NavigationPathProbeFormatter {
     private static func messagesRoute(_ route: MessagesRoute) -> String {
         switch route {
         case .tradeAIHub: return "tradeAIHub"
-        case .tradeAIConversation: return "tradeAIConversation"
+        case .tradeAIConversation(_, _): return "tradeAIConversation"
         case .thread: return "thread"
         case .sharedTrade: return "sharedTrade"
         case .sharedPost: return "sharedPost"

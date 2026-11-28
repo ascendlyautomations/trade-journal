@@ -36,10 +36,15 @@ final class TradeAIExperienceTests: XCTestCase {
     func testEveryPresetHasSpecializedCoachPrompt() {
         for preset in TradeAISuggestedPrompts.all {
             let content = TradeAICoachPrompts.apiContent(for: preset)
-            XCTAssertTrue(content.contains("## Verdict"), preset.id)
-            XCTAssertTrue(content.contains("100–250"), preset.id)
+            XCTAssertTrue(content.contains("RESPONSE FORMAT"), preset.id)
             XCTAssertTrue(content.contains("SPECIALIZED FOCUS"), preset.id)
             XCTAssertFalse(content.isEmpty, preset.id)
+            if preset.id == "mistakes" || preset.id == "actions" {
+                XCTAssertTrue(content.contains("## Key Improvements"), preset.id)
+                XCTAssertFalse(content.contains("## Verdict"), preset.id)
+            } else if preset.id != "journal" {
+                XCTAssertTrue(content.contains("## Verdict"), preset.id)
+            }
         }
 
         let custom = TradeAICoachPrompts.apiContentForCustomQuestion("Was my entry early?")
@@ -68,6 +73,26 @@ final class TradeAIExperienceTests: XCTestCase {
         XCTAssertTrue(sections?.biggestInsight?.contains("1R") == true)
         XCTAssertEqual(sections?.keyImprovements.count, 3)
         XCTAssertTrue(sections?.nextTradeFocus?.contains("Pre-commit") == true)
+    }
+
+    func testCoachResponseParserMapsLegacyHeadings() {
+        let legacy = """
+        ## Summary
+        You exited early on a valid continuation.
+
+        ## Strengths
+        - Defined risk before entry.
+
+        ## Areas for Improvement
+        - Hold to invalidation unless structure breaks.
+
+        ## Recommendations
+        - Pre-commit exit rules.
+        """
+        let sections = TradeAICoachResponseParser.parse(legacy)
+        XCTAssertTrue(sections?.biggestInsight?.contains("continuation") == true)
+        XCTAssertEqual(sections?.strengths.count, 1)
+        XCTAssertGreaterThanOrEqual(sections?.keyImprovements.count ?? 0, 2)
     }
 
     func testMapperBuildsBFFTradePayload() {
@@ -565,6 +590,8 @@ private final class MockAIRepository: AIRepository, @unchecked Sendable {
     }
 
     func loadConversationInbox(limit: Int) async throws -> [TradeAIConversationInboxItem] { [] }
+
+    func renameAICoachConversation(id: AIConversationID, title: String) async throws {}
 
     func explainPsychologyCoach(_ request: PsychologyCoachAIRequest) async throws -> PsychologyCoachAIResponse {
         PsychologyCoachAIResponse(reply: reply)

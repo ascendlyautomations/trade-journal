@@ -8,7 +8,7 @@ export { ANALYZE_TRADE_SYSTEM_PROMPT }
 
 export function buildAuthoritativeTradeAnalysisPrompt(
   context: AuthoritativeTradeContext,
-  options?: { hasScreenshot?: boolean }
+  options?: { hasScreenshot?: boolean; deferOutputFormat?: boolean }
 ): string {
   const historySummary = context.historyContextText.startsWith("TRADER HISTORY")
     ? context.historyContextText.replace(/^TRADER HISTORY:\s*/, "")
@@ -19,7 +19,10 @@ export function buildAuthoritativeTradeAnalysisPrompt(
     historySummary
       ? { summaryText: historySummary }
       : null,
-    { hasScreenshot: options?.hasScreenshot }
+    {
+      hasScreenshot: options?.hasScreenshot,
+      deferOutputFormat: options?.deferOutputFormat,
+    }
   )
 
   return `${base}

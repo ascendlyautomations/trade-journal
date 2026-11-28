@@ -318,6 +318,37 @@ export async function loadTradeConversationId(
   return data?.id ? String(data.id) : null
 }
 
+export async function updateConversationTitle(
+  db: Db,
+  userId: string,
+  conversationId: string,
+  title: string
+): Promise<{ ok: boolean; error?: string; code?: string }> {
+  const trimmed = title.trim()
+  if (!trimmed) {
+    return { ok: false, error: "Title is required", code: "invalid_title" }
+  }
+  if (trimmed.length > 120) {
+    return { ok: false, error: "Title is too long", code: "invalid_title" }
+  }
+
+  const { data, error } = await db
+    .from(conversations)
+    .update({ title: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", conversationId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle()
+
+  if (error) {
+    return { ok: false, error: error.message, code: "update_failed" }
+  }
+  if (!data) {
+    return { ok: false, error: "Conversation not found", code: "not_found" }
+  }
+  return { ok: true }
+}
+
 export async function listConversationInbox(
   db: Db,
   userId: string,

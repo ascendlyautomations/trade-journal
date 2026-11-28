@@ -70,6 +70,7 @@ struct TradeAIConversationView: View {
         .experienceScreenBackground()
         .navigationTitle("Trade AI")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.loadHistoryIfNeeded()
         }
