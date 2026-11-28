@@ -41,7 +41,7 @@ final class TradingRulesAnalyticsScopeController {
     func hydrate(profileID: ProfileID, accounts: [TradingAccount]) {
         self.profileID = profileID
         self.accounts = accounts
-        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+        if TraxsProPreviewSession.shared.isAnyPreviewActive {
             if !traxsProPreviewInitialScopeApplied {
                 applyTraxsProPreviewScopeDefaults()
                 traxsProPreviewInitialScopeApplied = true
@@ -258,7 +258,9 @@ final class TradingRulesAnalyticsScopeController {
         generation: UInt64
     ) async {
         guard let profileID else { return }
-        let usesSampleData = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+        let usesSampleData = TradingRulesAnalyticsPreviewSupport.usesBundledSampleDataPlane(
+            detailCache: dependencies.detailCache
+        )
         if !usesSampleData {
             persistScope(profileID: profileID)
         }
@@ -298,7 +300,7 @@ final class TradingRulesAnalyticsScopeController {
 
     private func publishScopeChange() {
         guard let profileID else { return }
-        if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+        if !TraxsProPreviewSession.shared.isAnyPreviewActive {
             persistScope(profileID: profileID)
         }
         if let dashboard = TradingRulesCompliancePresentationBridge.dashboardViewModel,

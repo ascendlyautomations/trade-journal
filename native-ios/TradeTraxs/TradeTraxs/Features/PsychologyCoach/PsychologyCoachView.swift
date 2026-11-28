@@ -11,11 +11,11 @@ final class PsychologyCoachViewModel {
     }
 
     private(set) var phase: Phase = .idle
-    private(set) var messages: [PsychologyCoachAIMessage] = []
-    private(set) var aiReply: String?
+    private(set) var messages: [AICoachConversationMessage] = []
+    private(set) var conversationID: AIConversationID?
+    private(set) var facts: PsychologyCoachFacts
 
     private let ai: any AIRepository
-    private let facts: PsychologyCoachFacts
 
     init(facts: PsychologyCoachFacts, ai: any AIRepository) {
         self.facts = facts
@@ -23,44 +23,107 @@ final class PsychologyCoachViewModel {
     }
 
     var deterministicFallback: String {
-        PsychologyCoachDeterministicCoach.buildSummary(from: facts).overview
+        facts.deterministicCoach.overview
     }
 
-    func loadInitialExplanation(forceRefresh: Bool = false) async {
-        if !forceRefresh,
-           let cached = PsychologyCoachSessionStore.shared.cachedAIExplanation,
-           PsychologyCoachSessionStore.shared.cachedAIHash == facts.factsHash {
-            aiReply = cached
-            phase = .ready
-            return
-        }
+    var isLoading: Bool {
+        if case .loading = phase { return true }
+        return false
+    }
 
-        if ExploreModeSupport.isActive {
-            aiReply = deterministicFallback
+    func startNewConversation() async {
+        PsychologyCoachSessionStore.shared.clearReopenConversation()
+        conversationID = nil
+        messages = []
+        await bootstrap(forceRefresh: true)
+    }
+
+    func bootstrap(forceRefresh: Bool = false) async {
+        if TraxsProPreviewSession.shared.activePreviewEnvironment != nil
+            || ExploreModeSupport.isActive
+        {
+            messages = [
+                AICoachConversationMessage(role: .assistant, content: deterministicFallback, promptKey: "preview")
+            ]
             phase = .ready
             return
         }
 
         phase = .loading
+        defer { PsychologyCoachSessionStore.shared.clearReopenConversation() }
+
         do {
+            if let reopen = PsychologyCoachSessionStore.shared.pendingReopenConversationID {
+                conversationID = reopen
+                let loaded = try await ai.loadConversationMessages(conversationID: reopen)
+                if let snapshot = loaded.0.psychologyFactsSnapshot {
+                    facts = snapshot
+                }
+                messages = loaded.1.map(Self.mapTradeAIMessage)
+                phase = .ready
+                return
+            }
+
+            if !forceRefresh,
+               let cached = PsychologyCoachSessionStore.shared.cachedAIExplanation,
+               PsychologyCoachSessionStore.shared.cachedAIHash == facts.factsHash,
+               conversationID == nil
+            {
+                let assistantId = UUID().uuidString
+                let response = try await ai.explainPsychologyCoach(
+                    PsychologyCoachAIRequest(
+                        facts: facts,
+                        messages: [],
+                        mode: .explain,
+                        conversationID: nil,
+                        createConversation: true,
+                        assistantMessageID: assistantId,
+                        persistCachedOnly: true,
+                        cachedReply: cached
+                    )
+                )
+                if let id = response.conversationID {
+                    conversationID = id
+                }
+                let assistant = AICoachConversationMessage(
+                    id: UUID(uuidString: response.assistantMessageID ?? assistantId) ?? UUID(),
+                    role: .assistant,
+                    content: cached,
+                    promptKey: "explain"
+                )
+                messages = [assistant]
+                phase = .ready
+                return
+            }
+
             let response = try await ai.explainPsychologyCoach(
                 PsychologyCoachAIRequest(
                     facts: facts,
                     messages: [],
-                    mode: .explain
+                    mode: .explain,
+                    conversationID: conversationID,
+                    createConversation: conversationID == nil
                 )
             )
-            aiReply = response.reply
+            if let id = response.conversationID {
+                conversationID = id
+            }
+            let assistant = AICoachConversationMessage(
+                id: UUID(uuidString: response.assistantMessageID ?? "") ?? UUID(),
+                role: .assistant,
+                content: response.reply,
+                promptKey: "explain"
+            )
+            messages = [assistant]
             PsychologyCoachSessionStore.shared.applyCachedAI(
                 explanation: response.reply,
                 factsHash: facts.factsHash
             )
             phase = .ready
         } catch is ThirdPartyAIConsentError {
-            aiReply = nil
+            messages = []
             phase = .idle
         } catch {
-            aiReply = nil
             phase = .failed(UserFacingError.message(for: error))
         }
     }
@@ -69,29 +132,50 @@ final class PsychologyCoachViewModel {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        messages.append(PsychologyCoachAIMessage(role: "user", content: trimmed))
-        if ExploreModeSupport.isActive {
-            messages.append(
-                PsychologyCoachAIMessage(role: "assistant", content: deterministicFallback)
-            )
+        if TraxsProPreviewSession.shared.activePreviewEnvironment != nil || ExploreModeSupport.isActive {
+            let user = AICoachConversationMessage(role: .user, content: trimmed)
+            let assistant = AICoachConversationMessage(role: .assistant, content: deterministicFallback, promptKey: "preview")
+            messages.append(contentsOf: [user, assistant])
             phase = .ready
             return
         }
+
+        let user = AICoachConversationMessage(role: .user, content: trimmed)
+        messages.append(user)
         phase = .loading
 
         do {
+            let apiMessages = messages.map {
+                PsychologyCoachAIMessage(role: $0.role.rawValue, content: $0.content)
+            }
             let response = try await ai.explainPsychologyCoach(
                 PsychologyCoachAIRequest(
                     facts: facts,
-                    messages: messages,
-                    mode: .followUp
+                    messages: apiMessages,
+                    mode: .followUp,
+                    conversationID: conversationID,
+                    createConversation: false,
+                    assistantMessageID: UUID().uuidString,
+                    userMessage: PsychologyCoachAITurnUserMessage(
+                        id: user.id.uuidString,
+                        displayContent: trimmed,
+                        createdAt: ISO8601.string(from: user.createdAt ?? Date())
+                    )
                 )
             )
-            messages.append(PsychologyCoachAIMessage(role: "assistant", content: response.reply))
-            aiReply = response.reply
+            if let id = response.conversationID {
+                conversationID = id
+            }
+            let assistant = AICoachConversationMessage(
+                id: UUID(uuidString: response.assistantMessageID ?? "") ?? UUID(),
+                role: .assistant,
+                content: response.reply,
+                promptKey: "followUp"
+            )
+            messages.append(assistant)
             phase = .ready
         } catch is ThirdPartyAIConsentError {
-            if messages.last?.role == "user", messages.last?.content == trimmed {
+            if messages.last?.role == .user, messages.last?.content == trimmed {
                 messages.removeLast()
             }
             phase = .ready
@@ -99,97 +183,85 @@ final class PsychologyCoachViewModel {
             phase = .failed(UserFacingError.message(for: error))
         }
     }
+
+    private static func mapTradeAIMessage(_ message: TradeAIMessage) -> AICoachConversationMessage {
+        let role: AICoachConversationRole =
+            message.role == .assistant ? .assistant : .user
+        return AICoachConversationMessage(
+            id: UUID(uuidString: message.id) ?? UUID(),
+            role: role,
+            content: message.content,
+            promptKey: message.promptKey,
+            createdAt: message.createdAt
+        )
+    }
 }
 
 struct PsychologyCoachView: View {
     @State private var viewModel: PsychologyCoachViewModel
-    @State private var questionText = ""
-
+    @State private var draft = ""
     @Environment(\.themeColors) private var colors
 
     init(facts: PsychologyCoachFacts, ai: any AIRepository) {
-        _viewModel = State(initialValue: PsychologyCoachViewModel(facts: facts, ai: ai))
+        _viewModel = State(
+            initialValue: PsychologyCoachViewModel(facts: facts, ai: ai)
+        )
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
+        Group {
+            if case .failed(let message) = viewModel.phase, viewModel.messages.isEmpty {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                    Text("Your patterns are computed from your journal. The coach explains them, it never invents statistics.")
-                        .experienceStyle(.footnote, color: colors.tertiaryText)
-
-                    ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.psychologyCoach)
-
-                    contentBlock
-                    ForEach(Array(viewModel.messages.enumerated()), id: \.offset) { index, message in
-                        if message.role == "assistant" {
-                            coachBubble(message.content)
-                        } else {
-                            userBubble(message.content)
-                        }
+                    Text("Coach unavailable")
+                        .experienceStyle(.headline)
+                    Text(message)
+                        .experienceStyle(.body, color: colors.secondaryText)
+                    ExperienceButton(title: "Try again", kind: .primary) {
+                        Task { await viewModel.bootstrap(forceRefresh: true) }
                     }
                 }
                 .padding(ExperienceSpacing.md)
+            } else {
+                AICoachConversationView(
+                    navigationTitle: "Psychology Coach",
+                    assistantTitle: "Psychology Coach",
+                    disclaimer: scopeSubtitle,
+                    messages: viewModel.messages,
+                    isLoading: viewModel.isLoading,
+                    draft: $draft,
+                    isSendEnabled: !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && !viewModel.isLoading,
+                    onSend: {
+                        let text = draft
+                        draft = ""
+                        Task { await viewModel.sendFollowUp(text) }
+                    },
+                    usesPsychologyStructuredParsing: true
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("New conversation") {
+                            Task { await viewModel.startNewConversation() }
+                        }
+                        .disabled(viewModel.isLoading)
+                    }
+                }
+                .safeAreaInset(edge: .bottom) {
+                    ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.psychologyCoach)
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.bottom, ExperienceSpacing.xs)
+                }
             }
-
-            composer
         }
-        .experienceScreenBackground()
-        .experienceNavigationTitle("Psychology Coach")
-        .task { await viewModel.loadInitialExplanation() }
+        .task {
+            await viewModel.bootstrap()
+        }
         .accessibilityIdentifier("psychologyCoach.view")
     }
 
-    @ViewBuilder
-    private var contentBlock: some View {
-        switch viewModel.phase {
-        case .loading where viewModel.aiReply == nil && viewModel.messages.isEmpty:
-            ExperienceLoadingSpinner(message: "Loading coach…")
-        case .failed:
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text("Coach unavailable")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                Text(viewModel.deterministicFallback)
-                    .experienceStyle(.body, color: colors.secondaryText)
-            }
-            .padding(ExperienceSpacing.md)
-            .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
-        default:
-            if let reply = viewModel.aiReply, viewModel.messages.isEmpty {
-                coachBubble(reply)
-            }
-        }
-    }
-
-    private var composer: some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            TextField("Ask about your patterns…", text: $questionText, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(1 ... 3)
-            Button("Ask") {
-                let question = questionText
-                questionText = ""
-                Task { await viewModel.sendFollowUp(question) }
-            }
-            .disabled(questionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.phase == .loading)
-        }
-        .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary)
-    }
-
-    private func coachBubble(_ text: String) -> some View {
-        Text(AIGeneratedTextNormalizer.normalize(text))
-            .experienceStyle(.body, color: colors.primaryText)
-            .padding(ExperienceSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(colors.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-    }
-
-    private func userBubble(_ text: String) -> some View {
-        Text(text)
-            .experienceStyle(.body, color: colors.primaryText)
-            .padding(ExperienceSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .background(colors.surfaceSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+    private var scopeSubtitle: String? {
+        let label = viewModel.facts.scope.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty else { return nil }
+        return "Scope: \(label)"
     }
 }

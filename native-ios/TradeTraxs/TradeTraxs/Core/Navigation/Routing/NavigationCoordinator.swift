@@ -352,7 +352,8 @@ final class NavigationCoordinator {
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
         case .roomMembers, .roomInfo, .manageRoom, .roomSettings, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .followers, .following, .rooms, .settings,
             .tradingRulesAnalytics, .tradingRulesRuleDetail, .tradingRulesDayDetail,
-            .tradingRulesTrends, .tradingRulesViolationHistory:
+            .tradingRulesTrends, .tradingRulesViolationHistory,
+            .tradeAIHub, .tradeAIConversation:
             break
         }
         let pathBefore = store.paths.messages.count

@@ -338,6 +338,177 @@ export type Database = {
           },
         ]
       }
+      ai_coach_conversations: {
+        Row: {
+          created_at: string
+          facts_hash: string | null
+          id: string
+          kind: string
+          last_message_at: string
+          last_message_preview: string | null
+          scope: Json | null
+          scope_fingerprint: string | null
+          scope_label: string | null
+          title: string | null
+          trade_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          facts_hash?: string | null
+          id?: string
+          kind: string
+          last_message_at?: string
+          last_message_preview?: string | null
+          scope?: Json | null
+          scope_fingerprint?: string | null
+          scope_label?: string | null
+          title?: string | null
+          trade_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          facts_hash?: string | null
+          id?: string
+          kind?: string
+          last_message_at?: string
+          last_message_preview?: string | null
+          scope?: Json | null
+          scope_fingerprint?: string | null
+          scope_label?: string | null
+          title?: string | null
+          trade_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_coach_conversations_trade_id_fkey"
+            columns: ["trade_id"]
+            isOneToOne: false
+            referencedRelation: "trades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_coach_messages: {
+        Row: {
+          attachments: Json
+          client_message_id: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          display_content: string | null
+          id: string
+          openai_content: string | null
+          prompt_key: string | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          attachments?: Json
+          client_message_id?: string | null
+          content: string
+          conversation_id: string
+          created_at?: string
+          display_content?: string | null
+          id?: string
+          openai_content?: string | null
+          prompt_key?: string | null
+          role: string
+          user_id: string
+        }
+        Update: {
+          attachments?: Json
+          client_message_id?: string | null
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          display_content?: string | null
+          id?: string
+          openai_content?: string | null
+          prompt_key?: string | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_coach_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_coach_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_usage_events: {
+        Row: {
+          completion_tokens: number | null
+          conversation_id: string | null
+          created_at: string
+          id: string
+          model: string | null
+          prompt_tokens: number | null
+          route: string
+          total_tokens: number | null
+          user_id: string
+        }
+        Insert: {
+          completion_tokens?: number | null
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          model?: string | null
+          prompt_tokens?: number | null
+          route: string
+          total_tokens?: number | null
+          user_id: string
+        }
+        Update: {
+          completion_tokens?: number | null
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          model?: string | null
+          prompt_tokens?: number | null
+          route?: string
+          total_tokens?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_events_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_coach_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       achievement_posts: {
         Row: {
           achievement_id: string

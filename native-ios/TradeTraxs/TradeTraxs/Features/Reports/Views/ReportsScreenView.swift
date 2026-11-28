@@ -73,6 +73,19 @@ struct ReportsScreenView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Reports")
+        .toolbar {
+            if navigationCoordinator != nil {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        viewModel.openTradeAIHub()
+                    } label: {
+                        Image(systemName: "brain.head.profile")
+                    }
+                    .accessibilityLabel("Trade AI")
+                    .accessibilityIdentifier("reports.tradeAI")
+                }
+            }
+        }
         .toolbar(.hidden, for: .tabBar)
         .refreshable {
             guard !restrictsTradingReportsCatalog else { return }

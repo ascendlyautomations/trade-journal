@@ -86,6 +86,14 @@ final class ReportsScreenViewModel: ScreenLifecycle {
         navigationCoordinator.pushHome(.settings(.tradingAccounts))
     }
 
+    func openTradeAIHub() {
+        ExperienceHaptics.play(.selection)
+        if ProAccessGate.presentFeatureIfNeeded(.aiAnalyst, profileID: profileID) {
+            return
+        }
+        navigationCoordinator.pushHome(.generalTradeCoach)
+    }
+
     func openManageCopyTradingGroups() {
         navigationCoordinator.pushHome(.settings(.copyTradingAccounts))
     }

@@ -4,6 +4,8 @@ import {
   buildAnalyzeTradeHistoryContext,
   buildTradeAnalysisPrompt,
 } from "@/lib/analyzeTradePrompt"
+import { buildAuthoritativeTradeContext } from "@/lib/server/ai/aiTradeContextBuilder"
+import { buildAuthoritativeTradeAnalysisPrompt } from "@/lib/server/ai/buildTradeAnalysisUserPrompt"
 import { normalizeAIProseResponse } from "@/lib/normalizeAIGeneratedText"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import {
@@ -249,17 +251,24 @@ export async function POST(req: Request) {
       console.error("[analyze-trade] History lookup failed", historyError)
     }
 
-    const historyContext = buildAnalyzeTradeHistoryContext(
-      historyRows ?? [],
+    const authoritative = await buildAuthoritativeTradeContext(
+      supabaseServiceRole,
+      user.id,
       String(tradeId)
     )
-    const prompt = buildTradeAnalysisPrompt(
-      (body as { trade: Record<string, unknown> }).trade,
-      historyContext,
-      {
-        hasScreenshot: Boolean(imageUrl),
-      }
-    )
+
+    const prompt = authoritative
+      ? buildAuthoritativeTradeAnalysisPrompt(authoritative, {
+          hasScreenshot: Boolean(imageUrl),
+        })
+      : buildTradeAnalysisPrompt(
+          (body as { trade: Record<string, unknown> }).trade,
+          buildAnalyzeTradeHistoryContext(
+            historyRows ?? [],
+            String(tradeId)
+          ),
+          { hasScreenshot: Boolean(imageUrl) }
+        )
     const priorMessages = Array.isArray(messages)
       ? messages.filter(
           (m): m is { role: string; content: string } =>

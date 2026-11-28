@@ -409,7 +409,11 @@ struct TradeDetailView: View {
             }
 
             if let tradeAI {
-                TradeAISectionView(viewModel: tradeAI)
+                TradeAIEntrySectionView(
+                    tradeID: trade.id,
+                    previewCount: tradeAI.messages.count,
+                    onOpen: { openTradeAIConversation() }
+                )
             }
         case .lockedPreview, .verifyingEntitlement:
             TradeDetailTraxProUpsellSection(
@@ -438,6 +442,11 @@ struct TradeDetailView: View {
 
     private var restrictsPremiumTradeAI: Bool {
         journalPremiumInsightsPresentation != .unrestricted
+    }
+
+    private func openTradeAIConversation() {
+        guard let tradeAI else { return }
+        viewModel.openTradeAIConversation(conversationID: tradeAI.conversationID)
     }
 
     @ViewBuilder

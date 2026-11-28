@@ -73,7 +73,10 @@ enum TradingRulesComplianceSessionLoader {
     ) -> Bool {
         let presentationStore = TradingRulesCompliancePresentationStores.store(detailCache: detailCache)
         presentationStore.clearIfProfileMismatch(profileID)
-        let accounts: [TradingAccount] = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+        let usesBundledSample = TradingRulesAnalyticsPreviewSupport.usesBundledSampleDataPlane(
+            detailCache: detailCache
+        )
+        let accounts: [TradingAccount] = usesBundledSample
             ? TradingRulesAnalyticsPreviewSupport.previewAccounts(profileID: profileID, detailCache: detailCache)
             : (SessionAccountsStore.shared.cached(for: profileID) ?? [])
         let linked = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
@@ -110,7 +113,9 @@ enum TradingRulesComplianceSessionLoader {
         profileID: ProfileID,
         presentationStore: TradingRulesComplianceSessionStore
     ) async -> TradingRulesComplianceLoadOutcome {
-        let usesBundledSample = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
+        let usesBundledSample = TradingRulesAnalyticsPreviewSupport.usesBundledSampleDataPlane(
+            detailCache: dependencies.detailCache
+        )
         if usesBundledSample,
            presentationStore.ready,
            presentationStore.profileID == profileID,
@@ -229,7 +234,9 @@ enum TradingRulesComplianceSessionLoader {
         profileID: ProfileID,
         dependencies: TradingRulesComplianceLoadDependencies
     ) async -> [TradingAccount] {
-        if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+        if TradingRulesAnalyticsPreviewSupport.usesBundledSampleDataPlane(
+            detailCache: dependencies.detailCache
+        ) {
             let previewAccounts = TradingRulesAnalyticsPreviewSupport.previewAccounts(
                 profileID: profileID,
                 dependencies: dependencies

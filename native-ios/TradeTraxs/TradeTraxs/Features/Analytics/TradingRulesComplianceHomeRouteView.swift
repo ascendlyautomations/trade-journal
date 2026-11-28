@@ -137,30 +137,13 @@ struct TradingRulesComplianceHomeRouteView: View {
         }
         .task(id: taskIdentity) {
             guard !showsEntitlementVerification else { return }
-            if !usesTraxsProPreviewDataPlane,
-               restrictsFullAnalytics, let profileID = activeProfileID
-            {
-                TradingRulesAnalyticsPreviewSupport.beginEphemeralSampleIfNeeded(
-                    profileID: profileID,
-                    detailCache: data.detailCache
-                )
-                scopeController.applyTraxsProPreviewScopeDefaultsIfNeeded()
-            }
             await refreshAnalytics(forceReveal: true)
         }
         .task(id: restrictsFullAnalytics) {
             if usesTraxsProPreviewDataPlane {
                 return
             }
-            if restrictsFullAnalytics {
-                guard let profileID = activeProfileID else { return }
-                TradingRulesAnalyticsPreviewSupport.beginEphemeralSampleIfNeeded(
-                    profileID: profileID,
-                    detailCache: data.detailCache
-                )
-                scopeController.applyTraxsProPreviewScopeDefaultsIfNeeded()
-                await refreshAnalytics(forceReveal: true)
-            } else {
+            if !restrictsFullAnalytics {
                 TradingRulesAnalyticsPreviewSupport.endEphemeralSampleIfNeeded(
                     profileID: activeProfileID,
                     detailCache: data.detailCache

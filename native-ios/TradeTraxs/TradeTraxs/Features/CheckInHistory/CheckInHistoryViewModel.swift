@@ -48,6 +48,12 @@ final class CheckInHistoryViewModel: ScreenLifecycle {
         navigationCoordinator.pushHome(.checkInDay(summary.dateKey))
     }
 
+    func openPsychologyAnalytics() {
+        ExperienceHaptics.play(.selection)
+        PsychologyAnalyticsSessionStore.shared.focusSection(nil)
+        navigationCoordinator.pushHome(.psychologyAnalytics)
+    }
+
     private func load(forceNetwork: Bool) async {
         state.phase = .loading
         if PsychologyAnalyticsPreviewSupport.usesSampleCheckInHistory {

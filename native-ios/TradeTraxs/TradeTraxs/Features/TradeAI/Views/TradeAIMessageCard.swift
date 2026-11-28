@@ -3,6 +3,10 @@ import SwiftUI
 /// Embedded assistant / user message card inside Trade Detail (not a floating chat).
 struct TradeAIMessageCard: View {
     let message: TradeAIMessage
+    var imagePipeline: (any ImagePipeline)?
+    var showsTradeAttachments: Bool = true
+    var tradeForAttachment: ((TradeID) -> Trade?)?
+    var onOpenTrade: ((TradeID) -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -37,6 +41,11 @@ struct TradeAIMessageCard: View {
             }
 
             if isExpanded {
+                if showsTradeAttachments, !message.attachments.isEmpty {
+                    attachmentStrip
+                } else if !showsTradeAttachments, !imageAttachments.isEmpty {
+                    imageOnlyAttachmentStrip
+                }
                 if let sections = coachSections {
                     coachBody(sections)
                 } else {
@@ -143,6 +152,79 @@ struct TradeAIMessageCard: View {
 
     private var shouldOfferCollapse: Bool {
         message.role == .assistant && message.content.count > 420
+    }
+
+    @ViewBuilder
+    private var imageOnlyAttachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: ExperienceSpacing.xs) {
+                ForEach(imageAttachments, id: \.url) { attachment in
+                    if let url = URL(string: attachment.url) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            default:
+                                colors.fillSecondary
+                            }
+                        }
+                        .frame(width: 88, height: 88)
+                        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var attachmentStrip: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            ForEach(tradeAttachments, id: \.rawValue) { tradeID in
+                if let imagePipeline {
+                    Button {
+                        onOpenTrade?(tradeID)
+                    } label: {
+                        SharedTradeMessageCard(
+                            trade: tradeForAttachment?(tradeID),
+                            tradeID: tradeID,
+                            imagePipeline: imagePipeline,
+                            isOutgoing: message.role == .user,
+                            includesBackground: true
+                        )
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .disabled(onOpenTrade == nil)
+                }
+            }
+            if !imageAttachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: ExperienceSpacing.xs) {
+                        ForEach(imageAttachments, id: \.url) { attachment in
+                            if let url = URL(string: attachment.url) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable().scaledToFill()
+                                    default:
+                                        colors.fillSecondary
+                                    }
+                                }
+                                .frame(width: 88, height: 88)
+                                .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var tradeAttachments: [TradeID] {
+        message.attachments.compactMap(\.tradeID)
+    }
+
+    private var imageAttachments: [TradeAIAttachment] {
+        message.attachments.filter { $0.kind != "trade" && !$0.url.isEmpty }
     }
 
     private var collapsedPreview: String {

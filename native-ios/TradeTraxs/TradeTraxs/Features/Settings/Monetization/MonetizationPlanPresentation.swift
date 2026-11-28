@@ -37,6 +37,9 @@ enum MonetizationPlanPresentation {
         let feature: ProFeatureKind
         var previewFeature: TraxsProPreviewFeature? = nil
         var previewEntryPoint: TraxsProPreviewEntryPoint = .featurePreviewCard
+        var previewButtonTitle: String? = nil
+        var unlockButtonTitle: String? = nil
+        var onPreview: (() -> Void)? = nil
         let previewAccessibilityIdentifier: String
         let unlockAccessibilityIdentifier: String
 
@@ -47,7 +50,8 @@ enum MonetizationPlanPresentation {
         }
 
         private var showsPreviewButton: Bool {
-            TraxsProPreviewCatalog.supportsInteractivePreview(for: feature)
+            if onPreview != nil { return true }
+            return TraxsProPreviewCatalog.supportsInteractivePreview(for: feature)
                 && TraxsProPreviewCoordinator.shared.canPresentPreview
                 && resolvedPreviewFeature != nil
         }
@@ -62,15 +66,21 @@ enum MonetizationPlanPresentation {
 
         var body: some View {
             VStack(spacing: ExperienceSpacing.sm) {
-                if showsPreviewButton, let resolvedPreviewFeature {
+                if showsPreviewButton, onPreview != nil || resolvedPreviewFeature != nil {
                     Button {
                         ExperienceHaptics.play(.selection)
-                        TraxsProPreviewCoordinator.shared.presentPreview(
-                            feature: resolvedPreviewFeature,
-                            entryPoint: previewEntryPoint
-                        )
+                        if let onPreview {
+                            onPreview()
+                        } else if let resolvedPreviewFeature {
+                            TraxsProPreviewCoordinator.shared.presentPreview(
+                                feature: resolvedPreviewFeature,
+                                entryPoint: previewEntryPoint
+                            )
+                        }
                     } label: {
-                        gateButtonTitle(MonetizationPlanCopy.previewWithSampleDataButtonTitle)
+                        gateButtonTitle(
+                            previewButtonTitle ?? MonetizationPlanCopy.previewWithSampleDataButtonTitle
+                        )
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.regular)
@@ -85,7 +95,9 @@ enum MonetizationPlanPresentation {
                             previewFeature: previewFeature
                         )
                     } label: {
-                        gateButtonTitle(MonetizationPlanCopy.paywallUnlockTitle)
+                        gateButtonTitle(
+                            unlockButtonTitle ?? MonetizationPlanCopy.paywallUnlockTitle
+                        )
                     }
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.roundedRectangle(radius: ExperienceRadius.sm))

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server"
 import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { getOpenAiClient, openAiApiKey } from "@/lib/server/openAiRouteSupport"
+import { openAiApiKey } from "@/lib/server/openAiRouteSupport"
 import {
-  PSYCHOLOGY_COACH_SYSTEM_PROMPT,
-  buildPsychologyCoachUserPrompt,
+  buildPsychologyCoachOpenAiMessages,
   type PsychologyCoachFactsPayload,
 } from "@/lib/psychologyCoachPrompt"
 import { normalizeAIProseResponse } from "@/lib/normalizeAIGeneratedText"
@@ -13,6 +12,17 @@ import {
 } from "@/lib/server/durableUserRateLimit"
 import { requireAIFeatureEntitlement } from "@/lib/server/requireAIFeatureEntitlement"
 import type { Json } from "@/lib/database.types"
+import {
+  createOpenAiChatCompletion,
+  mapOpenAiErrorToHttp,
+  openAiCoachModel,
+} from "@/lib/server/openAiChatCompletion"
+import {
+  appendAssistantMessageIdempotent,
+  appendTurnIdempotent,
+  createPsychologyConversation,
+  logAiUsage,
+} from "@/lib/server/ai/aiConversationService"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -25,14 +35,6 @@ export async function POST(req: Request) {
   }
 
   if (!openAiApiKey()) {
-    return NextResponse.json(
-      { error: "AI service unavailable" },
-      { status: 503 }
-    )
-  }
-
-  const openai = getOpenAiClient()
-  if (!openai) {
     return NextResponse.json(
       { error: "AI service unavailable" },
       { status: 503 }
@@ -62,34 +64,148 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing psychology facts" }, { status: 400 })
     }
 
-    // Owner-only — facts are always computed client-side for auth.uid(); reject cross-user payloads.
     if (body?.userId && body.userId !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const prompt = buildPsychologyCoachUserPrompt(facts, mode, messages)
+    const openAiMode = mode === "followUp" ? "followUp" : "explain"
+    const cachedReply =
+      typeof body?.cachedReply === "string" ? body.cachedReply.trim() : ""
+    const persistCachedOnly =
+      body?.persistCachedOnly === true &&
+      openAiMode === "explain" &&
+      cachedReply.length > 0
 
-    const maxTokens =
-      mode === "reportSummary" ? 320 : mode === "summary" ? 400 : 800
+    let conversationId =
+      typeof body?.conversationId === "string" ? body.conversationId.trim() : ""
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: PSYCHOLOGY_COACH_SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-        ...messages.map((message: { role: string; content: string }) => ({
-          role: message.role as "user" | "assistant",
-          content: message.content,
-        })),
-      ],
-      temperature: mode === "reportSummary" ? 0.3 : 0.4,
-      max_tokens: maxTokens,
+    if (
+      !conversationId &&
+      openAiMode === "explain" &&
+      body?.createConversation !== false
+    ) {
+      const scope = facts.scope ?? {}
+      const created = await createPsychologyConversation(supabaseServiceRole, user.id, {
+        title: `Psychology Coach · ${scope.label ?? "Analytics"}`,
+        scopeLabel: String(scope.label ?? "Analytics"),
+        scopeFingerprint: String(scope.fingerprint ?? facts.factsHash ?? ""),
+        factsHash: String(facts.factsHash ?? ""),
+        scope: {
+          label: scope.label,
+          fingerprint: scope.fingerprint,
+          factsHash: facts.factsHash,
+        },
+        factsSnapshot: facts as unknown as Record<string, unknown>,
+      })
+      if (created.conversationId) conversationId = created.conversationId
+    }
+
+    const assistantMessageId =
+      typeof body?.assistantMessageId === "string"
+        ? body.assistantMessageId.trim()
+        : crypto.randomUUID()
+
+    if (persistCachedOnly) {
+      let persistError: string | undefined
+      if (conversationId) {
+        const persisted = await appendAssistantMessageIdempotent(
+          supabaseServiceRole,
+          user.id,
+          conversationId,
+          {
+            id: assistantMessageId,
+            content: cachedReply,
+            promptKey: "psychology_explain",
+            createdAt: new Date().toISOString(),
+          }
+        )
+        persistError = persisted.error
+      }
+      return NextResponse.json({
+        reply: cachedReply,
+        usage: null,
+        conversationId: conversationId || null,
+        assistantMessageId,
+        persistError: persistError ?? null,
+        persistedCached: true,
+      })
+    }
+
+    const openAiMessages = buildPsychologyCoachOpenAiMessages(facts, openAiMode, messages)
+
+    const maxCompletionTokens =
+      mode === "reportSummary" ? 420 : mode === "summary" ? 520 : 1_200
+
+    const completion = await createOpenAiChatCompletion({
+      messages: openAiMessages,
+      temperature: mode === "reportSummary" ? 0.3 : 0.35,
+      maxCompletionTokens,
+      route: "psychology-coach",
+      userId: user.id,
     })
 
-    const rawReply = completion.choices[0]?.message?.content?.trim()
+    const rawReply = completion.content
     const reply = normalizeAIProseResponse(rawReply) ?? rawReply
     if (!reply) {
       return NextResponse.json({ error: "No response generated" }, { status: 500 })
+    }
+
+    await logAiUsage(supabaseServiceRole, {
+      userId: user.id,
+      conversationId: conversationId || null,
+      route: "psychology-coach",
+      model: openAiCoachModel(),
+      promptTokens: completion.usage?.prompt_tokens ?? null,
+      completionTokens: completion.usage?.completion_tokens ?? null,
+      totalTokens: completion.usage?.total_tokens ?? null,
+    })
+
+    let persistError: string | undefined
+    if (conversationId) {
+      const userMsg = body?.userMessage as
+        | {
+            id?: string
+            displayContent?: string
+            createdAt?: string
+          }
+        | undefined
+
+      if (openAiMode === "followUp" && userMsg?.id && userMsg.displayContent?.trim()) {
+        const persisted = await appendTurnIdempotent(
+          supabaseServiceRole,
+          user.id,
+          conversationId,
+          {
+            id: userMsg.id,
+            displayContent: userMsg.displayContent.trim(),
+            openaiContent: userMsg.displayContent.trim(),
+            promptKey: "psychology_follow_up",
+            createdAt: userMsg.createdAt ?? null,
+          },
+          {
+            id: assistantMessageId,
+            content: reply,
+            createdAt: new Date().toISOString(),
+          }
+        )
+        persistError = persisted.error
+      } else {
+        const persisted = await appendAssistantMessageIdempotent(
+          supabaseServiceRole,
+          user.id,
+          conversationId,
+          {
+            id: assistantMessageId,
+            content: reply,
+            promptKey:
+              openAiMode === "followUp"
+                ? "psychology_follow_up"
+                : "psychology_explain",
+            createdAt: new Date().toISOString(),
+          }
+        )
+        persistError = persisted.error
+      }
     }
 
     const factsHash = typeof facts.factsHash === "string" ? facts.factsHash : null
@@ -106,12 +222,27 @@ export async function POST(req: Request) {
       )
     }
 
-    return NextResponse.json({ reply })
+    return NextResponse.json({
+      reply,
+      usage: completion.usage ?? null,
+      conversationId: conversationId || null,
+      assistantMessageId,
+      persistError: persistError ?? null,
+    })
   } catch (error) {
-    console.error("[psychology-coach]", error)
+    const mapped = mapOpenAiErrorToHttp(error)
+    if (mapped.status >= 500 || mapped.body.code) {
+      console.error("[psychology-coach]", error)
+    }
     return NextResponse.json(
-      { error: "Psychology coach unavailable. Your analytics still work offline." },
-      { status: 500 }
+      mapped.body.reply
+        ? { error: mapped.body.error, reply: mapped.body.reply, code: mapped.body.code }
+        : {
+            error:
+              mapped.body.error ??
+              "Psychology coach unavailable. Your analytics still work offline.",
+          },
+      { status: mapped.status }
     )
   }
 }

@@ -195,6 +195,15 @@ enum ExternalDestinationIdentity {
             return "screen:trading-scorecard"
         case .psychologyCoach:
             return "screen:psychology-coach"
+        case .generalTradeCoach:
+            return "screen:general-trade-coach"
+        case .tradeAIHub:
+            return "screen:trade-ai-hub"
+        case .tradeAIConversation(let tradeID, let conversationID):
+            if let conversationID {
+                return "trade-ai:\(tradeID.rawValue):\(conversationID.rawValue)"
+            }
+            return "trade-ai:\(tradeID.rawValue)"
         case .checkInHistory:
             return "screen:check-in-history"
         case .checkInDay(let day):
@@ -247,6 +256,13 @@ enum ExternalDestinationIdentity {
 
     static func logicalKey(for route: MessagesRoute) -> String {
         switch route {
+        case .tradeAIHub:
+            return "screen:trade-ai-hub"
+        case .tradeAIConversation(let conversationID, let tradeID):
+            if let tradeID {
+                return "trade-ai:\(tradeID.rawValue):\(conversationID.rawValue)"
+            }
+            return "trade-ai-hub:\(conversationID.rawValue)"
         case .thread(let id):
             return "thread:\(id.rawValue)"
         case .sharedTrade(let id):

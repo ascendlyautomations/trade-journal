@@ -343,6 +343,14 @@ final class TradeHistoryViewModel {
         navigationCoordinator.pushHome(.backtest)
     }
 
+    func openTradeAIHub() {
+        ExperienceHaptics.play(.selection)
+        if ProAccessGate.presentFeatureIfNeeded(.aiAnalyst, profileID: ownerAccountsProfileID) {
+            return
+        }
+        navigationCoordinator.pushHome(.generalTradeCoach)
+    }
+
     func applyDraftFilters() {
         ExperienceHaptics.play(.selection)
         draftFilters.pnlMin = nil

@@ -107,6 +107,12 @@ nonisolated enum MonetizationPlanCopy {
     static let psychologyAnalyticsPreviewHistoryListSubtitle =
         "Sample check-in days from the demo journal."
 
+    static let scorecardPsychologyGateTitle = "Unlock Your Trading Psychology"
+    static let scorecardPsychologyGateMessage =
+        "Understand how your emotions, mindset, and trading habits impact your performance. Identify behavioral patterns and build better trading discipline."
+    static let previewPsychologyAnalyticsButtonTitle = "Preview Psychology Analytics"
+    static let upgradeToTraxsProButtonTitle = "Upgrade to TraxsPro"
+
     /// Per-chart unlock rows for the consolidated dashboard TraxsPro section (Free tier).
     static let dashboardPremiumAnalyticsHighlights: [PaywallHighlight] = [
         PaywallHighlight(

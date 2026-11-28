@@ -71,6 +71,9 @@ struct PsychologyAnalyticsDetailView: View {
     var onOpenCheckInHistory: (() -> Void)?
     var onOpenCheckInHistoryDay: ((CheckInHistoryDaySummary) -> Void)?
     var freePreviewHistorySummaries: [CheckInHistoryDaySummary] = []
+    var injectedCoachSummary: PsychologyCoachSummary? = nil
+    var showsSamplePreviewBanner = false
+    var showsPreviewUpgradeFooter = false
     var navigationCoordinator: NavigationCoordinator?
     var preferences: (any TradingPreferencesRepository)?
     var viewerID: ProfileID?
@@ -88,8 +91,19 @@ struct PsychologyAnalyticsDetailView: View {
         !freePreviewHistorySummaries.isEmpty
     }
 
-    private var coachSummary: PsychologyCoachSummary? {
-        PsychologyCoachSessionStore.shared.deterministicSummary
+    private var resolvedCoachSummary: PsychologyCoachSummary? {
+        injectedCoachSummary ?? PsychologyCoachSessionStore.shared.deterministicSummary
+    }
+
+    /// Sample preview presents the paywall in-place; Pro navigates to Psychology Coach.
+    private var openPsychologyCoachAction: (() -> Void)? {
+        if showsPreviewUpgradeFooter {
+            return {
+                ExperienceHaptics.play(.selection)
+                ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
+            }
+        }
+        return onOpenCoach
     }
 
     private var advancedSections: [PsychologyAnalyticsSection] {
@@ -105,6 +119,9 @@ struct PsychologyAnalyticsDetailView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+                    if showsSamplePreviewBanner {
+                        samplePreviewBanner
+                    }
                     if let navigationCoordinator {
                         TradingPreferenceDiscoverySlot(
                             surface: .analytics,
@@ -138,14 +155,19 @@ struct PsychologyAnalyticsDetailView: View {
                     }
 
                     if !showsFreePreviewOnlyContent,
-                       let coachSummary,
+                       let coachSummary = resolvedCoachSummary,
                        !coachSummary.recommendations.isEmpty {
                         PsychologySummarySection(
                             summary: coachSummary,
-                            onOpenCoach: onOpenCoach,
+                            onOpenCoach: openPsychologyCoachAction,
                             recommendationsOnly: true
                         )
                         .padding(.horizontal, ExperienceSpacing.md)
+                    }
+
+                    if showsPreviewUpgradeFooter {
+                        PsychologyAnalyticsPremiumLockedSection(includePreviewAction: false)
+                            .padding(.horizontal, ExperienceSpacing.md)
                     }
                 }
                 .padding(.vertical, ExperienceSpacing.md)
@@ -194,6 +216,27 @@ struct PsychologyAnalyticsDetailView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("psychologyAnalytics.openTradingRules")
+    }
+
+    private var samplePreviewBanner: some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.accent)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                Text("Sample data preview")
+                    .experienceStyle(.subheadline, color: colors.primaryText)
+                    .fontWeight(.semibold)
+                Text(MonetizationPlanCopy.psychologyAnalyticsPreviewSampleDataNote)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .accessibilityIdentifier("psychologyAnalytics.sampleDataBanner")
     }
 
     private var overviewSection: some View {

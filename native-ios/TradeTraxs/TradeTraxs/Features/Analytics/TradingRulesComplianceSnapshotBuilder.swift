@@ -33,6 +33,10 @@ enum TradingRulesComplianceSnapshotBuilder {
         dashboardInsights: DashboardInsightsPresentation? = nil,
         bundledOwnerTrades: [Trade]? = nil
     ) async -> Output {
+        let usesBundledSample = bundledOwnerTrades != nil
+            || TradingRulesAnalyticsPreviewSupport.usesBundledSampleDataPlane(
+                detailCache: dependencies.detailCache
+            )
         let previewChromeActive = TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome
         if previewChromeActive {
             RulesPreviewDebugLog.log(
@@ -65,13 +69,13 @@ enum TradingRulesComplianceSnapshotBuilder {
         if let bundledOwnerTrades {
             ownerTrades = bundledOwnerTrades
             historyComplete = true
-        } else if TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome {
+        } else if usesBundledSample {
             if let preview = TraxsProPreviewSession.shared.activePreviewEnvironment,
                preview.viewer == profileID
             {
                 ownerTrades = preview.trades
             } else {
-                ownerTrades = DemoCanonicalDataset.trades()
+                ownerTrades = TradingRulesAnalyticsPreviewSupport.previewOwnerTrades(profileID: profileID)
             }
             historyComplete = true
         } else {
@@ -86,7 +90,7 @@ enum TradingRulesComplianceSnapshotBuilder {
             historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
         }
 
-        if !TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome, !historyComplete {
+        if !usesBundledSample, !historyComplete {
             let scopedProbe = PsychologyAnalyticsTradeScope.complianceScopedTrades(
                 ownerTrades: ownerTrades,
                 accounts: accounts,

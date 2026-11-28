@@ -215,6 +215,8 @@ struct TradingAnalyticsPreferencesView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 0) {
+                applyRulesToPastTradesRow
+                settingsInlineDivider()
                 dropdownRow(
                     "Preferred Trading Session",
                     info: .preferredSessions,
@@ -293,19 +295,7 @@ struct TradingAnalyticsPreferencesView: View {
 
     @ViewBuilder
     private var generalBehaviorRows: some View {
-        HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
-            TradingRulesFieldLabel(
-                title: "Apply Rules to Past Trades",
-                info: .applyRulesToPastTrades
-            )
-            .tradingRulesSettingsLabelColumn()
-            Toggle("", isOn: $viewModel.applyRulesToPastTrades)
-                .labelsHidden()
-                .tint(colors.accent)
-                .fixedSize()
-        }
-        .tradingRulesSettingsRow()
-        .accessibilityIdentifier("settings.tradingAnalytics.applyPastTrades")
+        applyRulesToPastTradesRow
 
         settingsInlineDivider()
 
@@ -761,6 +751,22 @@ struct TradingAnalyticsPreferencesView: View {
         if let template = viewModel.pendingTemplate {
             Text("\(template.label): \(template.detail) Review fields before saving.")
         }
+    }
+
+    private var applyRulesToPastTradesRow: some View {
+        HStack(alignment: .center, spacing: TradingPreferenceFormLayout.rowColumnSpacing) {
+            TradingRulesFieldLabel(
+                title: "Apply Rules to Past Trades",
+                info: .applyRulesToPastTrades
+            )
+            .tradingRulesSettingsLabelColumn()
+            Toggle("", isOn: $viewModel.applyRulesToPastTrades)
+                .labelsHidden()
+                .tint(colors.accent)
+                .fixedSize()
+        }
+        .tradingRulesSettingsRow()
+        .accessibilityIdentifier("settings.tradingAnalytics.applyPastTrades")
     }
 
     private var templateDropdownRow: some View {

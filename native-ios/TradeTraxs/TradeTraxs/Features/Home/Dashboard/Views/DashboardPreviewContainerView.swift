@@ -129,6 +129,7 @@ struct DashboardPreviewContainerView: View {
             )
         case .checkInHistory:
             CheckInHistoryView(data: previewData, navigationCoordinator: navigationCoordinator)
+                .experienceChevronOnlyBackNavigationChrome()
         case .checkInDay(let dateKey):
             CheckInDayDetailView(
                 dateKey: dateKey,

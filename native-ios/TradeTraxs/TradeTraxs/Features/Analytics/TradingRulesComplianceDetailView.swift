@@ -135,9 +135,9 @@ struct TradingRulesComplianceDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                    if presentation == .freeSamplePreview
-                        || (presentation == .fullAnalytics && TradingRulesAnalyticsPreviewSupport.showsSampleDataChrome)
-                    {
+                    if TradingRulesAnalyticsPreviewSupport.usesBundledSampleDataPlane(
+                        detailCache: detailCache
+                    ) {
                         sampleDataNotice
                     }
                     if session.isProvisionalCompliance {
@@ -194,6 +194,7 @@ struct TradingRulesComplianceDetailView: View {
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.bottom, ExperienceSpacing.md)
             }
+            .padding(.top, ExperienceSpacing.sm)
         }
         .id(TradingRulesAnalyticsScrollSurfaceIdentity.analyticsList)
         .scrollPosition(scrollAnchor.binding)

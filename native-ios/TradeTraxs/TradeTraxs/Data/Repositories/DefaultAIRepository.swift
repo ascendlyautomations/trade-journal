@@ -2,8 +2,8 @@ import Foundation
 
 /// Production ``AIRepository``, BFF `/api/analyze-trade` + `trade_ai_messages` persistence.
 nonisolated struct DefaultAIRepository: AIRepository {
-    private let supabase: SupabaseInfrastructure
-    private let session: any SessionProviding
+    let supabase: SupabaseInfrastructure
+    let session: any SessionProviding
 
     private static let table = "trade_ai_messages"
     private static let selectColumns = "id,trade_id,user_id,role,content,prompt_key,created_at"
@@ -40,6 +40,43 @@ nonisolated struct DefaultAIRepository: AIRepository {
     }
 
     func loadConversation(tradeID: TradeID) async throws -> [TradeAIMessage] {
+        if let transport = supabase.transport {
+            let response = try await transport.send(
+                host: .bff,
+                path: "/api/ai/conversations/trade/\(tradeID.rawValue)/messages",
+                method: .get,
+                requiresAuthentication: true,
+                acceptsNonSuccessStatusCodes: true
+            )
+            if (200 ... 299).contains(response.statusCode) {
+                let decoded = try? JSONDecoder().decode(ConversationMessagesBFFResponse.self, from: response.data)
+                let mapped = (decoded?.messages ?? []).compactMap { row -> TradeAIMessage? in
+                    guard let role = TradeAIMessageRole(rawValue: row.role ?? "") else { return nil }
+                    return TradeAIMessage(
+                        id: row.id ?? UUID().uuidString,
+                        role: role,
+                        content: role == .assistant
+                            ? AIGeneratedTextNormalizer.normalize(row.content ?? "")
+                            : (row.content ?? ""),
+                        promptKey: AIConversationMessagesBFFDecoding.promptKey(row),
+                        attachments: AIConversationMessagesBFFDecoding.attachments(row),
+                        createdAt: AIConversationMessagesBFFDecoding.createdAt(row)
+                            .flatMap(ISO8601.date(from:)) ?? Date()
+                    )
+                }
+                #if DEBUG
+                TradeAITrace.conversationHistoryLoaded(
+                    tradeScoped: true,
+                    status: response.statusCode,
+                    byteCount: response.data.count,
+                    decoded: decoded != nil,
+                    messageCount: mapped.count
+                )
+                #endif
+                return mapped
+            }
+        }
+
         guard let userID = await session.currentUserID else { return [] }
         do {
             let rows: [TradeAIMessageDTO] = try await supabase.database.select(
@@ -103,7 +140,19 @@ nonisolated struct DefaultAIRepository: AIRepository {
             mode: request.mode.rawValue,
             messages: request.messages.map {
                 PsychologyCoachBFFMessage(role: $0.role, content: $0.content)
-            }
+            },
+            conversationId: request.conversationID?.rawValue,
+            createConversation: request.createConversation,
+            assistantMessageId: request.assistantMessageID,
+            userMessage: request.userMessage.map {
+                PsychologyCoachBFFUserMessage(
+                    id: $0.id,
+                    displayContent: $0.displayContent,
+                    createdAt: $0.createdAt
+                )
+            },
+            persistCachedOnly: request.persistCachedOnly,
+            cachedReply: request.cachedReply
         )
         let data = try transport.encodeJSON(body)
         let response = try await transport.send(
@@ -122,7 +171,12 @@ nonisolated struct DefaultAIRepository: AIRepository {
             guard let reply, !reply.isEmpty else {
                 throw AppError.unknown(message: "No response generated")
             }
-            return PsychologyCoachAIResponse(reply: AIGeneratedTextNormalizer.normalize(reply))
+            let conversationID = decoded?.conversationId.flatMap { AIConversationID($0) }
+            return PsychologyCoachAIResponse(
+                reply: AIGeneratedTextNormalizer.normalize(reply),
+                conversationID: conversationID,
+                assistantMessageID: decoded?.assistantMessageId
+            )
         case 401:
             throw AppError.domain(.permission(.notAuthenticated))
         case 403:
@@ -142,6 +196,31 @@ nonisolated struct DefaultAIRepository: AIRepository {
                 )
             )
         }
+    }
+
+    func analyzeGeneralTrading(_ request: GeneralTradeAIRequest) async throws -> GeneralTradeAIResponse {
+        try await ensureThirdPartyAIConsent()
+        guard let transport = supabase.transport else {
+            throw AppError.unknown(message: "Network transport unavailable")
+        }
+        let body = GeneralTradeCoachBFFBody(
+            question: request.question,
+            messages: request.messages.map { GeneralTradeCoachBFFMessage(role: $0.role, content: $0.content) }
+        )
+        let data = try transport.encodeJSON(body)
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/general-trade-coach",
+            method: .post,
+            body: data,
+            requiresAuthentication: true
+        )
+        let decoded = try? JSONDecoder().decode(GeneralTradeCoachBFFResponse.self, from: response.data)
+        let reply = decoded?.reply?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard response.statusCode == 200, let reply, !reply.isEmpty else {
+            throw AppError.unknown(message: decoded?.error ?? "Trade AI is unavailable.")
+        }
+        return GeneralTradeAIResponse(reply: AIGeneratedTextNormalizer.normalize(reply))
     }
 
     func extractScreenshotTrades(_ request: ScreenshotAIExtractRequest) async throws -> ScreenshotAIExtractResponse {
@@ -189,7 +268,7 @@ nonisolated struct DefaultAIRepository: AIRepository {
         }
     }
 
-    private func ensureThirdPartyAIConsent() async throws {
+    func ensureThirdPartyAIConsent() async throws {
         let allowed = await ThirdPartyAIConsentGate.ensureConsent(session: session)
         guard allowed else {
             throw ThirdPartyAIConsentError.userDeclined
@@ -230,6 +309,18 @@ private nonisolated struct PsychologyCoachBFFBody: Encodable {
     var facts: PsychologyCoachFacts
     var mode: String
     var messages: [PsychologyCoachBFFMessage]
+    var conversationId: String?
+    var createConversation: Bool
+    var assistantMessageId: String?
+    var userMessage: PsychologyCoachBFFUserMessage?
+    var persistCachedOnly: Bool
+    var cachedReply: String?
+}
+
+private nonisolated struct PsychologyCoachBFFUserMessage: Encodable {
+    var id: String
+    var displayContent: String
+    var createdAt: String?
 }
 
 private nonisolated struct PsychologyCoachBFFMessage: Encodable {
@@ -238,6 +329,23 @@ private nonisolated struct PsychologyCoachBFFMessage: Encodable {
 }
 
 private nonisolated struct PsychologyCoachBFFResponse: Decodable {
+    var reply: String?
+    var error: String?
+    var conversationId: String?
+    var assistantMessageId: String?
+}
+
+private nonisolated struct GeneralTradeCoachBFFBody: Encodable {
+    var question: String
+    var messages: [GeneralTradeCoachBFFMessage]
+}
+
+private nonisolated struct GeneralTradeCoachBFFMessage: Encodable {
+    var role: String
+    var content: String
+}
+
+private nonisolated struct GeneralTradeCoachBFFResponse: Decodable {
     var reply: String?
     var error: String?
 }

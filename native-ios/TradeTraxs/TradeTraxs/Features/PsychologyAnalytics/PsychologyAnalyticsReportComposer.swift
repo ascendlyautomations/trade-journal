@@ -38,7 +38,8 @@ enum PsychologyAnalyticsReportComposer {
             report: report,
             trades: scopedTrades,
             checkIns: checkIns,
-            preferences: preferences
+            preferences: preferences,
+            scope: PsychologyCoachScopeFacts(label: scope.label, fingerprint: scope.fingerprint)
         )
         let summary = PsychologyCoachDeterministicCoach.buildSummary(from: facts)
         PsychologyCoachSessionStore.shared.update(facts: facts, summary: summary)

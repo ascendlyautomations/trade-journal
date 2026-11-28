@@ -24,8 +24,8 @@ struct TradingScorecardDetailView: View {
                     if !result.insights.isEmpty {
                         insightsPanel(result: result)
                     }
-                    if showsTradingRulesUpgradePrompt {
-                        tradingRulesUpgradePrompt
+                    if restrictsPremiumPsychology {
+                        psychologyUpgradePrompt
                     }
                     if !restrictsPremiumPsychology {
                         Button {
@@ -60,42 +60,45 @@ struct TradingScorecardDetailView: View {
         }
     }
 
-    private var showsTradingRulesUpgradePrompt: Bool {
-        _ = entitlementGateRevision
-        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
-        return ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
-            demoModeActive: ExploreModeSupport.isActive,
-            profileID: profileID
-        )
-    }
+    private var psychologyUpgradePrompt: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+            MonetizationPlanPresentation.ProMarketingHeader(
+                title: MonetizationPlanCopy.scorecardPsychologyGateTitle,
+                subtitle: MonetizationPlanCopy.scorecardPsychologyGateMessage
+            )
 
-    private var tradingRulesUpgradePrompt: some View {
-        Group {
-            if ProMonetizationPolicy.canPresentProPaywall(
-                demoModeActive: ExploreModeSupport.isActive,
-                enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
-                paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
-            ) {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
-                } label: {
-                    Text("Upgrade to TraxsPro to track your trading rules and stay accountable.")
-                        .experienceStyle(.footnote, color: colors.accent)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("scorecard.tradingRules.upgrade")
-            } else if IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled {
+            MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
+                feature: .premiumAnalytics,
+                previewFeature: nil,
+                previewButtonTitle: MonetizationPlanCopy.previewPsychologyAnalyticsButtonTitle,
+                unlockButtonTitle: MonetizationPlanCopy.upgradeToTraxsProButtonTitle,
+                onPreview: {
+                    navigationCoordinator.pushHome(.psychologyAnalytics)
+                },
+                previewAccessibilityIdentifier: "scorecard.psychology.preview",
+                unlockAccessibilityIdentifier: "scorecard.psychology.upgrade"
+            )
+
+            if !canPresentProPaywall, IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled {
                 Text("TraxsPro upgrades aren't available in this build yet.")
                     .experienceStyle(.footnote, color: colors.tertiaryText)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, ExperienceSpacing.md)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("scorecard.psychology.upgradeUnavailable")
             }
         }
-        .padding(.top, ExperienceSpacing.xs)
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .experienceGroupedPanel(cornerRadius: ExperienceRadius.lg)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .accessibilityIdentifier("scorecard.psychology.promo")
+    }
+
+    private var canPresentProPaywall: Bool {
+        ProMonetizationPolicy.canPresentProPaywall(
+            demoModeActive: ExploreModeSupport.isActive,
+            enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
+            paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
+        )
     }
 
     private func heroPanel(result: ScorecardResult) -> some View {

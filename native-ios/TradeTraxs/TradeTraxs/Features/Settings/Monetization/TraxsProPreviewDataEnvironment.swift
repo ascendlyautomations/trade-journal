@@ -117,7 +117,8 @@ final class TraxsProPreviewDataEnvironment {
         let psychologySamplePresentation = PsychologyAnalyticsPreviewSupport.buildSamplePresentation(
             trades: eligibleTrades,
             checkIns: checkIns,
-            historySummaries: checkInHistorySummaries
+            historySummaries: checkInHistorySummaries,
+            preferences: preferenceContext
         )
         let rulesPresentationStore = TradingRulesComplianceSessionStore()
         let scorecardPresentationStore = TradingScorecardSessionStore()

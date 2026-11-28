@@ -188,6 +188,9 @@ export type PsychologyCoachFactInsight = {
   detail: string
   sampleSize: number
   reliability: string
+  winRate?: number | null
+  averagePnL?: number | null
+  expectancy?: number | null
 }
 
 export type PsychologyCoachTrendFact = {
@@ -216,19 +219,78 @@ export type PsychologyCoachGuardrailFacts = {
   personalTradeCap?: boolean
 }
 
+export type PsychologyCoachComparisonSide = {
+  label: string
+  sampleLabel: string
+  tradeCount: number
+  winRate: number | null
+  averagePnL: number | null
+  expectancy: number | null
+  reliability: PsychologySampleReliability
+  highlight: boolean
+}
+
+export type PsychologyCoachComparisonFact = {
+  id: string
+  category: string
+  title: string
+  headline: string
+  suggestion: string
+  sampleLine: string
+  reliability: PsychologySampleReliability
+  favorableSide: string
+  left: PsychologyCoachComparisonSide
+  right: PsychologyCoachComparisonSide
+}
+
 export type PsychologyCoachFacts = {
   generatedAt: number
   factsHash: string
+  scope: { label: string; fingerprint: string }
+  reportMeta: {
+    enrichedTradeCount: number
+    checkInMatchedTradeCount: number
+    matchedDayCount: number
+  }
   baseline: {
     tradeCount: number
     winRate: number | null
     expectancy: number | null
     averagePnL: number | null
-    reliability: string
+    reliability: PsychologySampleReliability
   }
+  comparisons: PsychologyCoachComparisonFact[]
   topInsights: PsychologyCoachFactInsight[]
   combinedPatterns: PsychologyCoachFactInsight[]
   trends: PsychologyCoachTrendFact[]
+  checkInAggregates: {
+    matchedDayCount: number
+    averageSleepHours: number | null
+    averageStress: number | null
+    averageMood: number | null
+    averageConfidence: number | null
+    averageEnergy: number | null
+    averageFocus: number | null
+  }
+  tradingRulesCompliance: {
+    adherencePercent: number | null
+    evaluated: number
+    followed: number
+    violated: number
+    topViolationRules: Array<{
+      ruleId: string
+      ruleLabel: string
+      violationCount: number
+      followedWinRate: number | null
+      violatedWinRate: number | null
+    }>
+  } | null
+  deterministicCoach: {
+    overview: string
+    doingWell: string[]
+    watchItems: string[]
+    recommendations: string[]
+  }
   guardrailFacts: PsychologyCoachGuardrailFacts
   dataGaps: string[]
   hasMinimumData: boolean

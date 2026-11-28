@@ -513,8 +513,65 @@ private final class MockAIRepository: AIRepository, @unchecked Sendable {
         persistedBatches.append(messages)
     }
 
+    func analyzeTradeTurn(_ request: TradeAITradeTurnRequest) async throws -> TradeAITurnResponse {
+        analyzeCallCount += 1
+        if let analyzeError { throw analyzeError }
+        let response = TradeAITurnResponse(
+            reply: reply,
+            conversationID: AIConversationID(UUID().uuidString),
+            userMessageID: request.userMessage.id,
+            assistantMessageID: UUID().uuidString,
+            shouldPersist: shouldPersist && !persistShouldFail,
+            persistError: persistShouldFail ? "persist failed" : nil,
+            backendCode: nil
+        )
+        if response.shouldPersist {
+            persistedBatches.append([request.userMessage, TradeAIMessage(role: .assistant, content: reply)])
+        }
+        return response
+    }
+
+    func analyzePortfolioTurn(_ request: TradeAIPortfolioTurnRequest) async throws -> TradeAITurnResponse {
+        try await analyzeTradeTurn(
+            TradeAITradeTurnRequest(
+                tradeID: TradeID(UUID().uuidString),
+                conversationID: request.conversationID,
+                userMessage: request.userMessage,
+                apiMessages: request.apiMessages
+            )
+        )
+    }
+
+    func persistTurn(_ request: TradeAIPersistTurnRequest) async throws {
+        if persistShouldFail { throw AppError.unknown(message: "persist failed") }
+        persistedBatches.append([request.userMessage, request.assistantMessage])
+    }
+
+    func uploadAICoachAttachment(_ request: TradeAIUploadAttachmentRequest) async throws -> TradeAIAttachment {
+        TradeAIAttachment(url: "https://example.invalid/test.jpg", storagePath: "draft/test.jpg")
+    }
+
+    func createGeneralTradeConversation(
+        _ request: TradeAICreateConversationRequest
+    ) async throws -> TradeAICreateConversationResponse {
+        TradeAICreateConversationResponse(
+            conversationID: AIConversationID(UUID().uuidString),
+            kind: "general_trade"
+        )
+    }
+
+    func loadConversationMessages(conversationID: AIConversationID) async throws -> (TradeAIConversationMeta, [TradeAIMessage]) {
+        (TradeAIConversationMeta(id: conversationID, kind: "trade", tradeID: nil, title: nil, psychologyFactsSnapshot: nil), history)
+    }
+
+    func loadConversationInbox(limit: Int) async throws -> [TradeAIConversationInboxItem] { [] }
+
     func explainPsychologyCoach(_ request: PsychologyCoachAIRequest) async throws -> PsychologyCoachAIResponse {
         PsychologyCoachAIResponse(reply: reply)
+    }
+
+    func analyzeGeneralTrading(_ request: GeneralTradeAIRequest) async throws -> GeneralTradeAIResponse {
+        GeneralTradeAIResponse(reply: reply)
     }
 
     func extractScreenshotTrades(_ request: ScreenshotAIExtractRequest) async throws -> ScreenshotAIExtractResponse {

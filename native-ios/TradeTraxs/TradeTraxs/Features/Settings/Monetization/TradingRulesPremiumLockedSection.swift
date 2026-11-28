@@ -12,6 +12,10 @@ struct TradingRulesPremiumLockedSection: View {
                 categoryBlock(category)
             }
 
+            Text("And many more trading rules…")
+                .experienceStyle(.caption, color: colors.tertiaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             actionButtons
         }
         .padding(ExperienceSpacing.md)

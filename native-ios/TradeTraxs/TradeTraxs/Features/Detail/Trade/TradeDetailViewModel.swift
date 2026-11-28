@@ -264,6 +264,12 @@ final class TradeDetailViewModel {
         navigationCoordinator.editTrade(tradeID)
     }
 
+    func openTradeAIConversation(conversationID: AIConversationID?) {
+        navigationCoordinator.pushHome(
+            .tradeAIConversation(tradeID: tradeID, conversationID: conversationID)
+        )
+    }
+
     func openAuthor() {
         guard let profileID = trade?.ownerProfileID else { return }
         navigationCoordinator.pushOtherProfile(profileID)

@@ -209,10 +209,70 @@ struct DemoAIRepository: AIRepository {
         _ = (messages, tradeID)
     }
 
+    func analyzeTradeTurn(_ request: TradeAITradeTurnRequest) async throws -> TradeAITurnResponse {
+        _ = request
+        return TradeAITurnResponse(
+            reply: "Demo Mode keeps this review on device.",
+            conversationID: AIConversationID(UUID().uuidString),
+            userMessageID: UUID().uuidString,
+            assistantMessageID: UUID().uuidString,
+            shouldPersist: false,
+            persistError: nil,
+            backendCode: nil
+        )
+    }
+
+    func analyzePortfolioTurn(_ request: TradeAIPortfolioTurnRequest) async throws -> TradeAITurnResponse {
+        try await analyzeTradeTurn(
+            TradeAITradeTurnRequest(
+                tradeID: TradeID(UUID().uuidString),
+                conversationID: request.conversationID,
+                userMessage: request.userMessage,
+                apiMessages: request.apiMessages
+            )
+        )
+    }
+
+    func persistTurn(_ request: TradeAIPersistTurnRequest) async throws {
+        _ = request
+    }
+
+    func uploadAICoachAttachment(_ request: TradeAIUploadAttachmentRequest) async throws -> TradeAIAttachment {
+        _ = request
+        return TradeAIAttachment(url: "https://example.invalid/demo-attachment.jpg")
+    }
+
+    func createGeneralTradeConversation(
+        _ request: TradeAICreateConversationRequest
+    ) async throws -> TradeAICreateConversationResponse {
+        _ = request
+        return TradeAICreateConversationResponse(
+            conversationID: AIConversationID(UUID().uuidString),
+            kind: "general_trade"
+        )
+    }
+
+    func loadConversationMessages(conversationID: AIConversationID) async throws -> (TradeAIConversationMeta, [TradeAIMessage]) {
+        _ = conversationID
+        return (TradeAIConversationMeta(id: conversationID, kind: "trade", tradeID: nil, title: nil, psychologyFactsSnapshot: nil), [])
+    }
+
+    func loadConversationInbox(limit: Int) async throws -> [TradeAIConversationInboxItem] {
+        _ = limit
+        return []
+    }
+
     func explainPsychologyCoach(_ request: PsychologyCoachAIRequest) async throws -> PsychologyCoachAIResponse {
         _ = request
         return PsychologyCoachAIResponse(
             reply: "Demo Mode explains this check-in from the sample journal. A TradeTraxs account unlocks the live coach."
+        )
+    }
+
+    func analyzeGeneralTrading(_ request: GeneralTradeAIRequest) async throws -> GeneralTradeAIResponse {
+        _ = request
+        return GeneralTradeAIResponse(
+            reply: "General Trade AI is available with a TradeTraxs account. Demo Mode uses sample analytics only."
         )
     }
 

@@ -1,16 +1,30 @@
 import type { TraderDailyCheckIn } from "../../dailyCheckIn/types.ts"
+import { buildTradingRulesComplianceAnalytics } from "@/lib/analytics/tradingRulesComplianceAnalytics.ts"
+import {
+  complianceTradeFromRow,
+  type PreferenceRuleContext,
+} from "@/lib/analytics/preferenceCompliance.ts"
 import { derivePsychologyGuardrails } from "./comparisons.ts"
 import { enrichPsychologyTrades } from "./enrich.ts"
 import { analyzePsychologyTrends } from "./trends.ts"
+import { buildPsychologyCoachDeterministicSummary } from "./coach.ts"
+import { buildMatchedTradingDays } from "../matchedTradingDays.ts"
+import { isCompleteCheckIn } from "../../dailyCheckIn/validation.ts"
 import type {
   PsychologyAnalyticsReport,
+  PsychologyAnalyticsSection,
   PsychologyCoachFactInsight,
   PsychologyCoachFacts,
   PsychologyInsightCard,
   PsychologyReportTrade,
 } from "./types.ts"
 
-function factInsight(card: PsychologyInsightCard): PsychologyCoachFactInsight {
+function factInsight(
+  card: PsychologyInsightCard,
+  sections: readonly PsychologyAnalyticsSection[]
+): PsychologyCoachFactInsight {
+  const section = sections.find((row) => row.id === card.id)
+  const leader = section?.groups.find((g) => g.highlight) ?? section?.groups[0]
   return {
     id: card.id,
     category: card.category,
@@ -18,6 +32,143 @@ function factInsight(card: PsychologyInsightCard): PsychologyCoachFactInsight {
     detail: card.detail,
     sampleSize: card.sampleSize,
     reliability: card.reliability,
+    winRate: leader?.metrics.winRate ?? null,
+    averagePnL: leader?.metrics.averagePnL ?? null,
+    expectancy: leader?.metrics.expectancy ?? null,
+  }
+}
+
+function comparisonFromSection(
+  report: PsychologyAnalyticsReport,
+  section: PsychologyAnalyticsReport["sections"][number]
+) {
+  const card = report.dashboardCards.find((row) => row.id === section.id)
+  const left = section.groups[0]
+  const right = section.groups[1]
+  const mapSide = (row: typeof left | undefined) =>
+    row
+      ? {
+          label: row.label,
+          sampleLabel: row.label,
+          tradeCount: row.metrics.tradeCount,
+          winRate: row.metrics.winRate,
+          averagePnL: row.metrics.averagePnL,
+          expectancy: row.metrics.expectancy,
+          reliability: row.metrics.reliability,
+          highlight: row.highlight,
+        }
+      : {
+          label: "",
+          sampleLabel: "",
+          tradeCount: 0,
+          winRate: null,
+          averagePnL: null,
+          expectancy: null,
+          reliability: "insufficient" as const,
+          highlight: false,
+        }
+  return {
+    id: section.id,
+    category: card?.category ?? section.id,
+    title: section.title,
+    headline: card?.headline ?? section.title,
+    suggestion: card?.detail ?? section.footnote ?? "",
+    sampleLine: section.footnote ?? "",
+    reliability: left?.metrics.reliability ?? "insufficient",
+    favorableSide: left?.highlight ? left.label : (right?.label ?? ""),
+    left: mapSide(left),
+    right: mapSide(right),
+  }
+}
+
+function average(values: readonly number[]): number | null {
+  if (values.length === 0) return null
+  return values.reduce((sum, v) => sum + v, 0) / values.length
+}
+
+function buildCheckInAggregates(
+  trades: readonly PsychologyReportTrade[],
+  checkIns: readonly TraderDailyCheckIn[],
+  matchedDayCount: number
+) {
+  const days = buildMatchedTradingDays(trades, checkIns.filter(isCompleteCheckIn))
+  if (days.length === 0) {
+    return {
+      matchedDayCount,
+      averageSleepHours: null,
+      averageStress: null,
+      averageMood: null,
+      averageConfidence: null,
+      averageEnergy: null,
+      averageFocus: null,
+    }
+  }
+  const sleep = days
+    .map((d) => d.checkIn.sleepHours)
+    .filter((v): v is number => v != null)
+  const stress = days
+    .map((d) => d.checkIn.stressLevel)
+    .filter((v): v is number => v != null)
+  const mood = days
+    .map((d) => d.checkIn.morningRating)
+    .filter((v): v is number => v != null)
+  const sleepQuality = days
+    .map((d) => d.checkIn.sleepQuality)
+    .filter((v): v is number => v != null)
+  const energy = days
+    .map((d) => d.checkIn.energyLevel)
+    .filter((v): v is number => v != null)
+  const focus = days
+    .map((d) => d.checkIn.focusLevel)
+    .filter((v): v is number => v != null)
+
+  return {
+    matchedDayCount,
+    averageSleepHours: average(sleep),
+    averageStress: average(stress),
+    averageMood: average(mood),
+    averageConfidence: average(sleepQuality),
+    averageEnergy: average(energy),
+    averageFocus: average(focus),
+  }
+}
+
+function buildTradingRulesFacts(
+  trades: readonly PsychologyReportTrade[],
+  preferences: PreferenceRuleContext | null
+): PsychologyCoachFacts["tradingRulesCompliance"] {
+  if (!preferences) return null
+  const complianceTrades = trades
+    .map((trade) =>
+      complianceTradeFromRow({
+        entry_time: trade.entry_time,
+        created_at: trade.created_at ?? trade.entry_time,
+        pnl: trade.pnl,
+        account_id: trade.accountId ?? null,
+        ticker: null,
+        symbol: null,
+      })
+    )
+    .filter((row): row is NonNullable<typeof row> => row != null)
+  const result = buildTradingRulesComplianceAnalytics(complianceTrades, preferences)
+  const topViolationRules = result.impacts
+    .filter((row) => row.sufficientSample)
+    .sort((a, b) => b.violated.priced - a.violated.priced)
+    .slice(0, 5)
+    .map((row) => ({
+      ruleId: row.ruleId,
+      ruleLabel: row.ruleLabel,
+      violationCount: row.violated.priced,
+      followedWinRate: row.winRateFollowed,
+      violatedWinRate: row.winRateViolated,
+    }))
+
+  return {
+    adherencePercent: result.score.adherencePercent,
+    evaluated: result.score.evaluated,
+    followed: result.score.followed,
+    violated: result.score.violated,
+    topViolationRules,
   }
 }
 
@@ -49,8 +200,9 @@ export function buildPsychologyDataGapMessages(
 
 function factsFingerprint(facts: Omit<PsychologyCoachFacts, "factsHash">): string {
   return JSON.stringify({
+    scope: facts.scope,
     baseline: facts.baseline,
-    topInsights: facts.topInsights.map((row) => row.id),
+    comparisons: facts.comparisons?.map((row) => row.id),
     trends: facts.trends.map((row) => row.id),
     guardrails: facts.guardrailFacts,
     gaps: facts.dataGaps,
@@ -62,7 +214,8 @@ export function buildPsychologyCoachFacts(
   trades: readonly PsychologyReportTrade[],
   checkIns: readonly TraderDailyCheckIn[],
   now: Date = new Date(),
-  preferences: import("@/lib/analytics/preferenceCompliance.ts").PreferenceRuleContext | null = null
+  preferences: PreferenceRuleContext | null = null,
+  scope?: { label: string; fingerprint: string }
 ): PsychologyCoachFacts {
   const enriched = enrichPsychologyTrades(trades, checkIns, preferences)
   const trends = analyzePsychologyTrends(trades, checkIns)
@@ -85,11 +238,21 @@ export function buildPsychologyCoachFacts(
         : []
     ),
   ]
-  const combinedFacts = [...new Map(combined.map((card) => [card.id, factInsight(card)])).values()]
+  const combinedFacts = [
+    ...new Map(
+      combined.map((card) => [card.id, factInsight(card, report.sections)])
+    ).values(),
+  ]
 
   const facts: PsychologyCoachFacts = {
     generatedAt: now.getTime(),
     factsHash: "",
+    scope: scope ?? { label: "All accounts", fingerprint: "default" },
+    reportMeta: {
+      enrichedTradeCount: report.enrichedTradeCount,
+      checkInMatchedTradeCount: report.checkInMatchedTradeCount,
+      matchedDayCount: report.matchedDayCount,
+    },
     baseline: {
       tradeCount: report.baseline.tradeCount,
       winRate: report.baseline.winRate,
@@ -97,12 +260,36 @@ export function buildPsychologyCoachFacts(
       averagePnL: report.baseline.averagePnL,
       reliability: report.baseline.reliability,
     },
-    topInsights: report.dashboardCards.map(factInsight),
+    comparisons: report.sections.map((section) =>
+      comparisonFromSection(report, section)
+    ),
+    topInsights: report.dashboardCards.map((card) =>
+      factInsight(card, report.sections)
+    ),
     combinedPatterns: combinedFacts,
     trends,
+    checkInAggregates: buildCheckInAggregates(
+      trades,
+      checkIns,
+      report.matchedDayCount
+    ),
+    tradingRulesCompliance: buildTradingRulesFacts(trades, preferences),
+    deterministicCoach: {
+      overview: "",
+      doingWell: [],
+      watchItems: [],
+      recommendations: [],
+    },
     guardrailFacts: guardrails,
     dataGaps: buildPsychologyDataGapMessages(report, trades),
     hasMinimumData: report.baseline.tradeCount >= 5,
+  }
+  const deterministic = buildPsychologyCoachDeterministicSummary(facts)
+  facts.deterministicCoach = {
+    overview: deterministic.overview,
+    doingWell: deterministic.doingWell,
+    watchItems: deterministic.watchItems,
+    recommendations: deterministic.recommendations,
   }
   facts.factsHash = factsFingerprint(facts)
   return facts

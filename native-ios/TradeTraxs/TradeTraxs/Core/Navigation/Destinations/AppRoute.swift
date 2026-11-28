@@ -46,10 +46,16 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case tradingScorecard
     /// Owner-only psychology coach (AI explains deterministic facts).
     case psychologyCoach
+    /// Account-wide Trade AI coaching thread (Messages inbox).
+    case generalTradeCoach
     /// Owner-only check-in history list.
     case checkInHistory
     /// Owner-only check-in + trades for one Eastern trading day.
     case checkInDay(String)
+    /// Full-screen Trade AI conversation for a journal trade.
+    case tradeAIConversation(tradeID: TradeID, conversationID: AIConversationID?)
+    /// General Trade AI hub (portfolio conversations).
+    case tradeAIHub
     /// Notifications / Activity inbox opened from Dashboard.
     case activity
     /// Pending follow requests opened from Activity.
@@ -104,6 +110,8 @@ enum FeedRoute: Hashable, Codable, Sendable {
 
 /// Messages tab push hierarchy (DMs + Trade Rooms opened from inbox).
 enum MessagesRoute: Hashable, Codable, Sendable {
+    case tradeAIHub
+    case tradeAIConversation(AIConversationID, tradeID: TradeID?)
     case thread(ConversationID)
     case sharedTrade(TradeID)
     case sharedPost(PostID)

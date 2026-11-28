@@ -374,6 +374,7 @@ struct HomeNavigationStack: View {
             )
         case .checkInHistory:
             CheckInHistoryView(data: appEnvironment.data, navigationCoordinator: coordinator)
+                .experienceChevronOnlyBackNavigationChrome()
         case .checkInDay(let dateKey):
             CheckInDayDetailView(
                 dateKey: dateKey,
@@ -495,7 +496,19 @@ struct HomeNavigationStack: View {
                 data: appEnvironment.data
             )
         case .psychologyCoach:
-            PsychologyCoachHomeRouteView(ai: appEnvironment.data.ai)
+            PsychologyCoachHomeRouteView(data: appEnvironment.data)
+        case .tradeAIConversation(let tradeID, let conversationID):
+            TradeAIConversationHostView(
+                tradeID: tradeID,
+                conversationID: conversationID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .tradeAIHub, .generalTradeCoach:
+            GeneralTradeAICoachView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .settings(let settingsRoute):
             SettingsDestinationView(
                 route: settingsRoute,
@@ -550,6 +563,8 @@ struct HomeNavigationStack: View {
         case .tradingRulesViolationHistory: return "Violation history"
         case .tradingScorecard: return DashboardScorecardDisplayCopy.sectionTitle
         case .psychologyCoach: return "Psychology Coach"
+        case .generalTradeCoach, .tradeAIHub: return "General Trade AI"
+        case .tradeAIConversation: return "Trade AI"
         case .checkInHistory: return "Check-In History"
         case .checkInDay: return "Daily Check-In"
         case .activity: return "Activity"
@@ -934,6 +949,26 @@ struct MessagesNavigationStack: View {
                 navigationCoordinator: coordinator,
                 detailCache: appEnvironment.data.detailCache
             )
+        case .tradeAIHub:
+            GeneralTradeAICoachView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .tradeAIConversation(let conversationID, let tradeID):
+            if let tradeID {
+                TradeAIConversationHostView(
+                    tradeID: tradeID,
+                    conversationID: conversationID,
+                    data: appEnvironment.data,
+                    navigationCoordinator: coordinator
+                )
+            } else {
+                GeneralTradeAICoachView(
+                    data: appEnvironment.data,
+                    navigationCoordinator: coordinator,
+                    initialConversationID: conversationID
+                )
+            }
         }
     }
 
@@ -959,6 +994,8 @@ struct MessagesNavigationStack: View {
         case .tradingRulesDayDetail: return "Trading day"
         case .tradingRulesTrends: return "Trading Rules Trends"
         case .tradingRulesViolationHistory: return "Violation history"
+        case .tradeAIHub: return "General Trade AI"
+        case .tradeAIConversation: return "Trade AI"
         }
     }
 }
@@ -1633,12 +1670,8 @@ struct PsychologyAnalyticsHomeRouteView: View {
                 if let freePreviewPresentation {
                     PsychologyAnalyticsFreePreviewView(
                         presentation: freePreviewPresentation,
-                        onOpenCheckInHistory: {
-                            navigationCoordinator.pushHome(.checkInHistory)
-                        },
-                        onOpenDay: { day in
-                            navigationCoordinator.pushHome(.checkInDay(day.dateKey))
-                        }
+                        navigationCoordinator: navigationCoordinator,
+                        data: data
                     )
                 } else {
                     ExperienceLoadingSpinner(message: "Loading sample analytics…")
@@ -1772,9 +1805,53 @@ struct PsychologyAnalyticsHomeRouteView: View {
     }
 }
 
+/// Loads a Messages inbox thread without dashboard hydration.
+private struct PsychologyCoachReopenRouteView: View {
+    let data: DataEnvironment
+
+    @State private var facts: PsychologyCoachFacts?
+    @State private var loadError: String?
+
+    var body: some View {
+        Group {
+            if let facts {
+                PsychologyCoachView(facts: facts, ai: data.ai)
+            } else if let loadError {
+                ExperienceEmptyState(
+                    icon: .chart,
+                    title: "Coach unavailable",
+                    message: loadError
+                )
+            } else {
+                ExperienceIndeterminateProgress()
+                    .controlSize(.regular)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        guard let conversationID = PsychologyCoachSessionStore.shared.pendingReopenConversationID else {
+            loadError = "Conversation not found."
+            return
+        }
+        do {
+            let payload = try await data.ai.loadConversationMessages(conversationID: conversationID)
+            guard let snapshot = payload.0.psychologyFactsSnapshot else {
+                loadError = "This conversation is missing saved analytics scope."
+                return
+            }
+            facts = snapshot
+        } catch {
+            loadError = UserFacingError.message(for: error)
+        }
+    }
+}
+
 /// Gates `HomeRoute.psychologyCoach` for confirmed Free users.
 private struct PsychologyCoachHomeRouteView: View {
-    let ai: any AIRepository
+    let data: DataEnvironment
 
     @State private var entitlementGateRevision = 0
     @State private var didPresentUpgradeGate = false
@@ -1794,8 +1871,10 @@ private struct PsychologyCoachHomeRouteView: View {
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .experienceScreenBackground()
+            } else if PsychologyCoachSessionStore.shared.pendingReopenConversationID != nil {
+                PsychologyCoachReopenRouteView(data: data)
             } else if let facts = PsychologyCoachSessionStore.shared.facts {
-                PsychologyCoachView(facts: facts, ai: ai)
+                PsychologyCoachView(facts: facts, ai: data.ai)
             } else {
                 ExperienceEmptyState(
                     icon: .chart,

@@ -1,0 +1,455 @@
+import SwiftUI
+
+@MainActor
+@Observable
+final class GeneralTradeAICoachViewModel {
+    private(set) var messages: [TradeAIMessage] = []
+    private(set) var isLoading = false
+    private(set) var isLoadingHistory = false
+    private(set) var errorMessage: String?
+    private(set) var persistErrorMessage: String?
+    private(set) var conversations: [TradeAIConversationInboxItem] = []
+    private(set) var conversationID: AIConversationID?
+    private(set) var conversationTitle = "General Trade AI"
+
+    var draft = ""
+    var pendingAttachmentData: Data?
+    var pendingAttachmentMime = "image/jpeg"
+    var showsNewConversationSheet = false
+    var newConversationTitle = ""
+    var showsTradePicker = false
+    var isLoadingTradePicker = false
+    var tradePickerTrades: [Trade] = []
+    var pendingSharedTrade: Trade?
+
+    var scopeController = TradingRulesAnalyticsScopeController()
+
+    private let ai: any AIRepository
+    private let trades: any TradeRepository
+    private let detailCache: DetailPresentationCache
+    private var accounts: [TradingAccount] = []
+    private var profileID: ProfileID?
+    private var attachedTradesByID: [TradeID: Trade] = [:]
+    private var pendingPersistTurn: (user: TradeAIMessage, assistant: TradeAIMessage)?
+
+    init(ai: any AIRepository, trades: any TradeRepository, detailCache: DetailPresentationCache) {
+        self.ai = ai
+        self.trades = trades
+        self.detailCache = detailCache
+    }
+
+    func tradeForAttachment(_ id: TradeID) -> Trade? {
+        attachedTradesByID[id]
+            ?? detailCache.trade(id: id)
+            ?? tradePickerTrades.first(where: { $0.id == id })
+    }
+
+    func presentTradePicker() {
+        ExperienceHaptics.play(.selection)
+        showsTradePicker = true
+    }
+
+    func loadTradePickerIfNeeded() async {
+        guard tradePickerTrades.isEmpty, !isLoadingTradePicker, let profileID else { return }
+        isLoadingTradePicker = true
+        defer { isLoadingTradePicker = false }
+        do {
+            let page = try await trades.trades(
+                ownedBy: profileID,
+                accountID: nil,
+                page: PageRequest(limit: 40),
+                publicOnly: false
+            )
+            tradePickerTrades = page.items
+        } catch {
+            tradePickerTrades = []
+        }
+    }
+
+    func stageTrade(_ trade: Trade) {
+        pendingSharedTrade = trade
+        attachedTradesByID[trade.id] = trade
+        detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
+        showsTradePicker = false
+    }
+
+    func bootstrap(initialConversationID: AIConversationID?) async {
+        defer { GeneralTradeCoachSessionStore.shared.clearReopenConversation() }
+
+        guard let profileID = SessionBootstrapStore.shared.last.map({ ProfileID($0.data.viewer.id) }) else {
+            return
+        }
+        self.profileID = profileID
+        accounts = detailCache.accounts(for: profileID) ?? []
+        scopeController.hydrate(profileID: profileID, accounts: accounts)
+        await refreshConversationList()
+
+        let target =
+            initialConversationID
+            ?? GeneralTradeCoachSessionStore.shared.pendingReopenConversationID
+
+        if let target {
+            await selectConversation(target)
+        } else if let recent = conversations.first {
+            await selectConversation(recent.id)
+        }
+    }
+
+    func refreshConversationList() async {
+        do {
+            let inbox = try await ai.loadConversationInbox(limit: 100)
+            conversations = inbox.filter { $0.kind == "general_trade" }
+        } catch {
+            conversations = []
+        }
+    }
+
+    func selectConversation(_ id: AIConversationID) async {
+        conversationID = id
+        if let row = conversations.first(where: { $0.id == id }) {
+            conversationTitle = row.title ?? "General Trade AI"
+        }
+        isLoadingHistory = true
+        defer { isLoadingHistory = false }
+        do {
+            let loaded = try await ai.loadConversationMessages(conversationID: id)
+            messages = loaded.1.sorted { $0.createdAt < $1.createdAt }
+            await hydrateAttachedTradesFromMessages()
+            errorMessage = nil
+        } catch {
+            errorMessage = UserFacingError.message(for: error)
+        }
+    }
+
+    func createConversation() async {
+        let title = newConversationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        let scope = TradeAIPortfolioScopeMapper.map(scopeController.clientScopeFilter(), accounts: accounts)
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let created = try await ai.createGeneralTradeConversation(
+                TradeAICreateConversationRequest(title: title, scope: scope)
+            )
+            conversationID = created.conversationID
+            conversationTitle = title
+            messages = []
+            showsNewConversationSheet = false
+            newConversationTitle = ""
+            await refreshConversationList()
+        } catch {
+            errorMessage = UserFacingError.message(for: error)
+        }
+    }
+
+    func send() async {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if Self.isPremiumRestricted {
+            ProUpgradeCoordinator.shared.present(reason: .feature(.aiAnalyst))
+            return
+        }
+
+        draft = ""
+        errorMessage = nil
+        persistErrorMessage = nil
+        pendingPersistTurn = nil
+
+        var attachments: [TradeAIAttachment] = []
+        if let trade = pendingSharedTrade {
+            pendingSharedTrade = nil
+            attachments.append(.attachedTrade(trade.id))
+            attachedTradesByID[trade.id] = trade
+        }
+        if let imageData = pendingAttachmentData {
+            pendingAttachmentData = nil
+            do {
+                let uploaded = try await ai.uploadAICoachAttachment(
+                    TradeAIUploadAttachmentRequest(
+                        imageData: imageData,
+                        mimeType: pendingAttachmentMime,
+                        conversationID: conversationID
+                    )
+                )
+                attachments = [uploaded]
+            } catch {
+                errorMessage = "We couldn't upload that image. Try again."
+                return
+            }
+        }
+
+        let user = TradeAIMessage(
+            role: .user,
+            content: text,
+            promptKey: "custom",
+            attachments: attachments
+        )
+        messages.append(user)
+        isLoading = true
+        defer { isLoading = false }
+
+        let scope = TradeAIPortfolioScopeMapper.map(scopeController.clientScopeFilter(), accounts: accounts)
+        let apiMessages = TradeAIAPIMessageBuilder.messagesForAPI(from: messages)
+
+        do {
+            let turn = try await ai.analyzePortfolioTurn(
+                TradeAIPortfolioTurnRequest(
+                    conversationID: conversationID,
+                    scope: scope,
+                    title: conversationTitle,
+                    userMessage: user,
+                    apiMessages: apiMessages
+                )
+            )
+            guard turn.analysisSucceeded else {
+                if messages.last?.id == user.id {
+                    messages.removeLast()
+                }
+                errorMessage = turn.reply
+                return
+            }
+
+            conversationID = turn.conversationID
+            let assistant = TradeAIMessage(
+                id: turn.assistantMessageID,
+                role: .assistant,
+                content: turn.reply
+            )
+            messages.append(assistant)
+            if turn.shouldPersist {
+                pendingPersistTurn = nil
+                persistErrorMessage = nil
+                #if DEBUG
+                TradeAITrace.persistTurnSkipped(reason: "server_persisted")
+                #endif
+            } else if let persistError = turn.persistError, !persistError.isEmpty {
+                pendingPersistTurn = (user, assistant)
+                persistErrorMessage =
+                    "Analysis is on screen, but saving to your account failed. Tap Retry Save."
+            }
+            await refreshConversationList()
+        } catch is ThirdPartyAIConsentError {
+            if messages.last?.id == user.id {
+                messages.removeLast()
+            }
+        } catch {
+            errorMessage = UserFacingError.message(for: error)
+        }
+    }
+
+    func retryPersistIfNeeded() async {
+        guard let pending = pendingPersistTurn, let conversationID else { return }
+        persistErrorMessage = nil
+        do {
+            try await ai.persistTurn(
+                TradeAIPersistTurnRequest(
+                    conversationID: conversationID,
+                    userMessage: pending.user,
+                    assistantMessage: pending.assistant
+                )
+            )
+            pendingPersistTurn = nil
+        } catch {
+            persistErrorMessage =
+                "Analysis is on screen, but saving to your account failed. Tap Retry Save."
+        }
+    }
+
+    private func hydrateAttachedTradesFromMessages() async {
+        let ids = Set(messages.flatMap { $0.attachments.compactMap(\.tradeID) })
+        guard !ids.isEmpty, profileID != nil else { return }
+        for id in ids where attachedTradesByID[id] == nil {
+            if let cached = detailCache.trade(id: id) {
+                attachedTradesByID[id] = cached
+                continue
+            }
+            if let loaded = try? await trades.trade(id: id) {
+                attachedTradesByID[id] = loaded
+                detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: loaded))
+            }
+        }
+    }
+
+    private static var isPremiumRestricted: Bool {
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+}
+
+struct GeneralTradeAICoachView: View {
+    let data: DataEnvironment
+    let navigationCoordinator: NavigationCoordinator
+    var initialConversationID: AIConversationID?
+
+    @State private var viewModel: GeneralTradeAICoachViewModel
+    @Environment(\.themeColors) private var colors
+
+    init(
+        data: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator,
+        initialConversationID: AIConversationID? = nil
+    ) {
+        self.data = data
+        self.navigationCoordinator = navigationCoordinator
+        self.initialConversationID = initialConversationID
+        _viewModel = State(
+            initialValue: GeneralTradeAICoachViewModel(
+                ai: data.ai,
+                trades: data.trades,
+                detailCache: data.detailCache
+            )
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TradingRulesAnalyticsFilterBar(
+                scope: viewModel.scopeController,
+                onManageAccounts: {
+                    navigationCoordinator.pushHome(.settings(.tradingAccounts))
+                },
+                onFiltersTap: {
+                    viewModel.scopeController.prepareDraftScopeFilters()
+                    viewModel.scopeController.showsFiltersSheet = true
+                }
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.xs)
+
+            if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
+                ExperienceIndeterminateProgress()
+                    .padding()
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    ForEach(viewModel.messages) { message in
+                        TradeAIMessageCard(
+                            message: message,
+                            imagePipeline: data.imagePipeline,
+                            tradeForAttachment: { viewModel.tradeForAttachment($0) },
+                            onOpenTrade: { tradeID in
+                                navigationCoordinator.pushHome(.tradeDetail(tradeID))
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.sm)
+            }
+
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .experienceStyle(.caption, color: colors.error)
+                    .padding(.horizontal, ExperienceSpacing.md)
+            }
+
+            if let persistError = viewModel.persistErrorMessage {
+                HStack {
+                    Text(persistError)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                    Spacer()
+                    Button("Retry Save") {
+                        Task { await viewModel.retryPersistIfNeeded() }
+                    }
+                    .font(.system(.caption, design: .default).weight(.semibold))
+                    .foregroundStyle(colors.accent)
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+            }
+
+            composer
+        }
+        .experienceScreenBackground()
+        .experienceNavigationTitle(viewModel.conversationTitle)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    ForEach(viewModel.conversations) { item in
+                        Button(item.title ?? "General Trade AI") {
+                            Task { await viewModel.selectConversation(item.id) }
+                        }
+                    }
+                    Button("New conversation…") {
+                        viewModel.showsNewConversationSheet = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("Conversations")
+            }
+        }
+        .sheet(isPresented: $viewModel.showsNewConversationSheet) {
+            newConversationSheet
+        }
+        .sheet(isPresented: $viewModel.scopeController.showsTimePeriodSheet) {
+            TradingRulesAnalyticsTimePeriodSheet(scope: viewModel.scopeController)
+        }
+        .sheet(isPresented: $viewModel.scopeController.showsFiltersSheet) {
+            TradingRulesAnalyticsFiltersSheet(scope: viewModel.scopeController)
+                .onAppear { viewModel.scopeController.prepareDraftScopeFilters() }
+        }
+        .sheet(isPresented: $viewModel.showsTradePicker) {
+            TradeSharePickerSheet(
+                trades: viewModel.tradePickerTrades,
+                imagePipeline: data.imagePipeline,
+                isLoading: viewModel.isLoadingTradePicker,
+                title: "Attach Trade",
+                onSelect: { viewModel.stageTrade($0) },
+                onClose: { viewModel.showsTradePicker = false }
+            )
+            .task { await viewModel.loadTradePickerIfNeeded() }
+        }
+        .task {
+            await viewModel.bootstrap(initialConversationID: initialConversationID)
+        }
+    }
+
+    private var composer: some View {
+        AITradeCoachComposerBar(
+            draft: $viewModel.draft,
+            isLoading: viewModel.isLoading,
+            showsTradeAttach: true,
+            stagedTrade: viewModel.pendingSharedTrade,
+            pendingImageData: viewModel.pendingAttachmentData,
+            imagePipeline: data.imagePipeline,
+            onSend: { Task { await viewModel.send() } },
+            onRemoveTrade: { viewModel.pendingSharedTrade = nil },
+            onRemoveImage: { viewModel.pendingAttachmentData = nil },
+            onAttachTrade: { viewModel.presentTradePicker() },
+            onPickedImage: { data in
+                viewModel.pendingAttachmentData = data
+                viewModel.pendingAttachmentMime = "image/jpeg"
+            }
+        )
+    }
+
+    private var newConversationSheet: some View {
+        NavigationStack {
+            Form {
+                TextField("Title", text: $viewModel.newConversationTitle)
+                Text("Scope uses the account and date filters above.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+            .navigationTitle("New conversation")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { viewModel.showsNewConversationSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        Task { await viewModel.createConversation() }
+                    }
+                    .disabled(
+                        viewModel.newConversationTitle
+                            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}

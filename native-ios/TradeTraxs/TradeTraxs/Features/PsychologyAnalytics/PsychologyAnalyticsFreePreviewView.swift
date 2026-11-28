@@ -1,58 +1,32 @@
 import SwiftUI
 
-/// Free-tier Psychology Analytics: sample overview + explorable Check-In History only.
+/// Sample Psychology Analytics — same ``PsychologyAnalyticsDetailView`` as Pro with banner + upgrade footer only.
 struct PsychologyAnalyticsFreePreviewView: View {
     let presentation: PsychologyAnalyticsPreviewSupport.SamplePresentation
-    var onOpenCheckInHistory: () -> Void
-    var onOpenDay: ((CheckInHistoryDaySummary) -> Void)?
+    let navigationCoordinator: NavigationCoordinator
+    let data: DataEnvironment
 
-    @Environment(\.themeColors) private var colors
-
-    private var inlineHistoryRows: [CheckInHistoryDaySummary] {
-        Array(
-            presentation.historySummaries.prefix(PsychologyAnalyticsPreviewSupport.inlineHistoryPreviewCount)
-        )
+    private var activeProfileID: ProfileID? {
+        SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                sampleDataBanner
-                PsychologyAnalyticsDetailView(
-                    report: presentation.report,
-                    unlockProgress: presentation.unlockProgress,
-                    onOpenCheckInHistory: onOpenCheckInHistory,
-                    onOpenCheckInHistoryDay: onOpenDay,
-                    freePreviewHistorySummaries: inlineHistoryRows
-                )
-                PsychologyAnalyticsPremiumLockedSection()
-                    .padding(.horizontal, ExperienceSpacing.md)
-            }
-            .padding(.vertical, ExperienceSpacing.md)
-        }
-        .experienceScreenBackground()
-        .experienceNavigationTitle("Psychology Analytics")
+        PsychologyAnalyticsDetailView(
+            report: presentation.report,
+            insightCards: presentation.displayInsightCards,
+            unlockProgress: presentation.unlockProgress,
+            postUnlockGapMessages: presentation.postUnlockGapMessages,
+            onOpenCheckInHistory: {
+                navigationCoordinator.pushHome(.checkInHistory)
+            },
+            injectedCoachSummary: presentation.coachSummary,
+            showsSamplePreviewBanner: true,
+            showsPreviewUpgradeFooter: true,
+            navigationCoordinator: navigationCoordinator,
+            preferences: data.tradingPreferences,
+            viewerID: activeProfileID,
+            detailCache: data.detailCache
+        )
         .accessibilityIdentifier("psychologyAnalytics.freePreview")
-    }
-
-    private var sampleDataBanner: some View {
-        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(colors.accent)
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                Text("Sample data preview")
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                    .fontWeight(.semibold)
-                Text(MonetizationPlanCopy.psychologyAnalyticsPreviewSampleDataNote)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(ExperienceSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .experienceDashboardCard(cornerRadius: ExperienceRadius.md)
-        .padding(.horizontal, ExperienceSpacing.md)
-        .accessibilityIdentifier("psychologyAnalytics.sampleDataBanner")
     }
 }

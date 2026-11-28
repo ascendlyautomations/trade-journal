@@ -34,6 +34,16 @@ struct CheckInHistoryView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Check-In History")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    viewModel.openPsychologyAnalytics()
+                } label: {
+                    Label("Analytics", systemImage: "chart.bar")
+                }
+                .accessibilityIdentifier("checkInHistory.analytics")
+            }
+        }
         .safeAreaInset(edge: .top, spacing: 0) {
             if PsychologyAnalyticsPreviewSupport.usesSampleCheckInHistory || traxsProPreviewReadOnly {
                 checkInHistorySampleBanner

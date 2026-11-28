@@ -105,7 +105,15 @@ struct TradeHistoryView: View {
             viewModel.searchChanged()
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    viewModel.openTradeAIHub()
+                } label: {
+                    Image(systemName: "brain.head.profile")
+                }
+                .accessibilityLabel("Trade AI")
+                .accessibilityIdentifier("trades.tradeAI")
+
                 Button {
                     viewModel.openBacktestLab()
                 } label: {

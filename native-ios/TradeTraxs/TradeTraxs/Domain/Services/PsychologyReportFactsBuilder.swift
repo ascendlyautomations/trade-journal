@@ -44,16 +44,36 @@ nonisolated enum PsychologyReportFactsBuilder {
             }
         }
 
+        let baseline = PsychologyCoachFactMetric(
+            tradeCount: report.performance.tradeCount,
+            winRate: report.performance.winRate.map { NSDecimalNumber(decimal: $0).doubleValue },
+            expectancy: report.performance.expectancy.map { NSDecimalNumber(decimal: $0).doubleValue },
+            averagePnL: report.performance.averagePnL.map { NSDecimalNumber(decimal: $0).doubleValue },
+            reliability: report.performance.reliability.rawValue
+        )
+
+        let guardrails = PsychologyCoachGuardrailFacts(
+            consecutiveLossCheckpoint: nil,
+            consecutiveLossWinRateAfter: report.behavior.afterTwoLossesWinRate,
+            consecutiveLossBaselineWinRate: report.behavior.afterTwoLossesBaselineWinRate,
+            lowSleepHoursThreshold: nil,
+            lowSleepExpectancy: nil,
+            maxTradesDaySoftLimit: nil,
+            lateTradeAveragePnL: report.behavior.lateTradeAvgPnL,
+            earlyTradeAveragePnL: report.behavior.earlyTradeAvgPnL
+        )
+
         return PsychologyCoachFacts(
             generatedAt: Date(timeIntervalSince1970: report.generatedAt / 1000),
             factsHash: report.factsHash,
-            baseline: PsychologyCoachFactMetric(
-                tradeCount: report.performance.tradeCount,
-                winRate: report.performance.winRate.map { NSDecimalNumber(decimal: $0).doubleValue },
-                expectancy: report.performance.expectancy.map { NSDecimalNumber(decimal: $0).doubleValue },
-                averagePnL: report.performance.averagePnL.map { NSDecimalNumber(decimal: $0).doubleValue },
-                reliability: report.performance.reliability.rawValue
+            scope: PsychologyCoachScopeFacts(label: report.dateRangeLabel, fingerprint: report.factsHash),
+            reportMeta: PsychologyCoachReportMetaFacts(
+                enrichedTradeCount: report.performance.tradeCount,
+                checkInMatchedTradeCount: report.checkInMatchedTradeCount,
+                matchedDayCount: report.matchedDayCount
             ),
+            baseline: baseline,
+            comparisons: [],
             topInsights: Array(topInsights.prefix(4)),
             combinedPatterns: [],
             trends: report.comparisons.prefix(2).map {
@@ -66,16 +86,23 @@ nonisolated enum PsychologyReportFactsBuilder {
                     reliability: $0.reliability
                 )
             },
-            guardrailFacts: PsychologyCoachGuardrailFacts(
-                consecutiveLossCheckpoint: nil,
-                consecutiveLossWinRateAfter: report.behavior.afterTwoLossesWinRate,
-                consecutiveLossBaselineWinRate: report.behavior.afterTwoLossesBaselineWinRate,
-                lowSleepHoursThreshold: nil,
-                lowSleepExpectancy: nil,
-                maxTradesDaySoftLimit: nil,
-                lateTradeAveragePnL: report.behavior.lateTradeAvgPnL,
-                earlyTradeAveragePnL: report.behavior.earlyTradeAvgPnL
+            checkInAggregates: PsychologyCoachCheckInAggregates(
+                matchedDayCount: report.matchedDayCount,
+                averageSleepHours: report.checkInSummary.averageSleepHours,
+                averageStress: report.checkInSummary.averageStress,
+                averageMood: report.checkInSummary.averageMorningRating,
+                averageConfidence: report.checkInSummary.averageSleepQuality.map { Double($0) },
+                averageEnergy: nil,
+                averageFocus: nil
             ),
+            tradingRulesCompliance: nil,
+            deterministicCoach: PsychologyCoachDeterministicFacts(
+                overview: report.doingWell.first ?? report.title,
+                doingWell: report.doingWell,
+                watchItems: report.watchItems,
+                recommendations: []
+            ),
+            guardrailFacts: guardrails,
             dataGaps: report.performance.tradeCount < 5 ? ["Log more trades in this period."] : [],
             hasMinimumData: report.performance.tradeCount >= 5
         )

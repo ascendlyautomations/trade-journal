@@ -10,8 +10,18 @@ final class PsychologyCoachSessionStore {
     private(set) var cachedAIExplanation: String?
     private(set) var cachedAIHash: String?
     private(set) var aiStale = false
+  /// When set, ``PsychologyCoachView`` reopens this persisted thread from Messages.
+    private(set) var pendingReopenConversationID: AIConversationID?
 
     private init() {}
+
+    func noteReopenConversation(id: AIConversationID) {
+        pendingReopenConversationID = id
+    }
+
+    func clearReopenConversation() {
+        pendingReopenConversationID = nil
+    }
 
     func update(
         facts: PsychologyCoachFacts,

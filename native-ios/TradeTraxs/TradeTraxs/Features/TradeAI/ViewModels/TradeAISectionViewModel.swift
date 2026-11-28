@@ -8,6 +8,7 @@ import Observation
 @MainActor
 final class TradeAISectionViewModel {
     private(set) var messages: [TradeAIMessage] = []
+    private(set) var trade: Trade?
     private(set) var isAnalyzing = false
     private(set) var isLoadingHistory = false
     private(set) var errorMessage: String?
@@ -16,6 +17,8 @@ final class TradeAISectionViewModel {
     var selectedPrompt: TradeAISuggestedPrompt = TradeAISuggestedPrompts.default
     /// Custom question field (advanced users).
     var draft = ""
+    var pendingAttachmentData: Data?
+    var pendingAttachmentMime = "image/jpeg"
 
     let analysisOptions = TradeAISuggestedPrompts.all
 
@@ -26,6 +29,7 @@ final class TradeAISectionViewModel {
     private var historyTask: Task<Void, Never>?
     private var didLoadHistory = false
     private var pendingPersistTurn: (user: TradeAIMessage, assistant: TradeAIMessage)?
+    private(set) var conversationID: AIConversationID?
 
     init(tradeID: TradeID, ai: any AIRepository) {
         self.tradeID = tradeID
@@ -33,9 +37,23 @@ final class TradeAISectionViewModel {
     }
 
     /// Refresh context whenever Trade Detail finishes loading / refreshing the trade.
+    func noteConversationID(_ id: AIConversationID) {
+        conversationID = id
+    }
+
     func updateContext(trade: Trade?, notes: [TradeNote]) {
         guard let trade, trade.id == tradeID else { return }
+        self.trade = trade
         context = TradeAIMapper.makeContext(trade: trade, notes: notes)
+    }
+
+    var showsConversationStarters: Bool {
+        messages.isEmpty && !isAnalyzing && !isLoadingHistory
+    }
+
+    func submitPreset(_ prompt: TradeAISuggestedPrompt) async {
+        selectedPrompt = prompt
+        await submit(displayText: prompt.title, promptKey: prompt.id)
     }
 
     /// Load stored AI turns once. Never regenerates prior replies.
@@ -47,7 +65,13 @@ final class TradeAISectionViewModel {
 
         historyTask?.cancel()
         do {
-            let history = try await ai.loadConversation(tradeID: tradeID)
+            let history: [TradeAIMessage]
+            if let conversationID {
+                let loaded = try await ai.loadConversationMessages(conversationID: conversationID)
+                history = loaded.1
+            } else {
+                history = try await ai.loadConversation(tradeID: tradeID)
+            }
             guard !Task.isCancelled else { return }
             if !history.isEmpty {
                 messages = history.sorted { $0.createdAt < $1.createdAt }
@@ -101,10 +125,29 @@ final class TradeAISectionViewModel {
         persistErrorMessage = nil
         pendingPersistTurn = nil
 
+        var attachments: [TradeAIAttachment] = []
+        if let imageData = pendingAttachmentData {
+            pendingAttachmentData = nil
+            do {
+                let uploaded = try await ai.uploadAICoachAttachment(
+                    TradeAIUploadAttachmentRequest(
+                        imageData: imageData,
+                        mimeType: pendingAttachmentMime,
+                        conversationID: conversationID
+                    )
+                )
+                attachments = [uploaded]
+            } catch {
+                errorMessage = "We couldn't upload that image. Try again."
+                return
+            }
+        }
+
         let userMessage = TradeAIMessage(
             role: .user,
             content: displayText,
-            promptKey: promptKey
+            promptKey: promptKey,
+            attachments: attachments
         )
         messages.append(userMessage)
 
@@ -130,21 +173,48 @@ final class TradeAISectionViewModel {
             defer { isAnalyzing = false }
             do {
                 let apiMessages = TradeAIAPIMessageBuilder.messagesForAPI(from: messages)
-                let response = try await ai.analyzeTrade(
-                    TradeAIAnalyzeRequest(context: context, messages: apiMessages)
+                let turn = try await ai.analyzeTradeTurn(
+                    TradeAITradeTurnRequest(
+                        tradeID: tradeID,
+                        conversationID: conversationID,
+                        userMessage: userMessage,
+                        apiMessages: apiMessages
+                    )
                 )
                 guard !Task.isCancelled else { return }
-                if response.backendCode == "pro_required" {
+                if turn.backendCode == "pro_required" {
                     if messages.last?.id == userMessage.id {
                         messages.removeLast()
                     }
                     ProUpgradeCoordinator.shared.present(reason: .feature(.aiAnalyst))
                     return
                 }
-                let assistant = TradeAIMessage(role: .assistant, content: response.reply)
+
+                guard turn.analysisSucceeded else {
+                    if messages.last?.id == userMessage.id {
+                        messages.removeLast()
+                    }
+                    errorMessage = turn.reply
+                    return
+                }
+
+                conversationID = turn.conversationID
+                let assistant = TradeAIMessage(
+                    id: turn.assistantMessageID,
+                    role: .assistant,
+                    content: turn.reply
+                )
                 messages.append(assistant)
-                if response.shouldPersist {
-                    await persistCompletedTurn(user: userMessage, assistant: assistant)
+                if turn.shouldPersist {
+                    pendingPersistTurn = nil
+                    persistErrorMessage = nil
+                    #if DEBUG
+                    TradeAITrace.persistTurnSkipped(reason: "server_persisted")
+                    #endif
+                } else if let persistError = turn.persistError, !persistError.isEmpty {
+                    pendingPersistTurn = (userMessage, assistant)
+                    persistErrorMessage =
+                        "Analysis is on screen, but saving to your account failed. Tap Retry Save."
                 }
             } catch is ThirdPartyAIConsentError {
                 guard !Task.isCancelled else { return }
@@ -167,7 +237,23 @@ final class TradeAISectionViewModel {
 
     private func persistCompletedTurn(user: TradeAIMessage, assistant: TradeAIMessage) async {
         do {
-            try await ai.persistMessages([user, assistant], tradeID: tradeID)
+            if let conversationID {
+                #if DEBUG
+                TradeAITrace.persistenceStarted(rowCount: 2, payloadType: "persist-turn")
+                #endif
+                try await ai.persistTurn(
+                    TradeAIPersistTurnRequest(
+                        conversationID: conversationID,
+                        userMessage: user,
+                        assistantMessage: assistant
+                    )
+                )
+            } else {
+                #if DEBUG
+                TradeAITrace.persistenceStarted(rowCount: 2, payloadType: "trade_ai_messages")
+                #endif
+                try await ai.persistMessages([user, assistant], tradeID: tradeID)
+            }
             pendingPersistTurn = nil
             persistErrorMessage = nil
         } catch {

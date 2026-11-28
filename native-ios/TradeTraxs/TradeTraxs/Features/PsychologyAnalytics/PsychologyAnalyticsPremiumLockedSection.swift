@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Locked TraxsPro psychology analytics (insights, coach, advanced comparisons).
 struct PsychologyAnalyticsPremiumLockedSection: View {
+    /// When false, only the unlock button is shown (caller is already in sample preview).
+    var includePreviewAction = true
+
     @Environment(\.themeColors) private var colors
 
     private let locks: [(title: String, detail: String)] = [
@@ -34,12 +37,32 @@ struct PsychologyAnalyticsPremiumLockedSection: View {
                 }
             }
 
-            MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
-                feature: .premiumAnalytics,
-                previewEntryPoint: .dashboardGate,
-                previewAccessibilityIdentifier: "psychologyAnalytics.preview",
-                unlockAccessibilityIdentifier: "psychologyAnalytics.exploreTraxsPro"
-            )
+            if includePreviewAction {
+                MonetizationPlanPresentation.TraxsProFeatureGateButtonStack(
+                    feature: .premiumAnalytics,
+                    previewEntryPoint: .dashboardGate,
+                    previewAccessibilityIdentifier: "psychologyAnalytics.preview",
+                    unlockAccessibilityIdentifier: "psychologyAnalytics.exploreTraxsPro"
+                )
+            } else if ProMonetizationPolicy.canPresentProPaywall(
+                demoModeActive: ExploreModeSupport.isActive,
+                enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
+                paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
+            ) {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
+                } label: {
+                    Text(MonetizationPlanCopy.upgradeToTraxsProButtonTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: ExperienceRadius.sm))
+                .controlSize(.regular)
+                .tint(colors.accent)
+                .accessibilityIdentifier("psychologyAnalytics.exploreTraxsPro")
+            }
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)

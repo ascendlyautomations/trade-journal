@@ -8,6 +8,14 @@ enum TradingRulesAnalyticsPreviewSupport {
         TraxsProPreviewSession.shared.isAnyPreviewActive || ephemeralSampleActive
     }
 
+    /// Bundled demo trades/preferences — TraxsPro preview containers or test-only ephemeral flag.
+    static func usesBundledSampleDataPlane(detailCache: DetailPresentationCache) -> Bool {
+        if TradingRulesCompliancePresentationStores.isPreviewDetailCache(detailCache) {
+            return true
+        }
+        return ephemeralSampleActive
+    }
+
     /// Free-tier rules analytics chrome on the live Home stack — does not seed production session stores.
     static func beginEphemeralSampleIfNeeded(profileID: ProfileID, detailCache: DetailPresentationCache) {
         _ = (profileID, detailCache)
@@ -78,7 +86,7 @@ enum TradingRulesAnalyticsPreviewSupport {
     }
 
     static var usesUnrestrictedPreviewRuleFamilies: Bool {
-        TraxsProPreviewSession.shared.isAnyPreviewActive || ephemeralSampleActive
+        TraxsProPreviewSession.shared.isAnyPreviewActive
     }
 
     /// Fixed 1Y / all-accounts scope for bundled sample analytics.
